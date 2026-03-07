@@ -8,7 +8,9 @@
       "Bash(git commit:*)",
       "Bash(git push -u origin master)",
       "Bash(git push)",
-      "Bash(git add index.html supabase_schema.sql)"
+      "Bash(git add index.html supabase_schema.sql)",
+      "Bash(where node)",
+      "Bash(where node.exe)"
     ]
   }
 }
