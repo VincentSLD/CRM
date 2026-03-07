@@ -1369,9 +1369,153 @@ tbody tr:last-child td { border-bottom: none; }
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ═══════════════════ LOGIN SCREEN ═══════════════════ */
+.login-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-0);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.4s var(--ease), visibility 0.4s;
+}
+.login-screen.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+.login-card {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  width: 100%;
+  max-width: 420px;
+  margin: 20px;
+  overflow: hidden;
+}
+
+.login-header {
+  background: #1A1A1A;
+  padding: 32px 32px 28px;
+  text-align: center;
+  border-bottom: 3px solid var(--yellow);
+}
+.login-header .login-logo {
+  width: 56px; height: 56px;
+  background: var(--yellow);
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 800;
+  color: #1A1A1A;
+  margin-bottom: 14px;
+}
+.login-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 4px;
+}
+.login-header p {
+  font-size: 13px;
+  color: rgba(255,255,255,0.5);
+}
+
+.login-body {
+  padding: 28px 32px 32px;
+}
+.login-body .fg { margin-bottom: 16px; }
+.login-body .fl { font-size: 12px; font-weight: 600; color: var(--t2); margin-bottom: 6px; display: block; }
+.login-body .fi {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+.login-body .fi:focus { outline: none; border-color: var(--yellow); box-shadow: 0 0 0 3px var(--yellow-glow); }
+
+.login-body .btn-login {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, #1a1a1a 0%, #333 100%);
+  color: var(--yellow);
+  border: 2px solid var(--yellow);
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 8px;
+}
+.login-body .btn-login:hover { background: var(--yellow); color: #1a1a1a; }
+.login-body .btn-login:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.login-toggle {
+  text-align: center;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--t3);
+}
+.login-toggle a {
+  color: var(--yellow-dark);
+  text-decoration: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+.login-toggle a:hover { text-decoration: underline; }
+
+.login-error {
+  background: var(--red-bg);
+  color: var(--red);
+  padding: 10px 14px;
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  margin-bottom: 14px;
+  display: none;
+}
+.login-error.show { display: block; }
 </style>
 </head>
 <body>
+
+<!-- ═══ LOGIN SCREEN ═══ -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <div class="login-header">
+      <div class="login-logo">CRM</div>
+      <h1>CRM Akuiteo</h1>
+      <p>Connectez-vous pour accéder au tableau de bord</p>
+    </div>
+    <div class="login-body">
+      <div class="login-error" id="loginError"></div>
+      <div id="loginFormFields">
+        <div class="fg" id="loginNameGroup" style="display:none">
+          <label class="fl">Nom complet</label>
+          <input class="fi" id="loginName" placeholder="Prénom Nom">
+        </div>
+        <div class="fg">
+          <label class="fl">Email</label>
+          <input class="fi" id="loginEmail" type="email" placeholder="prenom.nom@entreprise.fr">
+        </div>
+        <div class="fg">
+          <label class="fl">Mot de passe</label>
+          <input class="fi" id="loginPassword" type="password" placeholder="Votre mot de passe" onkeydown="if(event.key==='Enter')doAuth()">
+        </div>
+      </div>
+      <button class="btn-login" id="loginBtn" onclick="doAuth()">Se connecter</button>
+      <div class="login-toggle">
+        <span id="loginToggleText">Pas encore de compte ?</span>
+        <a id="loginToggleLink" onclick="toggleAuthMode()">Créer un compte</a>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 
@@ -1474,7 +1618,10 @@ tbody tr:last-child td { border-bottom: none; }
       <button class="topbar-btn" onclick="syncAkuiteo()" title="Synchroniser">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
       </button>
-      <div class="avatar" title="Mon profil">MB</div>
+      <div class="avatar" id="userAvatar" title="Mon profil">--</div>
+      <button class="topbar-btn" onclick="doLogout()" title="Se déconnecter" style="margin-left:4px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
     </div>
   </header>
 
@@ -1835,6 +1982,10 @@ function generateAlerts() {
 
 // ═══ CRUD HELPERS ═══
 async function dbInsert(table, data) {
+  // Ajouter created_by si l'utilisateur est connecté et la table le supporte
+  if (currentUser && ['devis','commandes','factures','reports'].includes(table)) {
+    data.created_by = currentUser.id;
+  }
   const { data: result, error } = await sb.from(table).insert(data).select();
   if (error) { toast(`Erreur: ${error.message}`, 'error'); return null; }
   toast('Enregistré avec succès', 'success');
@@ -2931,6 +3082,118 @@ function toast(msg, type='info') {
   setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity 0.3s';setTimeout(()=>t.remove(),300)},3500);
 }
 
+// ═══ AUTHENTICATION ═══
+let currentUser = null;
+let currentCommercial = null;
+let authMode = 'login'; // 'login' or 'signup'
+
+function toggleAuthMode() {
+  authMode = authMode === 'login' ? 'signup' : 'login';
+  const nameGroup = document.getElementById('loginNameGroup');
+  const btn = document.getElementById('loginBtn');
+  const toggleText = document.getElementById('loginToggleText');
+  const toggleLink = document.getElementById('loginToggleLink');
+  if (authMode === 'signup') {
+    nameGroup.style.display = 'block';
+    btn.textContent = 'Créer mon compte';
+    toggleText.textContent = 'Déjà un compte ?';
+    toggleLink.textContent = 'Se connecter';
+  } else {
+    nameGroup.style.display = 'none';
+    btn.textContent = 'Se connecter';
+    toggleText.textContent = 'Pas encore de compte ?';
+    toggleLink.textContent = 'Créer un compte';
+  }
+  document.getElementById('loginError').classList.remove('show');
+}
+
+async function doAuth() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  const btn = document.getElementById('loginBtn');
+
+  if (!email || !password) { errEl.textContent = 'Email et mot de passe requis'; errEl.classList.add('show'); return; }
+  if (password.length < 6) { errEl.textContent = 'Le mot de passe doit faire au moins 6 caractères'; errEl.classList.add('show'); return; }
+
+  btn.disabled = true;
+  btn.textContent = authMode === 'login' ? 'Connexion...' : 'Création du compte...';
+  errEl.classList.remove('show');
+
+  try {
+    let result;
+    if (authMode === 'signup') {
+      const fullName = document.getElementById('loginName').value.trim() || email.split('@')[0];
+      result = await sb.auth.signUp({
+        email, password,
+        options: { data: { full_name: fullName } }
+      });
+    } else {
+      result = await sb.auth.signInWithPassword({ email, password });
+    }
+
+    if (result.error) {
+      const msgs = {
+        'Invalid login credentials': 'Email ou mot de passe incorrect',
+        'User already registered': 'Cet email est déjà utilisé',
+        'Email not confirmed': 'Vérifiez votre email pour confirmer votre compte',
+      };
+      errEl.textContent = msgs[result.error.message] || result.error.message;
+      errEl.classList.add('show');
+      btn.disabled = false;
+      btn.textContent = authMode === 'login' ? 'Se connecter' : 'Créer mon compte';
+      return;
+    }
+
+    if (result.data.user) {
+      await onAuthSuccess(result.data.user);
+    }
+  } catch (e) {
+    errEl.textContent = 'Erreur de connexion. Réessayez.';
+    errEl.classList.add('show');
+    btn.disabled = false;
+    btn.textContent = authMode === 'login' ? 'Se connecter' : 'Créer mon compte';
+  }
+}
+
+async function onAuthSuccess(user) {
+  currentUser = user;
+
+  // Charger le profil commercial lié
+  const { data } = await sb.from('commerciaux').select('*').eq('user_id', user.id).single();
+  currentCommercial = data;
+
+  // Mettre à jour l'avatar
+  const initials = currentCommercial
+    ? currentCommercial.nom.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase()
+    : user.email.substring(0, 2).toUpperCase();
+  document.getElementById('userAvatar').textContent = initials;
+  document.getElementById('userAvatar').title = currentCommercial ? currentCommercial.nom : user.email;
+
+  // Masquer le login, afficher le CRM
+  document.getElementById('loginScreen').classList.add('hidden');
+
+  // Charger les données
+  document.getElementById('contentArea').innerHTML = '<div class="page active" style="text-align:center;padding:60px 20px;color:var(--t3)"><div style="font-size:1.1rem;font-weight:600">Chargement des données...</div><div style="margin-top:8px;font-size:.85rem">Connexion à Supabase</div></div>';
+  await loadDB();
+  renderPage('dashboard');
+  initRealtime();
+  toast(`Bienvenue ${currentCommercial ? currentCommercial.nom : user.email}`, 'success');
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+  currentUser = null;
+  currentCommercial = null;
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('loginEmail').value = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginName').value = '';
+  document.getElementById('loginError').classList.remove('show');
+  authMode = 'login';
+  toggleAuthMode(); toggleAuthMode(); // reset to login mode
+}
+
 // ═══ REAL-TIME SUBSCRIPTIONS ═══
 function initRealtime() {
   const tables = ['clients','devis','commandes','factures','reports','notifications'];
@@ -2946,10 +3209,19 @@ function initRealtime() {
 
 // ═══ INIT ═══
 (async function init() {
-  document.getElementById('contentArea').innerHTML = '<div class="page active" style="text-align:center;padding:60px 20px;color:var(--t3)"><div style="font-size:1.1rem;font-weight:600">Chargement des données...</div><div style="margin-top:8px;font-size:.85rem">Connexion à Supabase</div></div>';
-  await loadDB();
-  renderPage('dashboard');
-  initRealtime();
+  // Vérifier si l'utilisateur a déjà une session active
+  const { data: { session } } = await sb.auth.getSession();
+  if (session && session.user) {
+    await onAuthSuccess(session.user);
+  }
+  // Sinon, le login screen reste visible
+
+  // Écouter les changements d'état auth (refresh token, etc.)
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_OUT') {
+      document.getElementById('loginScreen').classList.remove('hidden');
+    }
+  });
 })();
 
 // Close notif panel on outside click
