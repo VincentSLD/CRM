@@ -1337,6 +1337,35 @@ tbody tr:last-child td { border-bottom: none; }
 
 .sidebar-overlay.active { display: block; }
 
+.btn-danger { background: var(--red-bg); color: var(--red); border-color: rgba(211,47,47,0.2); }
+.btn-danger:hover { background: var(--red); color: #fff; }
+
+.search-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0; right: 0;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow);
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 200;
+  display: none;
+}
+.search-dropdown.show { display: block; }
+.search-result {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.search-result:hover { background: var(--bg-3); }
+.search-result:last-child { border-bottom: none; }
+.search-result-type { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--t3); font-weight: 600; }
+.search-result-name { font-size: 13px; font-weight: 600; color: var(--t1); }
+.search-result-meta { font-size: 11px; color: var(--t3); }
+
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -1433,9 +1462,10 @@ tbody tr:last-child td { border-bottom: none; }
       <div class="topbar-title" id="pageTitle">Tableau de bord</div>
     </div>
     <div class="topbar-right">
-      <div class="search-bar">
+      <div class="search-bar" style="position:relative">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" placeholder="Rechercher..." id="globalSearch" oninput="handleSearch(this.value)">
+        <input type="text" placeholder="Rechercher..." id="globalSearch" oninput="handleSearch(this.value)" onfocus="handleSearch(this.value)" autocomplete="off">
+        <div class="search-dropdown" id="searchDropdown"></div>
       </div>
       <button class="topbar-btn" onclick="toggleNotifPanel()" title="Notifications">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -1551,6 +1581,133 @@ Cordialement,</textarea>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('proposal')">Fermer</button>
       <button class="btn btn-primary" onclick="generateProposal()">✦ Générer avec IA</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: NEW CLIENT ═══ -->
+<div class="modal-overlay" id="modal-new-client">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-head">
+      <h3>Nouveau client</h3>
+      <button class="modal-close" onclick="closeModal('new-client')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="fg"><label class="fl">Nom *</label><input class="fi" id="nc-name" placeholder="Nom du client"></div>
+        <div class="fg"><label class="fl">Code</label><input class="fi" id="nc-code" placeholder="CLI-XXXX"></div>
+        <div class="fg"><label class="fl">Secteur</label><input class="fi" id="nc-sector" placeholder="Ex: Énergie"></div>
+        <div class="fg"><label class="fl">Ville</label><input class="fi" id="nc-city" placeholder="Ex: Paris"></div>
+        <div class="fg"><label class="fl">Contact</label><input class="fi" id="nc-contact" placeholder="Nom du contact"></div>
+        <div class="fg"><label class="fl">Email</label><input class="fi" id="nc-email" type="email" placeholder="email@exemple.fr"></div>
+        <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="nc-phone" placeholder="+33 ..."></div>
+        <div class="fg"><label class="fl">Objectif CA</label><input class="fi" id="nc-obj" type="number" placeholder="0"></div>
+        <div class="fg"><label class="fl">Latitude</label><input class="fi" id="nc-lat" type="number" step="0.01" placeholder="48.85"></div>
+        <div class="fg"><label class="fl">Longitude</label><input class="fi" id="nc-lng" type="number" step="0.01" placeholder="2.35"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('new-client')">Annuler</button>
+      <button class="btn btn-primary" onclick="submitNewClient()">Créer le client</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: NEW DEVIS ═══ -->
+<div class="modal-overlay" id="modal-new-devis">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-head">
+      <h3>Nouveau devis</h3>
+      <button class="modal-close" onclick="closeModal('new-devis')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="fg"><label class="fl">Référence *</label><input class="fi" id="nd-ref" placeholder="DV-2024-XXX"></div>
+      <div class="fg"><label class="fl">Client *</label><select class="fs" id="nd-client"><option value="">Sélectionner...</option></select></div>
+      <div class="fg"><label class="fl">Sujet</label><input class="fi" id="nd-sujet" placeholder="Objet du devis"></div>
+      <div class="fg"><label class="fl">Montant</label><input class="fi" id="nd-montant" type="number" placeholder="0"></div>
+      <div class="fg"><label class="fl">Statut</label><select class="fs" id="nd-statut">
+        <option value="pending">En attente</option><option value="sent">Envoyé</option><option value="accepted">Accepté</option><option value="refused">Refusé</option>
+      </select></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('new-devis')">Annuler</button>
+      <button class="btn btn-primary" onclick="submitNewDevis()">Créer le devis</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: NEW COMMANDE ═══ -->
+<div class="modal-overlay" id="modal-new-commande">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-head">
+      <h3>Nouvelle commande</h3>
+      <button class="modal-close" onclick="closeModal('new-commande')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="fg"><label class="fl">Référence *</label><input class="fi" id="ncm-ref" placeholder="CM-2024-XXX"></div>
+      <div class="fg"><label class="fl">Client *</label><select class="fs" id="ncm-client"><option value="">Sélectionner...</option></select></div>
+      <div class="fg"><label class="fl">Montant</label><input class="fi" id="ncm-montant" type="number" placeholder="0"></div>
+      <div class="fg"><label class="fl">Date livraison</label><input class="fi" id="ncm-livraison" type="date"></div>
+      <div class="fg"><label class="fl">Statut</label><select class="fs" id="ncm-statut">
+        <option value="en_cours">En cours</option><option value="livree">Livrée</option><option value="annulee">Annulée</option>
+      </select></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('new-commande')">Annuler</button>
+      <button class="btn btn-primary" onclick="submitNewCommande()">Créer la commande</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: NEW FACTURE ═══ -->
+<div class="modal-overlay" id="modal-new-facture">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-head">
+      <h3>Nouvelle facture</h3>
+      <button class="modal-close" onclick="closeModal('new-facture')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="fg"><label class="fl">Référence *</label><input class="fi" id="nf-ref" placeholder="FA-2024-XXX"></div>
+      <div class="fg"><label class="fl">Client *</label><select class="fs" id="nf-client"><option value="">Sélectionner...</option></select></div>
+      <div class="fg"><label class="fl">Montant</label><input class="fi" id="nf-montant" type="number" placeholder="0"></div>
+      <div class="fg"><label class="fl">Date échéance</label><input class="fi" id="nf-echeance" type="date"></div>
+      <div class="fg"><label class="fl">Statut</label><select class="fs" id="nf-statut">
+        <option value="attente">En attente</option><option value="payee">Payée</option><option value="retard">En retard</option>
+      </select></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('new-facture')">Annuler</button>
+      <button class="btn btn-primary" onclick="submitNewFacture()">Créer la facture</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: EDIT CLIENT ═══ -->
+<div class="modal-overlay" id="modal-edit-client">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-head">
+      <h3>Modifier le client</h3>
+      <button class="modal-close" onclick="closeModal('edit-client')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="fg"><label class="fl">Nom</label><input class="fi" id="ec-name"></div>
+        <div class="fg"><label class="fl">Code</label><input class="fi" id="ec-code"></div>
+        <div class="fg"><label class="fl">Secteur</label><input class="fi" id="ec-sector"></div>
+        <div class="fg"><label class="fl">Ville</label><input class="fi" id="ec-city"></div>
+        <div class="fg"><label class="fl">Contact</label><input class="fi" id="ec-contact"></div>
+        <div class="fg"><label class="fl">Email</label><input class="fi" id="ec-email"></div>
+        <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="ec-phone"></div>
+        <div class="fg"><label class="fl">Objectif CA</label><input class="fi" id="ec-obj" type="number"></div>
+        <div class="fg"><label class="fl">CA Réalisé</label><input class="fi" id="ec-ca" type="number"></div>
+        <div class="fg"><label class="fl">Marge %</label><input class="fi" id="ec-margin" type="number"></div>
+        <div class="fg"><label class="fl">DSO (jours)</label><input class="fi" id="ec-dso" type="number"></div>
+        <div class="fg"><label class="fl">Score</label><input class="fi" id="ec-score" type="number" min="0" max="100"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('edit-client')">Annuler</button>
+      <button class="btn btn-primary" onclick="submitEditClient()">Enregistrer</button>
     </div>
   </div>
 </div>
@@ -1979,7 +2136,8 @@ function renderClients(filter='all') {
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn" onclick="openModal('proposal')">✦ Proposition IA</button>
-      <button class="btn btn-primary">+ Nouveau client</button>
+      <button class="btn btn-primary" onclick="openModal('new-client')">+ Nouveau client</button>
+      <button class="btn" onclick="exportCSV('clients')">⤓ Export CSV</button>
     </div>
   </div>
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
@@ -2041,6 +2199,7 @@ function renderClientDetail() {
       </div>
     </div>
     <div class="client-actions">
+      <button class="btn" onclick="openModal('edit-client')">✎ Modifier</button>
       <button class="btn" onclick="go('cr')">✎ Nouveau CR</button>
       <button class="btn" onclick="openModal('proposal')">✦ Proposition IA</button>
       <button class="btn btn-primary" onclick="openModal('send')">✈ Envoyer synthèse</button>
@@ -2120,7 +2279,7 @@ function renderPipeline() {
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div style="font-size:13px;color:var(--t2)">Pipeline — <span class="mono" style="color:var(--accent)">${fmt(DB.devis.filter(d=>d.statut==='pending'||d.statut==='sent').reduce((a,d)=>a+d.montant,0))}</span> en cours</div>
-    <button class="btn btn-primary">+ Nouveau devis</button>
+    <button class="btn btn-primary" onclick="openModal('new-devis')">+ Nouveau devis</button>
   </div>
   <div class="pipeline">${stages.map(s => {
     const total = s.items.reduce((a,b)=>a+b.montant,0);
@@ -2133,6 +2292,12 @@ function renderPipeline() {
         <div class="pipe-card-title">${d.sujet}</div>
         <div class="pipe-card-client">${d.client}</div>
         <div class="pipe-card-foot"><div class="pipe-card-amount">${fmt(d.montant)}</div><div class="pipe-card-date">${d.date}</div></div>
+        <select class="fs" style="margin-top:6px;padding:3px 6px;font-size:10px;width:100%;border-radius:6px" onchange="updateDevisStatus(${d.id},this.value)">
+          <option value="sent" ${d.statut==='sent'?'selected':''}>Prospection</option>
+          <option value="pending" ${d.statut==='pending'?'selected':''}>En attente</option>
+          <option value="accepted" ${d.statut==='accepted'?'selected':''}>Gagné</option>
+          <option value="refused" ${d.statut==='refused'?'selected':''}>Perdu</option>
+        </select>
       </div>`).join('')}
     </div>`;
   }).join('')}</div>`;
@@ -2202,39 +2367,100 @@ function initCarteMap() {
 }
 
 // ═══ DEVIS / COMMANDES / FACTURES / OBJECTIFS ═══
-function renderDevis() {
+function renderDevis(filter='all') {
+  const filtered = filter==='all' ? DB.devis : DB.devis.filter(d=>d.statut===filter);
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <button class="btn active">Tous</button><button class="btn">En attente</button><button class="btn">Acceptés</button><button class="btn">Refusés</button>
+      <button class="btn ${filter==='all'?'active':''}" onclick="filterDevis('all')">Tous <span style="opacity:.4">${DB.devis.length}</span></button>
+      <button class="btn ${filter==='pending'?'active':''}" onclick="filterDevis('pending')">En attente</button>
+      <button class="btn ${filter==='accepted'?'active':''}" onclick="filterDevis('accepted')">Acceptés</button>
+      <button class="btn ${filter==='sent'?'active':''}" onclick="filterDevis('sent')">Envoyés</button>
+      <button class="btn ${filter==='refused'?'active':''}" onclick="filterDevis('refused')">Refusés</button>
     </div>
-    <button class="btn btn-primary">+ Nouveau devis</button>
+    <div style="display:flex;gap:6px">
+      <button class="btn" onclick="exportCSV('devis')">⤓ Export CSV</button>
+      <button class="btn btn-primary" onclick="openModal('new-devis')">+ Nouveau devis</button>
+    </div>
   </div>
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Réf</th><th>Client</th><th>Sujet</th><th>Montant</th><th>Date</th><th>Statut</th></tr></thead>
-    <tbody>${DB.devis.map(d => {const s=devisStatusMap[d.statut]; return `<tr><td class="mono">${d.ref}</td><td>${d.client}</td><td>${d.sujet}</td><td class="mono">${fmt(d.montant)}</td><td>${d.date}</td><td><span class="badge ${s.c}">${s.l}</span></td></tr>`;}).join('')}</tbody></table>
+    <table><thead><tr><th>Réf</th><th>Client</th><th>Sujet</th><th>Montant</th><th>Date</th><th>Statut</th><th>Actions</th></tr></thead>
+    <tbody>${filtered.map(d => {const s=devisStatusMap[d.statut]; return `<tr>
+      <td class="mono">${d.ref}</td><td>${d.client}</td><td>${d.sujet}</td><td class="mono">${fmt(d.montant)}</td><td>${d.date}</td>
+      <td><select class="fs" style="padding:3px 6px;font-size:11px;width:auto;border-radius:6px" onchange="updateDevisStatus(${d.id},this.value)">
+        <option value="pending" ${d.statut==='pending'?'selected':''}>En attente</option>
+        <option value="sent" ${d.statut==='sent'?'selected':''}>Envoyé</option>
+        <option value="accepted" ${d.statut==='accepted'?'selected':''}>Accepté</option>
+        <option value="refused" ${d.statut==='refused'?'selected':''}>Refusé</option>
+      </select></td>
+      <td><button class="btn btn-danger" style="font-size:10px;padding:3px 8px" onclick="deleteRecord('devis',${d.id})">✕</button></td>
+    </tr>`;}).join('')}</tbody></table>
   </div></div></div>`;
 }
+function filterDevis(f) { document.getElementById('contentArea').innerHTML='<div class="page active">'+renderDevis(f)+'</div>'; }
+async function updateDevisStatus(id,s) { await dbUpdate('devis',id,{statut:s}); }
 
-function renderCommandes() {
-  return `
-  <div style="margin-bottom:16px;font-size:13px;color:var(--t2)">Commandes synchronisées depuis Akuiteo</div>
-  <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Réf</th><th>Client</th><th>Montant</th><th>Date</th><th>Livraison</th><th>Statut</th></tr></thead>
-    <tbody>${DB.commandes.map(c => {const s=cmdStatusMap[c.statut]; return `<tr><td class="mono">${c.ref}</td><td>${c.client}</td><td class="mono">${fmt(c.montant)}</td><td>${c.date}</td><td>${c.livraison}</td><td><span class="badge ${s.c}">${s.l}</span></td></tr>`;}).join('')}</tbody></table>
-  </div></div></div>`;
-}
-
-function renderFactures() {
+function renderCommandes(filter='all') {
+  const filtered = filter==='all' ? DB.commandes : DB.commandes.filter(c=>c.statut===filter);
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-    <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn active">Toutes</button><button class="btn">Payées</button><button class="btn">En attente</button><button class="btn">En retard</button></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn ${filter==='all'?'active':''}" onclick="filterCmd('all')">Toutes <span style="opacity:.4">${DB.commandes.length}</span></button>
+      <button class="btn ${filter==='en_cours'?'active':''}" onclick="filterCmd('en_cours')">En cours</button>
+      <button class="btn ${filter==='livree'?'active':''}" onclick="filterCmd('livree')">Livrées</button>
+      <button class="btn ${filter==='annulee'?'active':''}" onclick="filterCmd('annulee')">Annulées</button>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button class="btn" onclick="exportCSV('commandes')">⤓ Export CSV</button>
+      <button class="btn btn-primary" onclick="openModal('new-commande')">+ Nouvelle commande</button>
+    </div>
   </div>
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Réf</th><th>Client</th><th>Montant</th><th>Date</th><th>Échéance</th><th>Statut</th></tr></thead>
-    <tbody>${DB.factures.map(f => {const s=facStatusMap[f.statut]; return `<tr><td class="mono">${f.ref}</td><td>${f.client}</td><td class="mono">${fmt(f.montant)}</td><td>${f.date}</td><td>${f.echeance}</td><td><span class="badge ${s.c}">${s.l}${f.statut==='retard'&&f.jours?' (+'+f.jours+'j)':''}</span></td></tr>`;}).join('')}</tbody></table>
+    <table><thead><tr><th>Réf</th><th>Client</th><th>Montant</th><th>Date</th><th>Livraison</th><th>Statut</th><th>Actions</th></tr></thead>
+    <tbody>${filtered.map(c => {const s=cmdStatusMap[c.statut]; return `<tr>
+      <td class="mono">${c.ref}</td><td>${c.client}</td><td class="mono">${fmt(c.montant)}</td><td>${c.date}</td><td>${c.livraison}</td>
+      <td><select class="fs" style="padding:3px 6px;font-size:11px;width:auto;border-radius:6px" onchange="updateCmdStatus(${c.id},this.value)">
+        <option value="en_cours" ${c.statut==='en_cours'?'selected':''}>En cours</option>
+        <option value="livree" ${c.statut==='livree'?'selected':''}>Livrée</option>
+        <option value="annulee" ${c.statut==='annulee'?'selected':''}>Annulée</option>
+      </select></td>
+      <td><button class="btn btn-danger" style="font-size:10px;padding:3px 8px" onclick="deleteRecord('commandes',${c.id})">✕</button></td>
+    </tr>`;}).join('')}</tbody></table>
   </div></div></div>`;
 }
+function filterCmd(f) { document.getElementById('contentArea').innerHTML='<div class="page active">'+renderCommandes(f)+'</div>'; }
+async function updateCmdStatus(id,s) { await dbUpdate('commandes',id,{statut:s}); }
+
+function renderFactures(filter='all') {
+  const filtered = filter==='all' ? DB.factures : DB.factures.filter(f=>f.statut===filter);
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn ${filter==='all'?'active':''}" onclick="filterFact('all')">Toutes <span style="opacity:.4">${DB.factures.length}</span></button>
+      <button class="btn ${filter==='payee'?'active':''}" onclick="filterFact('payee')">Payées</button>
+      <button class="btn ${filter==='attente'?'active':''}" onclick="filterFact('attente')">En attente</button>
+      <button class="btn ${filter==='retard'?'active':''}" onclick="filterFact('retard')">En retard</button>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button class="btn" onclick="exportCSV('factures')">⤓ Export CSV</button>
+      <button class="btn btn-primary" onclick="openModal('new-facture')">+ Nouvelle facture</button>
+    </div>
+  </div>
+  <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
+    <table><thead><tr><th>Réf</th><th>Client</th><th>Montant</th><th>Date</th><th>Échéance</th><th>Statut</th><th>Actions</th></tr></thead>
+    <tbody>${filtered.map(f => {const s=facStatusMap[f.statut]; return `<tr>
+      <td class="mono">${f.ref}</td><td>${f.client}</td><td class="mono">${fmt(f.montant)}</td><td>${f.date}</td><td>${f.echeance}</td>
+      <td><select class="fs" style="padding:3px 6px;font-size:11px;width:auto;border-radius:6px" onchange="updateFactStatus(${f.id},this.value)">
+        <option value="attente" ${f.statut==='attente'?'selected':''}>En attente</option>
+        <option value="payee" ${f.statut==='payee'?'selected':''}>Payée</option>
+        <option value="retard" ${f.statut==='retard'?'selected':''}>En retard</option>
+      </select></td>
+      <td><button class="btn btn-danger" style="font-size:10px;padding:3px 8px" onclick="deleteRecord('factures',${f.id})">✕</button></td>
+    </tr>`;}).join('')}</tbody></table>
+  </div></div></div>`;
+}
+function filterFact(f) { document.getElementById('contentArea').innerHTML='<div class="page active">'+renderFactures(f)+'</div>'; }
+async function updateFactStatus(id,s) { await dbUpdate('factures',id,{statut:s}); }
 
 function renderObjectifs() {
   const commerciaux = DB.commerciaux && DB.commerciaux.length ? DB.commerciaux : [
@@ -2323,7 +2549,21 @@ function renderCR() {
 function initEditor() {}
 function clearEditor() { const e=document.getElementById('editorBody'); if(e) e.innerHTML=''; }
 function loadReport(id) { const r=DB.reports.find(x=>x.id===id); if(r){document.getElementById('editorBody').innerHTML=`<strong>${r.titre}</strong><br><br>${r.text}`; toast('Compte-rendu chargé','info');} }
-function saveReport() { toast('Compte-rendu sauvegardé','success'); }
+async function saveReport() {
+  const body = document.getElementById('editorBody');
+  const clientSel = document.getElementById('crClient');
+  if (!body || !body.innerText.trim()) { toast('Écrivez du contenu avant de sauvegarder','error'); return; }
+  const clientId = clientSel ? clientSel.value : '';
+  const clientName = clientSel && clientSel.selectedIndex > 0 ? clientSel.options[clientSel.selectedIndex].text : 'Non assigné';
+  const text = body.innerText.trim();
+  const titre = text.substring(0, 60) + (text.length > 60 ? '...' : '');
+  await dbInsert('reports', {
+    client_id: clientId || null,
+    client_name: clientName,
+    titre: titre,
+    contenu: body.innerHTML
+  });
+}
 
 // ═══ ENVOIS ═══
 function renderEnvois() {
@@ -2469,22 +2709,196 @@ function renderNotifs() {
     </div>`).join('');
 }
 
-function markAllRead() { DB.notifications.forEach(n=>n.read=true); renderNotifs(); document.querySelector('.notif-dot').style.display='none'; toast('Notifications marquées lues','info'); }
+async function markAllRead() {
+  const unread = DB.notifications.filter(n=>!n.read);
+  for (const n of unread) {
+    await sb.from('notifications').update({read:true}).eq('id',n.id);
+  }
+  DB.notifications.forEach(n=>n.read=true);
+  renderNotifs();
+  document.querySelector('.notif-dot').style.display='none';
+  toast('Notifications marquées lues','info');
+}
 
 // ═══ MODALS ═══
-function openModal(id) { document.getElementById('modal-'+id).classList.add('active');
-  if(id==='proposal') {const s=document.getElementById('proposalClient'); s.innerHTML='<option value="">Sélectionner...</option>'+DB.clients.map(c=>`<option value="${c.id}">${c.name}</option>`).join(''); if(currentClient) s.value=currentClient.id;}
+function openModal(id) {
+  const el = document.getElementById('modal-'+id);
+  if (!el) return;
+  el.classList.add('active');
+  const clientOpts = '<option value="">Sélectionner...</option>'+DB.clients.map(c=>`<option value="${c.id}" data-name="${c.name}">${c.name}</option>`).join('');
+  if(id==='proposal') {const s=document.getElementById('proposalClient'); s.innerHTML=clientOpts; if(currentClient) s.value=currentClient.id;}
+  if(id==='new-devis') document.getElementById('nd-client').innerHTML=clientOpts;
+  if(id==='new-commande') document.getElementById('ncm-client').innerHTML=clientOpts;
+  if(id==='new-facture') document.getElementById('nf-client').innerHTML=clientOpts;
+  if(id==='edit-client' && currentClient) {
+    const c = currentClient;
+    document.getElementById('ec-name').value = c.name||'';
+    document.getElementById('ec-code').value = c.code||'';
+    document.getElementById('ec-sector').value = c.sector||'';
+    document.getElementById('ec-city').value = c.city||'';
+    document.getElementById('ec-contact').value = c.contact||'';
+    document.getElementById('ec-email').value = c.email||'';
+    document.getElementById('ec-phone').value = c.phone||'';
+    document.getElementById('ec-obj').value = c.obj||0;
+    document.getElementById('ec-ca').value = c.ca||0;
+    document.getElementById('ec-margin').value = c.margin||0;
+    document.getElementById('ec-dso').value = c.dso||0;
+    document.getElementById('ec-score').value = c.score||0;
+  }
 }
-function closeModal(id) { document.getElementById('modal-'+id).classList.remove('active'); }
+function closeModal(id) { const el=document.getElementById('modal-'+id); if(el) el.classList.remove('active'); }
 function sendReport() { closeModal('send'); toast('Synthèse envoyée avec succès','success'); }
+
+// ═══ FORM SUBMISSIONS ═══
+async function submitNewClient() {
+  const name = document.getElementById('nc-name').value.trim();
+  if (!name) { toast('Le nom est obligatoire','error'); return; }
+  const id = name.toLowerCase().replace(/[^a-z0-9]/g,'_').substring(0,20);
+  const ini = name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+  const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
+  await dbInsert('clients', {
+    id, name, code: document.getElementById('nc-code').value||`CLI-${String(Date.now()).slice(-4)}`,
+    sector: document.getElementById('nc-sector').value||'',
+    city: document.getElementById('nc-city').value||'',
+    contact: document.getElementById('nc-contact').value||'',
+    email: document.getElementById('nc-email').value||'',
+    phone: document.getElementById('nc-phone').value||'',
+    obj: Number(document.getElementById('nc-obj').value)||0,
+    lat: Number(document.getElementById('nc-lat').value)||48.85,
+    lng: Number(document.getElementById('nc-lng').value)||2.35,
+    ini, color: colors[Math.floor(Math.random()*colors.length)],
+    ca:0, margin:0, dso:0, score:50, status:'objectif'
+  });
+  closeModal('new-client');
+}
+
+async function submitNewDevis() {
+  const ref = document.getElementById('nd-ref').value.trim();
+  const sel = document.getElementById('nd-client');
+  const clientId = sel.value;
+  if (!ref||!clientId) { toast('Référence et client obligatoires','error'); return; }
+  const clientName = sel.options[sel.selectedIndex].dataset.name;
+  await dbInsert('devis', {
+    ref, client_id: clientId, client_name: clientName,
+    sujet: document.getElementById('nd-sujet').value||'',
+    montant: Number(document.getElementById('nd-montant').value)||0,
+    statut: document.getElementById('nd-statut').value
+  });
+  closeModal('new-devis');
+}
+
+async function submitNewCommande() {
+  const ref = document.getElementById('ncm-ref').value.trim();
+  const sel = document.getElementById('ncm-client');
+  const clientId = sel.value;
+  if (!ref||!clientId) { toast('Référence et client obligatoires','error'); return; }
+  const clientName = sel.options[sel.selectedIndex].dataset.name;
+  await dbInsert('commandes', {
+    ref, client_id: clientId, client_name: clientName,
+    montant: Number(document.getElementById('ncm-montant').value)||0,
+    livraison: document.getElementById('ncm-livraison').value||null,
+    statut: document.getElementById('ncm-statut').value
+  });
+  closeModal('new-commande');
+}
+
+async function submitNewFacture() {
+  const ref = document.getElementById('nf-ref').value.trim();
+  const sel = document.getElementById('nf-client');
+  const clientId = sel.value;
+  if (!ref||!clientId) { toast('Référence et client obligatoires','error'); return; }
+  const clientName = sel.options[sel.selectedIndex].dataset.name;
+  await dbInsert('factures', {
+    ref, client_id: clientId, client_name: clientName,
+    montant: Number(document.getElementById('nf-montant').value)||0,
+    echeance: document.getElementById('nf-echeance').value||null,
+    statut: document.getElementById('nf-statut').value
+  });
+  closeModal('new-facture');
+}
+
+async function submitEditClient() {
+  if (!currentClient) return;
+  await dbUpdate('clients', currentClient.id, {
+    name: document.getElementById('ec-name').value,
+    code: document.getElementById('ec-code').value,
+    sector: document.getElementById('ec-sector').value,
+    city: document.getElementById('ec-city').value,
+    contact: document.getElementById('ec-contact').value,
+    email: document.getElementById('ec-email').value,
+    phone: document.getElementById('ec-phone').value,
+    obj: Number(document.getElementById('ec-obj').value)||0,
+    ca: Number(document.getElementById('ec-ca').value)||0,
+    margin: Number(document.getElementById('ec-margin').value)||0,
+    dso: Number(document.getElementById('ec-dso').value)||0,
+    score: Number(document.getElementById('ec-score').value)||0,
+  });
+  closeModal('edit-client');
+  currentClient = DB.clients.find(c=>c.id===currentClient.id);
+}
+
+// ═══ DELETE RECORD ═══
+async function deleteRecord(table, id) {
+  if (!confirm('Supprimer cet enregistrement ?')) return;
+  await dbDelete(table, id);
+}
+
+// ═══ EXPORT CSV ═══
+function exportCSV(table) {
+  let rows = [], headers = [];
+  if (table==='clients') {
+    headers = ['Nom','Code','Secteur','Ville','CA','Objectif','Marge','DSO','Score','Statut','Contact','Email','Téléphone'];
+    rows = DB.clients.map(c=>[c.name,c.code,c.sector,c.city,c.ca,c.obj,c.margin,c.dso,c.score,c.status,c.contact,c.email,c.phone]);
+  } else if (table==='devis') {
+    headers = ['Réf','Client','Sujet','Montant','Date','Statut'];
+    rows = DB.devis.map(d=>[d.ref,d.client,d.sujet,d.montant,d.date,d.statut]);
+  } else if (table==='commandes') {
+    headers = ['Réf','Client','Montant','Date','Livraison','Statut'];
+    rows = DB.commandes.map(c=>[c.ref,c.client,c.montant,c.date,c.livraison,c.statut]);
+  } else if (table==='factures') {
+    headers = ['Réf','Client','Montant','Date','Échéance','Statut'];
+    rows = DB.factures.map(f=>[f.ref,f.client,f.montant,f.date,f.echeance,f.statut]);
+  }
+  const csvContent = [headers.join(';'), ...rows.map(r=>r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(';'))].join('\n');
+  const blob = new Blob(['\uFEFF'+csvContent], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${table}_export_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  toast(`Export ${table} téléchargé`,'success');
+}
 
 // ═══ SEARCH ═══
 function handleSearch(q) {
-  if(q.length<2) return;
+  const dd = document.getElementById('searchDropdown');
+  if (!q || q.length < 2) { dd.classList.remove('show'); return; }
   const ql = q.toLowerCase();
-  const m = DB.clients.find(c=>c.name.toLowerCase().includes(ql)||c.code.toLowerCase().includes(ql));
-  if(m) showClient(m.id);
+  let results = [];
+  DB.clients.forEach(c => {
+    if (c.name.toLowerCase().includes(ql)||c.code.toLowerCase().includes(ql)||c.sector.toLowerCase().includes(ql))
+      results.push({type:'Client',name:c.name,meta:`${c.code} · ${c.sector} · ${c.city}`,action:`showClient('${c.id}')`});
+  });
+  DB.devis.forEach(d => {
+    if (d.ref.toLowerCase().includes(ql)||d.client.toLowerCase().includes(ql)||d.sujet.toLowerCase().includes(ql))
+      results.push({type:'Devis',name:d.ref,meta:`${d.client} · ${d.sujet}`,action:`go('devis')`});
+  });
+  DB.commandes.forEach(c => {
+    if (c.ref.toLowerCase().includes(ql)||c.client.toLowerCase().includes(ql))
+      results.push({type:'Commande',name:c.ref,meta:`${c.client} · ${fmt(c.montant)}`,action:`go('commandes')`});
+  });
+  DB.factures.forEach(f => {
+    if (f.ref.toLowerCase().includes(ql)||f.client.toLowerCase().includes(ql))
+      results.push({type:'Facture',name:f.ref,meta:`${f.client} · ${fmt(f.montant)}`,action:`go('factures')`});
+  });
+  if (!results.length) { dd.innerHTML='<div class="search-result"><div class="search-result-meta">Aucun résultat</div></div>'; dd.classList.add('show'); return; }
+  dd.innerHTML = results.slice(0,8).map(r => `<div class="search-result" onclick="${r.action};document.getElementById('searchDropdown').classList.remove('show');document.getElementById('globalSearch').value=''">
+    <div class="search-result-type">${r.type}</div>
+    <div class="search-result-name">${r.name}</div>
+    <div class="search-result-meta">${r.meta}</div>
+  </div>`).join('');
+  dd.classList.add('show');
 }
+document.addEventListener('click', e => { if(!e.target.closest('.search-bar')) document.getElementById('searchDropdown').classList.remove('show'); });
 
 // ═══ SYNC ═══
 function syncAkuiteo() {
@@ -2517,11 +2931,25 @@ function toast(msg, type='info') {
   setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity 0.3s';setTimeout(()=>t.remove(),300)},3500);
 }
 
+// ═══ REAL-TIME SUBSCRIPTIONS ═══
+function initRealtime() {
+  const tables = ['clients','devis','commandes','factures','reports','notifications'];
+  tables.forEach(table => {
+    sb.channel(`public:${table}`).on('postgres_changes', {event:'*', schema:'public', table}, async (payload) => {
+      console.log(`Realtime ${table}:`, payload.eventType);
+      await loadDB();
+      renderPage(currentPage);
+      if (payload.eventType === 'INSERT') toast(`Nouvelle entrée dans ${table}`, 'info');
+    }).subscribe();
+  });
+}
+
 // ═══ INIT ═══
 (async function init() {
   document.getElementById('contentArea').innerHTML = '<div class="page active" style="text-align:center;padding:60px 20px;color:var(--t3)"><div style="font-size:1.1rem;font-weight:600">Chargement des données...</div><div style="margin-top:8px;font-size:.85rem">Connexion à Supabase</div></div>';
   await loadDB();
   renderPage('dashboard');
+  initRealtime();
 })();
 
 // Close notif panel on outside click
