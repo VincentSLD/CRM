@@ -8,43 +8,43 @@
 <title>CRM Akuiteo — Tableau de Bord Commercial</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:opsz,wght@6..12,300;6..12,400;6..12,500;6..12,600;6..12,700;6..12,800;6..12,900&family=Playfair+Display:wght@700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 /* ═══════════════════ DESIGN SYSTEM ═══════════════════ */
 :root {
-  --bg-0: #F5F5F5;
-  --bg-1: #FFFFFF;
-  --bg-2: #FFFFFF;
-  --bg-3: #FAFAFA;
-  --bg-4: #ECECEC;
-  --bg-glass: rgba(255, 255, 255, 0.85);
-  --yellow: #F2B705;
-  --yellow-light: #F5C842;
-  --yellow-dark: #D9A004;
-  --yellow-pale: #FFF8E1;
-  --yellow-glow: rgba(242,183,5,0.25);
-  --accent: #F2B705;
-  --accent-2: #D9A004;
-  --accent-glow: rgba(242, 183, 5, 0.12);
-  --accent-glow-2: rgba(242, 183, 5, 0.08);
-  --green: #4CAF50;
-  --green-bg: rgba(76, 175, 80, 0.10);
-  --amber: #FF9800;
-  --amber-bg: rgba(255, 152, 0, 0.10);
-  --red: #D94040;
-  --red-bg: rgba(217, 64, 64, 0.10);
-  --cyan: #3D7AB5;
-  --cyan-bg: rgba(61, 122, 181, 0.10);
-  --t1: #1A1A1A;
-  --t2: #4A4A4A;
-  --t3: #7A7A7A;
-  --border: #E0E0E0;
-  --border-h: rgba(242, 183, 5, 0.5);
-  --r: 10px;
-  --r-sm: 8px;
-  --r-lg: 16px;
-  --shadow: 0 4px 12px rgba(0,0,0,0.1);
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --bg-0: #f5f5f0;
+  --bg-1: #ffffff;
+  --bg-2: #ffffff;
+  --bg-3: #f7f6f2;
+  --bg-4: #e0ddd5;
+  --bg-glass: rgba(255, 255, 255, 0.88);
+  --yellow: #f5c518;
+  --yellow-light: #fef9e7;
+  --yellow-dark: #c9a000;
+  --yellow-pale: #fef9e7;
+  --yellow-glow: rgba(245,197,24,0.25);
+  --accent: #f5c518;
+  --accent-2: #c9a000;
+  --accent-glow: rgba(245, 197, 24, 0.12);
+  --accent-glow-2: rgba(245, 197, 24, 0.08);
+  --green: #2e7d32;
+  --green-bg: rgba(46, 125, 50, 0.10);
+  --amber: #f5a623;
+  --amber-bg: rgba(245, 166, 35, 0.12);
+  --red: #d32f2f;
+  --red-bg: rgba(211, 47, 47, 0.10);
+  --cyan: #5c6bc0;
+  --cyan-bg: rgba(92, 107, 192, 0.10);
+  --t1: #1a1a1a;
+  --t2: #4a4a4a;
+  --t3: #8a8a80;
+  --border: #e0ddd5;
+  --border-h: rgba(245, 197, 24, 0.5);
+  --r: 14px;
+  --r-sm: 10px;
+  --r-lg: 14px;
+  --shadow: 0 8px 32px rgba(0,0,0,0.10);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.06);
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -52,12 +52,23 @@
 html { scroll-behavior: smooth; }
 
 body {
-  font-family: 'Nunito Sans', sans-serif;
+  font-family: 'Bricolage Grotesque', sans-serif;
   background: var(--bg-0);
   color: var(--t1);
   min-height: 100vh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Top accent bar */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #1a1a1a 0%, var(--yellow) 100%);
+  z-index: 200;
+  pointer-events: none;
 }
 
 /* ═══════════════════ SIDEBAR ═══════════════════ */
@@ -87,12 +98,12 @@ body {
   background: var(--yellow);
   border-radius: 10px;
   display: flex; align-items: center; justify-content: center;
-  font-family: 'Nunito Sans', sans-serif;
-  font-weight: 900;
-  font-size: 13px;
-  color: #1A1A1A;
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-weight: 800;
+  font-size: 12px;
+  color: #1a1a1a;
   flex-shrink: 0;
-  box-shadow: 0 2px 10px var(--yellow-glow);
+  box-shadow: 0 2px 16px rgba(245,197,24,0.12);
 }
 
 .sidebar-brand span:first-child {
@@ -107,10 +118,10 @@ body {
 .sidebar-brand span:last-child {
   font-size: 9px;
   color: rgba(255,255,255,0.4);
-  font-family: 'Nunito Sans', sans-serif;
+  font-family: 'Bricolage Grotesque', sans-serif;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .sidebar-nav {
@@ -174,14 +185,14 @@ body {
 .nav-badge {
   margin-left: auto;
   background: var(--yellow);
-  color: #1A1A1A;
+  color: #1a1a1a;
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 700;
   padding: 1px 6px;
   border-radius: 8px;
   min-width: 18px;
   text-align: center;
-  font-family: 'Nunito Sans', sans-serif;
+  font-family: 'DM Mono', monospace;
 }
 
 .sidebar-footer {
@@ -249,7 +260,8 @@ body {
 }
 
 .topbar-title {
-  font-family: 'Nunito Sans', sans-serif;
+  font-family: 'Playfair Display', serif;
+  letter-spacing: -0.02em;
 }
 
 .topbar-left {
@@ -292,11 +304,11 @@ body {
   width: 220px;
   outline: none;
   transition: all 0.25s var(--ease);
-  font-family: inherit;
+  font-family: 'DM Mono', monospace;
 }
 
 .search-bar input::placeholder { color: var(--t3); }
-.search-bar input:focus { border-color: var(--yellow); box-shadow: 0 0 0 3px var(--yellow-glow); width: 280px; }
+.search-bar input:focus { border-color: #1a1a1a; box-shadow: 0 0 0 3px rgba(26,26,26,0.1); width: 280px; }
 
 .search-bar svg {
   position: absolute;
@@ -318,7 +330,7 @@ body {
   position: relative;
 }
 
-.topbar-btn:hover { background: var(--yellow-pale); color: var(--t1); border-color: var(--yellow); }
+.topbar-btn:hover { background: var(--bg-3); color: var(--t1); border-color: rgba(26,26,26,0.2); }
 
 .notif-dot {
   position: absolute;
@@ -332,11 +344,11 @@ body {
 .avatar {
   width: 32px; height: 32px;
   border-radius: 50%;
-  background: var(--yellow);
+  background: linear-gradient(135deg, #1a1a1a 0%, #333333 100%);
   display: flex; align-items: center; justify-content: center;
-  font-weight: 800;
+  font-weight: 700;
   font-size: 12px;
-  color: #1A1A1A;
+  color: var(--yellow);
   cursor: pointer;
 }
 
@@ -361,7 +373,7 @@ body {
 
 .kpi-card {
   background: var(--bg-2);
-  border: 1px solid #ECECEC;
+  border: 1px solid var(--border);
   border-radius: var(--r-lg);
   padding: 18px 20px;
   transition: all 0.25s var(--ease);
@@ -374,12 +386,10 @@ body {
   content: '';
   position: absolute;
   top: 0; left: 0;
-  width: 100%; height: 3px;
-  opacity: 0;
-  transition: opacity 0.3s;
+  width: 3px; height: 100%;
 }
 
-.kpi-card.blue::after { background: var(--yellow); }
+.kpi-card.blue::after { background: #1a1a1a; }
 .kpi-card.green::after { background: var(--green); }
 .kpi-card.amber::after { background: var(--amber); }
 .kpi-card.red::after { background: var(--red); }
@@ -388,10 +398,8 @@ body {
 .kpi-card:hover {
   border-color: var(--border-h);
   transform: translateY(-2px);
-  box-shadow: var(--shadow);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.08);
 }
-
-.kpi-card:hover::after { opacity: 1; }
 
 .kpi-header {
   display: flex;
@@ -406,7 +414,7 @@ body {
   display: flex; align-items: center; justify-content: center;
 }
 
-.kpi-card.blue .kpi-icon { background: var(--yellow-pale); color: var(--yellow-dark); }
+.kpi-card.blue .kpi-icon { background: rgba(26,26,26,0.08); color: #1a1a1a; }
 .kpi-card.green .kpi-icon { background: var(--green-bg); color: var(--green); }
 .kpi-card.amber .kpi-icon { background: var(--amber-bg); color: var(--amber); }
 .kpi-card.red .kpi-icon { background: var(--red-bg); color: var(--red); }
@@ -420,7 +428,7 @@ body {
   display: flex;
   align-items: center;
   gap: 2px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'DM Mono', monospace;
 }
 
 .kpi-trend.up { background: var(--green-bg); color: var(--green); }
@@ -429,7 +437,7 @@ body {
 .kpi-value {
   font-size: 26px;
   font-weight: 800;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'DM Mono', monospace;
   letter-spacing: -1.5px;
   margin-bottom: 2px;
 }
@@ -454,7 +462,7 @@ body {
 /* ═══════════════════ CARD ═══════════════════ */
 .card {
   background: var(--bg-2);
-  border: 1px solid #ECECEC;
+  border: 1px solid var(--border);
   border-radius: var(--r-lg);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
@@ -488,7 +496,7 @@ body {
   background: var(--bg-3);
   color: var(--t2);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s var(--ease);
   font-family: inherit;
@@ -498,11 +506,11 @@ body {
   white-space: nowrap;
 }
 
-.btn:hover { color: var(--t1); border-color: var(--yellow); background: var(--yellow-pale); }
-.btn.active { background: var(--yellow-pale); color: var(--yellow-dark); border-color: var(--yellow); }
+.btn:hover { color: var(--t1); border-color: rgba(26,26,26,0.3); background: rgba(26,26,26,0.05); }
+.btn.active { background: var(--yellow-pale); color: #1a1a1a; border-color: rgba(245,197,24,0.4); }
 
-.btn-primary { background: var(--yellow); color: #1A1A1A; border-color: var(--yellow); font-weight: 800; }
-.btn-primary:hover { background: var(--yellow-light); }
+.btn-primary { background: linear-gradient(135deg, #1a1a1a 0%, #333333 100%); color: var(--yellow); border: 2px solid var(--yellow); font-weight: 700; letter-spacing: 0.02em; }
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(26,26,26,0.25); }
 
 .btn-success { background: var(--green); color: #fff; border-color: var(--green); font-weight: 700; }
 
@@ -524,13 +532,13 @@ table { width: 100%; border-collapse: collapse; }
 thead th {
   padding: 10px 14px;
   text-align: left;
-  font-size: 10px;
-  font-weight: 800;
+  font-size: 0.6rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 1.2px;
+  letter-spacing: 0.12em;
   color: var(--t3);
-  border-bottom: 2px solid var(--yellow);
-  background: var(--yellow-pale);
+  border-bottom: 2px solid #1a1a1a;
+  background: var(--bg-3);
   white-space: nowrap;
 }
 
@@ -542,7 +550,7 @@ tbody td {
 }
 
 tbody tr { cursor: pointer; transition: background 0.15s; }
-tbody tr:hover { background: var(--yellow-pale); }
+tbody tr:hover { background: var(--bg-3); }
 tbody tr:last-child td { border-bottom: none; }
 
 .cell-client {
@@ -561,9 +569,9 @@ tbody tr:last-child td { border-bottom: none; }
 }
 
 .cell-name { font-weight: 600; }
-.cell-code { font-size: 10px; color: var(--t3); font-family: 'JetBrains Mono', monospace; }
+.cell-code { font-size: 10px; color: var(--t3); font-family: 'DM Mono', monospace; }
 
-.mono { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; letter-spacing: -0.3px; }
+.mono { font-family: 'DM Mono', monospace; font-size: 12.5px; letter-spacing: -0.3px; }
 
 .badge {
   display: inline-flex;
@@ -577,7 +585,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 .badge.green { background: var(--green-bg); color: var(--green); }
 .badge.red { background: var(--red-bg); color: var(--red); }
-.badge.blue { background: var(--yellow-pale); color: var(--yellow-dark); }
+.badge.blue { background: rgba(26,26,26,0.08); color: #1a1a1a; }
 .badge.amber { background: var(--amber-bg); color: var(--amber); }
 .badge.cyan { background: var(--cyan-bg); color: var(--cyan); }
 
@@ -603,12 +611,12 @@ tbody tr:last-child td { border-bottom: none; }
 }
 
 .prog-fill.green { background: var(--green); }
-.prog-fill.blue { background: var(--yellow); }
+.prog-fill.blue { background: #1a1a1a; }
 .prog-fill.amber { background: var(--amber); }
 .prog-fill.red { background: var(--red); }
 
 .prog-text {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'DM Mono', monospace;
   font-size: 11px;
   color: var(--t2);
   min-width: 32px;
@@ -643,9 +651,9 @@ tbody tr:last-child td { border-bottom: none; }
 }
 
 .chart-bar:hover { filter: brightness(1.2); }
-.chart-bar.real { background: var(--yellow); }
-.chart-bar.target { background: #ECECEC; border: 1px dashed #D4D4D4; }
-.chart-bar.forecast { background: rgba(242,183,5,0.25); border: 1px dashed var(--yellow); }
+.chart-bar.real { background: #1a1a1a; }
+.chart-bar.target { background: var(--bg-3); border: 1px dashed var(--border); }
+.chart-bar.forecast { background: rgba(26,26,26,0.15); border: 1px dashed #1a1a1a; }
 
 .chart-label { font-size: 10px; color: var(--t3); font-weight: 500; }
 
@@ -680,7 +688,7 @@ tbody tr:last-child td { border-bottom: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'DM Mono', monospace;
   font-size: 12px;
   font-weight: 700;
 }
@@ -707,25 +715,25 @@ tbody tr:last-child td { border-bottom: none; }
 }
 
 .pipe-count {
-  background: var(--yellow-pale);
+  background: rgba(26,26,26,0.08);
   padding: 1px 7px;
   border-radius: 8px;
   font-size: 10px;
-  color: var(--yellow-dark);
-  font-weight: 800;
-  font-family: 'Nunito Sans', sans-serif;
+  color: var(--t2);
+  font-weight: 600;
+  font-family: 'DM Mono', monospace;
 }
 
-.pipe-total { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--t3); }
+.pipe-total { font-size: 11px; font-family: 'DM Mono', monospace; color: var(--t3); }
 
 .pipe-card {
   background: var(--bg-1);
-  border: 1px solid #ECECEC;
+  border: 1px solid var(--border);
   border-radius: var(--r);
   padding: 12px 14px;
   margin-bottom: 8px;
   cursor: pointer;
-  transition: all 0.2s var(--ease);
+  transition: all 0.25s var(--ease);
   box-shadow: var(--shadow-sm);
 }
 
@@ -741,10 +749,10 @@ tbody tr:last-child td { border-bottom: none; }
 }
 
 .pipe-card-amount {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'DM Mono', monospace;
   font-size: 12px;
-  font-weight: 700;
-  color: var(--yellow-dark);
+  font-weight: 500;
+  color: #1a1a1a;
 }
 
 .pipe-card-date { font-size: 10px; color: var(--t3); }
@@ -779,21 +787,21 @@ tbody tr:last-child td { border-bottom: none; }
   font-family: inherit;
 }
 
-.tb:hover { background: var(--yellow-pale); color: var(--t1); }
-.tb.active { background: var(--yellow-pale); color: var(--yellow-dark); }
+.tb:hover { background: var(--bg-3); color: var(--t1); }
+.tb.active { background: rgba(26,26,26,0.08); color: #1a1a1a; }
 
 .tb-ai {
   width: auto;
   padding: 0 10px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--yellow-dark);
+  color: #1a1a1a;
   gap: 4px;
   display: flex;
   align-items: center;
 }
 
-.tb-ai:hover { background: var(--yellow-pale); }
+.tb-ai:hover { background: var(--yellow-pale); border-radius: 6px; }
 
 .tb-div { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
 
@@ -827,8 +835,8 @@ tbody tr:last-child td { border-bottom: none; }
 
 .ai-box {
   background: var(--yellow-pale);
-  border: 1px solid rgba(242,183,5,0.3);
-  border-left: 4px solid var(--yellow);
+  border: 1px solid rgba(245,197,24,0.3);
+  border-left: 3px solid #1a1a1a;
   border-radius: var(--r);
   padding: 14px;
   margin: 0 12px 12px;
@@ -842,9 +850,9 @@ tbody tr:last-child td { border-bottom: none; }
   margin-bottom: 8px;
   font-size: 11px;
   font-weight: 700;
-  color: var(--yellow-dark);
+  color: #1a1a1a;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.1em;
 }
 
 .ai-box-text { font-size: 13px; line-height: 1.6; color: var(--t2); }
@@ -895,8 +903,8 @@ tbody tr:last-child td { border-bottom: none; }
   display: flex; align-items: center; justify-content: center;
   font-weight: 800;
   font-size: 20px;
-  background: var(--yellow);
-  color: #1A1A1A;
+  background: linear-gradient(135deg, #1a1a1a 0%, #333333 100%);
+  color: var(--yellow);
   flex-shrink: 0;
 }
 
@@ -938,8 +946,8 @@ tbody tr:last-child td { border-bottom: none; }
   white-space: nowrap;
 }
 
-.tab:hover { color: var(--t2); background: var(--yellow-pale); }
-.tab.active { color: #1A1A1A; border-bottom-color: var(--yellow); background: var(--yellow-pale); }
+.tab:hover { color: var(--t1); background: var(--bg-3); }
+.tab.active { color: #1a1a1a; border-bottom-color: #1a1a1a; font-weight: 700; }
 
 /* ═══════════════════ SCORING CARD ═══════════════════ */
 .score-card {
@@ -951,7 +959,7 @@ tbody tr:last-child td { border-bottom: none; }
 }
 
 .score-card .score-label { font-size: 11px; color: var(--t3); margin-top: 6px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
-.score-card .score-big { font-family: 'JetBrains Mono', monospace; font-size: 32px; font-weight: 800; margin: 4px 0; }
+.score-card .score-big { font-family: 'DM Mono', monospace; font-size: 32px; font-weight: 800; margin: 4px 0; }
 
 .score-factors {
   display: flex;
@@ -969,7 +977,7 @@ tbody tr:last-child td { border-bottom: none; }
 }
 
 .score-factor-name { color: var(--t2); }
-.score-factor-val { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+.score-factor-val { font-family: 'DM Mono', monospace; font-weight: 600; }
 
 /* ═══════════════════ MAP ═══════════════════ */
 .map-container {
@@ -990,7 +998,7 @@ tbody tr:last-child td { border-bottom: none; }
 .map-popup {
   padding: 1rem 1.2rem;
   min-width: 220px;
-  font-family: 'Nunito Sans', sans-serif;
+  font-family: 'Bricolage Grotesque', sans-serif;
 }
 
 .map-popup h4 {
@@ -1024,23 +1032,24 @@ tbody tr:last-child td { border-bottom: none; }
   width: 100%;
   margin-top: .75rem;
   padding: .5rem;
-  background: var(--yellow);
-  color: #1A1A1A;
-  border: none;
-  border-radius: 6px;
-  font-family: 'Nunito Sans', sans-serif;
+  background: linear-gradient(135deg, #1a1a1a 0%, #333333 100%);
+  color: var(--yellow);
+  border: 2px solid var(--yellow);
+  border-radius: 8px;
+  font-family: 'Bricolage Grotesque', sans-serif;
   font-size: .75rem;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
   text-align: center;
+  transition: all 0.2s;
 }
 
-.map-popup-btn:hover { background: var(--yellow-light); }
+.map-popup-btn:hover { box-shadow: 0 4px 12px rgba(26,26,26,0.25); }
 
 .leaflet-popup-content-wrapper {
   border-radius: var(--r) !important;
   box-shadow: var(--shadow) !important;
-  font-family: 'Nunito Sans', sans-serif !important;
+  font-family: 'Bricolage Grotesque', sans-serif !important;
 }
 
 .leaflet-popup-content { margin: 0 !important; padding: 0 !important; }
@@ -1185,7 +1194,7 @@ tbody tr:last-child td { border-bottom: none; }
   transition: all 0.15s;
 }
 
-.chip:hover, .chip.on { border-color: var(--yellow); background: var(--yellow-pale); color: var(--yellow-dark); }
+.chip:hover, .chip.on { border-color: rgba(26,26,26,0.3); background: rgba(26,26,26,0.05); color: #1a1a1a; }
 
 /* ═══════════════════ NOTIFICATION PANEL ═══════════════════ */
 .notif-panel {
@@ -1224,7 +1233,7 @@ tbody tr:last-child td { border-bottom: none; }
   transition: background 0.15s;
 }
 
-.notif-item:hover { background: var(--yellow-pale); }
+.notif-item:hover { background: var(--bg-3); }
 .notif-item:last-child { border-bottom: none; }
 
 .notif-dot-sm {
@@ -1236,7 +1245,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 .notif-text { font-size: 12.5px; line-height: 1.4; color: var(--t2); }
 .notif-text strong { color: var(--t1); }
-.notif-time { font-size: 10px; color: var(--t3); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+.notif-time { font-size: 10px; color: var(--t3); margin-top: 2px; font-family: 'DM Mono', monospace; }
 
 /* ═══════════════════ ACTIVITY ═══════════════════ */
 .act-item {
@@ -1257,7 +1266,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 .act-text { font-size: 12.5px; line-height: 1.4; color: var(--t2); }
 .act-text strong { color: var(--t1); }
-.act-time { font-size: 10px; color: var(--t3); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+.act-time { font-size: 10px; color: var(--t3); margin-top: 2px; font-family: 'DM Mono', monospace; }
 
 /* ═══════════════════ TOAST ═══════════════════ */
 .toasts {
@@ -1328,9 +1337,9 @@ tbody tr:last-child td { border-bottom: none; }
 
 .sidebar-overlay.active { display: block; }
 
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: var(--bg-0); }
-::-webkit-scrollbar-thumb { background: #B0B0B0; border-radius: 3px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 </style>
 </head>
 <body>
@@ -1548,70 +1557,156 @@ Cordialement,</textarea>
 
 <div class="toasts" id="toasts"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 // ═══════════════════════════════════════════════════════════
-//  DATA LAYER — simulates Akuiteo API responses
+//  SUPABASE — connexion à la base de données
 // ═══════════════════════════════════════════════════════════
-const DB = {
-  clients: [
-    { id:'enedis', name:'Enedis Grand Ouest', code:'CLI-0042', ca:245800, obj:280000, margin:42, dso:38, score:87, color:'#4f8ff7,#3b73d9', ini:'EN', sector:'Énergie', contact:'P. Moreau', email:'p.moreau@enedis.fr', phone:'+33 2 98 44 12 00', devis:3, lastContact:'Aujourd\'hui', status:'advance', lat:48.39, lng:-4.48, sentiment:{pos:72,neu:22,neg:6}, city:'Brest' },
-    { id:'naval', name:'Naval Group', code:'CLI-0018', ca:198400, obj:200000, margin:38, dso:45, score:82, color:'#8b5cf6,#7c3aed', ini:'NG', sector:'Défense', contact:'C. Dubois', email:'c.dubois@naval-group.com', phone:'+33 2 98 34 56 00', devis:1, lastContact:'Hier', status:'objectif', lat:48.38, lng:-4.50, sentiment:{pos:65,neu:28,neg:7}, city:'Brest' },
-    { id:'thales', name:'Thales', code:'CLI-0007', ca:167200, obj:250000, margin:35, dso:62, score:58, color:'#f59e0b,#d97706', ini:'TH', sector:'Défense & Aéro', contact:'L. Martin', email:'l.martin@thales.com', phone:'+33 1 73 32 00 00', devis:2, lastContact:'Il y a 3j', status:'retard', lat:48.83, lng:2.27, sentiment:{pos:48,neu:35,neg:17}, city:'Paris' },
-    { id:'safran', name:'Safran Tech', code:'CLI-0031', ca:142600, obj:180000, margin:40, dso:42, score:74, color:'#10b981,#059669', ini:'SF', sector:'Aéronautique', contact:'A. Bernard', email:'a.bernard@safrangroup.com', phone:'+33 1 40 60 80 00', devis:1, lastContact:'Il y a 5j', status:'objectif', lat:48.77, lng:2.01, sentiment:{pos:60,neu:30,neg:10}, city:'Massy' },
-    { id:'airbus', name:'Airbus Defence', code:'CLI-0055', ca:89300, obj:150000, margin:32, dso:55, score:45, color:'#ef4444,#dc2626', ini:'AD', sector:'Aéronautique', contact:'M. Petit', email:'m.petit@airbus.com', phone:'+33 5 61 93 33 33', devis:0, lastContact:'Il y a 12j', status:'retard', lat:43.63, lng:1.37, sentiment:{pos:35,neu:40,neg:25}, city:'Toulouse' },
-    { id:'dassault', name:'Dassault Systèmes', code:'CLI-0063', ca:134500, obj:160000, margin:44, dso:35, score:80, color:'#06b6d4,#0891b2', ini:'DS', sector:'Tech', contact:'J. Leroy', email:'j.leroy@3ds.com', phone:'+33 1 61 62 61 62', devis:2, lastContact:'Il y a 2j', status:'advance', lat:48.82, lng:2.13, sentiment:{pos:70,neu:24,neg:6}, city:'Vélizy' },
-    { id:'edf', name:'EDF Renouvelables', code:'CLI-0071', ca:112000, obj:120000, margin:37, dso:40, score:78, color:'#84cc16,#65a30d', ini:'EF', sector:'Énergie', contact:'N. Simon', email:'n.simon@edf.fr', phone:'+33 1 40 42 22 22', devis:1, lastContact:'Il y a 7j', status:'advance', lat:48.87, lng:2.33, sentiment:{pos:64,neu:28,neg:8}, city:'Paris' },
-    { id:'orange', name:'Orange Business', code:'CLI-0089', ca:78000, obj:130000, margin:28, dso:68, score:38, color:'#f97316,#ea580c', ini:'OB', sector:'Telecom', contact:'D. Laurent', email:'d.laurent@orange.com', phone:'+33 1 44 44 22 22', devis:0, lastContact:'Il y a 15j', status:'retard', lat:48.84, lng:2.26, sentiment:{pos:30,neu:38,neg:32}, city:'Paris' },
-  ],
-  devis: [
-    { ref:'DV-2024-089', client:'Enedis Grand Ouest', montant:85000, date:'01/03/2024', statut:'accepted', sujet:'Migration infra cloud' },
-    { ref:'DV-2024-092', client:'Naval Group', montant:124000, date:'05/03/2024', statut:'pending', sujet:'Cybersécurité OT' },
-    { ref:'DV-2024-094', client:'Thales', montant:67500, date:'08/03/2024', statut:'pending', sujet:'Formation DevSecOps' },
-    { ref:'DV-2024-095', client:'Enedis Grand Ouest', montant:42000, date:'10/03/2024', statut:'pending', sujet:'Audit sécurité SI' },
-    { ref:'DV-2024-097', client:'Dassault Systèmes', montant:198000, date:'12/03/2024', statut:'pending', sujet:'Intégration PLM' },
-    { ref:'DV-2024-098', client:'Safran Tech', montant:56700, date:'14/03/2024', statut:'sent', sujet:'POC IoT industriel' },
-    { ref:'DV-2024-088', client:'Airbus Defence', montant:274000, date:'28/02/2024', statut:'refused', sujet:'Refonte architecture SI' },
-  ],
-  commandes: [
-    { ref:'CM-2024-041', client:'Enedis Grand Ouest', montant:85000, date:'02/03/2024', statut:'en_cours', livraison:'15/06/2024' },
-    { ref:'CM-2024-039', client:'Naval Group', montant:156000, date:'15/02/2024', statut:'en_cours', livraison:'30/05/2024' },
-    { ref:'CM-2024-037', client:'Dassault Systèmes', montant:92000, date:'01/02/2024', statut:'livree', livraison:'01/03/2024' },
-    { ref:'CM-2024-035', client:'Thales', montant:45000, date:'20/01/2024', statut:'livree', livraison:'28/02/2024' },
-    { ref:'CM-2024-043', client:'Safran Tech', montant:34000, date:'10/03/2024', statut:'annulee', livraison:'—' },
-  ],
-  factures: [
-    { ref:'FA-2024-156', client:'Thales', montant:45000, date:'01/02/2024', echeance:'01/03/2024', statut:'retard', jours:6 },
-    { ref:'FA-2024-155', client:'Orange Business', montant:56000, date:'10/02/2024', echeance:'10/03/2024', statut:'retard', jours:0 },
-    { ref:'FA-2024-158', client:'Enedis Grand Ouest', montant:85000, date:'05/03/2024', echeance:'05/04/2024', statut:'attente', jours:0 },
-    { ref:'FA-2024-160', client:'Dassault Systèmes', montant:92000, date:'08/03/2024', echeance:'08/04/2024', statut:'attente', jours:0 },
-    { ref:'FA-2024-152', client:'Naval Group', montant:78000, date:'15/01/2024', echeance:'15/02/2024', statut:'payee', jours:0 },
-    { ref:'FA-2024-148', client:'Safran Tech', montant:67000, date:'05/01/2024', echeance:'05/02/2024', statut:'payee', jours:0 },
-    { ref:'FA-2024-161', client:'Airbus Defence', montant:55000, date:'12/03/2024', echeance:'12/04/2024', statut:'attente', jours:0 },
-  ],
-  reports: [
-    { id:1, client:'Enedis Grand Ouest', date:'Aujourd\'hui 10:30', titre:'Réunion de suivi — Migration cloud', text:'Points abordés : avancement Phase 2, planification des tests UAT, validation du budget complémentaire. Le client souhaite accélérer la livraison. Prochaine réunion prévue le 20/03.' },
-    { id:2, client:'Naval Group', date:'Hier 14:00', titre:'Kick-off Cybersécurité OT', text:'Présentation de l\'équipe projet, revue du périmètre, jalons clés définis pour Q2. Le RSSI demande un audit préliminaire.' },
-    { id:3, client:'Thales', date:'04/03/2024', titre:'Point commercial trimestriel', text:'Bilan Q1, discussion sur le renouvellement du contrat cadre, opportunités identifiées sur le segment aéronautique.' },
-  ],
-  notifications: [
-    { id:1, type:'danger', text:'<strong>Facture FA-2024-156</strong> en retard de 6 jours — Thales', time:'Il y a 30 min', read:false },
-    { id:2, type:'success', text:'<strong>Devis DV-2024-089</strong> accepté — Enedis Grand Ouest', time:'Il y a 1h', read:false },
-    { id:3, type:'warn', text:'<strong>Score client</strong> Orange Business en baisse (38/100)', time:'Il y a 2h', read:false },
-    { id:4, type:'info', text:'Rappel : relance <strong>Airbus Defence</strong> — dernier contact il y a 12j', time:'Il y a 3h', read:false },
-    { id:5, type:'warn', text:'<strong>DSO</strong> Orange Business à 68 jours (seuil: 60j)', time:'Il y a 4h', read:false },
-  ],
-  alerts: [
-    { type:'danger', title:'Factures en retard', desc:'2 factures dépassent leur échéance pour un total de 101 000€', items:['FA-2024-156 — Thales — 45 000€ — 6 jours de retard', 'FA-2024-155 — Orange Business — 56 000€ — échéance aujourd\'hui'] },
-    { type:'warn', title:'Clients sans contact > 10 jours', desc:'2 clients n\'ont pas été contactés depuis plus de 10 jours', items:['Airbus Defence — dernier contact il y a 12 jours', 'Orange Business — dernier contact il y a 15 jours'] },
-    { type:'warn', title:'Scoring client en baisse', desc:'2 clients ont un score prédictif inférieur à 50/100', items:['Orange Business — Score 38/100 (↓12 pts)', 'Airbus Defence — Score 45/100 (↓8 pts)'] },
-    { type:'info', title:'Objectifs à risque', desc:'3 clients sont en retard sur leurs objectifs annuels de CA', items:['Thales — 67% (objectif à risque)', 'Airbus Defence — 60% (critique)', 'Orange Business — 60% (critique)'] },
-    { type:'info', title:'DSO élevé', desc:'2 clients dépassent le seuil de 60 jours de délai de paiement moyen', items:['Orange Business — DSO 68 jours', 'Thales — DSO 62 jours'] },
-  ]
-};
+const SUPABASE_URL = 'https://asuccniyofzvwgooxjah.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzdWNjbml5b2Z6dndnb294amFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MDQyNjgsImV4cCI6MjA4ODQ4MDI2OH0.dPerW1BApAxe26xzv9i7oWIubgGuzO5RibMvs-MFm88';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ═══════════════════════════════════════════════════════════
+//  DATA LAYER — chargé depuis Supabase
+// ═══════════════════════════════════════════════════════════
+const DB = { clients:[], devis:[], commandes:[], factures:[], reports:[], notifications:[], alerts:[] };
+
+function timeAgo(dateStr) {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diff = Math.floor((now - d) / (1000*60*60*24));
+  if (diff === 0) return "Aujourd'hui";
+  if (diff === 1) return 'Hier';
+  return `Il y a ${diff}j`;
+}
+
+function fmtDateFR(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('fr-FR');
+}
+
+async function loadDB() {
+  try {
+    // Charger toutes les tables en parallèle
+    const [cRes, dRes, cmRes, fRes, rRes, nRes, coRes] = await Promise.all([
+      supabase.from('clients').select('*').order('ca', {ascending:false}),
+      supabase.from('devis').select('*').order('date', {ascending:false}),
+      supabase.from('commandes').select('*').order('date', {ascending:false}),
+      supabase.from('factures').select('*').order('date', {ascending:false}),
+      supabase.from('reports').select('*').order('date', {ascending:false}),
+      supabase.from('notifications').select('*').order('created_at', {ascending:false}),
+      supabase.from('commerciaux').select('*'),
+    ]);
+
+    // Mapper les clients pour garder le format attendu par le renderer
+    DB.clients = (cRes.data || []).map(c => ({
+      ...c,
+      sentiment: { pos: c.sentiment_pos, neu: c.sentiment_neu, neg: c.sentiment_neg },
+      lastContact: timeAgo(c.last_contact),
+      devis: 0
+    }));
+    // Compter les devis par client
+    DB.devis = (dRes.data || []).map(d => ({ ...d, client: d.client_name, date: fmtDateFR(d.date) }));
+    DB.clients.forEach(c => { c.devis = DB.devis.filter(d => d.client_id === c.id).length; });
+
+    DB.commandes = (cmRes.data || []).map(c => ({ ...c, client: c.client_name, date: fmtDateFR(c.date), livraison: fmtDateFR(c.livraison) }));
+    DB.factures = (fRes.data || []).map(f => ({ ...f, client: f.client_name, date: fmtDateFR(f.date), echeance: fmtDateFR(f.echeance), jours: f.jours_retard }));
+    DB.reports = (rRes.data || []).map(r => ({ ...r, client: r.client_name, text: r.contenu, date: timeAgo(r.date), titre: r.titre }));
+    DB.notifications = (nRes.data || []).map(n => ({ ...n, time: n.time_label }));
+    DB.commerciaux = coRes.data || [];
+
+    // Générer les alertes dynamiquement depuis les données
+    DB.alerts = generateAlerts();
+
+    console.log('Données chargées depuis Supabase', DB);
+    return true;
+  } catch (err) {
+    console.error('Erreur chargement Supabase:', err);
+    toast('Erreur de connexion à la base de données', 'error');
+    return false;
+  }
+}
+
+function generateAlerts() {
+  const alerts = [];
+  const overdueInvoices = DB.factures.filter(f => f.statut === 'retard');
+  if (overdueInvoices.length) {
+    alerts.push({
+      type:'danger', title:'Factures en retard',
+      desc: `${overdueInvoices.length} facture(s) en retard pour un total de ${fmt(overdueInvoices.reduce((a,f)=>a+Number(f.montant),0))}`,
+      items: overdueInvoices.map(f => `${f.ref} — ${f.client} — ${fmt(Number(f.montant))}${f.jours ? ' — '+f.jours+' jours de retard' : ''}`)
+    });
+  }
+  const dormant = DB.clients.filter(c => {
+    const d = new Date(c.last_contact);
+    return (new Date() - d) / (1000*60*60*24) > 10;
+  });
+  if (dormant.length) {
+    alerts.push({
+      type:'warn', title:'Clients sans contact > 10 jours',
+      desc: `${dormant.length} client(s) n'ont pas été contactés depuis plus de 10 jours`,
+      items: dormant.map(c => `${c.name} — dernier contact ${c.lastContact}`)
+    });
+  }
+  const lowScore = DB.clients.filter(c => c.score < 50);
+  if (lowScore.length) {
+    alerts.push({
+      type:'warn', title:'Scoring client en baisse',
+      desc: `${lowScore.length} client(s) avec un score inférieur à 50/100`,
+      items: lowScore.map(c => `${c.name} — Score ${c.score}/100`)
+    });
+  }
+  const behindObj = DB.clients.filter(c => c.obj > 0 && (c.ca / c.obj) < 0.7);
+  if (behindObj.length) {
+    alerts.push({
+      type:'info', title:'Objectifs à risque',
+      desc: `${behindObj.length} client(s) en retard sur leurs objectifs`,
+      items: behindObj.map(c => `${c.name} — ${pct(c.ca,c.obj)}%`)
+    });
+  }
+  const highDSO = DB.clients.filter(c => c.dso > 60);
+  if (highDSO.length) {
+    alerts.push({
+      type:'info', title:'DSO élevé',
+      desc: `${highDSO.length} client(s) dépassent 60 jours de DSO`,
+      items: highDSO.map(c => `${c.name} — DSO ${c.dso} jours`)
+    });
+  }
+  return alerts;
+}
+
+// ═══ CRUD HELPERS ═══
+async function dbInsert(table, data) {
+  const { data: result, error } = await supabase.from(table).insert(data).select();
+  if (error) { toast(`Erreur: ${error.message}`, 'error'); return null; }
+  toast('Enregistré avec succès', 'success');
+  await loadDB();
+  renderPage(currentPage);
+  return result;
+}
+
+async function dbUpdate(table, id, data) {
+  const { error } = await supabase.from(table).update(data).eq('id', id);
+  if (error) { toast(`Erreur: ${error.message}`, 'error'); return false; }
+  toast('Mis à jour avec succès', 'success');
+  await loadDB();
+  renderPage(currentPage);
+  return true;
+}
+
+async function dbDelete(table, id) {
+  const { error } = await supabase.from(table).delete().eq('id', id);
+  if (error) { toast(`Erreur: ${error.message}`, 'error'); return false; }
+  toast('Supprimé avec succès', 'success');
+  await loadDB();
+  renderPage(currentPage);
+  return true;
+}
 
 // ═══ UTILS ═══
-const fmt = v => v >= 1e6 ? (v/1e6).toFixed(2).replace('.',',')+' M€' : v.toLocaleString('fr-FR')+' €';
-const pct = (a,b) => Math.round(a/b*100);
+const fmt = v => { v = Number(v) || 0; return v >= 1e6 ? (v/1e6).toFixed(2).replace('.',',')+' M€' : v.toLocaleString('fr-FR')+' €'; };
+const pct = (a,b) => b ? Math.round(Number(a)/Number(b)*100) : 0;
 const pctColor = p => p >= 90 ? 'green' : p >= 70 ? 'blue' : p >= 50 ? 'amber' : 'red';
 
 function scoreColor(s) { return s >= 75 ? 'var(--green)' : s >= 50 ? 'var(--amber)' : 'var(--red)'; }
@@ -1620,7 +1715,7 @@ function scoreRing(score, size=44) {
   const r = 17, circ = 2*Math.PI*r, offset = circ - (score/100)*circ;
   return `<div class="score-ring" style="width:${size}px;height:${size}px">
     <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-      <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3"/>
+      <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="3"/>
       <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${c}" stroke-width="3" stroke-dasharray="${circ}" stroke-dashoffset="${offset}" stroke-linecap="round"/>
     </svg>
     <div class="score-val" style="color:${c}">${score}</div>
@@ -1697,7 +1792,10 @@ function renderDashboard() {
     </div>`;
   }
 
-  const dormantClients = DB.clients.filter(c=>c.lastContact.includes('12j')||c.lastContact.includes('15j'));
+  const dormantClients = DB.clients.filter(c => {
+    const d = new Date(c.last_contact);
+    return !isNaN(d) && (new Date() - d) / (1000*60*60*24) > 10;
+  });
   if(dormantClients.length) {
     alertsHTML += `<div class="alert-panel warn">
       <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -1794,8 +1892,8 @@ function renderChart() {
   });
   return `<div class="chart-bars">${bars}</div>
   <div class="chart-legend">
-    <div class="chart-legend-item"><div class="chart-legend-dot" style="background:var(--accent)"></div>Réalisé</div>
-    <div class="chart-legend-item"><div class="chart-legend-dot" style="background:rgba(242,183,5,0.3);border:1px dashed var(--yellow)"></div>Prévisionnel IA</div>
+    <div class="chart-legend-item"><div class="chart-legend-dot" style="background:#1a1a1a"></div>Réalisé</div>
+    <div class="chart-legend-item"><div class="chart-legend-dot" style="background:rgba(26,26,26,0.15);border:1px dashed #1a1a1a"></div>Prévisionnel IA</div>
     <div class="chart-legend-item"><div class="chart-legend-dot" style="background:rgba(255,255,255,0.1);border:1px dashed rgba(255,255,255,0.2)"></div>Objectif</div>
   </div>`;
 }
@@ -2139,10 +2237,8 @@ function renderFactures() {
 }
 
 function renderObjectifs() {
-  const commerciaux = [
-    {nom:'Marc Bertrand',ca:480000,obj:600000,clients:8,taux:'42%',score:78},
-    {nom:'Sophie Lemaire',ca:520000,obj:650000,clients:10,taux:'38%',score:82},
-    {nom:'Thomas Renaud',ca:420000,obj:670000,clients:6,taux:'31%',score:65},
+  const commerciaux = DB.commerciaux && DB.commerciaux.length ? DB.commerciaux : [
+    {nom:'—',ca:0,obj:1,clients_count:0,taux_conversion:'0%',score:0},
   ];
   return `
   <div class="kpi-grid" style="margin-bottom:20px">
@@ -2158,7 +2254,7 @@ function renderObjectifs() {
       <tbody>${commerciaux.map(c => {const p=pct(c.ca,c.obj); return `<tr>
         <td style="font-weight:600">${c.nom}</td><td>${scoreRing(c.score)}</td><td class="mono">${fmt(c.ca)}</td><td class="mono">${fmt(c.obj)}</td>
         <td><div class="prog"><div class="prog-bar"><div class="prog-fill ${pctColor(p)}" style="width:${p}%"></div></div><span class="prog-text">${p}%</span></div></td>
-        <td class="mono">${c.clients}</td><td class="mono">${c.taux}</td>
+        <td class="mono">${c.clients_count || c.clients || 0}</td><td class="mono">${c.taux_conversion || c.taux || '0%'}</td>
       </tr>`;}).join('')}</tbody></table>
     </div></div>
   </div>`;
@@ -2422,7 +2518,11 @@ function toast(msg, type='info') {
 }
 
 // ═══ INIT ═══
-renderPage('dashboard');
+(async function init() {
+  document.getElementById('contentArea').innerHTML = '<div class="page active" style="text-align:center;padding:60px 20px;color:var(--t3)"><div style="font-size:1.1rem;font-weight:600">Chargement des données...</div><div style="margin-top:8px;font-size:.85rem">Connexion à Supabase</div></div>';
+  await loadDB();
+  renderPage('dashboard');
+})();
 
 // Close notif panel on outside click
 document.addEventListener('click', e => {
