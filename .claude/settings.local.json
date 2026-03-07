@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init)",
+      "Bash(gh auth status)",
+      "Bash(gh repo create CRM --public --source=. --remote=origin --description \"CRM Project\")",
+      "Bash(git add index.html)",
+      "Bash(git commit:*)",
+      "Bash(git push -u origin master)",
+      "Bash(git push)"
+    ]
+  }
+}
