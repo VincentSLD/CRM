@@ -1564,7 +1564,7 @@ Cordialement,</textarea>
 // ═══════════════════════════════════════════════════════════
 const SUPABASE_URL = 'https://asuccniyofzvwgooxjah.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzdWNjbml5b2Z6dndnb294amFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MDQyNjgsImV4cCI6MjA4ODQ4MDI2OH0.dPerW1BApAxe26xzv9i7oWIubgGuzO5RibMvs-MFm88';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ═══════════════════════════════════════════════════════════
 //  DATA LAYER — chargé depuis Supabase
@@ -1590,13 +1590,13 @@ async function loadDB() {
   try {
     // Charger toutes les tables en parallèle
     const [cRes, dRes, cmRes, fRes, rRes, nRes, coRes] = await Promise.all([
-      supabase.from('clients').select('*').order('ca', {ascending:false}),
-      supabase.from('devis').select('*').order('date', {ascending:false}),
-      supabase.from('commandes').select('*').order('date', {ascending:false}),
-      supabase.from('factures').select('*').order('date', {ascending:false}),
-      supabase.from('reports').select('*').order('date', {ascending:false}),
-      supabase.from('notifications').select('*').order('created_at', {ascending:false}),
-      supabase.from('commerciaux').select('*'),
+      sb.from('clients').select('*').order('ca', {ascending:false}),
+      sb.from('devis').select('*').order('date', {ascending:false}),
+      sb.from('commandes').select('*').order('date', {ascending:false}),
+      sb.from('factures').select('*').order('date', {ascending:false}),
+      sb.from('reports').select('*').order('date', {ascending:false}),
+      sb.from('notifications').select('*').order('created_at', {ascending:false}),
+      sb.from('commerciaux').select('*'),
     ]);
 
     // Mapper les clients pour garder le format attendu par le renderer
@@ -1678,7 +1678,7 @@ function generateAlerts() {
 
 // ═══ CRUD HELPERS ═══
 async function dbInsert(table, data) {
-  const { data: result, error } = await supabase.from(table).insert(data).select();
+  const { data: result, error } = await sb.from(table).insert(data).select();
   if (error) { toast(`Erreur: ${error.message}`, 'error'); return null; }
   toast('Enregistré avec succès', 'success');
   await loadDB();
@@ -1687,7 +1687,7 @@ async function dbInsert(table, data) {
 }
 
 async function dbUpdate(table, id, data) {
-  const { error } = await supabase.from(table).update(data).eq('id', id);
+  const { error } = await sb.from(table).update(data).eq('id', id);
   if (error) { toast(`Erreur: ${error.message}`, 'error'); return false; }
   toast('Mis à jour avec succès', 'success');
   await loadDB();
@@ -1696,7 +1696,7 @@ async function dbUpdate(table, id, data) {
 }
 
 async function dbDelete(table, id) {
-  const { error } = await supabase.from(table).delete().eq('id', id);
+  const { error } = await sb.from(table).delete().eq('id', id);
   if (error) { toast(`Erreur: ${error.message}`, 'error'); return false; }
   toast('Supprimé avec succès', 'success');
   await loadDB();
