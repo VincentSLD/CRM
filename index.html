@@ -2351,6 +2351,7 @@ function renderClientDetail() {
     </div>
     <div class="client-actions">
       <button class="btn" onclick="openModal('edit-client')">✎ Modifier</button>
+      <button class="btn" onclick="pushClientToAkuiteo('${c.id}')">↑ Sync Akuiteo</button>
       <button class="btn" onclick="go('cr')">✎ Nouveau CR</button>
       <button class="btn" onclick="openModal('proposal')">✦ Proposition IA</button>
       <button class="btn btn-primary" onclick="openModal('send')">✈ Envoyer synthèse</button>
@@ -3051,10 +3052,100 @@ function handleSearch(q) {
 }
 document.addEventListener('click', e => { if(!e.target.closest('.search-bar')) document.getElementById('searchDropdown').classList.remove('show'); });
 
-// ═══ SYNC ═══
-function syncAkuiteo() {
+// ═══ SYNC AKUITEO ═══
+async function syncAkuiteo() {
   toast('Synchronisation Akuiteo en cours...','info');
-  setTimeout(()=>toast('147 éléments synchronisés avec succès','success'),2000);
+  try {
+    const { data, error } = await sb.rpc('akuiteo_search_customers', { search_text: null, max_results: 500 });
+    if (error) { toast('Erreur sync: ' + error.message, 'error'); return; }
+    if (data && data.error) { toast('Erreur API Akuiteo: ' + (data.message || 'Inconnue'), 'error'); return; }
+
+    const akCustomers = Array.isArray(data) ? data : [];
+    let created = 0, updated = 0;
+
+    for (const ak of akCustomers) {
+      const akId = String(ak.id || ak.code);
+      const existing = DB.clients.find(c => c.akuiteo_id === akId || c.code === ak.code);
+
+      const clientData = {
+        name: ak.name || ak.code || 'Sans nom',
+        code: ak.code || akId,
+        sector: ak.category?.name || '',
+        city: ak.mainSite?.city || ak.mainSiteRelatedInformation?.site?.city || '',
+        contact: ak.mainContact ? (ak.mainContact.firstName || '') + ' ' + (ak.mainContact.lastName || '') : '',
+        email: ak.mainContact?.email || '',
+        phone: ak.mainContact?.phone || '',
+        akuiteo_id: akId,
+        last_contact: new Date().toISOString().slice(0, 10),
+      };
+
+      if (existing) {
+        await sb.from('clients').update(clientData).eq('id', existing.id);
+        updated++;
+      } else {
+        const id = akId.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 20) + '_' + Date.now().toString(36);
+        const ini = (clientData.name || '??').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+        const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626'];
+        await sb.from('clients').insert({
+          ...clientData, id, ini,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          ca: 0, obj: 0, margin: 0, dso: 0, score: 50, status: 'objectif',
+          sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15,
+          lat: 46.6 + Math.random() * 3, lng: -1 + Math.random() * 6,
+        });
+        created++;
+      }
+    }
+
+    await loadDB();
+    renderPage(currentPage);
+    toast(`Sync terminée : ${created} créé(s), ${updated} mis à jour, ${akCustomers.length} total Akuiteo`, 'success');
+
+    // Mettre à jour le label de sync
+    document.getElementById('syncLabel').innerHTML = 'Akuiteo synchronisé — <span style="font-family:JetBrains Mono,monospace">' + new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) + '</span>';
+  } catch (e) {
+    console.error('Sync Akuiteo error:', e);
+    toast('Erreur de synchronisation: ' + e.message, 'error');
+  }
+}
+
+// Pousser un client CRM vers Akuiteo
+async function pushClientToAkuiteo(clientId) {
+  const client = DB.clients.find(c => c.id === clientId);
+  if (!client) { toast('Client non trouvé', 'error'); return; }
+
+  const akData = {
+    name: client.name,
+    code: client.code,
+  };
+
+  toast('Envoi vers Akuiteo...', 'info');
+
+  if (client.akuiteo_id) {
+    // Mise à jour
+    const { data, error } = await sb.rpc('akuiteo_update_customer', {
+      customer_id: client.akuiteo_id,
+      customer_data: akData
+    });
+    if (error || (data && data.error)) {
+      toast('Erreur mise à jour Akuiteo: ' + (error?.message || data?.message || 'Inconnue'), 'error');
+      return;
+    }
+    toast('Client mis à jour dans Akuiteo', 'success');
+  } else {
+    // Création
+    const { data, error } = await sb.rpc('akuiteo_create_customer', { customer_data: akData });
+    if (error || (data && data.error)) {
+      toast('Erreur création Akuiteo: ' + (error?.message || data?.message || 'Inconnue'), 'error');
+      return;
+    }
+    // Sauvegarder l'ID Akuiteo retourné
+    if (data && data.id) {
+      await sb.from('clients').update({ akuiteo_id: String(data.id) }).eq('id', clientId);
+      await loadDB();
+    }
+    toast('Client créé dans Akuiteo', 'success');
+  }
 }
 
 // ═══ OFFLINE DETECTION ═══
