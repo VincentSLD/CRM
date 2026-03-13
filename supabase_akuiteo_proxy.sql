@@ -41,9 +41,16 @@ BEGIN
   SELECT value INTO base_url FROM app_settings WHERE key = 'akuiteo_base_url';
   SELECT value INTO auth_header FROM app_settings WHERE key = 'akuiteo_auth';
 
-  req_body := '{}'::JSONB;
+  -- Format Akuiteo : chaque champ est un objet Clause {operator, value}
+  -- Les opérateurs doivent être en MAJUSCULES : LIKE, IS, IS_NOT, IN, etc.
   IF search_text IS NOT NULL AND search_text != '' THEN
-    req_body := jsonb_build_object('searchText', search_text);
+    req_body := jsonb_build_object(
+      'name', jsonb_build_object('operator', 'LIKE', 'value', '%' || search_text || '%')
+    );
+  ELSE
+    req_body := jsonb_build_object(
+      'code', jsonb_build_object('operator', 'LIKE', 'value', '%')
+    );
   END IF;
 
   SELECT * INTO response FROM extensions.http((

@@ -2416,7 +2416,77 @@ function renderClientDetail() {
         }).join('') || '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">Aucune facture</td></tr>'}</tbody></table>
       </div></div>
     </div>
+  </div>
+  <div class="card" id="contacts-card">
+    <div class="card-header">
+      <div class="card-title">Contacts Akuiteo</div>
+      <button class="btn" onclick="loadAkuiteoContacts('${c.akuiteo_id || ''}', '${c.id}')" style="font-size:12px">↻ Charger contacts</button>
+    </div>
+    <div class="card-body" id="contacts-list" style="padding:0">
+      <div style="text-align:center;padding:20px;color:var(--t3)">
+        ${c.akuiteo_id ? 'Cliquez "Charger contacts" pour récupérer les contacts depuis Akuiteo' : 'Ce client n\'est pas lié à Akuiteo'}
+      </div>
+    </div>
   </div>`;
+}
+
+async function loadAkuiteoContacts(akuiteoId, clientId) {
+  if (!akuiteoId) { toast('Ce client n\'a pas d\'ID Akuiteo', 'warn'); return; }
+  const el = document.getElementById('contacts-list');
+  el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t3)">Chargement...</div>';
+
+  try {
+    const contacts = await akuiteoFetch('GET', '/customers/' + akuiteoId + '/contacts');
+    console.log('[Akuiteo] Contacts:', contacts?.length || 0);
+
+    if (!Array.isArray(contacts) || contacts.length === 0) {
+      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t3)">Aucun contact trouvé</div>';
+      return;
+    }
+
+    // Sauvegarder en base Supabase
+    for (const ct of contacts) {
+      const ctId = 'ct_' + String(ct.id).replace(/[^a-zA-Z0-9]/g, '_') + '_' + clientId.substring(0, 8);
+      const contactData = {
+        id: ctId,
+        client_id: clientId,
+        akuiteo_id: String(ct.id),
+        akuiteo_customer_id: akuiteoId,
+        code: ct.code || '',
+        nom: ct.name || '',
+        prenom: ct.firstName || '',
+        titre: ct.title || '',
+        fonction: ct.functionTitle || ct.position || '',
+        service: ct.service || '',
+        email: ct.email || '',
+        email2: ct.email2 || '',
+        telephone: ct.phone || '',
+        mobile: ct.mobilePhone || '',
+        adresse: ct.address?.line1 || '',
+        code_postal: ct.address?.postalCode || '',
+        ville: ct.address?.city || '',
+        commentaire: ct.comment || '',
+      };
+      await sb.from('contacts').upsert(contactData, { onConflict: 'id' });
+    }
+
+    // Afficher les contacts
+    el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Fonction</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th>Ville</th></tr></thead><tbody>'
+      + contacts.map(ct => `<tr>
+        <td><strong>${ct.title || ''} ${ct.firstName || ''} ${ct.name || ''}</strong></td>
+        <td>${ct.functionTitle || ct.position || ct.service || ''}</td>
+        <td>${ct.email ? '<a href="mailto:'+ct.email+'">'+ct.email+'</a>' : '-'}</td>
+        <td class="mono">${ct.phone || '-'}</td>
+        <td class="mono">${ct.mobilePhone || '-'}</td>
+        <td>${ct.address?.city || '-'}</td>
+      </tr>`).join('')
+      + '</tbody></table></div>';
+
+    toast(`${contacts.length} contact(s) chargé(s) depuis Akuiteo`, 'success');
+  } catch (e) {
+    console.error('Load contacts error:', e);
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--red)">Erreur: ' + e.message + '</div>';
+  }
 }
 
 // ═══ PIPELINE ═══
@@ -3053,14 +3123,42 @@ function handleSearch(q) {
 document.addEventListener('click', e => { if(!e.target.closest('.search-bar')) document.getElementById('searchDropdown').classList.remove('show'); });
 
 // ═══ SYNC AKUITEO ═══
+// ═══ AKUITEO API via proxy local (lancer: python proxy_akuiteo.py) ═══
+const AKUITEO_PROXY = 'http://localhost:8888';
+
+async function akuiteoFetch(method, path, body = null) {
+  const opts = {
+    method,
+    headers: { 'Accept': 'application/json' },
+  };
+  if (body) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const r = await fetch(AKUITEO_PROXY + path, opts);
+  console.log(`[Akuiteo] ${method} ${path} → ${r.status}`);
+  if (!r.ok) {
+    const txt = await r.text();
+    throw new Error(`Akuiteo ${r.status}: ${txt.substring(0, 200)}`);
+  }
+  const text = await r.text();
+  return text ? JSON.parse(text) : null;
+}
+
 async function syncAkuiteo() {
   toast('Synchronisation Akuiteo en cours...','info');
   try {
-    const { data, error } = await sb.rpc('akuiteo_search_customers', { search_text: null, max_results: 500 });
-    if (error) { toast('Erreur sync: ' + error.message, 'error'); return; }
-    if (data && data.error) { toast('Erreur API Akuiteo: ' + (data.message || 'Inconnue'), 'error'); return; }
+    // Rechercher tous les clients Akuiteo (format Clause: operator en MAJUSCULES)
+    const akCustomers = await akuiteoFetch('POST', '/customers/search?limit=50', {
+      code: { operator: 'LIKE', value: '%' }
+    });
+    console.log('[Akuiteo] Clients trouvés:', akCustomers?.length || 0);
 
-    const akCustomers = Array.isArray(data) ? data : [];
+    if (!Array.isArray(akCustomers) || akCustomers.length === 0) {
+      toast('Aucun client trouvé dans Akuiteo', 'warn');
+      return;
+    }
+
     let created = 0, updated = 0;
 
     for (const ak of akCustomers) {
@@ -3068,13 +3166,13 @@ async function syncAkuiteo() {
       const existing = DB.clients.find(c => c.akuiteo_id === akId || c.code === ak.code);
 
       const clientData = {
-        name: ak.name || ak.code || 'Sans nom',
+        name: ak.name || ak.legalName || ak.code || 'Sans nom',
         code: ak.code || akId,
-        sector: ak.category?.name || '',
-        city: ak.mainSite?.city || ak.mainSiteRelatedInformation?.site?.city || '',
-        contact: ak.mainContact ? (ak.mainContact.firstName || '') + ' ' + (ak.mainContact.lastName || '') : '',
-        email: ak.mainContact?.email || '',
-        phone: ak.mainContact?.phone || '',
+        sector: ak.profession || ak.category || '',
+        city: ak.address?.city || '',
+        contact: ak.accountManager || ak.salesman || '',
+        email: ak.address?.email || ak.email || '',
+        phone: ak.address?.phone || ak.phone || '',
         akuiteo_id: akId,
         last_contact: new Date().toISOString().slice(0, 10),
       };
@@ -3083,7 +3181,7 @@ async function syncAkuiteo() {
         await sb.from('clients').update(clientData).eq('id', existing.id);
         updated++;
       } else {
-        const id = akId.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 20) + '_' + Date.now().toString(36);
+        const id = 'ak_' + akId.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20) + '_' + Date.now().toString(36);
         const ini = (clientData.name || '??').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
         const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626'];
         await sb.from('clients').insert({
@@ -3100,8 +3198,6 @@ async function syncAkuiteo() {
     await loadDB();
     renderPage(currentPage);
     toast(`Sync terminée : ${created} créé(s), ${updated} mis à jour, ${akCustomers.length} total Akuiteo`, 'success');
-
-    // Mettre à jour le label de sync
     document.getElementById('syncLabel').innerHTML = 'Akuiteo synchronisé — <span style="font-family:JetBrains Mono,monospace">' + new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) + '</span>';
   } catch (e) {
     console.error('Sync Akuiteo error:', e);
@@ -3114,37 +3210,25 @@ async function pushClientToAkuiteo(clientId) {
   const client = DB.clients.find(c => c.id === clientId);
   if (!client) { toast('Client non trouvé', 'error'); return; }
 
-  const akData = {
-    name: client.name,
-    code: client.code,
-  };
-
+  const akData = { name: client.name, code: client.code };
   toast('Envoi vers Akuiteo...', 'info');
 
-  if (client.akuiteo_id) {
-    // Mise à jour
-    const { data, error } = await sb.rpc('akuiteo_update_customer', {
-      customer_id: client.akuiteo_id,
-      customer_data: akData
-    });
-    if (error || (data && data.error)) {
-      toast('Erreur mise à jour Akuiteo: ' + (error?.message || data?.message || 'Inconnue'), 'error');
-      return;
+  try {
+    if (client.akuiteo_id) {
+      await akuiteoFetch('POST', '/customers/' + client.akuiteo_id, akData);
+      toast('Client mis à jour dans Akuiteo', 'success');
+    } else {
+      const result = await akuiteoFetch('PUT', '/customers', akData);
+      if (result && (result.id || result)) {
+        const newAkId = String(result.id || result);
+        await sb.from('clients').update({ akuiteo_id: newAkId }).eq('id', clientId);
+        await loadDB();
+      }
+      toast('Client créé dans Akuiteo', 'success');
     }
-    toast('Client mis à jour dans Akuiteo', 'success');
-  } else {
-    // Création
-    const { data, error } = await sb.rpc('akuiteo_create_customer', { customer_data: akData });
-    if (error || (data && data.error)) {
-      toast('Erreur création Akuiteo: ' + (error?.message || data?.message || 'Inconnue'), 'error');
-      return;
-    }
-    // Sauvegarder l'ID Akuiteo retourné
-    if (data && data.id) {
-      await sb.from('clients').update({ akuiteo_id: String(data.id) }).eq('id', clientId);
-      await loadDB();
-    }
-    toast('Client créé dans Akuiteo', 'success');
+  } catch (e) {
+    console.error('Push Akuiteo error:', e);
+    toast('Erreur Akuiteo: ' + e.message, 'error');
   }
 }
 
