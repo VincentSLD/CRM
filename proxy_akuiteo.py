@@ -7,7 +7,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import requests
 import json
 
-AKUITEO_BASE = "https://novamingenierie-test.myakuiteo.com/akuiteo/rest/crm"
+AKUITEO_ROOT = "https://novamingenierie-test.myakuiteo.com/akuiteo/rest"
 AKUITEO_AUTH = ("API1", "API1")
 
 class ProxyHandler(BaseHTTPRequestHandler):
@@ -22,9 +22,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _proxy(self, method):
-        # Le path après /akuiteo/ est transmis à l'API
+        # Routes: /crm/... → module CRM, /sales/... → module Sales
         path = self.path
-        url = AKUITEO_BASE + path
+        url = AKUITEO_ROOT + path
 
         body = None
         if self.headers.get('Content-Length'):
@@ -74,7 +74,7 @@ if __name__ == '__main__':
     port = 8888
     server = HTTPServer(('localhost', port), ProxyHandler)
     print(f"=== Proxy Akuiteo démarré sur http://localhost:{port} ===")
-    print(f"=== Cible: {AKUITEO_BASE} ===")
+    print(f"=== Cible: {AKUITEO_ROOT} ===")
     print("Appuyez Ctrl+C pour arrêter")
     try:
         server.serve_forever()

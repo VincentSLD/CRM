@@ -1582,6 +1582,10 @@ tbody tr:last-child td { border-bottom: none; }
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         Alertes <span class="nav-badge" style="background:var(--amber)">5</span>
       </div>
+      <div class="nav-item" data-page="admin" onclick="go('admin')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Admin
+      </div>
     </div>
   </nav>
   <div class="sidebar-footer">
@@ -1861,7 +1865,7 @@ Cordialement,</textarea>
 
 <div class="toasts" id="toasts"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script>
 // ═══════════════════════════════════════════════════════════
 //  SUPABASE — connexion à la base de données
@@ -1904,7 +1908,12 @@ async function loadDB() {
     ]);
 
     // Mapper les clients pour garder le format attendu par le renderer
-    DB.clients = (cRes.data || []).map(c => ({
+    let clientsRaw = cRes.data || [];
+    // Filtrer par commercial si l'utilisateur a un akuiteo_manager_id et n'est pas admin
+    if (currentCommercial && currentCommercial.akuiteo_manager_id && currentCommercial.role !== 'admin') {
+      clientsRaw = clientsRaw.filter(c => c.account_manager_id === currentCommercial.akuiteo_manager_id);
+    }
+    DB.clients = clientsRaw.map(c => ({
       ...c,
       sentiment: { pos: c.sentiment_pos, neu: c.sentiment_neu, neg: c.sentiment_neg },
       lastContact: timeAgo(c.last_contact),
@@ -2072,6 +2081,7 @@ function renderPage(page) {
     cr: renderCR,
     envois: renderEnvois,
     alertes: renderAlertes,
+    admin: renderAdmin,
   };
   C.innerHTML = '<div class="page active">' + (renderers[page] ? renderers[page]() : '<p>Page en construction</p>') + '</div>';
   // Post-render hooks
@@ -2436,7 +2446,7 @@ async function loadAkuiteoContacts(akuiteoId, clientId) {
   el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t3)">Chargement...</div>';
 
   try {
-    const contacts = await akuiteoFetch('GET', '/customers/' + akuiteoId + '/contacts');
+    const contacts = await akuiteoFetch('GET', '/crm/customers/' + akuiteoId + '/contacts');
     console.log('[Akuiteo] Contacts:', contacts?.length || 0);
 
     if (!Array.isArray(contacts) || contacts.length === 0) {
@@ -2823,6 +2833,97 @@ function renderEnvois() {
 }
 
 // ═══ ALERTES ═══
+function renderAdmin() {
+  const isAdmin = !currentCommercial || currentCommercial.role === 'admin';
+  if (!isAdmin) {
+    return '<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--t3)">Accès réservé aux administrateurs</div></div>';
+  }
+  return `
+  <div style="margin-bottom:16px;font-size:13px;color:var(--t2)">Administration — Liaison commerciaux ↔ Akuiteo</div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">Commerciaux — ID Akuiteo (accountManagerId)</div></div>
+    <div class="card-body" style="padding:0"><div class="table-wrap">
+      <table><thead><tr><th>Commercial</th><th>Email</th><th>Rôle</th><th>ID Akuiteo (accountManagerId)</th><th>Action</th></tr></thead>
+      <tbody>${DB.commerciaux.map(c => `<tr>
+        <td><strong>${c.nom || '—'}</strong></td>
+        <td>${c.email || '—'}</td>
+        <td>
+          <select onchange="updateCommercialRole('${c.id}', this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px">
+            <option value="commercial" ${c.role==='commercial'?'selected':''}>Commercial</option>
+            <option value="manager" ${c.role==='manager'?'selected':''}>Manager</option>
+            <option value="admin" ${c.role==='admin'?'selected':''}>Admin</option>
+          </select>
+        </td>
+        <td>
+          <input type="text" id="ak_${c.id}" value="${c.akuiteo_manager_id || ''}" placeholder="Ex: 500000075"
+            style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:13px;width:140px">
+        </td>
+        <td>
+          <button class="btn" onclick="saveAkuiteoManagerId('${c.id}')" style="font-size:12px">Sauvegarder</button>
+        </td>
+      </tr>`).join('')}</tbody></table>
+    </div></div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="card-header"><div class="card-title">IDs Akuiteo disponibles</div></div>
+    <div class="card-body">
+      <p style="font-size:13px;color:var(--t2);margin-bottom:12px">Cliquez "Charger" pour récupérer la liste des accountManagerId depuis Akuiteo et voir combien de clients chacun gère.</p>
+      <button class="btn btn-primary" onclick="loadAkuiteoManagerIds()" style="font-size:13px">Charger les IDs depuis Akuiteo</button>
+      <div id="akManagerList" style="margin-top:16px"></div>
+    </div>
+  </div>`;
+}
+
+async function saveAkuiteoManagerId(commercialId) {
+  const input = document.getElementById('ak_' + commercialId);
+  if (!input) return;
+  const val = input.value.trim() || null;
+  const { error } = await sb.from('commerciaux').update({ akuiteo_manager_id: val }).eq('id', commercialId);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  // Mettre à jour localement
+  const comm = DB.commerciaux.find(c => c.id === commercialId);
+  if (comm) comm.akuiteo_manager_id = val;
+  if (currentCommercial && currentCommercial.id === commercialId) currentCommercial.akuiteo_manager_id = val;
+  toast('ID Akuiteo sauvegardé', 'success');
+}
+
+async function updateCommercialRole(commercialId, role) {
+  const { error } = await sb.from('commerciaux').update({ role }).eq('id', commercialId);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  const comm = DB.commerciaux.find(c => c.id === commercialId);
+  if (comm) comm.role = role;
+  if (currentCommercial && currentCommercial.id === commercialId) currentCommercial.role = role;
+  toast('Rôle mis à jour', 'success');
+}
+
+async function loadAkuiteoManagerIds() {
+  const el = document.getElementById('akManagerList');
+  el.innerHTML = '<div style="color:var(--t3)">Chargement...</div>';
+  try {
+    const customers = await akuiteoFetch('POST', '/crm/customers/search?limit=2000', {
+      accountManagerId: { operator: 'IS_NOT_NULL', value: '' }
+    });
+    // Compter par manager
+    const counts = {};
+    for (const c of customers) {
+      const mid = c.accountManagerId;
+      if (!mid) continue;
+      if (!counts[mid]) counts[mid] = 0;
+      counts[mid]++;
+    }
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>accountManagerId</th><th>Nb clients</th><th>Action</th></tr></thead><tbody>'
+      + sorted.map(([mid, count]) => `<tr>
+        <td class="mono">${mid}</td>
+        <td class="mono">${count}</td>
+        <td><button class="btn" onclick="navigator.clipboard.writeText('${mid}');toast('ID copié','success')" style="font-size:11px">Copier</button></td>
+      </tr>`).join('')
+      + '</tbody></table></div>';
+  } catch (e) {
+    el.innerHTML = '<div style="color:var(--red)">Erreur: ' + e.message + '. Le proxy est-il lancé ?</div>';
+  }
+}
+
 function renderAlertes() {
   return `
   <div style="margin-bottom:16px;font-size:13px;color:var(--t2)">Alertes automatiques et relances à planifier</div>
@@ -3148,13 +3249,16 @@ async function akuiteoFetch(method, path, body = null) {
 async function syncAkuiteo() {
   toast('Synchronisation Akuiteo en cours...','info');
   try {
-    // Rechercher tous les clients Akuiteo (format Clause: operator en MAJUSCULES)
-    const akCustomers = await akuiteoFetch('POST', '/customers/search?limit=50', {
+    // --- ETAPE 1 : Sync clients ---
+    console.log('[Akuiteo] === ETAPE 1 : Appel API clients...');
+    const allAkCustomers = await akuiteoFetch('POST', '/crm/customers/search?limit=10', {
       code: { operator: 'LIKE', value: '%' }
     });
-    console.log('[Akuiteo] Clients trouvés:', akCustomers?.length || 0);
+    // L'API ignore ?limit, on tronque côté JS
+    const akCustomers = Array.isArray(allAkCustomers) ? allAkCustomers.slice(0, 50) : [];
+    console.log('[Akuiteo] Clients trouvés:', allAkCustomers?.length || 0, '→ traitement de', akCustomers.length);
 
-    if (!Array.isArray(akCustomers) || akCustomers.length === 0) {
+    if (akCustomers.length === 0) {
       toast('Aucun client trouvé dans Akuiteo', 'warn');
       return;
     }
@@ -3174,30 +3278,138 @@ async function syncAkuiteo() {
         email: ak.address?.email || ak.email || '',
         phone: ak.address?.phone || ak.phone || '',
         akuiteo_id: akId,
+        account_manager_id: ak.accountManagerId || null,
         last_contact: new Date().toISOString().slice(0, 10),
       };
 
-      if (existing) {
-        await sb.from('clients').update(clientData).eq('id', existing.id);
+      const { data: dbMatch } = await sb.from('clients').select('id').eq('akuiteo_id', akId).maybeSingle();
+      if (existing || dbMatch) {
+        await sb.from('clients').update(clientData).eq('id', (existing || dbMatch).id);
         updated++;
       } else {
-        const id = 'ak_' + akId.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20) + '_' + Date.now().toString(36);
+        const id = 'ak_' + akId.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20);
         const ini = (clientData.name || '??').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
         const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626'];
-        await sb.from('clients').insert({
+        const { error: ie } = await sb.from('clients').insert({
           ...clientData, id, ini,
           color: colors[Math.floor(Math.random() * colors.length)],
           ca: 0, obj: 0, margin: 0, dso: 0, score: 50, status: 'objectif',
           sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15,
           lat: 46.6 + Math.random() * 3, lng: -1 + Math.random() * 6,
         });
-        created++;
+        if (ie) console.warn(`[Akuiteo] Insert client ${akId}:`, ie.message);
+        else created++;
       }
     }
 
+    console.log(`[Akuiteo] Clients : ${created} créés, ${updated} mis à jour`);
+    toast(`Clients : ${created} créés, ${updated} mis à jour. Sync docs en cours...`, 'info');
+
+    // --- ETAPE 2 : Recharger DB ---
+    console.log('[Akuiteo] === ETAPE 2 : Rechargement DB ===');
+    await loadDB();
+    console.log('[Akuiteo] DB rechargée, clients en mémoire:', DB.clients.length);
+
+    // --- ETAPE 3 : Sync devis, commandes, factures ---
+    console.log('[Akuiteo] === ETAPE 3 : Sync devis/commandes/factures ===');
+    let syncedDocs = { devis: 0, commandes: 0, factures: 0 };
+    let errDocs = { devis: 0, commandes: 0, factures: 0 };
+
+    const akClientIds = akCustomers.map(c => String(c.id));
+    console.log('[Akuiteo] IDs Akuiteo à syncer:', akClientIds.length);
+
+    let skipped = 0;
+    for (let ci = 0; ci < akClientIds.length; ci++) {
+      const akCid = akClientIds[ci];
+      const crmClient = DB.clients.find(c => c.akuiteo_id === akCid);
+      if (!crmClient) {
+        skipped++;
+        console.warn(`[Akuiteo] Client ${akCid} non trouvé en DB, skip`);
+        continue;
+      }
+      console.log(`[Akuiteo] Sync docs ${ci+1}/${akClientIds.length}: ${crmClient.name} (akuiteo_id=${akCid})`);
+
+      try {
+        // Devis
+        const quotations = await akuiteoFetch('POST', '/sales/quotations/search?limit=20', {
+          customerId: { operator: 'IS', value: akCid }
+        });
+        console.log(`[Akuiteo]   Devis: ${Array.isArray(quotations) ? quotations.length : 'non-array'}`);
+        if (Array.isArray(quotations)) {
+          for (const q of quotations) {
+            const qId = 'akd_' + String(q.id).replace(/[^a-zA-Z0-9.]/g, '_');
+            const { error } = await sb.from('devis').upsert({
+              id: qId,
+              ref: String(q.number || q.id || ''),
+              client_name: crmClient.name,
+              client_id: crmClient.id,
+              sujet: q.name || q.description || q.projectId || 'Devis Akuiteo',
+              montant: q.preTaxAmount || q.afterTaxAmount || 0,
+              statut: q.state === 'SIGNED' ? 'accepted' : q.state === 'ARCHIVED' ? 'refused' : 'pending',
+              date: q.date ? q.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
+            }, { onConflict: 'id' });
+            if (error) { console.error(`[Akuiteo] Erreur upsert devis ${qId}:`, error.message); errDocs.devis++; }
+            else syncedDocs.devis++;
+          }
+        }
+
+        // Commandes
+        const orders = await akuiteoFetch('POST', '/sales/orders/search?limit=20', {
+          customerId: { operator: 'IS', value: akCid }
+        });
+        console.log(`[Akuiteo]   Commandes: ${Array.isArray(orders) ? orders.length : 'non-array'}`);
+        if (Array.isArray(orders)) {
+          for (const o of orders) {
+            const oId = 'akc_' + String(o.id).replace(/[^a-zA-Z0-9.]/g, '_');
+            const { error } = await sb.from('commandes').upsert({
+              id: oId,
+              ref: String(o.number || o.id || ''),
+              client_name: crmClient.name,
+              client_id: crmClient.id,
+              montant: o.preTaxAmount || o.afterTaxAmount || 0,
+              statut: o.state === 'DELIVERED' ? 'livree' : o.state === 'CANCELLED' ? 'annulee' : 'en_cours',
+              date: o.date ? o.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
+              livraison: o.deliveryDate ? o.deliveryDate.substring(0, 10) : null,
+            }, { onConflict: 'id' });
+            if (error) { console.error(`[Akuiteo] Erreur upsert commande ${oId}:`, error.message); errDocs.commandes++; }
+            else syncedDocs.commandes++;
+          }
+        }
+
+        // Factures
+        const invoices = await akuiteoFetch('POST', '/sales/invoices/search?limit=20', {
+          customerId: { operator: 'IS', value: akCid }
+        });
+        console.log(`[Akuiteo]   Factures: ${Array.isArray(invoices) ? invoices.length : 'non-array'}`);
+        if (Array.isArray(invoices)) {
+          for (const f of invoices) {
+            const fId = 'akf_' + String(f.id).replace(/[^a-zA-Z0-9.]/g, '_');
+            const { error } = await sb.from('factures').upsert({
+              id: fId,
+              ref: String(f.number || f.id || ''),
+              client_name: crmClient.name,
+              client_id: crmClient.id,
+              montant: f.preTaxAmount || f.afterTaxAmount || 0,
+              statut: f.paidOn ? 'payee' : f.bookedOn ? 'envoyee' : 'brouillon',
+              date: f.date ? f.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
+              echeance: f.payment?.dueDate ? f.payment.dueDate.substring(0, 10) : null,
+              jours_retard: 0,
+            }, { onConflict: 'id' });
+            if (error) { console.error(`[Akuiteo] Erreur upsert facture ${fId}:`, error.message); errDocs.factures++; }
+            else syncedDocs.factures++;
+          }
+        }
+      } catch (docErr) {
+        console.error(`[Akuiteo] Erreur sync docs pour client ${akCid}:`, docErr);
+      }
+    }
+
+    console.log(`[Akuiteo] === RÉSULTAT ===`);
+    console.log(`[Akuiteo] Skipped: ${skipped}, Devis: ${syncedDocs.devis} (${errDocs.devis} err), Commandes: ${syncedDocs.commandes} (${errDocs.commandes} err), Factures: ${syncedDocs.factures} (${errDocs.factures} err)`);
+
     await loadDB();
     renderPage(currentPage);
-    toast(`Sync terminée : ${created} créé(s), ${updated} mis à jour, ${akCustomers.length} total Akuiteo`, 'success');
+    toast(`Sync terminée : ${created} client(s), ${syncedDocs.devis} devis, ${syncedDocs.commandes} commandes, ${syncedDocs.factures} factures` + (skipped ? ` (${skipped} clients ignorés)` : ''), 'success');
     document.getElementById('syncLabel').innerHTML = 'Akuiteo synchronisé — <span style="font-family:JetBrains Mono,monospace">' + new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) + '</span>';
   } catch (e) {
     console.error('Sync Akuiteo error:', e);
@@ -3215,10 +3427,10 @@ async function pushClientToAkuiteo(clientId) {
 
   try {
     if (client.akuiteo_id) {
-      await akuiteoFetch('POST', '/customers/' + client.akuiteo_id, akData);
+      await akuiteoFetch('POST', '/crm/customers/' + client.akuiteo_id, akData);
       toast('Client mis à jour dans Akuiteo', 'success');
     } else {
-      const result = await akuiteoFetch('PUT', '/customers', akData);
+      const result = await akuiteoFetch('PUT', '/crm/customers', akData);
       if (result && (result.id || result)) {
         const newAkId = String(result.id || result);
         await sb.from('clients').update({ akuiteo_id: newAkId }).eq('id', clientId);

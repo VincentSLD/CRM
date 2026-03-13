@@ -22,7 +22,12 @@
       "Bash(where choco:*)",
       "Bash(winget install:*)",
       "Bash(winget search:*)",
-      "Bash(powershell -Command \"Invoke-WebRequest -Uri ''https://github.com/supabase/cli/releases/latest/download/supabase_windows_amd64.exe'' -OutFile ''C:/PROJETS/05_CRM/supabase.exe''\")"
+      "Bash(powershell -Command \"Invoke-WebRequest -Uri ''https://github.com/supabase/cli/releases/latest/download/supabase_windows_amd64.exe'' -OutFile ''C:/PROJETS/05_CRM/supabase.exe''\")",
+      "WebFetch(domain:novamingenierie-test.myakuiteo.com)",
+      "Bash(git add:*)",
+      "Bash(node -c index.html)",
+      "Bash(ls /c/Program*/nodejs/)",
+      "Read(//c/Users/vsalaud/AppData/**)"
     ]
   }
 }
