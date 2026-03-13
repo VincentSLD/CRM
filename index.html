@@ -3251,8 +3251,17 @@ async function onAuthSuccess(user) {
   currentUser = user;
 
   // Charger le profil commercial lié
-  const { data } = await sb.from('commerciaux').select('*').eq('user_id', user.id).single();
+  const { data } = await sb.from('commerciaux').select('*').eq('user_id', user.id).maybeSingle();
   currentCommercial = data;
+  // Si pas de profil commercial, en créer un automatiquement
+  if (!currentCommercial) {
+    const fullName = user.user_metadata?.full_name || user.email.split('@')[0];
+    const { data: newComm } = await sb.from('commerciaux').insert({
+      user_id: user.id, email: user.email, nom: fullName,
+      ca: 0, obj: 0, clients_count: 0, taux_conversion: '0%', score: 0
+    }).select().single();
+    currentCommercial = newComm;
+  }
 
   // Mettre à jour l'avatar
   const initials = currentCommercial

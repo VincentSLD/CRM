@@ -10,7 +10,19 @@
       "Bash(git push)",
       "Bash(git add index.html supabase_schema.sql)",
       "Bash(where node)",
-      "Bash(where node.exe)"
+      "Bash(where node.exe)",
+      "WebFetch(domain:docs.akuiteo.fr)",
+      "Bash(npx supabase:*)",
+      "Bash(supabase --version)",
+      "Bash(npm install:*)",
+      "Bash(where npm.cmd)",
+      "Bash(where npx.cmd)",
+      "Bash(where winget:*)",
+      "Bash(where scoop:*)",
+      "Bash(where choco:*)",
+      "Bash(winget install:*)",
+      "Bash(winget search:*)",
+      "Bash(powershell -Command \"Invoke-WebRequest -Uri ''https://github.com/supabase/cli/releases/latest/download/supabase_windows_amd64.exe'' -OutFile ''C:/PROJETS/05_CRM/supabase.exe''\")"
     ]
   }
 }
