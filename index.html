@@ -2870,7 +2870,11 @@ function renderClientDetail() {
     ])}
     ${detailSection('Commercial', [
       detailRow('Contact commercial', c.contact),
-      detailRow('Manager ID', c.account_manager_id),
+      detailRow('Responsable', (() => {
+        if (!c.account_manager_id) return null;
+        const comm = DB.commerciaux.find(x => x.akuiteo_manager_id === c.account_manager_id);
+        return comm ? '<strong>' + comm.nom + '</strong> <span style="color:var(--t3);font-size:11px">(' + c.account_manager_id + ')</span>' : c.account_manager_id;
+      })()),
       detailRow('Société', c.code_societe),
       detailRow('Statut Akuiteo', c.statut_akuiteo),
       detailRow('Mots-clés', c.mots_cles),
@@ -4065,7 +4069,25 @@ function showCommandeDetail(id) {
         detailRow('Commercial ID', c.commercial_id),
         detailRow('Nombre de lignes', c.nb_lignes),
       ])}
-      ${renderCustomData(c.custom_data)}
+      ${(() => {
+        if (!c.custom_data || !c.custom_data._lines || c.custom_data._lines.length === 0) return '';
+        const lines = c.custom_data._lines;
+        const billingModeLabel = m => ({FIXED_PRICE:'Forfait',TIME_AND_MATERIALS:'Régie',EXPENSE:'Frais'}[m]||m||'—');
+        return `<div style="grid-column:1/-1">${detailSection('Planification / Lignes de commande',
+          ['<table class="tbl-compact" style="width:100%"><thead><tr><th>#</th><th>Désignation</th><th>Mode</th><th style="text-align:right">Qté</th><th style="text-align:right">PU</th><th style="text-align:right">Total</th><th>Début</th><th>Fin</th><th>Livraison prévue</th><th>Facturation prévue</th></tr></thead><tbody>' +
+          lines.map(l => `<tr>
+            <td>${l.rankNumber||''}</td><td>${l.name||'—'}</td><td>${billingModeLabel(l.billingMode)}</td>
+            <td style="text-align:right" class="mono">${l.quantity!=null?l.quantity:''}</td>
+            <td style="text-align:right" class="mono">${l.unitPrice!=null?fmt(l.unitPrice):''}</td>
+            <td style="text-align:right" class="mono">${l.amountTotal!=null?fmt(l.amountTotal):''}</td>
+            <td>${l.startDate?fmtDateFR(l.startDate.substring(0,10)):''}</td>
+            <td>${l.endDate?fmtDateFR(l.endDate.substring(0,10)):''}</td>
+            <td>${l.estimatedDeliveryDate?fmtDateFR(l.estimatedDeliveryDate.substring(0,10)):''}</td>
+            <td>${l.estimatedBillingDate?fmtDateFR(l.estimatedBillingDate.substring(0,10)):(l.projectedBillingDate?fmtDateFR(l.projectedBillingDate.substring(0,10)):'')}</td>
+          </tr>`).join('') + '</tbody></table>']
+        )}</div>`;
+      })()}
+      ${renderCustomData(c.custom_data?(() => { const d={...c.custom_data}; delete d._lines; return Object.keys(d).length>0?d:null; })():null)}
     </div>
   </div>`;
 }
@@ -5297,7 +5319,21 @@ async function syncAkuiteo() {
               date_client: o.customerDate ? o.customerDate.substring(0, 10) : null,
               date_validation: o.validationDate ? o.validationDate.substring(0, 10) : null,
               devise: o.currencyCode || 'EUR', nb_lignes: Array.isArray(o.lines) ? o.lines.length : 0,
-              custom_data: (o.customData && Object.keys(o.customData).length > 0) ? o.customData : null,
+              custom_data: (() => {
+                const cd = (o.customData && Object.keys(o.customData).length > 0) ? {...o.customData} : {};
+                if (Array.isArray(o.lines) && o.lines.length > 0) {
+                  cd._lines = o.lines.map(l => ({
+                    name: l.name || null, phaseId: l.phaseId || null, subPhaseId: l.subPhaseId || null,
+                    projectTaskId: l.projectTaskId || null, projectId: l.projectId || null,
+                    startDate: l.startDate || null, endDate: l.endDate || null,
+                    estimatedDeliveryDate: l.estimatedDeliveryDate || null, estimatedBillingDate: l.estimatedBillingDate || null,
+                    projectedBillingDate: l.projectedBillingDate || null, billingMode: l.billingMode || null,
+                    quantity: l.quantity, unitPrice: l.unitPrice, amountTotal: l.amountTotal,
+                    rankNumber: l.rankNumber,
+                  }));
+                }
+                return Object.keys(cd).length > 0 ? cd : null;
+              })(),
             };
           });
           if (cBatch.length > 0) {
@@ -5514,6 +5550,41 @@ async function syncAkuiteo() {
       if ((i + BATCH_SIZE) % 100 < BATCH_SIZE) console.log(`[Akuiteo] Contacts: ${i + batch.length}/${akClientIds.length} clients (${syncedContacts} contacts)`);
     }
     console.log(`[Akuiteo] Contacts : ${syncedContacts} synchro, ${errContacts} erreurs`);
+
+    // --- ETAPE 6 : Auto-assign commercial (managerId des commandes) ---
+    console.log('[Akuiteo] === ETAPE 6 : Auto-assign commerciaux ===');
+    try {
+      const { data: clientsSansCom } = await sb.from('clients').select('id').is('account_manager_id', null);
+      if (clientsSansCom && clientsSansCom.length > 0) {
+        const clientIdsSet = new Set(clientsSansCom.map(c => c.id));
+        // Chercher le managerId le plus récent dans les commandes de chaque client
+        const { data: allCmd } = await sb.from('commandes').select('client_id,responsable_id,date').not('responsable_id', 'is', null).order('date', {ascending:false});
+        const managerByClient = {};
+        for (const cmd of (allCmd || [])) {
+          if (clientIdsSet.has(cmd.client_id) && !managerByClient[cmd.client_id]) {
+            managerByClient[cmd.client_id] = cmd.responsable_id;
+          }
+        }
+        // Fallback: chercher dans les devis
+        const clientsRestants = [...clientIdsSet].filter(id => !managerByClient[id]);
+        if (clientsRestants.length > 0) {
+          const { data: allDevis } = await sb.from('devis').select('client_id,responsable_id,date').not('responsable_id', 'is', null).order('date', {ascending:false});
+          for (const d of (allDevis || [])) {
+            if (clientsRestants.includes(d.client_id) && !managerByClient[d.client_id]) {
+              managerByClient[d.client_id] = d.responsable_id;
+            }
+          }
+        }
+        let assignedCount = 0;
+        for (const [clientId, managerId] of Object.entries(managerByClient)) {
+          const { error } = await sb.from('clients').update({ account_manager_id: managerId }).eq('id', clientId);
+          if (!error) assignedCount++;
+        }
+        console.log(`[Akuiteo] Commerciaux auto-assignés: ${assignedCount}/${Object.keys(managerByClient).length}`);
+      }
+    } catch (e) {
+      console.warn('[Akuiteo] Erreur auto-assign commerciaux:', e.message);
+    }
 
     await loadDB();
     contactsLoaded = false; // Forcer rechargement page contacts

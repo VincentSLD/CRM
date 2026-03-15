@@ -41,7 +41,18 @@
       "Bash(python3 -m json.tool)",
       "Bash(curl -s http://localhost:8888/crm/customers/500013020/sites)",
       "Bash(python3 -c \":*)",
-      "Bash(curl -s http://localhost:8888/crm/customers/500014503/sites)"
+      "Bash(curl -s http://localhost:8888/crm/customers/500014503/sites)",
+      "Bash(curl -s -u API1:API1 https://novamingenierie-test.myakuiteo.com/akuiteo/rest/business/phases/1)",
+      "Bash(curl -s -u API1:API1 https://novamingenierie-test.myakuiteo.com/akuiteo/rest/business/project-tasks/1)",
+      "Bash(python -m json.tool)",
+      "Bash(curl -s -u API1:API1 https://novamingenierie-test.myakuiteo.com/akuiteo/rest/business/phases/500034302)",
+      "Bash(curl -s -u API1:API1 https://novamingenierie-test.myakuiteo.com/akuiteo/rest/business/project-tasks/500073832)",
+      "Bash(curl -s -u API1:API1 https://novamingenierie-test.myakuiteo.com/akuiteo/rest/business/sub-phases/500040774)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -u API1:API1 \"https://novamingenierie-test.myakuiteo.com/akuiteo/rest/business/phases/500034302\")",
+      "Bash(for ep:*)",
+      "Bash(do echo:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -u API1:API1 \"https://novamingenierie-test.myakuiteo.com/akuiteo/rest/$ep\")",
+      "Bash(done)"
     ]
   }
 }
