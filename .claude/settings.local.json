@@ -27,7 +27,21 @@
       "Bash(git add:*)",
       "Bash(node -c index.html)",
       "Bash(ls /c/Program*/nodejs/)",
-      "Read(//c/Users/vsalaud/AppData/**)"
+      "Read(//c/Users/vsalaud/AppData/**)",
+      "Bash(python -c \":*)",
+      "Bash(grep -n \"contact_id\\\\|contact_name\" /c/PROJETS/05_CRM/*.sql)",
+      "WebFetch(domain:www.akuiteo.com)",
+      "WebFetch(domain:localhost)",
+      "Bash(curl -s http://localhost:8888/)",
+      "Bash(curl -s http://localhost:8888/business/)",
+      "Bash(curl -s -w \"\\\\n%{http_code}\" http://localhost:8888/business/projects/search -X POST -H \"Content-Type: application/json\" -d '{\"\"code\"\":{\"\"operator\"\":\"\"LIKE\"\",\"\"value\"\":\"\"%\"\"}}')",
+      "Bash(curl -s -w \"\\\\n%{http_code}\" http://localhost:8888/business/affairs/search -X POST -H \"Content-Type: application/json\" -d '{\"\"code\"\":{\"\"operator\"\":\"\"LIKE\"\",\"\"value\"\":\"\"%\"\"}}')",
+      "Bash(curl -s -w n%{http_code} http://localhost:8888/sales/orders/CC-ES2300911)",
+      "Bash(curl -s -w n%{http_code} http://localhost:8888/crm/customers/500013020/sites)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s http://localhost:8888/crm/customers/500013020/sites)",
+      "Bash(python3 -c \":*)",
+      "Bash(curl -s http://localhost:8888/crm/customers/500014503/sites)"
     ]
   }
 }
