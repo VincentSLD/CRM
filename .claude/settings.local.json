@@ -52,7 +52,22 @@
       "Bash(for ep:*)",
       "Bash(do echo:*)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" -u API1:API1 \"https://novamingenierie-test.myakuiteo.com/akuiteo/rest/$ep\")",
-      "Bash(done)"
+      "Bash(done)",
+      "WebSearch",
+      "Bash(curl -s https://docs.akuiteo.fr/api/5.0/swagger-sales.yaml)",
+      "Bash(curl -s https://docs.akuiteo.fr/api/5.0/swagger-crm.yaml)",
+      "Bash(curl -s https://docs.akuiteo.fr/api/5.0/swagger-projectmanagement.yaml)",
+      "Bash(curl -s https://docs.akuiteo.fr/api/5.0/swagger-settings.yaml)",
+      "Bash(for yaml:*)",
+      "Bash(curl -s https://docs.akuiteo.fr/api/5.0/$yaml.yaml)",
+      "Bash(curl -s https://docs.akuiteo.fr/api/5.0/swagger-workforce.yaml)",
+      "Bash(grep -v \"^--$\")",
+      "Bash(curl -s https://docs.akuiteo.fr/api/5.0/swagger-legacy.yaml)",
+      "Bash(curl -s http://localhost:8888/sales/orders/search?limit=3 -X POST -H 'Content-Type: application/json' -d {})",
+      "Bash(curl -s http://localhost:8888/sales/orders/CC-AS1500001/recipient-contacts -H 'Accept: application/json')",
+      "Bash(curl -s http://localhost:8888/settings/custom-data-params/CUSTOMER -H 'Accept: application/json')",
+      "Bash(curl -s http://localhost:8888/projectmanagement/projects/26.0507.01/phases/search -X POST -H 'Content-Type: application/json' -d {})",
+      "Bash(kill %1)"
     ]
   }
 }

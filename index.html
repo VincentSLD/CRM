@@ -1922,6 +1922,73 @@ let devisDateFrom = _yearAgo, devisDateTo = _today;
 let cmdDateFrom = _yearAgo, cmdDateTo = _today;
 let factDateFrom = _yearAgo, factDateTo = _today;
 
+// Filtre par société (companyCode Akuiteo)
+let selectedSocietes = new Set(); // vide = toutes
+let _societeRefreshFn = null;
+
+function getAllSocietes() {
+  const s = new Set();
+  [...(DB.devis||[]), ...(DB.commandes||[]), ...(DB.factures||[])].forEach(d => { if (d.societe) s.add(d.societe); });
+  return [...s].sort();
+}
+
+function filterBySociete(items) {
+  if (selectedSocietes.size === 0) return items;
+  return items.filter(d => selectedSocietes.has(d.societe));
+}
+
+function societeSelect(code) {
+  const all = getAllSocietes();
+  if (code === '__ALL__') {
+    selectedSocietes.clear();
+  } else if (selectedSocietes.size === 0) {
+    // Etait sur "Toutes" → on décoche une : sélectionner toutes sauf celle-ci
+    selectedSocietes = new Set(all.filter(x => x !== code));
+  } else if (selectedSocietes.has(code)) {
+    selectedSocietes.delete(code);
+    // Si plus rien coché → revenir à "Toutes"
+    if (selectedSocietes.size === 0) selectedSocietes.clear();
+  } else {
+    selectedSocietes.add(code);
+    // Si tout est coché → revenir à "Toutes"
+    if (selectedSocietes.size === all.length) selectedSocietes.clear();
+  }
+  // Rafraîchir la page en gardant le dropdown ouvert
+  if (_societeRefreshFn) _societeRefreshFn();
+  // Ré-ouvrir le dropdown après re-render
+  setTimeout(() => {
+    const dd = document.getElementById('societeDropdown');
+    if (dd) dd.style.display = 'block';
+  }, 0);
+}
+
+function renderSocieteFilter(refreshFn) {
+  _societeRefreshFn = refreshFn;
+  const societes = getAllSocietes();
+  if (societes.length <= 1) return '';
+  return `<div style="position:relative;display:inline-block" id="societeFilterWrap">
+    <button class="btn" onclick="var dd=document.getElementById('societeDropdown');dd.style.display=dd.style.display==='block'?'none':'block'" style="font-size:11px">
+      Société${selectedSocietes.size > 0 ? ' (' + selectedSocietes.size + ')' : 's'} ▾
+    </button>
+    <div id="societeDropdown" style="display:none;position:absolute;top:100%;left:0;z-index:200;background:var(--bg-1);border:1px solid var(--border);border-radius:8px;padding:8px;min-width:180px;box-shadow:0 6px 20px rgba(0,0,0,.3);max-height:240px;overflow-y:auto">
+      <label style="display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px;cursor:pointer;font-weight:600;border-bottom:1px solid var(--border);margin-bottom:4px">
+        <input type="checkbox" ${selectedSocietes.size === 0 ? 'checked' : ''} onchange="societeSelect('__ALL__')"> Toutes
+      </label>
+      ${societes.map(s => `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">
+        <input type="checkbox" ${selectedSocietes.size === 0 || selectedSocietes.has(s) ? 'checked' : ''} onchange="societeSelect('${s}')"> ${s}
+      </label>`).join('')}
+    </div>
+  </div>`;
+}
+
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('societeFilterWrap');
+  if (wrap && !wrap.contains(e.target)) {
+    const dd = document.getElementById('societeDropdown');
+    if (dd) dd.style.display = 'none';
+  }
+});
+
 function filterByDateRange(items, from, to) {
   return items.filter(item => {
     const d = (item.date_raw || '').substring(0, 10);
@@ -2213,6 +2280,7 @@ function renderContactDetail() {
       <div style="display:flex;gap:6px">
         ${c.email ? '<a href="mailto:'+c.email+'" class="btn btn-primary" style="text-decoration:none">Envoyer un email</a>' : ''}
         ${c.telephone ? '<a href="tel:'+c.telephone+'" class="btn" style="text-decoration:none">Appeler</a>' : ''}
+        <button class="btn" onclick="goToCR('${c.client_id||''}','${(c._clientName||'').replace(/'/g,"\\'")}','${c.id||''}','${([c.prenom,c.nom].filter(Boolean).join(' ')).replace(/'/g,"\\'")}')">Rédiger CR</button>
       </div>
     </div>
   </div>
@@ -2818,9 +2886,9 @@ function renderClientDetail() {
     <div class="client-actions">
       <button class="btn" onclick="openModal('edit-client')">✎ Modifier</button>
       <button class="btn" onclick="pushClientToAkuiteo('${c.id}')">↑ Sync Akuiteo</button>
-      <button class="btn" onclick="go('cr')">✎ Nouveau CR</button>
+      <button class="btn" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✎ Nouveau CR</button>
       <button class="btn" onclick="openModal('proposal')">✦ Proposition IA</button>
-      <button class="btn btn-primary" onclick="go('cr')">✈ Rédiger CR</button>
+      <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
     </div>
   </div>
   <div class="kpi-grid">
@@ -3509,6 +3577,8 @@ function renderAffaireDetail() {
       detailRow('Nom', a.nom),
       detailRow('Code projet', a.code_projet),
       detailRow('Client', a.client_name ? '<a href="#" onclick="showClient(&#39;'+a.client_id+'&#39;);return false" style="color:var(--accent)">'+a.client_name+'</a>' : null),
+      detailRow('Apporteur d\'affaire', a.apporteur_affaire),
+      detailRow('Responsable', a.responsable),
       detailRow('Marché', marche ? '<a href="#" onclick="showMarcheDetail(&#39;'+marche.id+'&#39;);return false" style="color:var(--accent)">'+( marche.ref||'')+' - '+(marche.nom||'')+'</a>' : '—'),
       detailRow('Statut', marcheStatutBadge(a.statut)),
     ])}
@@ -3566,8 +3636,9 @@ let marchesDateFrom = _fiveYearsAgo, marchesDateTo = _today;
 let marchesSearch = '';
 
 function renderPipeline() {
-  // Filtrer par recherche
-  let devis = filterByDateRange(DB.devis, pipeDateFrom, pipeDateTo);
+  // Filtrer par société puis par date
+  let devis = filterBySociete(DB.devis);
+  devis = filterByDateRange(devis, pipeDateFrom, pipeDateTo);
   if (pipelineSearch) {
     const q = pipelineSearch.toLowerCase();
     devis = devis.filter(d =>
@@ -3634,6 +3705,7 @@ function renderPipeline() {
         style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--t1)"
         onchange="pipeDateTo=this.value;renderPipelineRefresh()">
       <span style="font-size:12px;color:var(--t2);margin-left:6px">${devis.length} devis</span>
+      ${renderSocieteFilter(renderPipelineRefresh)}
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       <input type="text" placeholder="Rechercher client, réf, sujet..." value="${pipelineSearch}"
@@ -3760,7 +3832,8 @@ async function initCarteMap() {
 // ═══ DEVIS / COMMANDES / FACTURES / OBJECTIFS ═══
 function renderDevis(filter='all') {
   document._lastFilter = filter;
-  const dated = filterByDateRange(DB.devis, devisDateFrom, devisDateTo);
+  const bySociete = filterBySociete(DB.devis);
+  const dated = filterByDateRange(bySociete, devisDateFrom, devisDateTo);
   const statusFiltered = filter==='all' ? dated : dated.filter(d=>d.statut===filter);
   const colFiltered = applyColFilters(statusFiltered, 'devis');
   const filtered = applySorting(colFiltered, 'devis');
@@ -3774,6 +3847,7 @@ function renderDevis(filter='all') {
       <button class="btn ${filter==='accepted'?'active':''}" onclick="filterDevis('accepted')">Acceptés</button>
       <button class="btn ${filter==='sent'?'active':''}" onclick="filterDevis('sent')">Envoyés</button>
       <button class="btn ${filter==='refused'?'active':''}" onclick="filterDevis('refused')">Refusés</button>
+      ${renderSocieteFilter(() => filterDevis(filter))}
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       ${Object.values(tblColFilters.devis).some(v=>v) ? '<button class="btn" onclick="tblColFilters.devis={};filterDevis(&#39;'+filter+'&#39;)" style="font-size:11px;color:var(--red)">Effacer filtres</button>' : ''}
@@ -3822,7 +3896,8 @@ async function updateDevisStatus(id,s) { await dbUpdate('devis',id,{statut:s}); 
 
 function renderCommandes(filter='all') {
   document._lastFilter = filter;
-  const dated = filterByDateRange(DB.commandes, cmdDateFrom, cmdDateTo);
+  const bySociete = filterBySociete(DB.commandes);
+  const dated = filterByDateRange(bySociete, cmdDateFrom, cmdDateTo);
   const statusFiltered = filter==='all' ? dated : dated.filter(c=>c.statut===filter);
   const colFiltered = applyColFilters(statusFiltered, 'commandes');
   const filtered = applySorting(colFiltered, 'commandes');
@@ -3835,6 +3910,7 @@ function renderCommandes(filter='all') {
       <button class="btn ${filter==='en_cours'?'active':''}" onclick="filterCmd('en_cours')">En cours</button>
       <button class="btn ${filter==='livree'?'active':''}" onclick="filterCmd('livree')">Livrées</button>
       <button class="btn ${filter==='annulee'?'active':''}" onclick="filterCmd('annulee')">Annulées</button>
+      ${renderSocieteFilter(() => filterCmd(filter))}
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       ${Object.values(tblColFilters.commandes).some(v=>v) ? '<button class="btn" onclick="tblColFilters.commandes={};filterCmd(&#39;'+filter+'&#39;)" style="font-size:11px;color:var(--red)">Effacer filtres</button>' : ''}
@@ -3883,7 +3959,8 @@ async function updateCmdStatus(id,s) { await dbUpdate('commandes',id,{statut:s})
 
 function renderFactures(filter='all') {
   document._lastFilter = filter;
-  const dated = filterByDateRange(DB.factures, factDateFrom, factDateTo);
+  const bySociete = filterBySociete(DB.factures);
+  const dated = filterByDateRange(bySociete, factDateFrom, factDateTo);
   const statusFiltered = filter==='all' ? dated : dated.filter(f=>f.statut===filter);
   const colFiltered = applyColFilters(statusFiltered, 'factures');
   const filtered = applySorting(colFiltered, 'factures');
@@ -3897,6 +3974,7 @@ function renderFactures(filter='all') {
       <button class="btn ${filter==='payee'?'active':''}" onclick="filterFact('payee')">Payées</button>
       <button class="btn ${filter==='attente'?'active':''}" onclick="filterFact('attente')">En attente</button>
       <button class="btn ${filter==='retard'?'active':''}" onclick="filterFact('retard')">En retard</button>
+      ${renderSocieteFilter(() => filterFact(filter))}
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       ${Object.values(tblColFilters.factures).some(v=>v) ? '<button class="btn" onclick="tblColFilters.factures={};filterFact(&#39;'+filter+'&#39;)" style="font-size:11px;color:var(--red)">Effacer filtres</button>' : ''}
@@ -3972,7 +4050,21 @@ function detailRow(label, value) {
 }
 function renderCustomData(cd) {
   if (!cd || typeof cd !== 'object' || Object.keys(cd).length === 0) return '';
-  const rows = Object.entries(cd).map(([k, v]) => detailRow(k, typeof v === 'object' ? JSON.stringify(v) : String(v)));
+  const rows = Object.entries(cd).map(([k, v]) => {
+    // Format Akuiteo CustomData: { type, value, name, label, realOrder }
+    if (v && typeof v === 'object' && 'value' in v && 'name' in v) {
+      let displayVal = v.value;
+      if (v.type === 'DATE' && displayVal) {
+        try { displayVal = fmtDateFR(new Date(displayVal).toISOString().substring(0, 10)); } catch(e) {}
+      } else if (v.type === 'BOOLEAN') {
+        displayVal = displayVal ? 'Oui' : 'Non';
+      } else if (v.type === 'NUMBER' && displayVal != null) {
+        displayVal = fmt(displayVal);
+      }
+      return { order: v.realOrder || 999, html: detailRow(v.name || k, displayVal != null ? String(displayVal) : '—') };
+    }
+    return { order: 999, html: detailRow(k, typeof v === 'object' ? JSON.stringify(v) : String(v)) };
+  }).sort((a, b) => a.order - b.order).map(r => r.html);
   return detailSection('Données personnalisées', rows);
 }
 function detailSection(title, rows) {
@@ -4018,6 +4110,7 @@ function showDevisDetail(id) {
       ${detailSection('Organisation', [
         detailRow('Marché', d.marche_id ? (() => { const m = DB.marches.find(x=>x.id===d.marche_id); return m ? '<a href="#" onclick="showMarcheDetail(&#39;'+m.id+'&#39;);return false" style="color:var(--accent)">'+(m.ref||'')+' - '+(m.nom||'')+'</a>' : d.marche_id; })() : null),
         detailRow('Affaire', d.affaire_id ? (() => { const a = DB.affaires.find(x=>x.id===d.affaire_id); return a ? '<a href="#" onclick="showAffaireDetail(&#39;'+a.id+'&#39;);return false" style="color:var(--accent)">'+(a.ref||'')+' - '+(a.nom||'')+'</a>' : d.affaire_id; })() : null),
+        detailRow('Apporteur d\'affaire', d.apporteur_affaire),
         detailRow('Projet', d.projet),
         detailRow('Agence', d.agence),
         detailRow('Responsable ID', d.responsable_id),
@@ -4063,6 +4156,7 @@ function showCommandeDetail(id) {
       ${detailSection('Organisation', [
         detailRow('Marché', c.marche_id ? (() => { const m = DB.marches.find(x=>x.id===c.marche_id); return m ? '<a href="#" onclick="showMarcheDetail(&#39;'+m.id+'&#39;);return false" style="color:var(--accent)">'+(m.ref||'')+' - '+(m.nom||'')+'</a>' : c.marche_id; })() : null),
         detailRow('Affaire', c.affaire_id ? (() => { const a = DB.affaires.find(x=>x.id===c.affaire_id); return a ? '<a href="#" onclick="showAffaireDetail(&#39;'+a.id+'&#39;);return false" style="color:var(--accent)">'+(a.ref||'')+' - '+(a.nom||'')+'</a>' : c.affaire_id; })() : null),
+        detailRow('Apporteur d\'affaire', c.apporteur_affaire),
         detailRow('Projet', c.projet),
         detailRow('Agence', c.agence),
         detailRow('Responsable ID', c.responsable_id),
@@ -4128,6 +4222,7 @@ function showFactureDetail(id) {
       ${detailSection('Organisation', [
         detailRow('Marché', f.marche_id ? (() => { const m = DB.marches.find(x=>x.id===f.marche_id); return m ? '<a href="#" onclick="showMarcheDetail(&#39;'+m.id+'&#39;);return false" style="color:var(--accent)">'+(m.ref||'')+' - '+(m.nom||'')+'</a>' : f.marche_id; })() : null),
         detailRow('Affaire', f.affaire_id ? (() => { const a = DB.affaires.find(x=>x.id===f.affaire_id); return a ? '<a href="#" onclick="showAffaireDetail(&#39;'+a.id+'&#39;);return false" style="color:var(--accent)">'+(a.ref||'')+' - '+(a.nom||'')+'</a>' : f.affaire_id; })() : null),
+        detailRow('Apporteur d\'affaire', f.apporteur_affaire),
         detailRow('Projet', f.projet),
         detailRow('Agence', f.agence),
         detailRow('Mode de paiement', f.mode_paiement === 'BANK_TRANSFER' ? 'Virement bancaire' : f.mode_paiement === 'CHECK' ? 'Chèque' : f.mode_paiement === 'CASH' ? 'Espèces' : f.mode_paiement),
@@ -4185,8 +4280,18 @@ function crStatutBadge(s) {
   if (s==='envoye') return '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;color:#fff;background:var(--green)">Envoyé</span>';
   return '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;color:var(--t3);background:var(--bg-1)">Brouillon</span>';
 }
+let crFilterAuteur = '__mine__'; // '__mine__' = mes CR, '__all__' = tous, ou un id commercial
+
 function renderCR() {
   const today = new Date().toISOString().split('T')[0];
+  const myId = currentCommercial?.id || '';
+  // Filtrer la liste des CR
+  let filteredReports = DB.reports;
+  if (crFilterAuteur === '__mine__') {
+    filteredReports = DB.reports.filter(r => !r.redacteur_id || r.redacteur_id == myId);
+  } else if (crFilterAuteur !== '__all__') {
+    filteredReports = DB.reports.filter(r => r.redacteur_id == crFilterAuteur);
+  }
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div style="font-size:13px;color:var(--t2)">Dictez, rédigez et partagez vos comptes-rendus avec l&#39;aide de l&#39;IA</div>
@@ -4217,7 +4322,13 @@ function renderCR() {
         <div style="flex:1;min-width:130px">
           <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Date</label>
           <input type="date" id="crDate" value="${currentReport ? (currentReport.date_raw||'').substring(0,10) : today}"
-            style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)">
+            style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
+        </div>
+        <div style="flex:1;min-width:150px">
+          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Rédacteur</label>
+          <select id="crRedacteur" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
+            ${(DB.commerciaux||[]).map(co => `<option value="${co.id}" ${(currentReport ? currentReport.redacteur_id == co.id : co.id == myId) ? 'selected' : ''}>${co.nom||co.email}</option>`).join('')}
+          </select>
         </div>
       </div>
       <div style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
@@ -4270,21 +4381,30 @@ function renderCR() {
       </div>
     </div>
     <div class="card">
-      <div class="card-header">
-        <div class="card-title">Comptes-rendus récents</div>
-        <span style="font-size:12px;color:var(--t3)">${DB.reports.length} CR</span>
+      <div class="card-header" style="flex-wrap:wrap;gap:8px">
+        <div class="card-title">Comptes-rendus</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--bg-1);color:var(--t1)"
+            onchange="crFilterAuteur=this.value;renderPage('cr')">
+            <option value="__mine__" ${crFilterAuteur==='__mine__'?'selected':''}>Mes CR</option>
+            <option value="__all__" ${crFilterAuteur==='__all__'?'selected':''}>Tous</option>
+            ${(DB.commerciaux||[]).map(co => `<option value="${co.id}" ${crFilterAuteur==co.id?'selected':''}>${co.nom||co.email}</option>`).join('')}
+          </select>
+          <span style="font-size:11px;color:var(--t3)">${filteredReports.length} CR</span>
+        </div>
       </div>
       <div class="card-body" style="max-height:600px;overflow-y:auto;padding:0">
-        ${DB.reports.length === 0 ? '<div style="padding:30px;text-align:center;color:var(--t3);font-size:13px">Aucun compte-rendu</div>' :
-        DB.reports.map(r => {
+        ${filteredReports.length === 0 ? '<div style="padding:30px;text-align:center;color:var(--t3);font-size:13px">Aucun compte-rendu</div>' :
+        filteredReports.map(r => {
           const isActive = currentReport && currentReport.id === r.id;
+          const auteur = (DB.commerciaux||[]).find(co => co.id == r.redacteur_id);
           return `<div style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s${isActive?';background:var(--hover);border-left:3px solid var(--accent)':''}"
           onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="loadReport(${r.id})">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
             <div style="font-size:13px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.titre||'Sans titre'}</div>
             <div style="display:flex;gap:4px;margin-left:8px">${crTypeBadge(r.type_cr)} ${crStatutBadge(r.statut_cr)}</div>
           </div>
-          <div style="font-size:11px;color:var(--t3);margin-bottom:4px">${r.client||''}${r.contact_name ? ' — '+r.contact_name : ''} | ${r.date}</div>
+          <div style="font-size:11px;color:var(--t3);margin-bottom:4px">${r.client||''}${r.contact_name ? ' — '+r.contact_name : ''} | ${r.date}${auteur ? ' | '+auteur.nom : ''}</div>
           <div style="font-size:12px;color:var(--t2);line-height:1.4;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${(r.text||'').substring(0,150)}</div>
         </div>`;}).join('')}
       </div>
@@ -4295,7 +4415,30 @@ function renderCR() {
 function initEditor() {}
 function clearEditor() {
   currentReport = null;
+  _crPrefill = null;
   renderPage('cr');
+}
+
+// Pré-remplissage CR depuis fiche client ou contact
+let _crPrefill = null;
+function goToCR(clientId, clientName, contactId, contactName) {
+  currentReport = null;
+  _crPrefill = { clientId, clientName, contactId: contactId || null, contactName: contactName || null };
+  go('cr');
+  setTimeout(() => {
+    if (!_crPrefill) return;
+    const p = _crPrefill;
+    _crPrefill = null;
+    selectCRClient(p.clientId, p.clientName);
+    if (p.contactId && p.contactName) {
+      // Attendre le chargement des contacts puis sélectionner
+      const waitAndSelect = () => {
+        selectCRContact(p.contactId, p.contactName);
+      };
+      if (crContactsCache[p.clientId]) waitAndSelect();
+      else setTimeout(waitAndSelect, 500);
+    }
+  }, 100);
 }
 function loadReport(id) {
   const r = DB.reports.find(x=>x.id===id);
@@ -4428,6 +4571,9 @@ async function saveReport() {
   const typeCr = document.getElementById('crType')?.value || 'reunion';
   const dateCr = document.getElementById('crDate')?.value || new Date().toISOString().split('T')[0];
 
+  const redacteurId = document.getElementById('crRedacteur')?.value || currentCommercial?.id || null;
+  const redacteur = (DB.commerciaux||[]).find(co => co.id == redacteurId);
+
   const reportData = {
     client_id: clientId || null,
     client_name: clientName,
@@ -4437,7 +4583,9 @@ async function saveReport() {
     contenu: body.innerHTML,
     type_cr: typeCr,
     date: dateCr + 'T12:00:00',
-    updated_at: new Date().toISOString()
+    updated_at: new Date().toISOString(),
+    redacteur_id: redacteurId ? Number(redacteurId) : null,
+    redacteur_nom: redacteur?.nom || null,
   };
 
   if (currentReport) {
@@ -5282,7 +5430,7 @@ async function syncAkuiteo() {
               tva: (q.afterTaxAmount || 0) - (q.preTaxAmount || 0),
               statut: q.state === 'SIGNED' ? 'accepted' : q.state === 'ARCHIVED' ? 'refused' : q.state === 'SENT' ? 'sent' : 'pending',
               date: q.date ? q.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
-              projet: q.projectId || null, agence: q.entityCode || null,
+              projet: q.projectId || null, agence: q.entityCode || null, societe: q.companyCode || null,
               responsable_id: q.managerId || null, commercial_id: q.salesManagerId || null,
               reference1: q.reference1 || null, devise: q.currencyCode || 'EUR',
               probabilite: q.quotationProbability || null, description: q.description || null,
@@ -5297,8 +5445,17 @@ async function syncAkuiteo() {
             const { error } = await sb.from('devis').upsert(dBatch, { onConflict: 'id' });
             if (error) throw error;
           }
+          // Enrichir commandes avec les données personnalisées (CUSTOM_DATA)
+          const ordersArr = Array.isArray(orders) ? orders : [];
+          const enrichedOrders = await Promise.all(ordersArr.map(async o => {
+            try {
+              const full = await akuiteoFetch('POST', `/sales/orders/${o.id}/read`, { options: ['CUSTOM_DATA'] });
+              if (full && full.customData) o.customData = full.customData;
+            } catch (e) { /* ignore, on garde l'ordre sans customData */ }
+            return o;
+          }));
           // Préparer commandes batch + collecter deliverySiteId
-          const cBatch = (Array.isArray(orders) ? orders : []).map(o => {
+          const cBatch = enrichedOrders.map(o => {
             if (o.projectId) {
               clientDocs.push({ projectId: String(o.projectId), customerId: akCid, preTaxAmount: o.preTaxAmount, afterTaxAmount: o.afterTaxAmount, date: o.date, entityCode: o.entityCode });
               if (o.deliverySiteId) projectDeliverySite[String(o.projectId)] = { deliverySiteId: String(o.deliverySiteId), customerId: akCid };
@@ -5312,7 +5469,7 @@ async function syncAkuiteo() {
               statut: o.state === 'DELIVERED' ? 'livree' : o.state === 'CANCELLED' ? 'annulee' : 'en_cours',
               date: o.date ? o.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
               livraison: o.deliveryDate ? o.deliveryDate.substring(0, 10) : null,
-              projet: o.projectId || null, agence: o.entityCode || null,
+              projet: o.projectId || null, agence: o.entityCode || null, societe: o.companyCode || null,
               description: o.description || null, reference1: o.reference1 || null,
               devis_origine: o.quotationId || null, responsable_id: o.managerId || null,
               commercial_id: o.salesManagerId || null,
@@ -5354,7 +5511,7 @@ async function syncAkuiteo() {
               echeance: f.payment?.dueDate ? f.payment.dueDate.substring(0, 10) : null,
               jours_retard: 0, type_facture: f.invoiceType || null,
               reste_a_payer: f.balance ?? null, description: f.description || null,
-              projet: f.projectId || null, agence: f.entityCode || null,
+              projet: f.projectId || null, agence: f.entityCode || null, societe: f.companyCode || null,
               mode_paiement: f.methodOfPayment || null,
               date_envoi: f.sentOn ? f.sentOn.substring(0, 10) : null,
               date_paiement: f.paidOn ? f.paidOn.substring(0, 10) : null,
@@ -5439,12 +5596,29 @@ async function syncAkuiteo() {
           else syncedMarches += marchesBatch.slice(i, i + 100).length;
         }
       }
+      // Enrichir affaires avec nom + apporteur d'affaire depuis l'API projet
+      console.log(`[Akuiteo] Enrichissement des ${Object.keys(affairesByProject).length} affaires (nom + apporteur)...`);
+      const projectPids = Object.keys(affairesByProject);
+      for (let i = 0; i < projectPids.length; i += PARALLEL) {
+        const batch = projectPids.slice(i, i + PARALLEL);
+        await Promise.allSettled(batch.map(async pid => {
+          try {
+            const proj = await akuiteoFetch('POST', `/projectmanagement/projects/${pid}/read`, { options: ['PROJECT_SUB_CATEGORY', 'PROJECT_SUB_CATEGORY_LEVEL2', 'MANAGER'] });
+            if (proj) {
+              const a = affairesByProject[pid];
+              if (proj.name) a.nom = proj.name;
+              if (proj.projectSubCategory?.name) a.apporteur = proj.projectSubCategory.name;
+              if (proj.manager?.name) a.responsable = [proj.manager.name, proj.manager.firstName].filter(Boolean).join(' ');
+            }
+          } catch (e) { /* ignore */ }
+        }));
+      }
       // Upsert affaires
       const affairesBatch = [];
       for (const [pid, aff] of Object.entries(affairesByProject)) {
         const affId = 'aka_' + pid.replace(/[^a-zA-Z0-9.]/g, '_');
         projectToAffaire[pid] = affId;
-        affairesBatch.push({ id: affId, akuiteo_id: pid, ref: pid, nom: 'Affaire ' + pid, marche_id: projectToMarche[pid] || null, client_id: aff.client_id, client_name: aff.client_name, date_debut: aff.minDate, date_fin: aff.maxDate, montant: aff.montant, montant_ttc: aff.montant_ttc, statut: 'en_cours', agence: aff.agence, code_projet: pid });
+        affairesBatch.push({ id: affId, akuiteo_id: pid, ref: pid, nom: aff.nom || ('Affaire ' + pid), marche_id: projectToMarche[pid] || null, client_id: aff.client_id, client_name: aff.client_name, date_debut: aff.minDate, date_fin: aff.maxDate, montant: aff.montant, montant_ttc: aff.montant_ttc, statut: 'en_cours', agence: aff.agence, code_projet: pid, apporteur_affaire: aff.apporteur || null, responsable: aff.responsable || null });
       }
       if (affairesBatch.length > 0) {
         for (let i = 0; i < affairesBatch.length; i += 100) {
@@ -5453,14 +5627,17 @@ async function syncAkuiteo() {
           else syncedAffaires += affairesBatch.slice(i, i + 100).length;
         }
       }
-      // Lier docs → affaires/marchés
-      console.log('[Akuiteo] Liens docs → affaires/marchés...');
+      // Lier docs → affaires/marchés + propager apporteur d'affaire
+      console.log('[Akuiteo] Liens docs → affaires/marchés + apporteur...');
       for (const [pid, affId] of Object.entries(projectToAffaire)) {
         const mId = projectToMarche[pid] || null;
+        const aff = affairesByProject[pid];
+        const apporteur = aff?.apporteur || null;
+        const updateData = { affaire_id: affId, marche_id: mId, apporteur_affaire: apporteur };
         await Promise.all([
-          sb.from('devis').update({ affaire_id: affId, marche_id: mId }).eq('projet', pid),
-          sb.from('commandes').update({ affaire_id: affId, marche_id: mId }).eq('projet', pid),
-          sb.from('factures').update({ affaire_id: affId, marche_id: mId }).eq('projet', pid),
+          sb.from('devis').update(updateData).eq('projet', pid),
+          sb.from('commandes').update(updateData).eq('projet', pid),
+          sb.from('factures').update(updateData).eq('projet', pid),
         ]);
       }
     }
