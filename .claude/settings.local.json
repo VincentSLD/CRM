@@ -67,7 +67,10 @@
       "Bash(curl -s http://localhost:8888/sales/orders/CC-AS1500001/recipient-contacts -H 'Accept: application/json')",
       "Bash(curl -s http://localhost:8888/settings/custom-data-params/CUSTOMER -H 'Accept: application/json')",
       "Bash(curl -s http://localhost:8888/projectmanagement/projects/26.0507.01/phases/search -X POST -H 'Content-Type: application/json' -d {})",
-      "Bash(kill %1)"
+      "Bash(kill %1)",
+      "Bash(grep -B5 -A20 \"/customers/{customer_id}/contacts/:$\")",
+      "Bash(curl -s \"http://localhost:8888/crm/customers\" -X PUT -H \"Content-Type: application/json\" -H \"Accept: application/json\" -d \"{\"\"name\"\":\"\"TEST\"\",\"\"code\"\":\"\"TESTCLI\"\"}\")",
+      "Bash(curl -v \"http://localhost:8888/crm/customers\" -X PUT -H \"Content-Type: application/json\" -H \"Accept: application/json\" -d \"{\"\"name\"\":\"\"TEST\"\",\"\"code\"\":\"\"TESTCLI\"\"}\")"
     ]
   }
 }

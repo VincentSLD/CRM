@@ -30,13 +30,13 @@ class ProxyHandler(BaseHTTPRequestHandler):
         if self.headers.get('Content-Length'):
             body = self.rfile.read(int(self.headers['Content-Length']))
 
-        headers = {"Accept": "application/json"}
+        headers = {"Accept": self.headers.get('Accept', 'application/json')}
         if body:
-            headers["Content-Type"] = "application/json"
+            headers["Content-Type"] = self.headers.get('Content-Type', 'application/json')
 
         print(f"[PROXY] {method} {url}")
         try:
-            r = requests.request(method, url, auth=AKUITEO_AUTH, headers=headers, data=body, timeout=30)
+            r = requests.request(method, url, auth=AKUITEO_AUTH, headers=headers, data=body, timeout=120)
             print(f"[PROXY] Response: {r.status_code} ({len(r.content)} bytes)")
 
             self.send_response(r.status_code)

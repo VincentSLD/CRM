@@ -1553,11 +1553,12 @@ tbody tr:last-child td { border-bottom: none; }
       <div class="nav-item" data-page="clients" onclick="go('clients')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Clients
-        <span class="nav-badge">24</span>
+        <span class="nav-badge" id="navBadgeClients"></span>
       </div>
       <div class="nav-item" data-page="contacts" onclick="go('contacts')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         Contacts
+        <span class="nav-badge" id="navBadgeContacts" style="display:none"></span>
       </div>
       <div class="nav-item" data-page="pipeline" onclick="go('pipeline')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
@@ -1573,18 +1574,21 @@ tbody tr:last-child td { border-bottom: none; }
       <div class="nav-item" data-page="marches" onclick="go('marches')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2z"/></svg>
         Marchés
+        <span class="nav-badge" id="navBadgeMarches" style="display:none"></span>
       </div>
       <div class="nav-item" data-page="devis" onclick="go('devis')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        Devis <span class="nav-badge">7</span>
+        Devis <span class="nav-badge" id="navBadgeDevis"></span>
       </div>
       <div class="nav-item" data-page="commandes" onclick="go('commandes')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>
         Commandes
+        <span class="nav-badge" id="navBadgeCommandes" style="display:none"></span>
       </div>
       <div class="nav-item" data-page="factures" onclick="go('factures')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
         Factures
+        <span class="nav-badge" id="navBadgeFactures" style="display:none"></span>
       </div>
       <div class="nav-item" data-page="objectifs" onclick="go('objectifs')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
@@ -1595,15 +1599,16 @@ tbody tr:last-child td { border-bottom: none; }
       <div class="nav-section-title">Communication</div>
       <div class="nav-item" data-page="cr" onclick="go('cr')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        Comptes-rendus <span class="nav-badge">3</span>
+        Comptes-rendus <span class="nav-badge" id="navBadgeCR"></span>
       </div>
       <div class="nav-item" data-page="envois" onclick="go('envois')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         Envois
+        <span class="nav-badge" id="navBadgeEnvois" style="display:none"></span>
       </div>
       <div class="nav-item" data-page="alertes" onclick="go('alertes')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-        Alertes <span class="nav-badge" style="background:var(--amber)">5</span>
+        Alertes <span class="nav-badge" id="navBadgeAlertes" style="background:var(--amber)"></span>
       </div>
       <div class="nav-item" data-page="admin" onclick="go('admin')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -1614,7 +1619,7 @@ tbody tr:last-child td { border-bottom: none; }
   <div class="sidebar-footer">
     <div class="sync-status">
       <div class="sync-dot" id="syncDot"></div>
-      <span id="syncLabel">Akuiteo synchronisé — <span style="font-family:'JetBrains Mono',monospace">14:32</span></span>
+      <span id="syncLabel">Akuiteo</span>
     </div>
     <div class="offline-badge" id="offlineBadge">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/></svg>
@@ -1752,24 +1757,65 @@ Cordialement,</textarea>
 
 <!-- ═══ MODAL: NEW CLIENT ═══ -->
 <div class="modal-overlay" id="modal-new-client">
-  <div class="modal" style="max-width:620px">
+  <div class="modal" style="max-width:750px;max-height:90vh;overflow-y:auto">
     <div class="modal-head">
       <h3>Nouveau client</h3>
       <button class="modal-close" onclick="closeModal('new-client')">×</button>
     </div>
     <div class="modal-body">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px">
+        <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:8px">Rechercher une entreprise (SIRET, SIREN ou nom)</div>
+        <div style="display:flex;gap:8px">
+          <input class="fi" id="nc-sirene-search" placeholder="Ex: 44306184100066 ou NOVAM INGENIERIE" style="flex:1"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();searchSirene()}">
+          <button class="btn btn-primary" onclick="searchSirene()" style="white-space:nowrap">Rechercher</button>
+        </div>
+        <div id="nc-sirene-results" style="display:none;margin-top:10px;max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Identité</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
         <div class="fg"><label class="fl">Nom *</label><input class="fi" id="nc-name" placeholder="Nom du client"></div>
         <div class="fg"><label class="fl">Code</label><input class="fi" id="nc-code" placeholder="CLI-XXXX"></div>
+        <div class="fg"><label class="fl">Raison sociale</label><input class="fi" id="nc-raison"></div>
+        <div class="fg"><label class="fl">Raison sociale 2</label><input class="fi" id="nc-raison2"></div>
+        <div class="fg"><label class="fl">Forme juridique</label><input class="fi" id="nc-forme"></div>
         <div class="fg"><label class="fl">Secteur</label><input class="fi" id="nc-sector" placeholder="Ex: Énergie"></div>
-        <div class="fg"><label class="fl">Ville</label><input class="fi" id="nc-city" placeholder="Ex: Paris"></div>
-        <div class="fg"><label class="fl">Contact</label><input class="fi" id="nc-contact" placeholder="Nom du contact"></div>
-        <div class="fg"><label class="fl">Email</label><input class="fi" id="nc-email" type="email" placeholder="email@exemple.fr"></div>
-        <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="nc-phone" placeholder="+33 ..."></div>
-        <div class="fg"><label class="fl">Objectif CA</label><input class="fi" id="nc-obj" type="number" placeholder="0"></div>
-        <div class="fg"><label class="fl">Latitude</label><input class="fi" id="nc-lat" type="number" step="0.01" placeholder="48.85"></div>
-        <div class="fg"><label class="fl">Longitude</label><input class="fi" id="nc-lng" type="number" step="0.01" placeholder="2.35"></div>
       </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Adresse</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg" style="grid-column:1/-1"><label class="fl">Ligne 1</label><input class="fi" id="nc-addr1"></div>
+        <div class="fg"><label class="fl">Ligne 2</label><input class="fi" id="nc-addr2"></div>
+        <div class="fg"><label class="fl">Ligne 3</label><input class="fi" id="nc-addr3"></div>
+        <div class="fg"><label class="fl">Code postal</label><input class="fi" id="nc-cp"></div>
+        <div class="fg"><label class="fl">Ville</label><input class="fi" id="nc-city"></div>
+        <div class="fg"><label class="fl">Département</label><input class="fi" id="nc-dept"></div>
+        <div class="fg"><label class="fl">Région</label><input class="fi" id="nc-region"></div>
+        <div class="fg"><label class="fl">Pays</label><input class="fi" id="nc-pays" value="FR"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Coordonnées</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">Email</label><input class="fi" id="nc-email" type="email"></div>
+        <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="nc-phone"></div>
+        <div class="fg"><label class="fl">Téléphone 2</label><input class="fi" id="nc-phone2"></div>
+        <div class="fg"><label class="fl">Mobile</label><input class="fi" id="nc-mobile"></div>
+        <div class="fg"><label class="fl">Fax</label><input class="fi" id="nc-fax"></div>
+        <div class="fg"><label class="fl">Site web</label><input class="fi" id="nc-web"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Informations légales</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">SIREN</label><input class="fi" id="nc-siren"></div>
+        <div class="fg"><label class="fl">SIRET</label><input class="fi" id="nc-siret"></div>
+        <div class="fg"><label class="fl">Code APE</label><input class="fi" id="nc-ape"></div>
+        <div class="fg"><label class="fl">Réf. externe</label><input class="fi" id="nc-refext"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Entreprise</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">CA déclaré</label><input class="fi" id="nc-revenue" type="number"></div>
+        <div class="fg"><label class="fl">Capital</label><input class="fi" id="nc-capital" type="number"></div>
+        <div class="fg"><label class="fl">Effectif</label><input class="fi" id="nc-headcount" type="number"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Notes</div>
+      <div class="fg"><textarea class="fi" id="nc-notes" rows="3" style="resize:vertical" placeholder="Notes internes..."></textarea></div>
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('new-client')">Annuler</button>
@@ -1849,26 +1895,56 @@ Cordialement,</textarea>
 
 <!-- ═══ MODAL: EDIT CLIENT ═══ -->
 <div class="modal-overlay" id="modal-edit-client">
-  <div class="modal" style="max-width:620px">
+  <div class="modal" style="max-width:750px;max-height:90vh;overflow-y:auto">
     <div class="modal-head">
       <h3>Modifier le client</h3>
       <button class="modal-close" onclick="closeModal('edit-client')">×</button>
     </div>
     <div class="modal-body">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="fg"><label class="fl">Nom</label><input class="fi" id="ec-name"></div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Identité</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">Nom *</label><input class="fi" id="ec-name"></div>
         <div class="fg"><label class="fl">Code</label><input class="fi" id="ec-code"></div>
+        <div class="fg"><label class="fl">Raison sociale</label><input class="fi" id="ec-raison"></div>
+        <div class="fg"><label class="fl">Raison sociale 2</label><input class="fi" id="ec-raison2"></div>
+        <div class="fg"><label class="fl">Forme juridique</label><input class="fi" id="ec-forme"></div>
         <div class="fg"><label class="fl">Secteur</label><input class="fi" id="ec-sector"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Adresse</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg" style="grid-column:1/-1"><label class="fl">Ligne 1</label><input class="fi" id="ec-addr1"></div>
+        <div class="fg"><label class="fl">Ligne 2</label><input class="fi" id="ec-addr2"></div>
+        <div class="fg"><label class="fl">Ligne 3</label><input class="fi" id="ec-addr3"></div>
+        <div class="fg"><label class="fl">Code postal</label><input class="fi" id="ec-cp"></div>
         <div class="fg"><label class="fl">Ville</label><input class="fi" id="ec-city"></div>
-        <div class="fg"><label class="fl">Contact</label><input class="fi" id="ec-contact"></div>
+        <div class="fg"><label class="fl">Département</label><input class="fi" id="ec-dept"></div>
+        <div class="fg"><label class="fl">Région</label><input class="fi" id="ec-region"></div>
+        <div class="fg"><label class="fl">Pays</label><input class="fi" id="ec-pays"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Coordonnées</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
         <div class="fg"><label class="fl">Email</label><input class="fi" id="ec-email"></div>
         <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="ec-phone"></div>
-        <div class="fg"><label class="fl">Objectif CA</label><input class="fi" id="ec-obj" type="number"></div>
-        <div class="fg"><label class="fl">CA Réalisé</label><input class="fi" id="ec-ca" type="number"></div>
-        <div class="fg"><label class="fl">Marge %</label><input class="fi" id="ec-margin" type="number"></div>
-        <div class="fg"><label class="fl">DSO (jours)</label><input class="fi" id="ec-dso" type="number"></div>
-        <div class="fg"><label class="fl">Score</label><input class="fi" id="ec-score" type="number" min="0" max="100"></div>
+        <div class="fg"><label class="fl">Téléphone 2</label><input class="fi" id="ec-phone2"></div>
+        <div class="fg"><label class="fl">Mobile</label><input class="fi" id="ec-mobile"></div>
+        <div class="fg"><label class="fl">Fax</label><input class="fi" id="ec-fax"></div>
+        <div class="fg"><label class="fl">Site web</label><input class="fi" id="ec-web"></div>
       </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Informations légales</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">SIREN</label><input class="fi" id="ec-siren"></div>
+        <div class="fg"><label class="fl">SIRET</label><input class="fi" id="ec-siret"></div>
+        <div class="fg"><label class="fl">Code APE</label><input class="fi" id="ec-ape"></div>
+        <div class="fg"><label class="fl">Réf. externe</label><input class="fi" id="ec-refext"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Entreprise</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">CA déclaré</label><input class="fi" id="ec-revenue" type="number"></div>
+        <div class="fg"><label class="fl">Capital</label><input class="fi" id="ec-capital" type="number"></div>
+        <div class="fg"><label class="fl">Effectif</label><input class="fi" id="ec-headcount" type="number"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Notes</div>
+      <div class="fg"><textarea class="fi" id="ec-notes" rows="3" style="resize:vertical"></textarea></div>
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('edit-client')">Annuler</button>
@@ -2123,11 +2199,35 @@ async function loadDB() {
     await Promise.all([loadTopClients(), loadPortfolioStats()]);
 
     console.log(`Données chargées depuis Supabase (${DB.clients.length} clients affichés / ${clientsTotalCount} total)`, DB);
+    updateNavBadges();
     return true;
   } catch (err) {
     console.error('Erreur chargement Supabase:', err);
     toast('Erreur de connexion à la base de données', 'error');
     return false;
+  }
+}
+
+function updateNavBadges() {
+  const badges = {
+    navBadgeClients: clientsTotalCount || DB.clients.length,
+    navBadgeContacts: null, // chargé à la demande
+    navBadgeMarches: DB.marches.length,
+    navBadgeDevis: DB.devis.length,
+    navBadgeCommandes: DB.commandes.length,
+    navBadgeFactures: DB.factures.length,
+    navBadgeCR: DB.reports.length,
+    navBadgeAlertes: DB.alerts.length,
+  };
+  for (const [id, count] of Object.entries(badges)) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    if (count != null && count > 0) {
+      el.textContent = count;
+      el.style.display = '';
+    } else {
+      el.style.display = 'none';
+    }
   }
 }
 
@@ -2245,8 +2345,8 @@ function renderContacts() {
         <td><div style="font-weight:600;font-size:13px">${fullName}</div><div style="font-size:11px;color:var(--t3)">${c.code||''}</div></td>
         <td style="font-size:12px">${c.fonction||'—'}</td>
         <td style="font-size:12px">${c.email ? '<a href="mailto:'+c.email+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+c.email+'</a>' : '—'}</td>
-        <td style="font-size:12px;font-family:monospace">${c.telephone||'—'}</td>
-        <td style="font-size:12px;font-family:monospace">${c.mobile||'—'}</td>
+        <td style="font-size:12px;font-family:monospace">${c.telephone ? '<a href="tel:'+c.telephone+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+c.telephone+'</a>' : '—'}</td>
+        <td style="font-size:12px;font-family:monospace">${c.mobile ? '<a href="tel:'+c.mobile+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+c.mobile+'</a>' : '—'}</td>
         <td style="font-size:12px">${c.ville||'—'}</td>
       </tr>`;
     }).join('')}</tbody></table>
@@ -2277,10 +2377,12 @@ function renderContactDetail() {
         <div style="font-size:13px;color:var(--t3);margin-top:2px">${c.fonction||''} ${c.service ? '— '+c.service : ''}</div>
         ${c._clientName ? `<div style="font-size:13px;color:var(--accent);margin-top:4px;cursor:pointer" onclick="showClient('${c.client_id}')">${c._clientName}</div>` : ''}
       </div>
-      <div style="display:flex;gap:6px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${c.email ? '<a href="mailto:'+c.email+'" class="btn btn-primary" style="text-decoration:none">Envoyer un email</a>' : ''}
         ${c.telephone ? '<a href="tel:'+c.telephone+'" class="btn" style="text-decoration:none">Appeler</a>' : ''}
         <button class="btn" onclick="goToCR('${c.client_id||''}','${(c._clientName||'').replace(/'/g,"\\'")}','${c.id||''}','${([c.prenom,c.nom].filter(Boolean).join(' ')).replace(/'/g,"\\'")}')">Rédiger CR</button>
+        <button class="btn" onclick="toggleEditContact()">Modifier</button>
+        <button class="btn" onclick="pushContactToAkuiteo('${c.id}')">Sync Akuiteo</button>
       </div>
     </div>
   </div>
@@ -2290,8 +2392,8 @@ function renderContactDetail() {
       <div class="card-body">
         ${detailRow('Email principal', c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : null)}
         ${detailRow('Email secondaire', c.email2 ? '<a href="mailto:'+c.email2+'" style="color:var(--accent)">'+c.email2+'</a>' : null)}
-        ${detailRow('Téléphone', c.telephone)}
-        ${detailRow('Mobile', c.mobile)}
+        ${detailRow('Téléphone', c.telephone ? '<a href="tel:'+c.telephone+'" style="color:var(--accent)">'+c.telephone+'</a>' : null)}
+        ${detailRow('Mobile', c.mobile ? '<a href="tel:'+c.mobile+'" style="color:var(--accent)">'+c.mobile+'</a>' : null)}
       </div>
     </div>
     <div class="card">
@@ -2317,7 +2419,74 @@ function renderContactDetail() {
   <div class="card" style="margin-top:16px">
     <div class="card-header"><div class="card-title">Commentaire</div></div>
     <div class="card-body"><div style="white-space:pre-wrap;font-size:13px;color:var(--t2)">${c.commentaire}</div></div>
-  </div>` : ''}`;
+  </div>` : ''}
+  <div id="editContactForm" style="display:none;margin-top:16px">
+    <div class="card">
+      <div class="card-header"><div class="card-title">Modifier le contact</div></div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:12px">
+          <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Prénom</label>
+            <input type="text" id="ec-prenom" value="${(c.prenom||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
+          <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Nom</label>
+            <input type="text" id="ec-nom" value="${(c.nom||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
+          <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Fonction</label>
+            <input type="text" id="ec-fonction" value="${(c.fonction||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
+          <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Service</label>
+            <input type="text" id="ec-service" value="${(c.service||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
+          <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Email</label>
+            <input type="email" id="ec-email" value="${(c.email||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
+          <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Email 2</label>
+            <input type="email" id="ec-email2" value="${(c.email2||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
+          <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Téléphone</label>
+            <input type="tel" id="ec-tel" value="${(c.telephone||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
+          <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Mobile</label>
+            <input type="tel" id="ec-mobile" value="${(c.mobile||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
+          <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Adresse</label>
+            <input type="text" id="ec-adresse" value="${(c.adresse||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
+          <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Code postal</label>
+            <input type="text" id="ec-cp" value="${(c.code_postal||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
+          <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Ville</label>
+            <input type="text" id="ec-ville" value="${(c.ville||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Commentaire</label>
+          <textarea id="ec-commentaire" rows="3" class="fi" style="padding:6px 8px;font-size:12px;resize:vertical">${c.commentaire||''}</textarea>
+        </div>
+        <div style="display:flex;gap:6px;justify-content:flex-end">
+          <button class="btn" onclick="toggleEditContact()">Annuler</button>
+          <button class="btn btn-primary" onclick="saveEditContact()">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleEditContact() {
+  const f = document.getElementById('editContactForm');
+  if (f) f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveEditContact() {
+  if (!currentContact) return;
+  const update = {
+    prenom: document.getElementById('ec-prenom')?.value.trim() || null,
+    nom: document.getElementById('ec-nom')?.value.trim() || null,
+    fonction: document.getElementById('ec-fonction')?.value.trim() || null,
+    service: document.getElementById('ec-service')?.value.trim() || null,
+    email: document.getElementById('ec-email')?.value.trim() || null,
+    email2: document.getElementById('ec-email2')?.value.trim() || null,
+    telephone: document.getElementById('ec-tel')?.value.trim() || null,
+    mobile: document.getElementById('ec-mobile')?.value.trim() || null,
+    adresse: document.getElementById('ec-adresse')?.value.trim() || null,
+    code_postal: document.getElementById('ec-cp')?.value.trim() || null,
+    ville: document.getElementById('ec-ville')?.value.trim() || null,
+    commentaire: document.getElementById('ec-commentaire')?.value.trim() || null,
+  };
+  const { error } = await sb.from('contacts').update(update).eq('id', currentContact.id);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  toast('Contact mis à jour', 'success');
+  Object.assign(currentContact, update);
+  renderPage('contact-detail');
 }
 
 function generateAlerts() {
@@ -2551,37 +2720,15 @@ function renderDashboard() {
   return `
   ${alertsHTML}
   <div class="kpi-grid">
-    <div class="kpi-card blue">
-      <div class="kpi-header"><div class="kpi-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>${trendBadge(caTrend)}</div>
-      <div class="kpi-value">${fmt(totalCA)}</div>
-      <div class="kpi-label">CA Réalisé YTD</div>
-    </div>
     <div class="kpi-card green">
       <div class="kpi-header"><div class="kpi-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>${trendBadge(devisTrend)}</div>
       <div class="kpi-value">${fmt(devisEnCours)}</div>
       <div class="kpi-label">Devis en cours</div>
     </div>
-    <div class="kpi-card amber">
-      <div class="kpi-header"><div class="kpi-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div></div>
-      <div class="kpi-value">${objPct}%</div>
-      <div class="kpi-label">Objectif annuel atteint</div>
-    </div>
     <div class="kpi-card red">
       <div class="kpi-header"><div class="kpi-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div></div>
       <div class="kpi-value">${fmt(factRetard)}</div>
       <div class="kpi-label">${nbRetard} facture(s) en retard</div>
-    </div>
-  </div>
-  <div class="kpi-grid">
-    <div class="kpi-card cyan">
-      <div class="kpi-header"><div class="kpi-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg></div></div>
-      <div class="kpi-value">${avgMargin}%</div>
-      <div class="kpi-label">Marge moyenne</div>
-    </div>
-    <div class="kpi-card blue">
-      <div class="kpi-header"><div class="kpi-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div></div>
-      <div class="kpi-value">${avgDSO}j</div>
-      <div class="kpi-label">DSO moyen</div>
     </div>
     <div class="kpi-card green">
       <div class="kpi-header"><div class="kpi-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div></div>
@@ -2596,16 +2743,11 @@ function renderDashboard() {
   </div>
   <div class="grid-2">
     <div class="card">
-      <div class="card-header"><div class="card-title">CA Réalisé vs Objectif vs Prévisionnel</div></div>
-      <div class="card-body">${renderChart()}</div>
-    </div>
-    <div class="card">
       <div class="card-header"><div class="card-title">Activité récente</div></div>
       <div class="card-body" style="max-height:330px;overflow-y:auto">
         ${renderActivity()}
       </div>
     </div>
-  </div>
   <div class="grid-2 equal">
     <div class="card">
       <div class="card-header"><div class="card-title">Top clients — Score & CA</div><button class="btn" onclick="go('clients')">Voir tout</button></div>
@@ -2712,16 +2854,12 @@ async function loadTopClients() {
 function renderTopClients() {
   const sorted = (topClientsCache || DB.clients).slice(0, 10);
   if (!sorted.length) return '<div style="text-align:center;padding:20px;color:var(--t3)">Aucun client</div>';
-  return `<table><thead><tr><th>Client</th><th>Score</th><th>CA</th><th>Marge</th><th>DSO</th><th>Progression</th></tr></thead>
+  return `<table><thead><tr><th>Client</th><th>Ville</th><th>Secteur</th></tr></thead>
   <tbody>${sorted.map(c => {
-    const p = pct(c.ca,c.obj);
     return `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
       <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div><div><div class="cell-name">${c.name}</div><div class="cell-code">${c.code}</div></div></div></td>
-      <td>${scoreRing(c.score)}</td>
-      <td class="mono">${fmt(c.ca)}</td>
-      <td class="mono" style="color:${c.margin>=38?'var(--green)':'var(--amber)'}">${c.margin}%</td>
-      <td class="mono" style="color:${c.dso<=50?'var(--green)':c.dso<=60?'var(--amber)':'var(--red)'}">${c.dso}j</td>
-      <td><div class="prog"><div class="prog-bar"><div class="prog-fill ${pctColor(p)}" style="width:${p}%"></div></div><span class="prog-text">${p}%</span></div></td>
+      <td style="font-size:12px">${c.city||''}</td>
+      <td style="font-size:12px">${c.sector||''}</td>
     </tr>`;
   }).join('')}</tbody></table>`;
 }
@@ -2766,25 +2904,7 @@ function renderPortfolioHealth() {
       <div style="font-size:11px;color:var(--t2);margin-top:2px">En retard</div>
     </div>
   </div>
-  <div style="font-size:11px;text-align:center;color:var(--t3);margin-bottom:12px">${s.total} clients au total</div>
-  <div style="margin-bottom:16px">
-    <div style="font-size:12px;color:var(--t3);margin-bottom:6px">Sentiment moyen des échanges</div>
-    <div class="sentiment-bar">
-      <div class="pos" style="width:${s.avgPos}%"></div>
-      <div class="neu" style="width:${s.avgNeu}%"></div>
-      <div class="neg" style="width:${s.avgNeg}%"></div>
-    </div>
-    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--t3);margin-top:4px">
-      <span>Positif ${s.avgPos}%</span><span>Neutre ${s.avgNeu}%</span><span>Négatif ${s.avgNeg}%</span>
-    </div>
-  </div>
-  <div style="font-size:12px;color:var(--t3);margin-bottom:6px">Top DSO (jours)</div>
-  ${s.topDSO.map(c => `
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer" onclick="showClient('${c.id}')">
-      <span style="font-size:12px;min-width:140px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</span>
-      <div class="prog" style="flex:1"><div class="prog-bar" style="height:4px"><div class="prog-fill ${(c.dso||0)<=50?'green':(c.dso||0)<=60?'amber':'red'}" style="width:${((c.dso||0)/80)*100}%"></div></div></div>
-      <span class="mono" style="font-size:11px;color:${(c.dso||0)<=50?'var(--green)':(c.dso||0)<=60?'var(--amber)':'var(--red)'}">${c.dso||0}j</span>
-    </div>`).join('')}`;
+  <div style="font-size:11px;text-align:center;color:var(--t3);margin-bottom:12px">${s.total} clients au total</div>`;
 }
 
 // ═══ CLIENTS PAGE ═══
@@ -2813,18 +2933,13 @@ function renderClients(filter='all') {
     ${letters.map(l => `<button class="btn ${clientsLetter===l?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'${l}','')">${l}</button>`).join('')}
   </div>
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Client</th><th>Ville</th><th>Score</th><th>CA YTD</th><th>Marge</th><th>DSO</th><th>Objectif</th><th>Statut</th></tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucun client trouvé</td></tr>' : filtered.map(c => {
-      const p = pct(c.ca,c.obj);
+    <table><thead><tr><th>Client</th><th>Ville</th><th>Secteur</th><th>Statut</th></tr></thead>
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">Aucun client trouvé</td></tr>' : filtered.map(c => {
       const s = statusMap[c.status] || {cls:'',label:c.status};
       return `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
-        <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div><div><div class="cell-name">${c.name}</div><div class="cell-code">${c.code} · ${c.sector}</div></div></div></td>
+        <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div><div><div class="cell-name">${c.name}</div><div class="cell-code">${c.code}</div></div></div></td>
         <td style="font-size:12px">${c.city||''}</td>
-        <td>${scoreRing(c.score)}</td>
-        <td class="mono">${fmt(c.ca)}</td>
-        <td class="mono" style="color:${c.margin>=38?'var(--green)':'var(--amber)'}">${c.margin}%</td>
-        <td class="mono" style="color:${c.dso<=50?'var(--green)':c.dso<=60?'var(--amber)':'var(--red)'}">${c.dso}j</td>
-        <td><div class="prog"><div class="prog-bar"><div class="prog-fill ${pctColor(p)}" style="width:${p}%"></div></div><span class="prog-text">${p}%</span></div></td>
+        <td style="font-size:12px">${c.sector||''}</td>
         <td><span class="badge ${s.cls}">${s.label}</span></td>
       </tr>`;
     }).join('')}</tbody></table>
@@ -2861,17 +2976,7 @@ async function showClient(id) {
 function renderClientDetail() {
   const c = currentClient;
   if(!c) return '<p>Client non trouvé</p>';
-  const p = pct(c.ca,c.obj);
   const s = statusMap[c.status] || statusMap['objectif'];
-
-  // Score factors
-  const factors = [
-    {name:'Régularité paiements', val: c.dso <= 40 ? 'Excellent' : c.dso <= 55 ? 'Bon' : 'À risque', color: c.dso<=40?'var(--green)':c.dso<=55?'var(--amber)':'var(--red)'},
-    {name:'Progression CA', val: p >= 80 ? 'Excellent' : p >= 60 ? 'Bon' : 'Faible', color: p>=80?'var(--green)':p>=60?'var(--amber)':'var(--red)'},
-    {name:'Fréquence échanges', val: 'Régulier', color:'var(--green)'},
-    {name:'Marge projet', val: c.margin+'%', color: c.margin>=38?'var(--green)':'var(--amber)'},
-    {name:'Sentiment global', val: c.sentiment.pos+'% positif', color: c.sentiment.pos>=60?'var(--green)':c.sentiment.pos>=45?'var(--amber)':'var(--red)'},
-  ];
 
   return `
   <button class="btn" onclick="go('clients')" style="margin-bottom:14px">← Retour aux clients</button>
@@ -2886,15 +2991,10 @@ function renderClientDetail() {
     <div class="client-actions">
       <button class="btn" onclick="openModal('edit-client')">✎ Modifier</button>
       <button class="btn" onclick="pushClientToAkuiteo('${c.id}')">↑ Sync Akuiteo</button>
-      <button class="btn" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✎ Nouveau CR</button>
-      <button class="btn" onclick="openModal('proposal')">✦ Proposition IA</button>
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
     </div>
   </div>
   <div class="kpi-grid">
-    <div class="kpi-card blue"><div class="kpi-value" style="font-size:22px">${fmt(c.ca)}</div><div class="kpi-label">CA YTD</div></div>
-    <div class="kpi-card green"><div class="kpi-value" style="font-size:22px">${c.margin}%</div><div class="kpi-label">Marge</div></div>
-    <div class="kpi-card amber"><div class="kpi-value" style="font-size:22px">${c.dso}j</div><div class="kpi-label">DSO</div></div>
     <div class="kpi-card cyan"><div class="kpi-value" style="font-size:22px">${c.devis}</div><div class="kpi-label">Devis en cours</div></div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
@@ -2908,11 +3008,12 @@ function renderClientDetail() {
       detailRow('Région', c.region),
       detailRow('Pays', c.pays),
     ])}
+    ${c.lat && c.lng ? '<div style="margin-bottom:12px"><a href="https://www.google.com/maps/dir/?api=1&destination='+c.lat+','+c.lng+'" target="_blank" class="btn" style="text-decoration:none;width:100%;justify-content:center">Y aller (GPS)</a></div>' : ''}
     ${detailSection('Coordonnées', [
-      detailRow('Email', c.email),
-      detailRow('Téléphone', c.phone),
-      detailRow('Téléphone 2', c.telephone2),
-      detailRow('Mobile', c.mobile),
+      detailRow('Email', c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : null),
+      detailRow('Téléphone', c.phone ? '<a href="tel:'+c.phone+'" style="color:var(--accent)">'+c.phone+'</a>' : null),
+      detailRow('Téléphone 2', c.telephone2 ? '<a href="tel:'+c.telephone2+'" style="color:var(--accent)">'+c.telephone2+'</a>' : null),
+      detailRow('Mobile', c.mobile ? '<a href="tel:'+c.mobile+'" style="color:var(--accent)">'+c.mobile+'</a>' : null),
       detailRow('Fax', c.fax),
       detailRow('Site web', c.site_web ? '<a href="' + (c.site_web.startsWith('http') ? c.site_web : 'https://'+c.site_web) + '" target="_blank" style="color:var(--accent)">' + c.site_web + '</a>' : null),
     ])}
@@ -2953,38 +3054,6 @@ function renderClientDetail() {
     ])}
   </div>
   ${c.notes ? `<div class="card" style="margin-bottom:16px"><div class="card-header"><div class="card-title">Notes</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes}</div></div></div>` : ''}
-  <div class="grid-2 equal">
-    <div class="card">
-      <div class="card-header"><div class="card-title">Score prédictif</div></div>
-      <div class="card-body">
-        <div style="display:flex;align-items:center;gap:20px;margin-bottom:16px">
-          ${scoreRing(c.score, 80)}
-          <div><div style="font-size:24px;font-weight:800;font-family:'JetBrains Mono',monospace;color:${scoreColor(c.score)}">${c.score}/100</div><div style="font-size:12px;color:var(--t3)">Score de santé client</div></div>
-        </div>
-        <div class="score-factors">
-          ${factors.map(f => `<div class="score-factor"><span class="score-factor-name">${f.name}</span><span class="score-factor-val" style="color:${f.color}">${f.val}</span></div>`).join('')}
-        </div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-header"><div class="card-title">Analyse de sentiment</div></div>
-      <div class="card-body">
-        <div class="sentiment-bar" style="height:10px;border-radius:5px;margin-bottom:16px">
-          <div class="pos" style="width:${c.sentiment.pos}%"></div>
-          <div class="neu" style="width:${c.sentiment.neu}%"></div>
-          <div class="neg" style="width:${c.sentiment.neg}%"></div>
-        </div>
-        <div style="display:flex;justify-content:space-around;margin-bottom:20px">
-          <div style="text-align:center"><div class="mono" style="font-size:18px;font-weight:700;color:var(--green)">${c.sentiment.pos}%</div><div style="font-size:11px;color:var(--t3)">Positif</div></div>
-          <div style="text-align:center"><div class="mono" style="font-size:18px;font-weight:700;color:var(--amber)">${c.sentiment.neu}%</div><div style="font-size:11px;color:var(--t3)">Neutre</div></div>
-          <div style="text-align:center"><div class="mono" style="font-size:18px;font-weight:700;color:var(--red)">${c.sentiment.neg}%</div><div style="font-size:11px;color:var(--t3)">Négatif</div></div>
-        </div>
-        <div style="font-size:12px;color:var(--t2);line-height:1.6">
-          <strong style="color:var(--t1)">Analyse IA :</strong> Les échanges récents sont ${c.sentiment.pos>=60?'majoritairement positifs avec un bon niveau de confiance':'mitigés avec des points de friction identifiés'}. ${c.sentiment.neg>=15?'Attention : le taux de sentiment négatif suggère des insatisfactions à traiter.':'Le client semble satisfait de la collaboration.'}
-        </div>
-      </div>
-    </div>
-  </div>
   <div class="grid-2 equal">
     <div class="card">
       <div class="card-header"><div class="card-title">Devis</div></div>
@@ -3109,8 +3178,8 @@ async function loadClientContacts(clientId) {
         <td><strong>${fullName}</strong>${ct.service ? '<div style="font-size:10px;color:var(--t3)">'+ct.service+'</div>' : ''}</td>
         <td style="font-size:12px">${ct.fonction || '—'}</td>
         <td style="font-size:12px">${ct.email ? '<a href="mailto:'+ct.email+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+ct.email+'</a>' : '—'}</td>
-        <td class="mono" style="font-size:12px">${ct.telephone || '—'}</td>
-        <td class="mono" style="font-size:12px">${ct.mobile || '—'}</td>
+        <td class="mono" style="font-size:12px">${ct.telephone ? '<a href="tel:'+ct.telephone+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+ct.telephone+'</a>' : '—'}</td>
+        <td class="mono" style="font-size:12px">${ct.mobile ? '<a href="tel:'+ct.mobile+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+ct.mobile+'</a>' : '—'}</td>
         <td style="font-size:12px">${ct.ville || '—'}</td>
         <td><button class="btn" style="font-size:10px;padding:2px 6px;color:var(--red)" onclick="event.stopPropagation();deleteContact('${ct.id}','${clientId}')">×</button></td>
       </tr>`;
@@ -3768,19 +3837,13 @@ function renderCarte() {
   <div class="map-container">
     <div id="mapLeaflet"></div>
   </div>
-  <div class="map-legend-bar">
-    <span style="font-weight:700">Score santé :</span>
-    <span class="map-legend-item"><span class="map-legend-dot" style="background:#4CAF50"></span> ≥ 70</span>
-    <span class="map-legend-item"><span class="map-legend-dot" style="background:#FF9800"></span> 50–69</span>
-    <span class="map-legend-item"><span class="map-legend-dot" style="background:#D94040"></span> &lt; 50</span>
-  </div>
   <div class="card" style="margin-top:16px">
     <div class="card-header"><div class="card-title">Clients par zone géographique</div></div>
     <div class="card-body" style="padding:0"><div class="table-wrap">
-      <table><thead><tr><th>Client</th><th>Ville</th><th>Score</th><th>Dernier contact</th><th>CA</th></tr></thead>
-      <tbody>${DB.clients.map(c => `<tr onclick="showClient('${c.id}')">
+      <table><thead><tr><th>Client</th><th>Ville</th><th>Secteur</th></tr></thead>
+      <tbody>${DB.clients.map(c => `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
         <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div><div class="cell-name">${c.name}</div></div></td>
-        <td>${c.city}</td><td>${scoreRing(c.score)}</td><td style="color:var(--t2)">${c.lastContact}</td><td class="mono">${fmt(c.ca)}</td>
+        <td>${c.city}</td><td>${c.sector||''}</td>
       </tr>`).join('')}</tbody></table>
     </div></div>
   </div>`;
@@ -3818,11 +3881,11 @@ async function initCarteMap() {
       <div class="map-popup">
         <h4>${c.name}</h4>
         <div class="map-popup-city">${c.city || ''} · ${c.sector || ''}</div>
-        <div class="map-popup-row"><span class="map-popup-label">Score</span><span class="map-popup-val" style="color:${color}">${c.score||0}/100</span></div>
-        <div class="map-popup-row"><span class="map-popup-label">CA réalisé</span><span class="map-popup-val">${fmt(c.ca)}</span></div>
-        <div class="map-popup-row"><span class="map-popup-label">Objectif</span><span class="map-popup-val">${fmt(c.obj)}</span></div>
         <div class="map-popup-row"><span class="map-popup-label">Statut</span><span class="map-popup-val"><span class="badge ${s.cls}">${s.label}</span></span></div>
-        <button class="map-popup-btn" onclick="showClient('${c.id}')">Voir la fiche →</button>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="map-popup-btn" style="flex:1" onclick="showClient('${c.id}')">Voir la fiche</button>
+          <a class="map-popup-btn" style="flex:1;text-decoration:none;text-align:center" href="https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}" target="_blank">Y aller</a>
+        </div>
       </div>
     `, { maxWidth: 280 });
   });
@@ -4893,16 +4956,32 @@ function openModal(id) {
     const c = currentClient;
     document.getElementById('ec-name').value = c.name||'';
     document.getElementById('ec-code').value = c.code||'';
+    document.getElementById('ec-raison').value = c.raison_sociale||'';
+    document.getElementById('ec-raison2').value = c.raison_sociale2||'';
+    document.getElementById('ec-forme').value = c.forme_juridique||'';
     document.getElementById('ec-sector').value = c.sector||'';
+    document.getElementById('ec-addr1').value = c.adresse_ligne1||'';
+    document.getElementById('ec-addr2').value = c.adresse_ligne2||'';
+    document.getElementById('ec-addr3').value = c.adresse_ligne3||'';
+    document.getElementById('ec-cp').value = c.code_postal||'';
     document.getElementById('ec-city').value = c.city||'';
-    document.getElementById('ec-contact').value = c.contact||'';
+    document.getElementById('ec-dept').value = c.departement||'';
+    document.getElementById('ec-region').value = c.region||'';
+    document.getElementById('ec-pays').value = c.pays||'';
     document.getElementById('ec-email').value = c.email||'';
     document.getElementById('ec-phone').value = c.phone||'';
-    document.getElementById('ec-obj').value = c.obj||0;
-    document.getElementById('ec-ca').value = c.ca||0;
-    document.getElementById('ec-margin').value = c.margin||0;
-    document.getElementById('ec-dso').value = c.dso||0;
-    document.getElementById('ec-score').value = c.score||0;
+    document.getElementById('ec-phone2').value = c.telephone2||'';
+    document.getElementById('ec-mobile').value = c.mobile||'';
+    document.getElementById('ec-fax').value = c.fax||'';
+    document.getElementById('ec-web').value = c.site_web||'';
+    document.getElementById('ec-siren').value = c.siren||'';
+    document.getElementById('ec-siret').value = c.siret||'';
+    document.getElementById('ec-ape').value = c.ape||'';
+    document.getElementById('ec-refext').value = c.reference_externe||'';
+    document.getElementById('ec-revenue').value = c.chiffre_affaires||'';
+    document.getElementById('ec-capital').value = c.capital||'';
+    document.getElementById('ec-headcount').value = c.effectif||'';
+    document.getElementById('ec-notes').value = c.notes||'';
   }
 }
 function closeModal(id) { const el=document.getElementById('modal-'+id); if(el) el.classList.remove('active'); }
@@ -5048,24 +5127,128 @@ async function sendReport() {
 }
 
 // ═══ FORM SUBMISSIONS ═══
+async function searchSirene() {
+  const q = document.getElementById('nc-sirene-search').value.trim();
+  if (!q) return;
+  const resultsDiv = document.getElementById('nc-sirene-results');
+  resultsDiv.style.display = 'block';
+  resultsDiv.innerHTML = '<div style="padding:12px;text-align:center;color:var(--t3);font-size:12px">Recherche en cours...</div>';
+
+  try {
+    const isNum = /^\d+$/.test(q.replace(/\s/g, ''));
+    const cleanQ = q.replace(/\s/g, '');
+    let url;
+    if (isNum && cleanQ.length === 14) {
+      // SIRET exact
+      url = `https://recherche-entreprises.api.gouv.fr/search?q=${cleanQ}&mtm_campaign=crm-novam`;
+    } else if (isNum && cleanQ.length === 9) {
+      // SIREN exact
+      url = `https://recherche-entreprises.api.gouv.fr/search?q=${cleanQ}&mtm_campaign=crm-novam`;
+    } else {
+      // Recherche par nom
+      url = `https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(q)}&mtm_campaign=crm-novam&per_page=10`;
+    }
+
+    const resp = await fetch(url);
+    const data = await resp.json();
+    const results = data.results || [];
+
+    if (results.length === 0) {
+      resultsDiv.innerHTML = '<div style="padding:12px;text-align:center;color:var(--t3);font-size:12px">Aucun résultat trouvé</div>';
+      return;
+    }
+
+    resultsDiv.innerHTML = results.map((r, i) => {
+      const siege = r.siege || {};
+      const nom = r.nom_complet || r.nom_raison_sociale || '';
+      const siret = siege.siret || '';
+      const ville = siege.libelle_commune || '';
+      const cp = siege.code_postal || '';
+      const activite = siege.activite_principale || r.activite_principale || '';
+      return `<div style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px"
+        onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
+        onclick="fillFromSirene(${i})">
+        <div style="font-weight:600;color:var(--t1)">${nom}</div>
+        <div style="color:var(--t3);margin-top:2px">SIRET: ${siret} | ${cp} ${ville} | APE: ${activite}</div>
+      </div>`;
+    }).join('');
+
+    // Stocker les résultats pour fillFromSirene
+    window._sireneResults = results;
+  } catch (e) {
+    console.error('Sirene search error:', e);
+    resultsDiv.innerHTML = '<div style="padding:12px;text-align:center;color:var(--red);font-size:12px">Erreur lors de la recherche</div>';
+  }
+}
+
+function fillFromSirene(index) {
+  const r = window._sireneResults?.[index];
+  if (!r) return;
+  const siege = r.siege || {};
+
+  document.getElementById('nc-name').value = r.nom_complet || r.nom_raison_sociale || '';
+  document.getElementById('nc-raison').value = r.nom_complet || r.nom_raison_sociale || '';
+  document.getElementById('nc-forme').value = r.nature_juridique || '';
+  document.getElementById('nc-siren').value = r.siren || '';
+  document.getElementById('nc-siret').value = siege.siret || '';
+  document.getElementById('nc-ape').value = siege.activite_principale || r.activite_principale || '';
+  document.getElementById('nc-sector').value = r.section_activite_principale || '';
+  document.getElementById('nc-addr1').value = siege.adresse || siege.numero_voie ? [(siege.numero_voie||''), (siege.type_voie||''), (siege.libelle_voie||'')].filter(Boolean).join(' ') : '';
+  document.getElementById('nc-addr2').value = siege.complement_adresse || '';
+  document.getElementById('nc-cp').value = siege.code_postal || '';
+  document.getElementById('nc-city').value = siege.libelle_commune || '';
+  document.getElementById('nc-dept').value = siege.departement || '';
+  document.getElementById('nc-region').value = siege.region || '';
+  document.getElementById('nc-pays').value = 'FR';
+
+  // Effectif
+  const tranche = r.tranche_effectif_salarie || '';
+  if (r.nombre_etablissements_ouverts) {
+    document.getElementById('nc-headcount').value = '';
+  }
+
+  // Fermer les résultats
+  document.getElementById('nc-sirene-results').style.display = 'none';
+  toast('Données de l\'entreprise importées', 'success');
+}
+
 async function submitNewClient() {
   const name = document.getElementById('nc-name').value.trim();
   if (!name) { toast('Le nom est obligatoire','error'); return; }
-  const id = name.toLowerCase().replace(/[^a-z0-9]/g,'_').substring(0,20);
+  const id = name.toLowerCase().replace(/[^a-z0-9]/g,'_').substring(0,20) + '_' + String(Date.now()).slice(-4);
   const ini = name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
   const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
   await dbInsert('clients', {
-    id, name, code: document.getElementById('nc-code').value||`CLI-${String(Date.now()).slice(-4)}`,
-    sector: document.getElementById('nc-sector').value||'',
-    city: document.getElementById('nc-city').value||'',
-    contact: document.getElementById('nc-contact').value||'',
-    email: document.getElementById('nc-email').value||'',
-    phone: document.getElementById('nc-phone').value||'',
-    obj: Number(document.getElementById('nc-obj').value)||0,
-    lat: Number(document.getElementById('nc-lat').value)||48.85,
-    lng: Number(document.getElementById('nc-lng').value)||2.35,
+    id, name,
+    code: document.getElementById('nc-code').value.trim() || `CLI-${String(Date.now()).slice(-4)}`,
+    raison_sociale: document.getElementById('nc-raison').value.trim() || null,
+    raison_sociale2: document.getElementById('nc-raison2').value.trim() || null,
+    forme_juridique: document.getElementById('nc-forme').value.trim() || null,
+    sector: document.getElementById('nc-sector').value.trim() || '',
+    adresse_ligne1: document.getElementById('nc-addr1').value.trim() || null,
+    adresse_ligne2: document.getElementById('nc-addr2').value.trim() || null,
+    adresse_ligne3: document.getElementById('nc-addr3').value.trim() || null,
+    code_postal: document.getElementById('nc-cp').value.trim() || null,
+    city: document.getElementById('nc-city').value.trim() || '',
+    departement: document.getElementById('nc-dept').value.trim() || null,
+    region: document.getElementById('nc-region').value.trim() || null,
+    pays: document.getElementById('nc-pays').value.trim() || null,
+    email: document.getElementById('nc-email').value.trim() || '',
+    phone: document.getElementById('nc-phone').value.trim() || '',
+    telephone2: document.getElementById('nc-phone2').value.trim() || null,
+    mobile: document.getElementById('nc-mobile').value.trim() || null,
+    fax: document.getElementById('nc-fax').value.trim() || null,
+    site_web: document.getElementById('nc-web').value.trim() || null,
+    siren: document.getElementById('nc-siren').value.trim() || null,
+    siret: document.getElementById('nc-siret').value.trim() || null,
+    ape: document.getElementById('nc-ape').value.trim() || null,
+    reference_externe: document.getElementById('nc-refext').value.trim() || null,
+    chiffre_affaires: Number(document.getElementById('nc-revenue').value) || 0,
+    capital: Number(document.getElementById('nc-capital').value) || 0,
+    effectif: Number(document.getElementById('nc-headcount').value) || 0,
+    notes: document.getElementById('nc-notes').value.trim() || null,
     ini, color: colors[Math.floor(Math.random()*colors.length)],
-    ca:0, margin:0, dso:0, score:50, status:'objectif'
+    status: 'objectif',
   });
   closeModal('new-client');
 }
@@ -5118,18 +5301,34 @@ async function submitNewFacture() {
 async function submitEditClient() {
   if (!currentClient) return;
   await dbUpdate('clients', currentClient.id, {
-    name: document.getElementById('ec-name').value,
-    code: document.getElementById('ec-code').value,
-    sector: document.getElementById('ec-sector').value,
-    city: document.getElementById('ec-city').value,
-    contact: document.getElementById('ec-contact').value,
-    email: document.getElementById('ec-email').value,
-    phone: document.getElementById('ec-phone').value,
-    obj: Number(document.getElementById('ec-obj').value)||0,
-    ca: Number(document.getElementById('ec-ca').value)||0,
-    margin: Number(document.getElementById('ec-margin').value)||0,
-    dso: Number(document.getElementById('ec-dso').value)||0,
-    score: Number(document.getElementById('ec-score').value)||0,
+    name: document.getElementById('ec-name').value.trim(),
+    code: document.getElementById('ec-code').value.trim(),
+    raison_sociale: document.getElementById('ec-raison').value.trim() || null,
+    raison_sociale2: document.getElementById('ec-raison2').value.trim() || null,
+    forme_juridique: document.getElementById('ec-forme').value.trim() || null,
+    sector: document.getElementById('ec-sector').value.trim(),
+    adresse_ligne1: document.getElementById('ec-addr1').value.trim() || null,
+    adresse_ligne2: document.getElementById('ec-addr2').value.trim() || null,
+    adresse_ligne3: document.getElementById('ec-addr3').value.trim() || null,
+    code_postal: document.getElementById('ec-cp').value.trim() || null,
+    city: document.getElementById('ec-city').value.trim(),
+    departement: document.getElementById('ec-dept').value.trim() || null,
+    region: document.getElementById('ec-region').value.trim() || null,
+    pays: document.getElementById('ec-pays').value.trim() || null,
+    email: document.getElementById('ec-email').value.trim(),
+    phone: document.getElementById('ec-phone').value.trim(),
+    telephone2: document.getElementById('ec-phone2').value.trim() || null,
+    mobile: document.getElementById('ec-mobile').value.trim() || null,
+    fax: document.getElementById('ec-fax').value.trim() || null,
+    site_web: document.getElementById('ec-web').value.trim() || null,
+    siren: document.getElementById('ec-siren').value.trim() || null,
+    siret: document.getElementById('ec-siret').value.trim() || null,
+    ape: document.getElementById('ec-ape').value.trim() || null,
+    reference_externe: document.getElementById('ec-refext').value.trim() || null,
+    chiffre_affaires: Number(document.getElementById('ec-revenue').value) || 0,
+    capital: Number(document.getElementById('ec-capital').value) || 0,
+    effectif: Number(document.getElementById('ec-headcount').value) || 0,
+    notes: document.getElementById('ec-notes').value.trim() || null,
   });
   closeModal('edit-client');
   currentClient = DB.clients.find(c=>c.id===currentClient.id);
@@ -5223,10 +5422,10 @@ document.addEventListener('click', e => { if(!e.target.closest('.search-bar')) d
 // ═══ AKUITEO API via proxy local (lancer: python proxy_akuiteo.py) ═══
 const AKUITEO_PROXY = 'http://localhost:8888';
 
-async function akuiteoFetch(method, path, body = null) {
+async function akuiteoFetch(method, path, body = null, opts2 = {}) {
   const opts = {
     method,
-    headers: { 'Accept': 'application/json' },
+    headers: { 'Accept': opts2.accept || 'application/json' },
   };
   if (body) {
     opts.headers['Content-Type'] = 'application/json';
@@ -5239,7 +5438,8 @@ async function akuiteoFetch(method, path, body = null) {
     throw new Error(`Akuiteo ${r.status}: ${txt.substring(0, 200)}`);
   }
   const text = await r.text();
-  return text ? JSON.parse(text) : null;
+  if (!text) return null;
+  try { return JSON.parse(text); } catch(e) { return text; }
 }
 
 async function syncAkuiteo() {
@@ -5767,7 +5967,7 @@ async function syncAkuiteo() {
     contactsLoaded = false; // Forcer rechargement page contacts
     renderPage(currentPage);
     toast(`Sync terminée : ${created} clients, ${syncedMarches} marchés, ${syncedAffaires} affaires, ${syncedDocs.devis} devis, ${syncedDocs.commandes} cmd, ${syncedDocs.factures} fact, ${syncedContacts} contacts`, 'success');
-    document.getElementById('syncLabel').innerHTML = 'Akuiteo synchronisé — <span style="font-family:JetBrains Mono,monospace">' + new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) + '</span>';
+    updateSyncLabel();
   } catch (e) {
     console.error('Sync Akuiteo error:', e);
     toast('Erreur de synchronisation: ' + e.message, 'error');
@@ -5776,27 +5976,129 @@ async function syncAkuiteo() {
 
 // Pousser un client CRM vers Akuiteo
 async function pushClientToAkuiteo(clientId) {
-  const client = DB.clients.find(c => c.id === clientId);
-  if (!client) { toast('Client non trouvé', 'error'); return; }
+  const c = DB.clients.find(x => x.id === clientId);
+  if (!c) { toast('Client non trouvé', 'error'); return; }
 
-  const akData = { name: client.name, code: client.code };
+  // Charger toutes les données du client depuis Supabase (pas juste la page courante)
+  const { data: full } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
+  if (!full) { toast('Client non trouvé en base', 'error'); return; }
+
+  const akData = {
+    name: full.name || '',
+    legalName: full.raison_sociale || full.name || '',
+    legalName2: full.raison_sociale2 || null,
+    SIREN: full.siren || null,
+    SIRET: full.siret || null,
+    APE: full.ape || null,
+    legalForm: full.forme_juridique || null,
+    externalReference: full.reference_externe || null,
+    languageCode: full.langue || null,
+    revenue: full.chiffre_affaires || null,
+    equity: full.capital || null,
+    headcount: full.effectif || null,
+    address: {
+      line1: full.adresse_ligne1 || null,
+      line2: full.adresse_ligne2 || null,
+      line3: full.adresse_ligne3 || null,
+      postalCode: full.code_postal || null,
+      city: full.city || null,
+      department: full.departement || null,
+      country: full.pays || null,
+      phone: full.phone || null,
+      phone2: full.telephone2 || null,
+      mobilePhone: full.mobile || null,
+      fax: full.fax || null,
+      email: full.email || null,
+      webSite: full.site_web || null,
+    },
+  };
+
+  // Garantir que address existe toujours (obligatoire pour Akuiteo)
+  if (!akData.address) akData.address = {};
+  // Nettoyer les valeurs null de l'adresse
+  Object.keys(akData.address).forEach(k => { if (akData.address[k] == null) delete akData.address[k]; });
+  // country est obligatoire
+  if (!akData.address.country) akData.address.country = 'FR';
+
   toast('Envoi vers Akuiteo...', 'info');
-
   try {
-    if (client.akuiteo_id) {
-      await akuiteoFetch('POST', '/crm/customers/' + client.akuiteo_id, akData);
+    if (full.akuiteo_id) {
+      // Update : id dans le body + Accept text/plain obligatoires
+      akData.id = full.akuiteo_id;
+      await akuiteoFetch('POST', '/crm/customers/' + full.akuiteo_id, akData, { accept: 'text/plain' });
       toast('Client mis à jour dans Akuiteo', 'success');
     } else {
-      const result = await akuiteoFetch('PUT', '/crm/customers', akData);
-      if (result && (result.id || result)) {
-        const newAkId = String(result.id || result);
+      // Création : code + type obligatoires + Accept text/plain
+      akData.code = full.code || null;
+      akData.type = 'CUSTOMER';
+      const result = await akuiteoFetch('PUT', '/crm/customers', akData, { accept: 'text/plain' });
+      if (result) {
+        const newAkId = String(typeof result === 'object' ? result.id || result : result);
         await sb.from('clients').update({ akuiteo_id: newAkId }).eq('id', clientId);
         await loadDB();
+        renderPage(currentPage);
       }
       toast('Client créé dans Akuiteo', 'success');
     }
   } catch (e) {
     console.error('Push Akuiteo error:', e);
+    toast('Erreur Akuiteo: ' + e.message, 'error');
+  }
+}
+
+async function pushContactToAkuiteo(contactId) {
+  const { data: ct } = await sb.from('contacts').select('*').eq('id', contactId).maybeSingle();
+  if (!ct) { toast('Contact non trouvé', 'error'); return; }
+
+  // Trouver l'akuiteo_id du client parent
+  let customerAkId = null;
+  if (ct.client_id) {
+    const { data: cl } = await sb.from('clients').select('akuiteo_id').eq('id', ct.client_id).maybeSingle();
+    customerAkId = cl?.akuiteo_id;
+  }
+  if (!customerAkId) { toast('Le client parent n\'a pas d\'ID Akuiteo. Synchronisez d\'abord le client.', 'error'); return; }
+
+  const akData = {
+    name: ct.nom || '',
+    firstName: ct.prenom || null,
+    title: ct.titre || null,
+    position: ct.fonction || null,
+    service: ct.service || null,
+    email: ct.email || null,
+    email2: ct.email2 || null,
+    phone: ct.telephone || null,
+    mobilePhone: ct.mobile || null,
+    comment: ct.commentaire || null,
+    address: {
+      line1: ct.adresse || null,
+      postalCode: ct.code_postal || null,
+      city: ct.ville || null,
+    },
+  };
+
+  // Garantir que address existe toujours
+  if (!akData.address) akData.address = {};
+  Object.keys(akData.address).forEach(k => { if (akData.address[k] == null) delete akData.address[k]; });
+  if (!akData.address.country) akData.address.country = 'FR';
+
+  toast('Envoi du contact vers Akuiteo...', 'info');
+  try {
+    if (ct.akuiteo_id) {
+      akData.id = ct.akuiteo_id;
+      await akuiteoFetch('POST', `/crm/customers/${customerAkId}/contacts/${ct.akuiteo_id}`, akData, { accept: 'text/plain' });
+      toast('Contact mis à jour dans Akuiteo', 'success');
+    } else {
+      akData.code = ct.code || null;
+      const result = await akuiteoFetch('PUT', `/crm/customers/${customerAkId}/contacts/`, akData, { accept: 'text/plain' });
+      if (result) {
+        const newAkId = String(typeof result === 'object' ? result.id || result : result);
+        await sb.from('contacts').update({ akuiteo_id: newAkId }).eq('id', contactId);
+        if (currentContact && currentContact.id === contactId) currentContact.akuiteo_id = newAkId;
+      }
+      toast('Contact créé dans Akuiteo', 'success');
+    }
+  } catch (e) {
+    console.error('Push contact Akuiteo error:', e);
     toast('Erreur Akuiteo: ' + e.message, 'error');
   }
 }
@@ -5811,8 +6113,7 @@ window.addEventListener('offline', () => {
 
 window.addEventListener('online', () => {
   document.getElementById('offlineBadge').classList.remove('show');
-  document.getElementById('syncDot').style.background='var(--green)';
-  document.getElementById('syncLabel').innerHTML='Akuiteo synchronisé — <span style="font-family:JetBrains Mono,monospace">'+new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+'</span>';
+  updateSyncLabel();
   toast('Connexion rétablie — Synchronisation en cours','success');
 });
 
@@ -5929,9 +6230,16 @@ async function onAuthSuccess(user) {
   // Charger les données
   document.getElementById('contentArea').innerHTML = '<div class="page active" style="text-align:center;padding:60px 20px;color:var(--t3)"><div style="font-size:1.1rem;font-weight:600">Chargement des données...</div><div style="margin-top:8px;font-size:.85rem">Connexion à Supabase</div></div>';
   await loadDB();
+  updateSyncLabel();
   renderPage('dashboard');
   initRealtime();
   toast(`Bienvenue ${currentCommercial ? currentCommercial.nom : user.email}`, 'success');
+}
+
+function updateSyncLabel() {
+  const now = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+  document.getElementById('syncDot').style.background = 'var(--green)';
+  document.getElementById('syncLabel').innerHTML = 'Akuiteo synchronisé — <span style="font-family:JetBrains Mono,monospace">' + now + '</span>';
 }
 
 async function doLogout() {
