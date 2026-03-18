@@ -1999,6 +1999,27 @@ let devisDateFrom = _yearAgo, devisDateTo = _today;
 let cmdDateFrom = _yearAgo, cmdDateTo = _today;
 let factDateFrom = _yearAgo, factDateTo = _today;
 
+// Pagination tables (100 lignes par page)
+const TBL_PAGE_SIZE = 100;
+let devisPage = 0, cmdPage = 0, factPage = 0, marchesPage = 0;
+
+function renderTablePagination(total, currentPage, onPageFn) {
+  const totalPages = Math.ceil(total / TBL_PAGE_SIZE);
+  if (totalPages <= 1) return '';
+  const from = currentPage * TBL_PAGE_SIZE + 1;
+  const to = Math.min((currentPage + 1) * TBL_PAGE_SIZE, total);
+  return `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid var(--border);font-size:12px;color:var(--t3)">
+    <span>${from}–${to} sur ${total}</span>
+    <div style="display:flex;gap:4px">
+      <button class="btn" onclick="${onPageFn}(0)" ${currentPage===0?'disabled':''} style="font-size:11px;padding:3px 8px">&#171;</button>
+      <button class="btn" onclick="${onPageFn}(${currentPage-1})" ${currentPage===0?'disabled':''} style="font-size:11px;padding:3px 8px">&#8249;</button>
+      <span style="padding:3px 10px;font-weight:600">${currentPage+1} / ${totalPages}</span>
+      <button class="btn" onclick="${onPageFn}(${currentPage+1})" ${currentPage>=totalPages-1?'disabled':''} style="font-size:11px;padding:3px 8px">&#8250;</button>
+      <button class="btn" onclick="${onPageFn}(${totalPages-1})" ${currentPage>=totalPages-1?'disabled':''} style="font-size:11px;padding:3px 8px">&#187;</button>
+    </div>
+  </div>`;
+}
+
 // Filtre par société (companyCode Akuiteo)
 let selectedSocietes = new Set(); // vide = toutes
 let _societeRefreshFn = null;
@@ -3349,7 +3370,7 @@ function renderMarches() {
       <th style="width:70px">Affaires</th>
       <th style="width:80px">Statut</th>
     </tr></thead>
-    <tbody>${marches.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucun marché trouvé</td></tr>' : marches.map(m => {
+    <tbody>${marches.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucun marché trouvé</td></tr>' : marches.slice(marchesPage*TBL_PAGE_SIZE, (marchesPage+1)*TBL_PAGE_SIZE).map(m => {
       const nbAff = DB.affaires.filter(a => a.marche_id === m.id).length;
       const nbDevis = DB.devis.filter(d => d.marche_id === m.id).length;
       const nbCmd = DB.commandes.filter(c => c.marche_id === m.id).length;
@@ -3369,12 +3390,15 @@ function renderMarches() {
       </tr>`;
     }).join('')}</tbody>
     </table>
+  ${renderTablePagination(marches.length, marchesPage, 'goMarchesPage')}
   </div></div></div>`;
 }
 
 function renderMarchesRefresh() {
+  marchesPage = 0;
   document.getElementById('contentArea').innerHTML = '<div class="page active">' + renderMarches() + '</div>';
 }
+function goMarchesPage(p) { marchesPage=p; document.getElementById('contentArea').innerHTML='<div class="page active">'+renderMarches()+'</div>'; }
 
 let marchesMap = null;
 let marchesMapVisible = false;
@@ -3973,7 +3997,7 @@ function renderDevis(filter='all') {
       ${sortTh('devis','agence','Agence','filterDevis')}
       ${sortTh('devis','statut','Statut','filterDevis')}
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis trouvé</td></tr>' : filtered.map(d => `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis trouvé</td></tr>' : filtered.slice(devisPage*TBL_PAGE_SIZE, (devisPage+1)*TBL_PAGE_SIZE).map(d => `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer">
       <td class="mono">${d.ref}</td>
       <td>${d.client}</td>
       <td>${d.sujet||''}</td>
@@ -3983,9 +4007,11 @@ function renderDevis(filter='all') {
       <td>${d.agence||''}</td>
       <td>${devisStatusLabel(d.statut)}</td>
     </tr>`).join('')}</tbody></table>
+  ${renderTablePagination(filtered.length, devisPage, 'goDevisPage')}
   </div></div></div>`;
 }
-function filterDevis(f) { document._lastFilter=f; document.getElementById('contentArea').innerHTML='<div class="page active">'+renderDevis(f)+'</div>'; }
+function filterDevis(f) { devisPage=0; document._lastFilter=f; document.getElementById('contentArea').innerHTML='<div class="page active">'+renderDevis(f)+'</div>'; }
+function goDevisPage(p) { devisPage=p; document.getElementById('contentArea').innerHTML='<div class="page active">'+renderDevis(document._lastFilter||'all')+'</div>'; }
 async function updateDevisStatus(id,s) { await dbUpdate('devis',id,{statut:s}); }
 
 function renderCommandes(filter='all') {
@@ -4036,7 +4062,7 @@ function renderCommandes(filter='all') {
       ${sortTh('commandes','livraison','Livraison','filterCmd')}
       ${sortTh('commandes','statut','Statut','filterCmd')}
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucune commande trouvée</td></tr>' : filtered.map(c => `<tr onclick="showCommandeDetail('${c.id}')" style="cursor:pointer">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucune commande trouvée</td></tr>' : filtered.slice(cmdPage*TBL_PAGE_SIZE, (cmdPage+1)*TBL_PAGE_SIZE).map(c => `<tr onclick="showCommandeDetail('${c.id}')" style="cursor:pointer">
       <td class="mono">${c.ref}</td>
       <td>${c.client}</td>
       <td>${c.nom||''}</td>
@@ -4046,9 +4072,11 @@ function renderCommandes(filter='all') {
       <td>${c.livraison}</td>
       <td>${cmdStatusLabel(c.statut)}</td>
     </tr>`).join('')}</tbody></table>
+  ${renderTablePagination(filtered.length, cmdPage, 'goCmdPage')}
   </div></div></div>`;
 }
-function filterCmd(f) { document._lastFilter=f; document.getElementById('contentArea').innerHTML='<div class="page active">'+renderCommandes(f)+'</div>'; }
+function filterCmd(f) { cmdPage=0; document._lastFilter=f; document.getElementById('contentArea').innerHTML='<div class="page active">'+renderCommandes(f)+'</div>'; }
+function goCmdPage(p) { cmdPage=p; document.getElementById('contentArea').innerHTML='<div class="page active">'+renderCommandes(document._lastFilter||'all')+'</div>'; }
 async function updateCmdStatus(id,s) { await dbUpdate('commandes',id,{statut:s}); }
 
 function renderFactures(filter='all') {
@@ -4101,7 +4129,7 @@ function renderFactures(filter='all') {
       ${sortTh('factures','date_paiement','Paiement','filterFact')}
       ${sortTh('factures','statut','Statut','filterFact')}
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3)">Aucune facture trouvée</td></tr>' : filtered.map(f => `<tr onclick="showFactureDetail('${f.id}')" style="cursor:pointer">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3)">Aucune facture trouvée</td></tr>' : filtered.slice(factPage*TBL_PAGE_SIZE, (factPage+1)*TBL_PAGE_SIZE).map(f => `<tr onclick="showFactureDetail('${f.id}')" style="cursor:pointer">
       <td class="mono">${f.ref}</td>
       <td>${f.client}</td>
       <td>${f.type_facture === 'CREDIT' ? '<span style="color:var(--red)">Avoir</span>' : f.type_facture === 'INVOICE' ? 'Facture' : f.type_facture || ''}</td>
@@ -4112,9 +4140,11 @@ function renderFactures(filter='all') {
       <td>${f.date_paiement ? fmtDateFR(f.date_paiement) : ''}</td>
       <td>${facStatusLabel(f.statut)}</td>
     </tr>`).join('')}</tbody></table>
+  ${renderTablePagination(filtered.length, factPage, 'goFactPage')}
   </div></div></div>`;
 }
-function filterFact(f) { document._lastFilter=f; document.getElementById('contentArea').innerHTML='<div class="page active">'+renderFactures(f)+'</div>'; }
+function filterFact(f) { factPage=0; document._lastFilter=f; document.getElementById('contentArea').innerHTML='<div class="page active">'+renderFactures(f)+'</div>'; }
+function goFactPage(p) { factPage=p; document.getElementById('contentArea').innerHTML='<div class="page active">'+renderFactures(document._lastFilter||'all')+'</div>'; }
 async function updateFactStatus(id,s) { await dbUpdate('factures',id,{statut:s}); }
 
 // ═══ LABELS STATUT ═══
