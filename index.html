@@ -352,6 +352,22 @@ body::before {
   cursor: pointer;
 }
 
+/* ═══ Toggle Mes données ═══ */
+.view-toggle {
+  display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;
+}
+.view-toggle-track {
+  width: 34px; height: 18px; border-radius: 9px; background: var(--border);
+  position: relative; transition: background .2s;
+}
+.view-toggle.active .view-toggle-track { background: var(--accent); }
+.view-toggle-thumb {
+  width: 14px; height: 14px; border-radius: 50%; background: #fff;
+  position: absolute; top: 2px; left: 2px; transition: left .2s;
+}
+.view-toggle.active .view-toggle-thumb { left: 18px; }
+.view-toggle-label { font-size: 11px; color: var(--t3); white-space: nowrap; }
+
 /* ═══════════════════ CONTENT ═══════════════════ */
 .content { padding: 24px 28px; }
 
@@ -1650,6 +1666,10 @@ tbody tr:last-child td { border-bottom: none; }
       <button class="topbar-btn" onclick="syncAkuiteo()" title="Synchroniser">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
       </button>
+      <div class="view-toggle active" id="viewMyDataToggle" onclick="toggleViewMyData()" title="Basculer entre mes données et toutes les données">
+        <span class="view-toggle-label" id="viewMyDataLabel">Mes données</span>
+        <div class="view-toggle-track"><div class="view-toggle-thumb"></div></div>
+      </div>
       <div class="avatar" id="userAvatar" title="Mon profil">--</div>
       <button class="topbar-btn" onclick="doLogout()" title="Se déconnecter" style="margin-left:4px">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2020,6 +2040,46 @@ function renderTablePagination(total, currentPage, onPageFn) {
   </div>`;
 }
 
+// Filtre "Mes données" / "Tout voir"
+let viewMyData = true; // true = données du commercial connecté, false = tout
+
+function filterByCommercial(items) {
+  if (!viewMyData) return items;
+  if (!currentCommercial || !currentCommercial.akuiteo_manager_id) return items;
+  if (currentCommercial.role === 'admin' && !viewMyData) return items;
+  const myId = currentCommercial.akuiteo_manager_id;
+  return items.filter(d => d.responsable_id === myId || d.commercial_id === myId);
+}
+
+async function toggleViewMyData() {
+  viewMyData = !viewMyData;
+  // Mettre à jour le toggle UI
+  const toggleEl = document.getElementById('viewMyDataToggle');
+  if (toggleEl) toggleEl.classList.toggle('active', viewMyData);
+  const labelEl = document.getElementById('viewMyDataLabel');
+  if (labelEl) labelEl.textContent = viewMyData ? 'Mes données' : 'Tout voir';
+  // Recharger les clients (filtré côté DB)
+  await reloadClientsForView();
+  updateNavBadges();
+  renderPage(currentPage);
+}
+
+async function reloadClientsForView() {
+  let clientQuery = sb.from('clients').select('*', { count: 'exact' }).order('ca', {ascending:false}).range(0, CLIENTS_PER_PAGE - 1);
+  if (viewMyData && currentCommercial && currentCommercial.akuiteo_manager_id) {
+    clientQuery = clientQuery.eq('account_manager_id', currentCommercial.akuiteo_manager_id);
+  }
+  const cRes = await clientQuery;
+  clientsTotalCount = cRes.count || 0;
+  clientsPage = 0;
+  clientsLetter = '';
+  clientsSearch = '';
+  DB.clients = (cRes.data || []).map(mapClient);
+  DB.clients.forEach(c => { c.devis = DB.devis.filter(d => d.client_id === c.id).length; });
+  // Recharger les top clients et stats portefeuille
+  await Promise.all([loadTopClients(), loadPortfolioStats()]);
+}
+
 // Filtre par société (companyCode Akuiteo)
 let selectedSocietes = new Set(); // vide = toutes
 let _societeRefreshFn = null;
@@ -2173,7 +2233,7 @@ async function loadDB() {
   try {
     // Charger devis/commandes/factures/reports/notifications/commerciaux + top 50 clients
     let clientQuery = sb.from('clients').select('*', { count: 'exact' }).order('ca', {ascending:false}).range(0, CLIENTS_PER_PAGE - 1);
-    if (currentCommercial && currentCommercial.akuiteo_manager_id && currentCommercial.role !== 'admin') {
+    if (viewMyData && currentCommercial && currentCommercial.akuiteo_manager_id) {
       clientQuery = clientQuery.eq('account_manager_id', currentCommercial.akuiteo_manager_id);
     }
 
@@ -2263,10 +2323,10 @@ function updateNavBadges() {
   const badges = {
     navBadgeClients: clientsTotalCount || DB.clients.length,
     navBadgeContacts: null, // chargé à la demande
-    navBadgeMarches: DB.marches.length,
-    navBadgeDevis: DB.devis.length,
-    navBadgeCommandes: DB.commandes.length,
-    navBadgeFactures: DB.factures.length,
+    navBadgeMarches: filterByCommercial(DB.marches).length,
+    navBadgeDevis: filterByCommercial(DB.devis).length,
+    navBadgeCommandes: filterByCommercial(DB.commandes).length,
+    navBadgeFactures: filterByCommercial(DB.factures).length,
     navBadgeCR: DB.reports.length,
     navBadgeAlertes: DB.alerts.length,
   };
@@ -2291,7 +2351,7 @@ async function loadClientsPage(page, letter, search) {
   const to = from + CLIENTS_PER_PAGE - 1;
 
   let query = sb.from('clients').select('*', { count: 'exact' });
-  if (currentCommercial && currentCommercial.akuiteo_manager_id && currentCommercial.role !== 'admin') {
+  if (viewMyData && currentCommercial && currentCommercial.akuiteo_manager_id) {
     query = query.eq('account_manager_id', currentCommercial.akuiteo_manager_id);
   }
   if (letter) {
@@ -2705,10 +2765,12 @@ function renderPage(page) {
 //  DASHBOARD
 // ═══════════════════════════════════════════════════════════
 function renderDashboard() {
+  const myDevis = filterByCommercial(DB.devis);
+  const myFactures = filterByCommercial(DB.factures);
   const totalCA = DB.clients.reduce((a,c)=>a+c.ca,0);
   const totalObj = DB.clients.reduce((a,c)=>a+c.obj,0);
-  const devisEnCours = DB.devis.filter(d=>d.statut==='pending'||d.statut==='sent').reduce((a,d)=>a+d.montant,0);
-  const factRetard = DB.factures.filter(f=>f.statut==='retard').reduce((a,f)=>a+f.montant,0);
+  const devisEnCours = myDevis.filter(d=>d.statut==='pending'||d.statut==='sent').reduce((a,d)=>a+d.montant,0);
+  const factRetard = myFactures.filter(f=>f.statut==='retard').reduce((a,f)=>a+f.montant,0);
   const nClients = DB.clients.length || 1;
   const avgDSO = Math.round(DB.clients.reduce((a,c)=>a+c.dso,0)/nClients);
   const avgMargin = Math.round(DB.clients.reduce((a,c)=>a+c.margin,0)/nClients);
@@ -2718,29 +2780,29 @@ function renderDashboard() {
   const curMonth = now.getMonth();
   const curYear = now.getFullYear();
   // CA facturé ce mois vs mois précédent
-  const factThisMonth = DB.factures.filter(f => { const d = new Date(f.date_raw); return d.getMonth()===curMonth && d.getFullYear()===curYear; }).reduce((a,f)=>a+(f.montant||0),0);
-  const factLastMonth = DB.factures.filter(f => { const d = new Date(f.date_raw); return d.getMonth()===(curMonth-1+12)%12 && (curMonth===0 ? d.getFullYear()===curYear-1 : d.getFullYear()===curYear); }).reduce((a,f)=>a+(f.montant||0),0);
+  const factThisMonth = myFactures.filter(f => { const d = new Date(f.date_raw); return d.getMonth()===curMonth && d.getFullYear()===curYear; }).reduce((a,f)=>a+(f.montant||0),0);
+  const factLastMonth = myFactures.filter(f => { const d = new Date(f.date_raw); return d.getMonth()===(curMonth-1+12)%12 && (curMonth===0 ? d.getFullYear()===curYear-1 : d.getFullYear()===curYear); }).reduce((a,f)=>a+(f.montant||0),0);
   const caTrend = factLastMonth > 0 ? Math.round((factThisMonth - factLastMonth) / factLastMonth * 1000) / 10 : 0;
 
   // Devis en cours ce mois vs mois précédent
-  const devisThisMonth = DB.devis.filter(d => { const dt = new Date(d.date_raw); return dt.getMonth()===curMonth && dt.getFullYear()===curYear && (d.statut==='pending'||d.statut==='sent'); }).reduce((a,d)=>a+(d.montant||0),0);
-  const devisLastMonth = DB.devis.filter(d => { const dt = new Date(d.date_raw); return dt.getMonth()===(curMonth-1+12)%12 && (curMonth===0 ? dt.getFullYear()===curYear-1 : dt.getFullYear()===curYear) && (d.statut==='pending'||d.statut==='sent'); }).reduce((a,d)=>a+(d.montant||0),0);
+  const devisThisMonth = myDevis.filter(d => { const dt = new Date(d.date_raw); return dt.getMonth()===curMonth && dt.getFullYear()===curYear && (d.statut==='pending'||d.statut==='sent'); }).reduce((a,d)=>a+(d.montant||0),0);
+  const devisLastMonth = myDevis.filter(d => { const dt = new Date(d.date_raw); return dt.getMonth()===(curMonth-1+12)%12 && (curMonth===0 ? dt.getFullYear()===curYear-1 : dt.getFullYear()===curYear) && (d.statut==='pending'||d.statut==='sent'); }).reduce((a,d)=>a+(d.montant||0),0);
   const devisTrend = devisLastMonth > 0 ? Math.round((devisThisMonth - devisLastMonth) / devisLastMonth * 1000) / 10 : 0;
 
   // Taux de conversion devis (acceptés / total hors brouillon)
-  const devisTotal = DB.devis.filter(d=>d.statut!=='pending').length || 1;
-  const devisAccepted = DB.devis.filter(d=>d.statut==='accepted'||d.statut==='signed').length;
+  const devisTotal = myDevis.filter(d=>d.statut!=='pending').length || 1;
+  const devisAccepted = myDevis.filter(d=>d.statut==='accepted'||d.statut==='signed').length;
   const tauxConversion = Math.round(devisAccepted / devisTotal * 100);
 
   // Panier moyen (montant moyen des devis acceptés/signés)
-  const devisGagnes = DB.devis.filter(d=>d.statut==='accepted'||d.statut==='signed');
+  const devisGagnes = myDevis.filter(d=>d.statut==='accepted'||d.statut==='signed');
   const panierMoyen = devisGagnes.length > 0 ? devisGagnes.reduce((a,d)=>a+(d.montant||0),0) / devisGagnes.length : 0;
 
   // Tendance objectif
   const objPct = pct(totalCA, totalObj);
 
   // Tendance factures retard
-  const nbRetard = DB.factures.filter(f=>f.statut==='retard').length;
+  const nbRetard = myFactures.filter(f=>f.statut==='retard').length;
 
   function trendBadge(val, invert) {
     if (val === 0) return '';
@@ -2750,7 +2812,7 @@ function renderDashboard() {
 
   // Alerts at top
   let alertsHTML = '';
-  const overdueInvoices = DB.factures.filter(f=>f.statut==='retard');
+  const overdueInvoices = myFactures.filter(f=>f.statut==='retard');
   if(overdueInvoices.length) {
     alertsHTML += `<div class="alert-panel">
       <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -2858,23 +2920,26 @@ function renderChart() {
 
 function renderActivity() {
   const items = [];
+  const myDevis = filterByCommercial(DB.devis);
+  const myFactures = filterByCommercial(DB.factures);
+  const myCommandes = filterByCommercial(DB.commandes);
 
   // Derniers devis
-  DB.devis.slice(0, 5).forEach(d => {
+  myDevis.slice(0, 5).forEach(d => {
     const statusTxt = d.statut === 'accepted' ? 'accepté' : d.statut === 'signed' ? 'signé' : d.statut === 'refused' ? 'refusé' : d.statut === 'sent' ? 'envoyé' : 'créé';
     const color = d.statut === 'accepted' || d.statut === 'signed' ? 'var(--green)' : d.statut === 'refused' ? 'var(--red)' : 'var(--accent)';
     items.push({ c: color, t: `<strong>Devis ${d.ref}</strong> ${statusTxt} — <strong>${d.client}</strong> (${fmt(d.montant)})`, time: d.date, raw: d.date_raw || '' });
   });
 
   // Dernières factures
-  DB.factures.slice(0, 5).forEach(f => {
+  myFactures.slice(0, 5).forEach(f => {
     const color = f.statut === 'retard' ? 'var(--red)' : f.statut === 'payee' ? 'var(--green)' : 'var(--amber)';
     const statusTxt = f.statut === 'payee' ? 'payée' : f.statut === 'retard' ? 'en retard' : f.statut === 'envoyee' ? 'envoyée' : 'en attente';
     items.push({ c: color, t: `<strong>Facture ${f.ref}</strong> ${statusTxt} — <strong>${f.client}</strong> (${fmt(f.montant)})`, time: f.date, raw: f.date_raw || '' });
   });
 
   // Dernières commandes
-  DB.commandes.slice(0, 3).forEach(o => {
+  myCommandes.slice(0, 3).forEach(o => {
     const color = o.statut === 'livree' ? 'var(--green)' : 'var(--accent)';
     items.push({ c: color, t: `<strong>Commande ${o.ref}</strong> — <strong>${o.client}</strong> (${fmt(o.montant)})`, time: o.date, raw: o.date_raw || '' });
   });
@@ -2896,7 +2961,7 @@ let topClientsCache = null;
 
 async function loadTopClients() {
   let query = sb.from('clients').select('*').order('ca', {ascending: false}).limit(10);
-  if (currentCommercial && currentCommercial.akuiteo_manager_id && currentCommercial.role !== 'admin') {
+  if (viewMyData && currentCommercial && currentCommercial.akuiteo_manager_id) {
     query = query.eq('account_manager_id', currentCommercial.akuiteo_manager_id);
   }
   const { data } = await query;
@@ -2921,7 +2986,7 @@ let portfolioStats = null;
 
 async function loadPortfolioStats() {
   let query = sb.from('clients').select('status,score,dso,sentiment_pos,sentiment_neu,sentiment_neg,name,id');
-  if (currentCommercial && currentCommercial.akuiteo_manager_id && currentCommercial.role !== 'admin') {
+  if (viewMyData && currentCommercial && currentCommercial.akuiteo_manager_id) {
     query = query.eq('account_manager_id', currentCommercial.akuiteo_manager_id);
   }
   const { data } = await query;
@@ -3293,7 +3358,8 @@ function marcheStatutBadge(s) {
 }
 
 function renderMarches() {
-  let marches = filterByDateRange(DB.marches, marchesDateFrom, marchesDateTo);
+  let marches = filterByCommercial(DB.marches);
+  marches = filterByDateRange(marches, marchesDateFrom, marchesDateTo);
   if (marchesSearch) {
     const q = marchesSearch.toLowerCase();
     marches = marches.filter(m =>
@@ -3473,7 +3539,7 @@ async function initMarchesMap() {
     attribution: '© OpenStreetMap © CARTO', maxZoom: 19
   }).addTo(marchesMap);
 
-  const marches = filterByDateRange(DB.marches, marchesDateFrom, marchesDateTo);
+  const marches = filterByDateRange(filterByCommercial(DB.marches), marchesDateFrom, marchesDateTo);
   const bounds = [];
   let noCoords = 0;
   for (const m of marches) {
@@ -3760,8 +3826,9 @@ let marchesDateFrom = _fiveYearsAgo, marchesDateTo = _today;
 let marchesSearch = '';
 
 function renderPipeline() {
-  // Filtrer par société puis par date
-  let devis = filterBySociete(DB.devis);
+  // Filtrer par commercial, société puis par date
+  let devis = filterByCommercial(DB.devis);
+  devis = filterBySociete(devis);
   devis = filterByDateRange(devis, pipeDateFrom, pipeDateTo);
   if (pipelineSearch) {
     const q = pipelineSearch.toLowerCase();
@@ -3950,7 +4017,8 @@ async function initCarteMap() {
 // ═══ DEVIS / COMMANDES / FACTURES / OBJECTIFS ═══
 function renderDevis(filter='all') {
   document._lastFilter = filter;
-  const bySociete = filterBySociete(DB.devis);
+  const byComm = filterByCommercial(DB.devis);
+  const bySociete = filterBySociete(byComm);
   const dated = filterByDateRange(bySociete, devisDateFrom, devisDateTo);
   const statusFiltered = filter==='all' ? dated : dated.filter(d=>d.statut===filter);
   const colFiltered = applyColFilters(statusFiltered, 'devis');
@@ -4016,7 +4084,8 @@ async function updateDevisStatus(id,s) { await dbUpdate('devis',id,{statut:s}); 
 
 function renderCommandes(filter='all') {
   document._lastFilter = filter;
-  const bySociete = filterBySociete(DB.commandes);
+  const byComm = filterByCommercial(DB.commandes);
+  const bySociete = filterBySociete(byComm);
   const dated = filterByDateRange(bySociete, cmdDateFrom, cmdDateTo);
   const statusFiltered = filter==='all' ? dated : dated.filter(c=>c.statut===filter);
   const colFiltered = applyColFilters(statusFiltered, 'commandes');
@@ -4081,7 +4150,8 @@ async function updateCmdStatus(id,s) { await dbUpdate('commandes',id,{statut:s})
 
 function renderFactures(filter='all') {
   document._lastFilter = filter;
-  const bySociete = filterBySociete(DB.factures);
+  const byComm = filterByCommercial(DB.factures);
+  const bySociete = filterBySociete(byComm);
   const dated = filterByDateRange(bySociete, factDateFrom, factDateTo);
   const statusFiltered = filter==='all' ? dated : dated.filter(f=>f.statut===filter);
   const colFiltered = applyColFilters(statusFiltered, 'factures');
@@ -4376,15 +4446,16 @@ function renderObjectifs() {
     {nom:'—',ca:0,obj:1,clients_count:0,taux_conversion:'0%',score:0},
   ];
   // Calculs dynamiques
+  const myDevis = filterByCommercial(DB.devis);
   const objCA = pct(DB.clients.reduce((a,c)=>a+c.ca,0), DB.clients.reduce((a,c)=>a+c.obj,0));
-  const totalDevis = DB.devis.length || 1;
-  const devisGagnesObj = DB.devis.filter(d=>d.statut==='accepted'||d.statut==='signed').length;
+  const totalDevis = myDevis.length || 1;
+  const devisGagnesObj = myDevis.filter(d=>d.statut==='accepted'||d.statut==='signed').length;
   const txConvObj = Math.round(devisGagnesObj / totalDevis * 100);
   // Clients avec score >= 60 = "satisfaits"
   const txSatisfaction = DB.clients.length > 0 ? Math.round(DB.clients.filter(c=>c.score>=60).length / DB.clients.length * 100) : 0;
   // Clients créés ce mois (approximation via les plus récents)
   const nbClientsTotal = DB.clients.length || 1;
-  const nbDevisClients = new Set(DB.devis.map(d=>d.client_id)).size;
+  const nbDevisClients = new Set(myDevis.map(d=>d.client_id)).size;
   const txClientsActifs = Math.round(nbDevisClients / nbClientsTotal * 100);
 
   return `
@@ -4958,19 +5029,21 @@ async function loadAkuiteoManagerIds() {
     const customers = await akuiteoFetch('POST', '/crm/customers/search?limit=2000', {
       accountManagerId: { operator: 'IS_NOT_NULL', value: '' }
     });
-    // Compter par manager
-    const counts = {};
+    // Compter par manager et récupérer le nom
+    const managers = {};
     for (const c of customers) {
       const mid = c.accountManagerId;
       if (!mid) continue;
-      if (!counts[mid]) counts[mid] = 0;
-      counts[mid]++;
+      if (!managers[mid]) managers[mid] = { count: 0, name: c.accountManager || '' };
+      managers[mid].count++;
+      if (!managers[mid].name && c.accountManager) managers[mid].name = c.accountManager;
     }
-    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-    el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>accountManagerId</th><th>Nb clients</th><th>Action</th></tr></thead><tbody>'
-      + sorted.map(([mid, count]) => `<tr>
+    const sorted = Object.entries(managers).sort((a, b) => b[1].count - a[1].count);
+    el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>accountManagerId</th><th>Nom</th><th>Nb clients</th><th>Action</th></tr></thead><tbody>'
+      + sorted.map(([mid, info]) => `<tr>
         <td class="mono">${mid}</td>
-        <td class="mono">${count}</td>
+        <td>${info.name || '<span style="color:var(--t3)">—</span>'}</td>
+        <td class="mono">${info.count}</td>
         <td><button class="btn" onclick="navigator.clipboard.writeText('${mid}');toast('ID copié','success')" style="font-size:11px">Copier</button></td>
       </tr>`).join('')
       + '</tbody></table></div>';
@@ -5561,16 +5634,16 @@ async function doSearch(q) {
     });
   }
 
-  // Recherche devis/commandes/factures en local (déjà chargés)
-  DB.devis.forEach(d => {
+  // Recherche devis/commandes/factures en local (déjà chargés, filtrés par commercial)
+  filterByCommercial(DB.devis).forEach(d => {
     if (d.ref?.toLowerCase().includes(ql)||d.client?.toLowerCase().includes(ql)||(d.sujet||'').toLowerCase().includes(ql))
       results.push({type:'Devis',name:d.ref,meta:`${d.client} · ${d.sujet||''}`,action:`go('devis')`});
   });
-  DB.commandes.forEach(c => {
+  filterByCommercial(DB.commandes).forEach(c => {
     if (c.ref?.toLowerCase().includes(ql)||c.client?.toLowerCase().includes(ql))
       results.push({type:'Commande',name:c.ref,meta:`${c.client} · ${fmt(c.montant)}`,action:`go('commandes')`});
   });
-  DB.factures.forEach(f => {
+  filterByCommercial(DB.factures).forEach(f => {
     if (f.ref?.toLowerCase().includes(ql)||f.client?.toLowerCase().includes(ql))
       results.push({type:'Facture',name:f.ref,meta:`${f.client} · ${fmt(f.montant)}`,action:`go('factures')`});
   });
@@ -6456,6 +6529,18 @@ async function onAuthSuccess(user) {
     }).select().single();
     currentCommercial = newComm;
   }
+
+  // Initialiser le mode de vue : admins voient tout par défaut, commerciaux voient leurs données
+  if (currentCommercial && currentCommercial.role === 'admin') {
+    viewMyData = false;
+  } else {
+    viewMyData = !!(currentCommercial && currentCommercial.akuiteo_manager_id);
+  }
+  // Mettre à jour le toggle UI
+  const toggleEl = document.getElementById('viewMyDataToggle');
+  if (toggleEl) toggleEl.classList.toggle('active', viewMyData);
+  const labelEl = document.getElementById('viewMyDataLabel');
+  if (labelEl) labelEl.textContent = viewMyData ? 'Mes données' : 'Tout voir';
 
   // Mettre à jour l'avatar
   const initials = currentCommercial
