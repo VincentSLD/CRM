@@ -2647,6 +2647,7 @@ function renderPage(page) {
   // Post-render hooks
   if (page === 'cr') initEditor();
   if (page === 'carte') setTimeout(initCarteMap, 50);
+  if (page === 'admin') setTimeout(loadAdminAccessList, 50);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -4738,7 +4739,14 @@ function renderAdmin() {
     return '<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--t3)">Accès réservé aux administrateurs</div></div>';
   }
   return `
-  <div style="margin-bottom:16px;font-size:13px;color:var(--t2)">Administration — Liaison commerciaux ↔ Akuiteo</div>
+  <div style="margin-bottom:16px;font-size:13px;color:var(--t2)">Administration</div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><div class="card-title">Demandes d'accès au CRM</div></div>
+    <div class="card-body">
+      <div id="adminAccessList" style="color:var(--t3);font-size:13px">Chargement...</div>
+    </div>
+  </div>
   <div class="card">
     <div class="card-header"><div class="card-title">Commerciaux — ID Akuiteo (accountManagerId)</div></div>
     <div class="card-body" style="padding:0"><div class="table-wrap">
@@ -4771,6 +4779,81 @@ function renderAdmin() {
       <div id="akManagerList" style="margin-top:16px"></div>
     </div>
   </div>`;
+}
+
+async function loadAdminAccessList() {
+  const el = document.getElementById('adminAccessList');
+  if (!el) return;
+  try {
+    const token = await getAuthToken();
+    if (!token) { el.textContent = 'Session expirée, reconnectez-vous'; return; }
+    const r = await fetch('/api/admin-users', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) { el.textContent = 'Erreur ' + r.status; return; }
+    const { users } = await r.json();
+    if (!users.length) { el.textContent = 'Aucune demande en attente'; return; }
+    const pending = users.filter(u => !u.approved);
+    const approved = users.filter(u => u.approved);
+    let html = '';
+    if (pending.length > 0) {
+      html += '<div style="font-weight:600;margin-bottom:8px;color:var(--yellow-dark)">En attente (' + pending.length + ')</div>';
+      html += pending.map(u => `
+        <div id="access-row-${u.user_id}" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--yellow-pale);border-radius:8px;margin-bottom:6px">
+          <div><strong>${u.name || 'Sans nom'}</strong> <span style="color:var(--t3)">${u.email}</span></div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-primary" onclick="adminApprove('${u.user_id}')" style="font-size:11px;padding:4px 12px">Approuver</button>
+            <button class="btn" onclick="adminReject('${u.user_id}')" style="font-size:11px;padding:4px 12px;background:#fee;color:#d32f2f;border-color:#fcc">Refuser</button>
+          </div>
+        </div>
+      `).join('');
+    }
+    if (approved.length > 0) {
+      html += '<div style="font-weight:600;margin:12px 0 8px;color:var(--green)">Approuvés (' + approved.length + ')</div>';
+      html += approved.map(u => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg-3);border-radius:8px;margin-bottom:4px">
+          <div><strong>${u.name || 'Sans nom'}</strong> <span style="color:var(--t3)">${u.email}</span></div>
+          <span style="color:var(--green);font-size:12px;font-weight:600">Approuvé</span>
+        </div>
+      `).join('');
+    }
+    el.innerHTML = html;
+  } catch (e) { el.textContent = 'Erreur: ' + e.message; }
+}
+
+async function adminApprove(userId) {
+  const row = document.getElementById('access-row-' + userId);
+  if (!row) return;
+  row.querySelector('div:last-child').innerHTML = '<span style="color:var(--t3)">...</span>';
+  try {
+    const token = await getAuthToken();
+    const r = await fetch('/api/admin-users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ user_id: userId, action: 'approve' })
+    });
+    if (!r.ok) throw new Error('Erreur ' + r.status);
+    row.style.background = '#e8f5e9';
+    row.querySelector('div:last-child').innerHTML = '<span style="color:var(--green);font-weight:600">Approuvé</span>';
+    toast('Utilisateur approuvé', 'success');
+  } catch (e) {
+    row.querySelector('div:last-child').innerHTML = '<span style="color:#d32f2f">Erreur</span>';
+  }
+}
+
+async function adminReject(userId) {
+  if (!confirm('Refuser et supprimer cet utilisateur ?')) return;
+  const row = document.getElementById('access-row-' + userId);
+  if (!row) return;
+  try {
+    const token = await getAuthToken();
+    const r = await fetch('/api/admin-users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ user_id: userId, action: 'reject' })
+    });
+    if (!r.ok) throw new Error('Erreur ' + r.status);
+    row.remove();
+    toast('Utilisateur refusé', 'success');
+  } catch (e) { toast('Erreur: ' + e.message, 'error'); }
 }
 
 async function saveAkuiteoManagerId(commercialId) {
@@ -6143,6 +6226,28 @@ function toast(msg, type='info') {
 let currentUser = null;
 let currentCommercial = null;
 let authMode = 'login'; // 'login' or 'signup'
+const ADMIN_EMAILS = ['vsalaud@be-gph.fr'];
+
+// Vérifie si l'utilisateur a accès au CRM (table crm_access)
+async function checkCrmAccess(userId) {
+  const { data, error } = await sb.from('crm_access').select('id, approved').eq('user_id', userId).maybeSingle();
+  if (error) {
+    console.error('Erreur crm_access:', error);
+    // Si la table n'existe pas encore, laisser passer (fallback)
+    if (error.code === '42P01' || error.message?.includes('does not exist')) return true;
+    return false;
+  }
+  // Si pas de ligne dans crm_access, l'utilisateur n'est pas encore enregistré
+  if (!data) return false;
+  return data.approved === true;
+}
+
+async function getAuthToken() {
+  const { data } = await sb.auth.getSession();
+  if (data.session?.access_token) return data.session.access_token;
+  const { data: refreshed } = await sb.auth.refreshSession();
+  return refreshed.session?.access_token || null;
+}
 
 function toggleAuthMode() {
   authMode = authMode === 'login' ? 'signup' : 'login';
@@ -6185,6 +6290,34 @@ async function doAuth() {
         email, password,
         options: { data: { full_name: fullName } }
       });
+      if (result.error) throw result.error;
+
+      // Notifier l'admin pour approbation
+      try {
+        await fetch('/api/notify-admin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: result.data.user.id, user_email: email, user_name: fullName })
+        });
+      } catch (e) { console.warn('Notification admin échouée:', e); }
+
+      // Déconnecter et afficher le message d'attente
+      await sb.auth.signOut();
+      errEl.textContent = '';
+      errEl.classList.remove('show');
+      const successEl = document.createElement('div');
+      successEl.style.cssText = 'background:#e8f5e9;color:#2e7d32;padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:12px;text-align:center;line-height:1.5';
+      successEl.textContent = 'Compte créé ! Un administrateur a été notifié. Vous recevrez l\'accès sous peu.';
+      const formFields = document.getElementById('loginFormFields');
+      formFields.parentNode.insertBefore(successEl, formFields);
+      setTimeout(() => successEl.remove(), 8000);
+
+      // Revenir au mode login
+      authMode = 'signup';
+      toggleAuthMode();
+      btn.disabled = false;
+      btn.textContent = 'Se connecter';
+      return;
     } else {
       result = await sb.auth.signInWithPassword({ email, password });
     }
@@ -6203,10 +6336,24 @@ async function doAuth() {
     }
 
     if (result.data.user) {
+      // Vérifier l'approbation admin
+      const hasAccess = await checkCrmAccess(result.data.user.id);
+      if (!hasAccess) {
+        await sb.auth.signOut();
+        errEl.textContent = 'Votre accès n\'a pas encore été approuvé par un administrateur.';
+        errEl.classList.add('show');
+        btn.disabled = false;
+        btn.textContent = 'Se connecter';
+        return;
+      }
       await onAuthSuccess(result.data.user);
     }
   } catch (e) {
-    errEl.textContent = 'Erreur de connexion. Réessayez.';
+    const msgs = {
+      'Invalid login credentials': 'Email ou mot de passe incorrect',
+      'User already registered': 'Cet email est déjà utilisé',
+    };
+    errEl.textContent = msgs[e.message] || e.message || 'Erreur de connexion. Réessayez.';
     errEl.classList.add('show');
     btn.disabled = false;
     btn.textContent = authMode === 'login' ? 'Se connecter' : 'Créer mon compte';
@@ -6245,7 +6392,27 @@ async function onAuthSuccess(user) {
   updateSyncLabel();
   renderPage('dashboard');
   initRealtime();
+  checkAdminPending(user);
   toast(`Bienvenue ${currentCommercial ? currentCommercial.nom : user.email}`, 'success');
+}
+
+// Vérifier les utilisateurs en attente d'approbation (admin uniquement)
+async function checkAdminPending(user) {
+  if (!ADMIN_EMAILS.includes(user.email)) return;
+  try {
+    const token = await getAuthToken();
+    if (!token) return;
+    const r = await fetch('/api/admin-users', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return;
+    const { users } = await r.json();
+    const pending = users.filter(u => !u.approved).length;
+    // Afficher un badge sur le menu Admin
+    const adminNav = document.querySelector('[data-page="admin"] .nav-badge');
+    if (adminNav && pending > 0) {
+      adminNav.textContent = pending;
+      adminNav.style.display = 'inline-flex';
+    }
+  } catch (e) { console.warn('Admin check failed:', e); }
 }
 
 function updateSyncLabel() {
@@ -6285,7 +6452,17 @@ function initRealtime() {
   // Vérifier si l'utilisateur a déjà une session active
   const { data: { session } } = await sb.auth.getSession();
   if (session && session.user) {
-    await onAuthSuccess(session.user);
+    try {
+      const hasAccess = await checkCrmAccess(session.user.id);
+      if (hasAccess) {
+        await onAuthSuccess(session.user);
+        return;
+      }
+    } catch (e) {
+      // Si offline, laisser passer
+      if (!navigator.onLine) { await onAuthSuccess(session.user); return; }
+    }
+    await sb.auth.signOut();
   }
   // Sinon, le login screen reste visible
 
