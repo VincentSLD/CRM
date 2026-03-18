@@ -5901,6 +5901,7 @@ async function syncAkuiteo() {
       }
       // Enrichir affaires avec nom + apporteur d'affaire depuis l'API projet
       console.log(`[Akuiteo] Enrichissement des ${Object.keys(affairesByProject).length} affaires (nom + apporteur)...`);
+      const PARALLEL = 10;
       const projectPids = Object.keys(affairesByProject);
       for (let i = 0; i < projectPids.length; i += PARALLEL) {
         const batch = projectPids.slice(i, i + PARALLEL);
