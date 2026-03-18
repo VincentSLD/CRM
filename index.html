@@ -2156,23 +2156,37 @@ async function loadDB() {
       clientQuery = clientQuery.eq('account_manager_id', currentCommercial.akuiteo_manager_id);
     }
 
-    const [cRes, dRes, cmRes, fRes, rRes, nRes, coRes] = await Promise.all([
+    // Fonction pour charger toutes les lignes d'une table (pagination Supabase max 1000/appel)
+    async function fetchAll(table, orderCol, orderAsc = false) {
+      let all = [], from = 0;
+      const PAGE = 1000;
+      while (true) {
+        let q = sb.from(table).select('*');
+        if (orderCol) q = q.order(orderCol, {ascending: orderAsc});
+        const { data, error } = await q.range(from, from + PAGE - 1);
+        if (error) { console.warn(`fetchAll ${table} error:`, error.message); break; }
+        if (!data || data.length === 0) break;
+        all = all.concat(data);
+        if (data.length < PAGE) break;
+        from += PAGE;
+      }
+      return all;
+    }
+
+    const [cRes, dAll, cmAll, fAll, rAll, nAll, coAll] = await Promise.all([
       clientQuery,
-      sb.from('devis').select('*').order('date', {ascending:false}),
-      sb.from('commandes').select('*').order('date', {ascending:false}),
-      sb.from('factures').select('*').order('date', {ascending:false}),
-      sb.from('reports').select('*').order('date', {ascending:false}),
-      sb.from('notifications').select('*').order('created_at', {ascending:false}),
-      sb.from('commerciaux').select('*'),
+      fetchAll('devis', 'date'),
+      fetchAll('commandes', 'date'),
+      fetchAll('factures', 'date'),
+      fetchAll('reports', 'date'),
+      fetchAll('notifications', 'created_at'),
+      fetchAll('commerciaux', null),
     ]);
     // Charger marches/affaires séparément (tables optionnelles)
-    const [maRes, afRes] = await Promise.all([
-      sb.from('marches').select('*').order('date_debut', {ascending:false}),
-      sb.from('affaires').select('*').order('date_debut', {ascending:false}),
-    ]);
-    if (maRes.error) console.warn('Erreur chargement marches:', maRes.error.message);
-    if (afRes.error) console.warn('Erreur chargement affaires:', afRes.error.message);
-    console.log('[loadDB] Marchés:', (maRes.data||[]).length, 'Affaires:', (afRes.data||[]).length);
+    let maAll = [], afAll = [];
+    try { maAll = await fetchAll('marches', 'date_debut'); } catch(e) { console.warn('Erreur marches:', e.message); }
+    try { afAll = await fetchAll('affaires', 'date_debut'); } catch(e) { console.warn('Erreur affaires:', e.message); }
+    console.log('[loadDB] Marchés:', maAll.length, 'Affaires:', afAll.length);
 
     clientsTotalCount = cRes.count || 0;
     clientsPage = 0;
@@ -2180,19 +2194,19 @@ async function loadDB() {
     clientsSearch = '';
     DB.clients = (cRes.data || []).map(mapClient);
 
-    DB.devis = (dRes.data || []).map(d => ({ ...d, client: d.client_name, date_raw: d.date, date: fmtDateFR(d.date) }));
+    DB.devis = dAll.map(d => ({ ...d, client: d.client_name, date_raw: d.date, date: fmtDateFR(d.date) }));
     DB.devis.sort((a,b) => (b.date_raw||'').localeCompare(a.date_raw||''));
     DB.clients.forEach(c => { c.devis = DB.devis.filter(d => d.client_id === c.id).length; });
 
-    DB.commandes = (cmRes.data || []).map(c => ({ ...c, client: c.client_name, date_raw: c.date, date: fmtDateFR(c.date), livraison: fmtDateFR(c.livraison) }));
+    DB.commandes = cmAll.map(c => ({ ...c, client: c.client_name, date_raw: c.date, date: fmtDateFR(c.date), livraison: fmtDateFR(c.livraison) }));
     DB.commandes.sort((a,b) => (b.date_raw||'').localeCompare(a.date_raw||''));
-    DB.factures = (fRes.data || []).map(f => ({ ...f, client: f.client_name, date_raw: f.date, date: fmtDateFR(f.date), echeance: fmtDateFR(f.echeance), jours: f.jours_retard }));
+    DB.factures = fAll.map(f => ({ ...f, client: f.client_name, date_raw: f.date, date: fmtDateFR(f.date), echeance: fmtDateFR(f.echeance), jours: f.jours_retard }));
     DB.factures.sort((a,b) => (b.date_raw||'').localeCompare(a.date_raw||''));
-    DB.reports = (rRes.data || []).map(r => ({ ...r, client: r.client_name, text: r.contenu, date_raw: r.date, date: timeAgo(r.date), titre: r.titre }));
-    DB.notifications = (nRes.data || []).map(n => ({ ...n, time: n.time_label }));
-    DB.commerciaux = coRes.data || [];
-    DB.marches = (maRes.data || []).map(m => ({ ...m, client: m.client_name, date_raw: m.date_debut, date: fmtDateFR(m.date_debut) }));
-    DB.affaires = (afRes.data || []).map(a => ({ ...a, client: a.client_name, date_raw: a.date_debut, date: fmtDateFR(a.date_debut) }));
+    DB.reports = rAll.map(r => ({ ...r, client: r.client_name, text: r.contenu, date_raw: r.date, date: timeAgo(r.date), titre: r.titre }));
+    DB.notifications = nAll.map(n => ({ ...n, time: n.time_label }));
+    DB.commerciaux = coAll;
+    DB.marches = maAll.map(m => ({ ...m, client: m.client_name, date_raw: m.date_debut, date: fmtDateFR(m.date_debut) }));
+    DB.affaires = afAll.map(a => ({ ...a, client: a.client_name, date_raw: a.date_debut, date: fmtDateFR(a.date_debut) }));
 
     DB.alerts = generateAlerts();
 
