@@ -2160,20 +2160,31 @@ async function loadDB() {
     const DEVIS_LITE = 'id,ref,client_id,client_name,sujet,montant,date,statut,projet,agence,societe,responsable_id,commercial_id,probabilite';
     const CMD_LITE = 'id,ref,client_id,client_name,nom,montant,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id';
     const FACT_LITE = 'id,ref,client_id,client_name,montant,date,echeance,statut,jours_retard,projet,agence,societe,responsable_id,type_facture,reste_a_payer,date_paiement';
-    const MARCHE_LITE = 'id,nom,client_id,client_name,montant_total,nb_devis,nb_commandes,nb_factures,date_debut,date_fin,agence,societe,adresse_ligne1,code_postal,ville,lat,lng,apporteur,responsable';
-    const AFFAIRE_LITE = 'id,nom,marche_id,client_id,client_name,montant_total,nb_devis,nb_commandes,nb_factures,date_debut,agence,societe,apporteur,responsable';
+    const MARCHE_LITE = 'id,nom,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,adresse,code_postal,ville,lat,lng,nb_affaires,responsable_id';
+    const AFFAIRE_LITE = 'id,nom,marche_id,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,code_projet,apporteur_affaire,responsable';
 
     // Filtre : 1 an glissant pour les tables volumineuses
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
     const dateFilter = oneYearAgo.toISOString().slice(0, 10);
 
-    // Chargement rapide : 1 seule requête avec limit élevé + filtre date (pas de pagination séquentielle)
+    // Chargement rapide : pages parallèles de 1000 avec filtre date
     async function fetchFast(table, cols, dateCol = 'date') {
-      const { data, error } = await sb.from(table).select(cols)
-        .gte(dateCol, dateFilter).order(dateCol, {ascending: false}).limit(10000);
+      // 1ère page + count pour savoir combien de pages lancer en parallèle
+      const { data: first, error, count } = await sb.from(table).select(cols, { count: 'exact' })
+        .gte(dateCol, dateFilter).order(dateCol, {ascending: false}).range(0, 999);
       if (error) { console.warn(`fetchFast ${table}:`, error.message); return []; }
-      return data || [];
+      if (!first || first.length < 1000) return first || [];
+      // Lancer les pages restantes en parallèle
+      const totalPages = Math.ceil((count || first.length) / 1000);
+      const remaining = await Promise.all(
+        Array.from({length: totalPages - 1}, (_, i) =>
+          sb.from(table).select(cols).gte(dateCol, dateFilter)
+            .order(dateCol, {ascending: false}).range((i+1)*1000, (i+2)*1000 - 1)
+            .then(r => r.data || [])
+        )
+      );
+      return first.concat(...remaining);
     }
 
     // Tout en parallèle, 1 seul appel par table
