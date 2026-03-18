@@ -5566,8 +5566,8 @@ async function syncAkuiteo() {
       console.log(`[Akuiteo] Page ${page}: ${batch.length} clients (total: ${allAkCustomers.length})`);
       if (batch.length < PAGE_SIZE) break; // dernière page
       page++;
-      // Sécurité : max 5000 clients
-      if (allAkCustomers.length >= 5000) { console.warn('[Akuiteo] Limite 5000 clients atteinte'); break; }
+      // Sécurité : max 25000 clients
+      if (allAkCustomers.length >= 25000) { console.warn('[Akuiteo] Limite 25000 clients atteinte'); break; }
     }
     const akCustomers = allAkCustomers;
     console.log('[Akuiteo] Total clients:', akCustomers.length);
@@ -5685,10 +5685,19 @@ async function syncAkuiteo() {
     ];
     for (const ep of projectEndpoints) {
       try {
-        const res = await akuiteoFetch('POST', ep + '?limit=500', { code: { operator: 'LIKE', value: '%' } });
-        if (Array.isArray(res) && res.length > 0) {
-          akProjects = res;
-          console.log(`[Akuiteo] Projets trouvés via ${ep}: ${res.length}`);
+        let allProj = [], pOff = 0;
+        const P_SIZE = 500;
+        while (true) {
+          const res = await akuiteoFetch('POST', ep + `?limit=${P_SIZE}&offset=${pOff}`, { code: { operator: 'LIKE', value: '%' } });
+          if (!Array.isArray(res) || res.length === 0) break;
+          allProj = allProj.concat(res);
+          console.log(`[Akuiteo] Projets via ${ep}: page ${pOff/P_SIZE} → ${res.length} (total: ${allProj.length})`);
+          if (res.length < P_SIZE) break;
+          pOff += P_SIZE;
+        }
+        if (allProj.length > 0) {
+          akProjects = allProj;
+          console.log(`[Akuiteo] Projets trouvés via ${ep}: ${allProj.length}`);
           break;
         }
       } catch (e) {
@@ -5719,11 +5728,25 @@ async function syncAkuiteo() {
         if (!crmClient) return { d: 0, c: 0, f: 0 };
         const clientDocs = [];
         try {
+          // Fonction de pagination pour les docs d'un client
+          async function fetchAllDocs(path, criteria) {
+            let all = [], off = 0;
+            const DPG = 200;
+            while (true) {
+              const res = await akuiteoFetch('POST', path + `?limit=${DPG}&offset=${off}`, criteria).catch(() => []);
+              if (!Array.isArray(res) || res.length === 0) break;
+              all = all.concat(res);
+              if (res.length < DPG) break;
+              off += DPG;
+            }
+            return all;
+          }
           // Devis + Commandes + Factures en parallèle pour CE client
+          const crit = { customerId: { operator: 'IS', value: akCid } };
           const [quotations, orders, invoices] = await Promise.all([
-            akuiteoFetch('POST', '/sales/quotations/search?limit=100', { customerId: { operator: 'IS', value: akCid } }).catch(() => []),
-            akuiteoFetch('POST', '/sales/orders/search?limit=100', { customerId: { operator: 'IS', value: akCid } }).catch(() => []),
-            akuiteoFetch('POST', '/sales/invoices/search?limit=100', { customerId: { operator: 'IS', value: akCid } }).catch(() => []),
+            fetchAllDocs('/sales/quotations/search', crit),
+            fetchAllDocs('/sales/orders/search', crit),
+            fetchAllDocs('/sales/invoices/search', crit),
           ]);
           // Préparer devis batch
           const dBatch = (Array.isArray(quotations) ? quotations : []).map(q => {
