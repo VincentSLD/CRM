@@ -2157,11 +2157,12 @@ async function loadDB() {
     }
 
     // Fonction pour charger toutes les lignes d'une table (pagination Supabase max 1000/appel)
-    async function fetchAll(table, orderCol, orderAsc = false) {
+    // cols = colonnes à charger (sans custom_data/description pour les listes = plus rapide)
+    async function fetchAll(table, orderCol, orderAsc = false, cols = '*') {
       let all = [], from = 0;
       const PAGE = 1000;
       while (true) {
-        let q = sb.from(table).select('*');
+        let q = sb.from(table).select(cols);
         if (orderCol) q = q.order(orderCol, {ascending: orderAsc});
         const { data, error } = await q.range(from, from + PAGE - 1);
         if (error) { console.warn(`fetchAll ${table} error:`, error.message); break; }
@@ -2173,19 +2174,26 @@ async function loadDB() {
       return all;
     }
 
+    // Colonnes légères (sans custom_data, description, notes = gros blobs JSON)
+    const DEVIS_COLS = 'id,akuiteo_id,ref,client_id,client_name,sujet,montant,montant_ttc,tva,date,statut,projet,agence,societe,responsable_id,commercial_id,devise,probabilite,date_validation,date_signature_prevue,date_signature_reelle,nb_lignes,reference1,created_at';
+    const CMD_COLS = 'id,akuiteo_id,ref,client_id,client_name,nom,montant,montant_ttc,tva,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id,devis_origine,devise,date_client,date_validation,nb_lignes,reference1,created_at';
+    const FACT_COLS = 'id,akuiteo_id,ref,client_id,client_name,montant,montant_ttc,tva,date,echeance,statut,jours_retard,projet,agence,societe,responsable_id,devise,type_facture,reste_a_payer,mode_paiement,date_envoi,date_paiement,date_comptable,nb_lignes,reference1,created_at';
+    const MARCHE_COLS = 'id,nom,client_id,client_name,montant_total,nb_devis,nb_commandes,nb_factures,date_debut,date_fin,agence,societe,adresse_ligne1,code_postal,ville,lat,lng,apporteur,responsable,created_at';
+    const AFFAIRE_COLS = 'id,nom,marche_id,client_id,client_name,montant_total,nb_devis,nb_commandes,nb_factures,date_debut,agence,societe,apporteur,responsable,created_at';
+
     const [cRes, dAll, cmAll, fAll, rAll, nAll, coAll] = await Promise.all([
       clientQuery,
-      fetchAll('devis', 'date'),
-      fetchAll('commandes', 'date'),
-      fetchAll('factures', 'date'),
-      fetchAll('reports', 'date'),
-      fetchAll('notifications', 'created_at'),
-      fetchAll('commerciaux', null),
+      fetchAll('devis', 'date', false, DEVIS_COLS),
+      fetchAll('commandes', 'date', false, CMD_COLS),
+      fetchAll('factures', 'date', false, FACT_COLS),
+      fetchAll('reports', 'date', false, 'id,client_id,client_name,date,titre,created_at'),
+      fetchAll('notifications', 'created_at', false, 'id,type,text,time_label,read,created_at'),
+      fetchAll('commerciaux', null, false),
     ]);
     // Charger marches/affaires séparément (tables optionnelles)
     let maAll = [], afAll = [];
-    try { maAll = await fetchAll('marches', 'date_debut'); } catch(e) { console.warn('Erreur marches:', e.message); }
-    try { afAll = await fetchAll('affaires', 'date_debut'); } catch(e) { console.warn('Erreur affaires:', e.message); }
+    try { maAll = await fetchAll('marches', 'date_debut', false, MARCHE_COLS); } catch(e) { console.warn('Erreur marches:', e.message); }
+    try { afAll = await fetchAll('affaires', 'date_debut', false, AFFAIRE_COLS); } catch(e) { console.warn('Erreur affaires:', e.message); }
     console.log('[loadDB] Marchés:', maAll.length, 'Affaires:', afAll.length);
 
     clientsTotalCount = cRes.count || 0;
@@ -2202,7 +2210,7 @@ async function loadDB() {
     DB.commandes.sort((a,b) => (b.date_raw||'').localeCompare(a.date_raw||''));
     DB.factures = fAll.map(f => ({ ...f, client: f.client_name, date_raw: f.date, date: fmtDateFR(f.date), echeance: fmtDateFR(f.echeance), jours: f.jours_retard }));
     DB.factures.sort((a,b) => (b.date_raw||'').localeCompare(a.date_raw||''));
-    DB.reports = rAll.map(r => ({ ...r, client: r.client_name, text: r.contenu, date_raw: r.date, date: timeAgo(r.date), titre: r.titre }));
+    DB.reports = rAll.map(r => ({ ...r, client: r.client_name, text: r.contenu || '', date_raw: r.date, date: timeAgo(r.date), titre: r.titre }));
     DB.notifications = nAll.map(n => ({ ...n, time: n.time_label }));
     DB.commerciaux = coAll;
     DB.marches = maAll.map(m => ({ ...m, client: m.client_name, date_raw: m.date_debut, date: fmtDateFR(m.date_debut) }));
@@ -4156,9 +4164,14 @@ function detailSection(title, rows) {
 }
 
 // ═══ FICHE DEVIS ═══
-function showDevisDetail(id) {
+async function showDevisDetail(id) {
   const d = DB.devis.find(x => x.id === id);
   if (!d) return;
+  // Charger les champs lourds à la demande
+  if (d.custom_data === undefined) {
+    const { data } = await sb.from('devis').select('custom_data,description').eq('id', id).maybeSingle();
+    if (data) { d.custom_data = data.custom_data; d.description = data.description; }
+  }
   currentPage = 'devis-detail';
   document.getElementById('pageTitle').textContent = 'Devis ' + (d.ref || d.id);
   document.getElementById('contentArea').innerHTML = `<div class="page active">
@@ -4202,9 +4215,13 @@ function showDevisDetail(id) {
 }
 
 // ═══ FICHE COMMANDE ═══
-function showCommandeDetail(id) {
+async function showCommandeDetail(id) {
   const c = DB.commandes.find(x => x.id === id);
   if (!c) return;
+  if (c.custom_data === undefined) {
+    const { data } = await sb.from('commandes').select('custom_data,description').eq('id', id).maybeSingle();
+    if (data) { c.custom_data = data.custom_data; c.description = data.description; }
+  }
   currentPage = 'commande-detail';
   document.getElementById('pageTitle').textContent = 'Commande ' + (c.ref || c.id);
   document.getElementById('contentArea').innerHTML = `<div class="page active">
@@ -4266,9 +4283,13 @@ function showCommandeDetail(id) {
 }
 
 // ═══ FICHE FACTURE ═══
-function showFactureDetail(id) {
+async function showFactureDetail(id) {
   const f = DB.factures.find(x => x.id === id);
   if (!f) return;
+  if (f.custom_data === undefined) {
+    const { data } = await sb.from('factures').select('custom_data,description').eq('id', id).maybeSingle();
+    if (data) { f.custom_data = data.custom_data; f.description = data.description; }
+  }
   currentPage = 'facture-detail';
   document.getElementById('pageTitle').textContent = 'Facture ' + (f.ref || f.id);
   document.getElementById('contentArea').innerHTML = `<div class="page active">
