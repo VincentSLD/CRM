@@ -5707,171 +5707,144 @@ async function syncAkuiteo() {
     if (akProjects.length === 0) {
       console.log('[Akuiteo] Aucun endpoint projets disponible — les marchés seront construits depuis les documents');
     }
-    toast(`Sync docs en cours...`, 'info');
+    toast(`Sync docs en cours (bulk)...`, 'info');
 
-    // --- ETAPE 4 : Sync devis/commandes/factures en parallèle par lots de 10 clients ---
-    console.log('[Akuiteo] === ETAPE 4 : Sync docs (parallèle ×10) ===');
+    // --- ETAPE 4 : Sync devis/commandes/factures en BULK (pagination globale) ---
+    console.log('[Akuiteo] === ETAPE 4 : Sync docs BULK ===');
     let syncedDocs = { devis: 0, commandes: 0, factures: 0 };
-    let errDocs = { devis: 0, commandes: 0, factures: 0 };
     const akClientMap = {};
     for (const c of DB.clients) { if (c.akuiteo_id) akClientMap[c.akuiteo_id] = c; }
     const akClientIds = akCustomers.map(c => String(c.id));
-    const PARALLEL = 10;
-    const allFetchedDocs = []; // pour construire marchés/affaires après
-    const projectDeliverySite = {}; // projectId → { deliverySiteId, customerId }
+    const allFetchedDocs = [];
+    const projectDeliverySite = {};
+    const bulkCrit = { companyCode: { operator: 'IS_NOT_NULL' } };
+    const BULK_PAGE = 200;
+
+    // Fonction paginée bulk
+    async function fetchAllBulk(path, criteria) {
+      let all = [], off = 0;
+      while (true) {
+        const res = await akuiteoFetch('POST', path + `?limit=${BULK_PAGE}&offset=${off}`, criteria).catch(() => []);
+        if (!Array.isArray(res) || res.length === 0) break;
+        all = all.concat(res);
+        console.log(`[Akuiteo] ${path}: offset=${off} → ${res.length} (total: ${all.length})`);
+        if (res.length < BULK_PAGE) break;
+        off += BULK_PAGE;
+      }
+      return all;
+    }
 
     const t4Start = Date.now();
-    for (let i = 0; i < akClientIds.length; i += PARALLEL) {
-      const batch = akClientIds.slice(i, i + PARALLEL);
-      const results = await Promise.allSettled(batch.map(async (akCid) => {
-        const crmClient = akClientMap[akCid];
-        if (!crmClient) return { d: 0, c: 0, f: 0 };
-        const clientDocs = [];
-        try {
-          // Fonction de pagination pour les docs d'un client
-          async function fetchAllDocs(path, criteria) {
-            let all = [], off = 0;
-            const DPG = 200;
-            while (true) {
-              const res = await akuiteoFetch('POST', path + `?limit=${DPG}&offset=${off}`, criteria).catch(() => []);
-              if (!Array.isArray(res) || res.length === 0) break;
-              all = all.concat(res);
-              if (res.length < DPG) break;
-              off += DPG;
-            }
-            return all;
-          }
-          // Devis + Commandes + Factures en parallèle pour CE client
-          const crit = { customerId: { operator: 'IS', value: akCid } };
-          const [quotations, orders, invoices] = await Promise.all([
-            fetchAllDocs('/sales/quotations/search', crit),
-            fetchAllDocs('/sales/orders/search', crit),
-            fetchAllDocs('/sales/invoices/search', crit),
-          ]);
-          // Préparer devis batch
-          const dBatch = (Array.isArray(quotations) ? quotations : []).map(q => {
-            if (q.projectId) clientDocs.push({ projectId: String(q.projectId), customerId: akCid, preTaxAmount: q.preTaxAmount, afterTaxAmount: q.afterTaxAmount, date: q.date, entityCode: q.entityCode });
-            return {
-              id: 'akd_' + String(q.id).replace(/[^a-zA-Z0-9.]/g, '_'),
-              akuiteo_id: String(q.id || ''), ref: String(q.number || q.id || ''),
-              client_name: crmClient.name, client_id: crmClient.id,
-              sujet: q.name || q.description || q.projectId || 'Devis Akuiteo',
-              montant: q.preTaxAmount || 0, montant_ttc: q.afterTaxAmount || 0,
-              tva: (q.afterTaxAmount || 0) - (q.preTaxAmount || 0),
-              statut: q.state === 'SIGNED' ? 'accepted' : q.state === 'ARCHIVED' ? 'refused' : q.state === 'SENT' ? 'sent' : 'pending',
-              date: q.date ? q.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
-              projet: q.projectId || null, agence: q.entityCode || null, societe: q.companyCode || null,
-              responsable_id: q.managerId || null, commercial_id: q.salesManagerId || null,
-              reference1: q.reference1 || null, devise: q.currencyCode || 'EUR',
-              probabilite: q.quotationProbability || null, description: q.description || null,
-              date_validation: q.validationDate ? q.validationDate.substring(0, 10) : null,
-              date_signature_prevue: q.expectedSignatureDate ? q.expectedSignatureDate.substring(0, 10) : null,
-              date_signature_reelle: q.actualSignatureDate ? q.actualSignatureDate.substring(0, 10) : null,
-              nb_lignes: Array.isArray(q.lines) ? q.lines.length : 0,
-              custom_data: (q.customData && Object.keys(q.customData).length > 0) ? q.customData : null,
-            };
-          });
-          if (dBatch.length > 0) {
-            const { error } = await sb.from('devis').upsert(dBatch, { onConflict: 'id' });
-            if (error) throw error;
-          }
-          // Enrichir commandes avec les données personnalisées (CUSTOM_DATA)
-          const ordersArr = Array.isArray(orders) ? orders : [];
-          const enrichedOrders = await Promise.all(ordersArr.map(async o => {
-            try {
-              const full = await akuiteoFetch('POST', `/sales/orders/${o.id}/read`, { options: ['CUSTOM_DATA'] });
-              if (full && full.customData) o.customData = full.customData;
-            } catch (e) { /* ignore, on garde l'ordre sans customData */ }
-            return o;
-          }));
-          // Préparer commandes batch + collecter deliverySiteId
-          const cBatch = enrichedOrders.map(o => {
-            if (o.projectId) {
-              clientDocs.push({ projectId: String(o.projectId), customerId: akCid, preTaxAmount: o.preTaxAmount, afterTaxAmount: o.afterTaxAmount, date: o.date, entityCode: o.entityCode });
-              if (o.deliverySiteId) projectDeliverySite[String(o.projectId)] = { deliverySiteId: String(o.deliverySiteId), customerId: akCid };
-            }
-            return {
-              id: 'akc_' + String(o.id).replace(/[^a-zA-Z0-9.]/g, '_'),
-              akuiteo_id: String(o.id || ''), ref: String(o.number || o.id || ''),
-              client_name: crmClient.name, client_id: crmClient.id,
-              nom: o.name || null, montant: o.preTaxAmount || 0, montant_ttc: o.afterTaxAmount || 0,
-              tva: (o.afterTaxAmount || 0) - (o.preTaxAmount || 0),
-              statut: o.state === 'DELIVERED' ? 'livree' : o.state === 'CANCELLED' ? 'annulee' : 'en_cours',
-              date: o.date ? o.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
-              livraison: o.deliveryDate ? o.deliveryDate.substring(0, 10) : null,
-              projet: o.projectId || null, agence: o.entityCode || null, societe: o.companyCode || null,
-              description: o.description || null, reference1: o.reference1 || null,
-              devis_origine: o.quotationId || null, responsable_id: o.managerId || null,
-              commercial_id: o.salesManagerId || null,
-              date_client: o.customerDate ? o.customerDate.substring(0, 10) : null,
-              date_validation: o.validationDate ? o.validationDate.substring(0, 10) : null,
-              devise: o.currencyCode || 'EUR', nb_lignes: Array.isArray(o.lines) ? o.lines.length : 0,
-              custom_data: (() => {
-                const cd = (o.customData && Object.keys(o.customData).length > 0) ? {...o.customData} : {};
-                if (Array.isArray(o.lines) && o.lines.length > 0) {
-                  cd._lines = o.lines.map(l => ({
-                    name: l.name || null, phaseId: l.phaseId || null, subPhaseId: l.subPhaseId || null,
-                    projectTaskId: l.projectTaskId || null, projectId: l.projectId || null,
-                    startDate: l.startDate || null, endDate: l.endDate || null,
-                    estimatedDeliveryDate: l.estimatedDeliveryDate || null, estimatedBillingDate: l.estimatedBillingDate || null,
-                    projectedBillingDate: l.projectedBillingDate || null, billingMode: l.billingMode || null,
-                    quantity: l.quantity, unitPrice: l.unitPrice, amountTotal: l.amountTotal,
-                    rankNumber: l.rankNumber,
-                  }));
-                }
-                return Object.keys(cd).length > 0 ? cd : null;
-              })(),
-            };
-          });
-          if (cBatch.length > 0) {
-            const { error } = await sb.from('commandes').upsert(cBatch, { onConflict: 'id' });
-            if (error) throw error;
-          }
-          // Préparer factures batch
-          const fBatch = (Array.isArray(invoices) ? invoices : []).map(f => {
-            if (f.projectId) clientDocs.push({ projectId: String(f.projectId), customerId: akCid, preTaxAmount: f.preTaxAmount, afterTaxAmount: f.afterTaxAmount, date: f.date, entityCode: f.entityCode });
-            return {
-              id: 'akf_' + String(f.id).replace(/[^a-zA-Z0-9.]/g, '_'),
-              akuiteo_id: String(f.id || ''), ref: String(f.number || f.id || ''),
-              client_name: crmClient.name, client_id: crmClient.id,
-              montant: f.preTaxAmount || 0, montant_ttc: f.afterTaxAmount || 0,
-              tva: (f.afterTaxAmount || 0) - (f.preTaxAmount || 0),
-              statut: f.paidOn ? 'payee' : f.bookedOn ? 'envoyee' : 'brouillon',
-              date: f.date ? f.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
-              echeance: f.payment?.dueDate ? f.payment.dueDate.substring(0, 10) : null,
-              jours_retard: 0, type_facture: f.invoiceType || null,
-              reste_a_payer: f.balance ?? null, description: f.description || null,
-              projet: f.projectId || null, agence: f.entityCode || null, societe: f.companyCode || null,
-              mode_paiement: f.methodOfPayment || null,
-              date_envoi: f.sentOn ? f.sentOn.substring(0, 10) : null,
-              date_paiement: f.paidOn ? f.paidOn.substring(0, 10) : null,
-              date_comptable: f.bookedOn ? f.bookedOn.substring(0, 10) : null,
-              statut_dematerialisation: f.dematerializationStatus || null,
-              responsable_id: f.managerId || null, devise: f.currencyCode || 'EUR',
-              nb_lignes: Array.isArray(f.lines) ? f.lines.length : 0, reference1: f.reference1 || null,
-              custom_data: (f.customData && Object.keys(f.customData).length > 0) ? f.customData : null,
-            };
-          });
-          if (fBatch.length > 0) {
-            const { error } = await sb.from('factures').upsert(fBatch, { onConflict: 'id' });
-            if (error) throw error;
-          }
-          return { d: dBatch.length, c: cBatch.length, f: fBatch.length, docs: clientDocs };
-        } catch (e) { throw e; }
-      }));
-      for (const r of results) {
-        if (r.status === 'fulfilled' && r.value) {
-          syncedDocs.devis += r.value.d || 0;
-          syncedDocs.commandes += r.value.c || 0;
-          syncedDocs.factures += r.value.f || 0;
-          if (r.value.docs) allFetchedDocs.push(...r.value.docs);
-        } else if (r.status === 'rejected') {
-          errDocs.devis++; console.warn('[Akuiteo] Doc batch err:', r.reason?.message);
-        }
-      }
-      if ((i + PARALLEL) % 50 < PARALLEL) console.log(`[Akuiteo] Docs: ${i + batch.length}/${akClientIds.length} clients (${syncedDocs.devis}D ${syncedDocs.commandes}C ${syncedDocs.factures}F)`);
+
+    // Récupérer TOUT en parallèle (3 flux bulk)
+    const [allQuotations, allOrders, allInvoices] = await Promise.all([
+      fetchAllBulk('/sales/quotations/search', bulkCrit),
+      fetchAllBulk('/sales/orders/search', bulkCrit),
+      fetchAllBulk('/sales/invoices/search', bulkCrit),
+    ]);
+    console.log(`[Akuiteo] Bulk fetch: ${allQuotations.length} devis, ${allOrders.length} cmd, ${allInvoices.length} fact en ${((Date.now()-t4Start)/1000).toFixed(1)}s`);
+
+    // --- Traiter devis ---
+    toast(`Traitement ${allQuotations.length} devis...`, 'info');
+    const dBatchAll = allQuotations.map(q => {
+      const akCid = String(q.thirdPartyId || q.customerId || '');
+      const crmClient = akClientMap[akCid];
+      if (q.projectId) allFetchedDocs.push({ projectId: String(q.projectId), customerId: akCid, preTaxAmount: q.preTaxAmount, afterTaxAmount: q.afterTaxAmount, date: q.date, entityCode: q.entityCode });
+      return {
+        id: 'akd_' + String(q.id).replace(/[^a-zA-Z0-9.]/g, '_'),
+        akuiteo_id: String(q.id || ''), ref: String(q.number || q.id || ''),
+        client_name: crmClient?.name || q.name || 'Inconnu', client_id: crmClient?.id || null,
+        sujet: q.name || q.description || q.projectId || 'Devis Akuiteo',
+        montant: q.preTaxAmount || 0, montant_ttc: q.afterTaxAmount || 0,
+        tva: (q.afterTaxAmount || 0) - (q.preTaxAmount || 0),
+        statut: q.state === 'SIGNED' ? 'accepted' : q.state === 'ARCHIVED' ? 'refused' : q.state === 'SENT' ? 'sent' : 'pending',
+        date: q.date ? q.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
+        projet: q.projectId || null, agence: q.entityCode || null, societe: q.companyCode || null,
+        responsable_id: q.managerId || null, commercial_id: q.salesManagerId || null,
+        reference1: q.reference1 || null, devise: q.currencyCode || 'EUR',
+        probabilite: q.quotationProbability || null, description: q.description || null,
+        date_validation: q.validationDate ? q.validationDate.substring(0, 10) : null,
+        date_signature_prevue: q.expectedSignatureDate ? q.expectedSignatureDate.substring(0, 10) : null,
+        date_signature_reelle: q.actualSignatureDate ? q.actualSignatureDate.substring(0, 10) : null,
+        nb_lignes: Array.isArray(q.lines) ? q.lines.length : 0,
+        custom_data: (q.customData && Object.keys(q.customData).length > 0) ? q.customData : null,
+      };
+    });
+    for (let i = 0; i < dBatchAll.length; i += 100) {
+      const { error } = await sb.from('devis').upsert(dBatchAll.slice(i, i + 100), { onConflict: 'id' });
+      if (error) console.warn('[Akuiteo] Devis upsert err:', error.message);
     }
-    console.log(`[Akuiteo] Docs en ${((Date.now()-t4Start)/1000).toFixed(1)}s : ${syncedDocs.devis} devis, ${syncedDocs.commandes} cmd, ${syncedDocs.factures} fact`);
+    syncedDocs.devis = dBatchAll.length;
+
+    // --- Traiter commandes ---
+    toast(`Traitement ${allOrders.length} commandes...`, 'info');
+    const cBatchAll = allOrders.map(o => {
+      const akCid = String(o.thirdPartyId || o.customerId || '');
+      const crmClient = akClientMap[akCid];
+      if (o.projectId) {
+        allFetchedDocs.push({ projectId: String(o.projectId), customerId: akCid, preTaxAmount: o.preTaxAmount, afterTaxAmount: o.afterTaxAmount, date: o.date, entityCode: o.entityCode });
+        if (o.deliverySiteId) projectDeliverySite[String(o.projectId)] = { deliverySiteId: String(o.deliverySiteId), customerId: akCid };
+      }
+      return {
+        id: 'akc_' + String(o.id).replace(/[^a-zA-Z0-9.]/g, '_'),
+        akuiteo_id: String(o.id || ''), ref: String(o.number || o.id || ''),
+        client_name: crmClient?.name || o.name || 'Inconnu', client_id: crmClient?.id || null,
+        nom: o.name || null, montant: o.preTaxAmount || 0, montant_ttc: o.afterTaxAmount || 0,
+        tva: (o.afterTaxAmount || 0) - (o.preTaxAmount || 0),
+        statut: o.state === 'DELIVERED' ? 'livree' : o.state === 'CANCELLED' ? 'annulee' : 'en_cours',
+        date: o.date ? o.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
+        livraison: o.deliveryDate ? o.deliveryDate.substring(0, 10) : null,
+        projet: o.projectId || null, agence: o.entityCode || null, societe: o.companyCode || null,
+        description: o.description || null, reference1: o.reference1 || null,
+        devis_origine: o.quotationId || null, responsable_id: o.managerId || null,
+        commercial_id: o.salesManagerId || null,
+        date_client: o.customerDate ? o.customerDate.substring(0, 10) : null,
+        date_validation: o.validationDate ? o.validationDate.substring(0, 10) : null,
+        devise: o.currencyCode || 'EUR', nb_lignes: Array.isArray(o.lines) ? o.lines.length : 0,
+        custom_data: (o.customData && Object.keys(o.customData).length > 0) ? o.customData : null,
+      };
+    });
+    for (let i = 0; i < cBatchAll.length; i += 100) {
+      const { error } = await sb.from('commandes').upsert(cBatchAll.slice(i, i + 100), { onConflict: 'id' });
+      if (error) console.warn('[Akuiteo] Commandes upsert err:', error.message);
+    }
+    syncedDocs.commandes = cBatchAll.length;
+
+    // --- Traiter factures ---
+    toast(`Traitement ${allInvoices.length} factures...`, 'info');
+    const fBatchAll = allInvoices.map(f => {
+      const akCid = String(f.thirdPartyId || f.customerId || '');
+      const crmClient = akClientMap[akCid];
+      if (f.projectId) allFetchedDocs.push({ projectId: String(f.projectId), customerId: akCid, preTaxAmount: f.preTaxAmount, afterTaxAmount: f.afterTaxAmount, date: f.date, entityCode: f.entityCode });
+      return {
+        id: 'akf_' + String(f.id).replace(/[^a-zA-Z0-9.]/g, '_'),
+        akuiteo_id: String(f.id || ''), ref: String(f.number || f.id || ''),
+        client_name: crmClient?.name || 'Inconnu', client_id: crmClient?.id || null,
+        montant: f.preTaxAmount || 0, montant_ttc: f.afterTaxAmount || 0,
+        tva: (f.afterTaxAmount || 0) - (f.preTaxAmount || 0),
+        statut: f.paidOn ? 'payee' : f.bookedOn ? 'envoyee' : 'brouillon',
+        date: f.date ? f.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
+        echeance: f.payment?.dueDate ? f.payment.dueDate.substring(0, 10) : null,
+        jours_retard: 0, type_facture: f.invoiceType || null,
+        reste_a_payer: f.balance ?? null, description: f.description || null,
+        projet: f.projectId || null, agence: f.entityCode || null, societe: f.companyCode || null,
+        mode_paiement: f.methodOfPayment || null,
+        date_envoi: f.sentOn ? f.sentOn.substring(0, 10) : null,
+        date_paiement: f.paidOn ? f.paidOn.substring(0, 10) : null,
+        date_comptable: f.bookedOn ? f.bookedOn.substring(0, 10) : null,
+        statut_dematerialisation: f.dematerializationStatus || null,
+        responsable_id: f.managerId || null, devise: f.currencyCode || 'EUR',
+        nb_lignes: Array.isArray(f.lines) ? f.lines.length : 0, reference1: f.reference1 || null,
+        custom_data: (f.customData && Object.keys(f.customData).length > 0) ? f.customData : null,
+      };
+    });
+    for (let i = 0; i < fBatchAll.length; i += 100) {
+      const { error } = await sb.from('factures').upsert(fBatchAll.slice(i, i + 100), { onConflict: 'id' });
+      if (error) console.warn('[Akuiteo] Factures upsert err:', error.message);
+    }
+    syncedDocs.factures = fBatchAll.length;
+
+    console.log(`[Akuiteo] Docs BULK en ${((Date.now()-t4Start)/1000).toFixed(1)}s : ${syncedDocs.devis} devis, ${syncedDocs.commandes} cmd, ${syncedDocs.factures} fact`);
 
     // --- ETAPE 4b : Construire marchés & affaires depuis les projectId ---
     console.log('[Akuiteo] === ETAPE 4b : Construction marchés & affaires ===');
