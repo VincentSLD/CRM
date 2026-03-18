@@ -2174,26 +2174,46 @@ async function loadDB() {
       return all;
     }
 
-    // Colonnes légères (sans custom_data, description, notes = gros blobs JSON)
-    const DEVIS_COLS = 'id,akuiteo_id,ref,client_id,client_name,sujet,montant,montant_ttc,tva,date,statut,projet,agence,societe,responsable_id,commercial_id,devise,probabilite,date_validation,date_signature_prevue,date_signature_reelle,nb_lignes,reference1,created_at';
-    const CMD_COLS = 'id,akuiteo_id,ref,client_id,client_name,nom,montant,montant_ttc,tva,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id,devis_origine,devise,date_client,date_validation,nb_lignes,reference1,created_at';
-    const FACT_COLS = 'id,akuiteo_id,ref,client_id,client_name,montant,montant_ttc,tva,date,echeance,statut,jours_retard,projet,agence,societe,responsable_id,devise,type_facture,reste_a_payer,mode_paiement,date_envoi,date_paiement,date_comptable,nb_lignes,reference1,created_at';
-    const MARCHE_COLS = 'id,nom,client_id,client_name,montant_total,nb_devis,nb_commandes,nb_factures,date_debut,date_fin,agence,societe,adresse_ligne1,code_postal,ville,lat,lng,apporteur,responsable,created_at';
-    const AFFAIRE_COLS = 'id,nom,marche_id,client_id,client_name,montant_total,nb_devis,nb_commandes,nb_factures,date_debut,agence,societe,apporteur,responsable,created_at';
+    // Colonnes minimales pour agrégation + affichage liste
+    const DEVIS_LITE = 'id,ref,client_id,client_name,sujet,montant,date,statut,projet,agence,societe,responsable_id,commercial_id,probabilite';
+    const CMD_LITE = 'id,ref,client_id,client_name,nom,montant,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id';
+    const FACT_LITE = 'id,ref,client_id,client_name,montant,date,echeance,statut,jours_retard,projet,agence,societe,responsable_id,type_facture,reste_a_payer,date_paiement';
+    const MARCHE_LITE = 'id,nom,client_id,client_name,montant_total,nb_devis,nb_commandes,nb_factures,date_debut,date_fin,agence,societe,adresse_ligne1,code_postal,ville,lat,lng,apporteur,responsable';
+    const AFFAIRE_LITE = 'id,nom,marche_id,client_id,client_name,montant_total,nb_devis,nb_commandes,nb_factures,date_debut,agence,societe,apporteur,responsable';
+
+    // Ne charger que les 2 dernières années pour les tables volumineuses
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+    const dateFilter = twoYearsAgo.toISOString().slice(0, 10);
+
+    async function fetchFiltered(table, orderCol, cols, dateCol = 'date') {
+      let all = [], from = 0;
+      const PAGE = 1000;
+      while (true) {
+        let q = sb.from(table).select(cols).gte(dateCol, dateFilter).order(orderCol, {ascending: false});
+        const { data, error } = await q.range(from, from + PAGE - 1);
+        if (error) { console.warn(`fetchFiltered ${table} error:`, error.message); break; }
+        if (!data || data.length === 0) break;
+        all = all.concat(data);
+        if (data.length < PAGE) break;
+        from += PAGE;
+      }
+      return all;
+    }
 
     const [cRes, dAll, cmAll, fAll, rAll, nAll, coAll] = await Promise.all([
       clientQuery,
-      fetchAll('devis', 'date', false, DEVIS_COLS),
-      fetchAll('commandes', 'date', false, CMD_COLS),
-      fetchAll('factures', 'date', false, FACT_COLS),
+      fetchFiltered('devis', 'date', DEVIS_LITE),
+      fetchFiltered('commandes', 'date', CMD_LITE),
+      fetchFiltered('factures', 'date', FACT_LITE),
       fetchAll('reports', 'date', false, 'id,client_id,client_name,date,titre,created_at'),
       fetchAll('notifications', 'created_at', false, 'id,type,text,time_label,read,created_at'),
       fetchAll('commerciaux', null, false),
     ]);
     // Charger marches/affaires séparément (tables optionnelles)
     let maAll = [], afAll = [];
-    try { maAll = await fetchAll('marches', 'date_debut', false, MARCHE_COLS); } catch(e) { console.warn('Erreur marches:', e.message); }
-    try { afAll = await fetchAll('affaires', 'date_debut', false, AFFAIRE_COLS); } catch(e) { console.warn('Erreur affaires:', e.message); }
+    try { maAll = await fetchAll('marches', 'date_debut', false, MARCHE_LITE); } catch(e) { console.warn('Erreur marches:', e.message); }
+    try { afAll = await fetchAll('affaires', 'date_debut', false, AFFAIRE_LITE); } catch(e) { console.warn('Erreur affaires:', e.message); }
     console.log('[loadDB] Marchés:', maAll.length, 'Affaires:', afAll.length);
 
     clientsTotalCount = cRes.count || 0;
