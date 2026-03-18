@@ -5419,10 +5419,22 @@ async function doSearch(q) {
 document.addEventListener('click', e => { if(!e.target.closest('.search-bar')) document.getElementById('searchDropdown').classList.remove('show'); });
 
 // ═══ SYNC AKUITEO ═══
-// ═══ AKUITEO API via proxy local (lancer: python proxy_akuiteo.py) ═══
-const AKUITEO_PROXY = 'http://localhost:8888';
+// En production (Vercel) → serverless function /api/akuiteo
+// En local → proxy direct localhost:8888
+const IS_LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:';
+const AKUITEO_PROXY = IS_LOCAL ? 'http://localhost:8888' : '';
 
 async function akuiteoFetch(method, path, body = null, opts2 = {}) {
+  let url;
+  if (IS_LOCAL) {
+    url = AKUITEO_PROXY + path;
+  } else {
+    // Vercel serverless: /api/akuiteo?path=/crm/...&limit=100
+    const [basePath, qs] = path.split('?');
+    const params = new URLSearchParams(qs || '');
+    params.set('path', basePath);
+    url = '/api/akuiteo?' + params.toString();
+  }
   const opts = {
     method,
     headers: { 'Accept': opts2.accept || 'application/json' },
@@ -5431,7 +5443,7 @@ async function akuiteoFetch(method, path, body = null, opts2 = {}) {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
   }
-  const r = await fetch(AKUITEO_PROXY + path, opts);
+  const r = await fetch(url, opts);
   console.log(`[Akuiteo] ${method} ${path} → ${r.status}`);
   if (!r.ok) {
     const txt = await r.text();
