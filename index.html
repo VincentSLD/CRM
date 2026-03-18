@@ -1769,6 +1769,7 @@ Cordialement,</textarea>
           <input class="fi" id="nc-sirene-search" placeholder="Ex: 44306184100066 ou NOVAM INGENIERIE" style="flex:1"
             onkeydown="if(event.key==='Enter'){event.preventDefault();searchSirene()}">
           <button class="btn btn-primary" onclick="searchSirene()" style="white-space:nowrap">Rechercher</button>
+          <button class="btn" onclick="clearNewClientForm()" style="white-space:nowrap;color:var(--t3)">Effacer tout</button>
         </div>
         <div id="nc-sirene-results" style="display:none;margin-top:10px;max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
       </div>
@@ -5210,6 +5211,17 @@ async function sendReport() {
 }
 
 // ═══ FORM SUBMISSIONS ═══
+function clearNewClientForm() {
+  const ids = ['nc-sirene-search','nc-name','nc-code','nc-raison','nc-raison2','nc-forme','nc-sector',
+    'nc-addr1','nc-addr2','nc-addr3','nc-cp','nc-city','nc-dept','nc-region',
+    'nc-email','nc-phone','nc-phone2','nc-mobile','nc-fax','nc-web',
+    'nc-siren','nc-siret','nc-ape','nc-refext','nc-revenue','nc-capital','nc-headcount','nc-notes'];
+  ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('nc-pays').value = 'FR';
+  const results = document.getElementById('nc-sirene-results');
+  if (results) { results.style.display = 'none'; results.innerHTML = ''; }
+}
+
 async function searchSirene() {
   const q = document.getElementById('nc-sirene-search').value.trim();
   if (!q) return;
