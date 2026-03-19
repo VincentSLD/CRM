@@ -5467,11 +5467,16 @@ let sendSearchTimeout = null;
 
 function openSendModal() {
   const body = document.getElementById('editorBody');
-  if (!body || !body.innerText.trim()) { toast('Écrivez du contenu avant d&#39;envoyer','error'); return; }
-  // Sauvegarder d'abord si pas encore sauvegardé
+  if (!body || !body.innerText.trim()) { toast('Écrivez du contenu avant d\'envoyer','error'); return; }
+  // Récupérer les infos depuis le formulaire CR avant de fermer la modale
   const titre = document.getElementById('crTitre')?.value || '';
   const clientName = document.getElementById('crClientSearch')?.value || '';
-  // Pré-remplir l'objet
+  const contactId = document.getElementById('crContactId')?.value;
+  const contactName = document.getElementById('crContactSearch')?.value;
+  const clientId = document.getElementById('crClientId')?.value;
+  // Fermer la modale CR
+  closeCRModal();
+  // Ouvrir la modale Envoi
   sendRecipients = [];
   const el = document.getElementById('modal-send');
   if (el) el.classList.add('active');
@@ -5480,12 +5485,7 @@ function openSendModal() {
     if (subj) subj.value = titre || 'Compte-rendu' + (clientName ? ' — ' + clientName : '');
     const chips = document.getElementById('sendRecipientChips');
     if (chips) chips.innerHTML = '';
-    // Si un contact est sélectionné, l'ajouter automatiquement
-    const contactId = document.getElementById('crContactId')?.value;
-    const contactName = document.getElementById('crContactSearch')?.value;
     if (contactId && contactName) {
-      // Chercher l'email du contact dans le cache
-      const clientId = document.getElementById('crClientId')?.value;
       const cached = crContactsCache[clientId] || [];
       const contact = cached.find(c => c.id == contactId);
       addSendRecipient(contactId, contactName, contact?.email || '');
