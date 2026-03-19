@@ -5863,15 +5863,6 @@ async function openSendModal() {
     await loadSendGroups();
     const subj = document.getElementById('sendSubject');
     if (subj) subj.value = _sendData.titre || 'Compte-rendu' + (_sendData.clientName ? ' — ' + _sendData.clientName : '');
-    // Pré-remplir l'email du contact sélectionné
-    if (_sendData.contactId) {
-      const cached = crContactsCache[_sendData.clientId] || [];
-      const contact = cached.find(c => c.id == _sendData.contactId);
-      if (contact?.email) {
-        const textarea = document.getElementById('sendEmails');
-        if (textarea) textarea.value = contact.email;
-      }
-    }
   }, 50);
 }
 
