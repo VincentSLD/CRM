@@ -1351,6 +1351,17 @@ tbody tr:last-child td { border-bottom: none; }
   .client-actions { margin-left: 0; width: 100%; }
   .client-actions .btn { flex: 1; justify-content: center; }
   .notif-panel { right: 8px; left: 8px; width: auto; }
+  /* CR mobile */
+  .editor-toolbar { gap: 2px; padding: 6px 8px; }
+  .tb { width: 28px; height: 28px; font-size: 12px; }
+  .tb-ai { font-size: 10px; padding: 0 6px; }
+  .tb-div { margin: 0 2px; }
+  .editor-body { min-height: 140px; padding: 10px 12px; font-size: 13px; }
+  .editor-foot { padding: 8px 10px; }
+  .editor-foot .btn { font-size: 11px; padding: 5px 10px; }
+  .modal { max-width: 95vw; max-height: 90vh; }
+  .ai-box { margin: 8px; }
+  .ai-box-text { font-size: 12px; }
 }
 
 @media (max-width: 480px) {
@@ -1358,6 +1369,11 @@ tbody tr:last-child td { border-bottom: none; }
   .topbar-right .search-bar { display: none; }
   .tabs { gap: 0; }
   .tab { padding: 8px 10px; font-size: 11px; }
+  /* CR ultra-petit */
+  .tb-ai { font-size: 9px; padding: 0 4px; }
+  .editor-body { min-height: 120px; padding: 8px 10px; font-size: 12px; }
+  .editor-foot { flex-direction: column; align-items: stretch; }
+  .editor-foot > div { justify-content: center; }
 }
 
 .sidebar-overlay {
