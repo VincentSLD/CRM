@@ -4976,13 +4976,13 @@ async function submitNewContactFromCR() {
   const mobile = document.getElementById('nco-mobile').value.trim();
   const fonction = document.getElementById('nco-fonction').value.trim();
 
-  const { data, error } = await sb.from('contacts').insert({
-    nom, prenom: prenom || null,
-    email: email || null, telephone: phone || null, mobile: mobile || null,
-    fonction: fonction || null,
-    client_id: clientId, client_name: clientName,
-    created_at: new Date().toISOString()
-  }).select();
+  const contactData = { nom, client_id: clientId };
+  if (prenom) contactData.prenom = prenom;
+  if (email) contactData.email = email;
+  if (phone) contactData.telephone = phone;
+  if (mobile) contactData.mobile = mobile;
+  if (fonction) contactData.fonction = fonction;
+  const { data, error } = await sb.from('contacts').insert(contactData).select();
 
   if (error) { toast('Erreur: '+error.message,'error'); return; }
   toast('Contact créé','success');
