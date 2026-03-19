@@ -4982,9 +4982,10 @@ async function submitNewContactFromCR() {
   if (phone) contactData.telephone = phone;
   if (mobile) contactData.mobile = mobile;
   if (fonction) contactData.fonction = fonction;
+  console.log('[CR] Insert contact:', contactData);
   const { data, error } = await sb.from('contacts').insert(contactData).select();
 
-  if (error) { toast('Erreur: '+error.message,'error'); return; }
+  if (error) { toast('Erreur: '+error.message,'error'); console.error('[CR] Contact insert error:', error); return; }
   toast('Contact créé','success');
   closeModal('new-contact');
 
