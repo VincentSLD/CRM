@@ -1710,48 +1710,7 @@ tbody tr:last-child td { border-bottom: none; }
 </main>
 
 <!-- ═══ MODAL: SEND REPORT ═══ -->
-<div class="modal-overlay" id="modal-send">
-  <div class="modal" style="max-width:600px">
-    <div class="modal-head">
-      <h3>Envoyer le compte-rendu</h3>
-      <button class="modal-close" onclick="closeModal('send')">×</button>
-    </div>
-    <div class="modal-body">
-      <div class="fg">
-        <label class="fl">Objet</label>
-        <input class="fi" placeholder="CR Réunion — Client" id="sendSubject">
-      </div>
-      <div class="fg">
-        <label class="fl">Destinataires</label>
-        <div style="position:relative">
-          <input class="fi" id="sendRecipientSearch" placeholder="Rechercher un contact par nom ou email..." autocomplete="off"
-            oninput="searchSendRecipients(this.value)" onfocus="searchSendRecipients(this.value)">
-          <div id="sendRecipientDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
-        </div>
-        <div class="chips" style="margin-top:8px" id="sendRecipientChips"></div>
-      </div>
-      <div class="fg">
-        <label class="fl">Message</label>
-        <textarea class="ft" id="sendMessage" rows="6">Bonjour,
-
-Veuillez trouver ci-dessous le compte-rendu de notre échange.
-
-Cordialement,</textarea>
-      </div>
-      <div class="fg">
-        <label class="fl">Contenu joint</label>
-        <div style="display:flex;gap:14px;flex-wrap:wrap">
-          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;color:var(--t2)"><input type="checkbox" id="sendOptFull" checked> CR complet</label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;color:var(--t2)"><input type="checkbox" id="sendOptCopy"> Copie à moi</label>
-        </div>
-      </div>
-    </div>
-    <div class="modal-foot">
-      <button class="btn" onclick="closeModal('send')">Annuler</button>
-      <button class="btn btn-primary" onclick="sendReport()">Envoyer</button>
-    </div>
-  </div>
-</div>
+<!-- Modal envoi supprimée — remplacée par vue pleine page -->
 
 <!-- ═══ MODAL: GENERATE PROPOSAL ═══ -->
 <div class="modal-overlay" id="modal-proposal">
@@ -4521,6 +4480,7 @@ let crFilterAuteur = '__mine__'; // '__mine__' = mes CR, '__all__' = tous, ou un
 let crViewMode = 'list'; // 'list' ou 'detail'
 
 function renderCR() {
+  if (crViewMode === 'send') return renderCRSend();
   if (crViewMode === 'detail') return renderCRDetail();
   return renderCRList();
 }
@@ -4610,6 +4570,73 @@ function backToCRList() {
   currentReport = null;
   crAttachments = [];
   renderPage('cr');
+}
+
+// Données d'envoi conservées entre les vues
+let _sendData = { titre: '', clientName: '', contactId: '', contactName: '', clientId: '' };
+
+function renderCRSend() {
+  return `
+  <div style="margin-bottom:16px">
+    <a href="#" onclick="backFromSend();return false" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--accent);text-decoration:none;font-weight:500">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+      Retour au compte-rendu
+    </a>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Envoyer le compte-rendu</div>
+    </div>
+    <div class="card-body">
+      <div class="fg">
+        <label class="fl">Objet</label>
+        <input class="fi" placeholder="CR Réunion — Client" id="sendSubject">
+      </div>
+      <div class="fg">
+        <label class="fl">Destinataires</label>
+        <div style="position:relative">
+          <input class="fi" id="sendRecipientSearch" placeholder="Rechercher un contact par nom ou email..." autocomplete="off"
+            oninput="searchSendRecipients(this.value)" onfocus="searchSendRecipients(this.value)">
+          <div id="sendRecipientDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
+        </div>
+        <div class="chips" style="margin-top:8px" id="sendRecipientChips"></div>
+      </div>
+      <div class="fg">
+        <label class="fl">Message complémentaire au CR</label>
+        <textarea class="fi" id="sendMessage" rows="4" style="resize:vertical" placeholder="Ajouter un message complémentaire (facultatif)..."></textarea>
+      </div>
+      <div class="fg">
+        <label class="fl">Contenu joint</label>
+        <div style="display:flex;gap:14px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;color:var(--t2)"><input type="checkbox" id="sendOptFull" checked> CR complet</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;color:var(--t2)"><input type="checkbox" id="sendOptPJ" checked> Avec Pièces jointes</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;color:var(--t2)"><input type="checkbox" id="sendOptCopy"> Copie à moi</label>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn" onclick="backFromSend()">Annuler</button>
+        <button class="btn btn-primary" onclick="sendReport()">Envoyer</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function backFromSend() {
+  crViewMode = 'detail';
+  renderPage('cr');
+  // Re-remplir les champs client/contact après le render
+  if (currentReport) {
+    setTimeout(() => {
+      const cs = document.getElementById('crClientSearch');
+      if (cs) cs.value = currentReport.client || '';
+      const ci = document.getElementById('crClientId');
+      if (ci) ci.value = currentReport.client_id || '';
+      const co = document.getElementById('crContactSearch');
+      if (co) { co.value = currentReport.contact_name || ''; co.disabled = !currentReport.client_id; co.style.opacity = currentReport.client_id ? '1' : '0.5'; }
+      const coi = document.getElementById('crContactId');
+      if (coi) coi.value = currentReport.contact_id || '';
+    }, 50);
+  }
 }
 
 function initEditor() {}
@@ -5520,27 +5547,25 @@ let sendSearchTimeout = null;
 function openSendModal() {
   const body = document.getElementById('editorBody');
   if (!body || !body.innerText.trim()) { toast('Écrivez du contenu avant d\'envoyer','error'); return; }
-  // Récupérer les infos depuis le formulaire CR avant de fermer la modale
-  const titre = document.getElementById('crTitre')?.value || '';
-  const clientName = document.getElementById('crClientSearch')?.value || '';
-  const contactId = document.getElementById('crContactId')?.value;
-  const contactName = document.getElementById('crContactSearch')?.value;
-  const clientId = document.getElementById('crClientId')?.value;
-  // Fermer la modale CR
-  closeCRModal();
-  // Ouvrir la modale Envoi
+  // Récupérer les infos depuis le formulaire CR
+  _sendData.titre = document.getElementById('crTitre')?.value || '';
+  _sendData.clientName = document.getElementById('crClientSearch')?.value || '';
+  _sendData.contactId = document.getElementById('crContactId')?.value || '';
+  _sendData.contactName = document.getElementById('crContactSearch')?.value || '';
+  _sendData.clientId = document.getElementById('crClientId')?.value || '';
+  // Passer en vue envoi
   sendRecipients = [];
-  const el = document.getElementById('modal-send');
-  if (el) el.classList.add('active');
+  crViewMode = 'send';
+  renderPage('cr');
   setTimeout(() => {
     const subj = document.getElementById('sendSubject');
-    if (subj) subj.value = titre || 'Compte-rendu' + (clientName ? ' — ' + clientName : '');
+    if (subj) subj.value = _sendData.titre || 'Compte-rendu' + (_sendData.clientName ? ' — ' + _sendData.clientName : '');
     const chips = document.getElementById('sendRecipientChips');
     if (chips) chips.innerHTML = '';
-    if (contactId && contactName) {
-      const cached = crContactsCache[clientId] || [];
-      const contact = cached.find(c => c.id == contactId);
-      addSendRecipient(contactId, contactName, contact?.email || '');
+    if (_sendData.contactId && _sendData.contactName) {
+      const cached = crContactsCache[_sendData.clientId] || [];
+      const contact = cached.find(c => c.id == _sendData.contactId);
+      addSendRecipient(_sendData.contactId, _sendData.contactName, contact?.email || '');
     }
   }, 50);
 }
@@ -5647,11 +5672,11 @@ async function sendReport() {
     window.open(mailto, '_blank');
   }
 
-  closeModal('send');
-  envoisCache = null; // Forcer le rechargement
+  envoisCache = null;
   toast('Envoi enregistré' + (emails.length ? ' — Client mail ouvert' : ' — Aucun email disponible'), emails.length ? 'success' : 'warning');
   await loadDB();
-  renderPage(currentPage);
+  crViewMode = 'list';
+  renderPage('cr');
 }
 
 // ═══ FORM SUBMISSIONS ═══
