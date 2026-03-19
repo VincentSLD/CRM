@@ -1146,6 +1146,8 @@ tbody tr:last-child td { border-bottom: none; }
   animation: modalIn 0.3s var(--ease);
 }
 
+@keyframes spin { to { transform: rotate(360deg); } }
+
 @keyframes modalIn {
   from { opacity:0; transform:scale(0.96) translateY(8px); }
   to { opacity:1; transform:scale(1) translateY(0); }
@@ -5238,47 +5240,70 @@ function toggleDictation() {
 }
 
 // ═══ AI ASSIST ═══
-function aiAssist(action) {
+async function aiAssist(action) {
   const editor = document.getElementById('editorBody');
-  if(action !== 'preprdv' && (!editor||!editor.innerText.trim())) { toast('Écrivez d\'abord du contenu','error'); return; }
-  document.getElementById('editorStatus').textContent='✦ IA en traitement...';
-  setTimeout(() => {
-    if (action === 'preprdv') {
-      const clientName = document.getElementById('crClientSearch')?.value || 'le client';
-      const prepHtml = `<strong>Préparation RDV — ${clientName}</strong><br><br>`
-        + `<strong>1. Pourquoi je suis là ? Motif commercial valable ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
-        + `<strong>2. Qu'est-ce que je veux savoir ? Informations à obtenir ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
-        + `<strong>3. Qu'est-ce que je veux échanger comme informations ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
-        + `<strong>4. Quelles sont les objections possibles ? Doutes ou incertitudes ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
-        + `<strong>5. Quels sont mes différenciateurs clés ? Et mes faiblesses "critiques" ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
-        + `<strong>6. Quels engagements d'actions prendre à la fin de l'entretien ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span>`;
-      document.getElementById('aiArea').innerHTML = `<div class="ai-box">
-        <div class="ai-box-head">✦ Trame de préparation RDV</div>
-        <div class="ai-box-text">${prepHtml}</div>
-        <div class="ai-box-actions">
-          <button class="btn btn-primary" style="font-size:11px" onclick="acceptAI()">Insérer dans le CR</button>
-          <button class="btn" style="font-size:11px" onclick="document.getElementById('aiArea').innerHTML=''">Ignorer</button>
-        </div>
-      </div>`;
-      document.getElementById('editorStatus').textContent='Prêt';
-      return;
+  const aiArea = document.getElementById('aiArea');
+  const status = document.getElementById('editorStatus');
+
+  // Préparer RDV : pas besoin de contenu
+  if (action === 'preprdv') {
+    const clientName = document.getElementById('crClientSearch')?.value || 'le client';
+    const prepHtml = `<strong>Préparation RDV — ${clientName}</strong><br><br>`
+      + `<strong>1. Pourquoi je suis là ? Motif commercial valable ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
+      + `<strong>2. Qu'est-ce que je veux savoir ? Informations à obtenir ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
+      + `<strong>3. Qu'est-ce que je veux échanger comme informations ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
+      + `<strong>4. Quelles sont les objections possibles ? Doutes ou incertitudes ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
+      + `<strong>5. Quels sont mes différenciateurs clés ? Et mes faiblesses "critiques" ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
+      + `<strong>6. Quels engagements d'actions prendre à la fin de l'entretien ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span>`;
+    aiArea.innerHTML = `<div class="ai-box">
+      <div class="ai-box-head">✦ Trame de préparation RDV</div>
+      <div class="ai-box-text">${prepHtml}</div>
+      <div class="ai-box-actions">
+        <button class="btn btn-primary" style="font-size:11px" onclick="acceptAI()">Insérer dans le CR</button>
+        <button class="btn" style="font-size:11px" onclick="document.getElementById('aiArea').innerHTML=''">Ignorer</button>
+      </div>
+    </div>`;
+    return;
+  }
+
+  // Pour les autres actions, il faut du contenu
+  if (!editor || !editor.innerText.trim()) { toast('Écrivez d\'abord du contenu','error'); return; }
+
+  const labels = { rewrite: 'Reformulation', summarize: 'Synthèse', complete: 'Complément' };
+  status.textContent = '✦ IA en traitement...';
+  aiArea.innerHTML = `<div class="ai-box"><div class="ai-box-head">✦ ${labels[action] || 'IA'} en cours...</div><div class="ai-box-text" style="text-align:center;padding:20px;color:var(--t3)"><div style="display:inline-block;width:20px;height:20px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></div><br>Analyse du contenu...</div></div>`;
+
+  try {
+    const clientName = document.getElementById('crClientSearch')?.value || '';
+    const text = editor.innerText.trim();
+
+    const resp = await fetch('/api/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, text, clientName })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || 'Erreur API IA');
     }
-    const suggestions = {
-      rewrite:'<strong>Reformulation :</strong><br>Suite à notre échange, plusieurs axes stratégiques ont été identifiés. Les prochaines étapes incluent la finalisation du planning et la validation des ressources. Un point de suivi consolidera les avancées.',
-      summarize:'<strong>Synthèse IA :</strong><br>• Réunion de suivi avec validation des jalons Q2<br>• Budget complémentaire approuvé<br>• Tests UAT planifiés semaine 12<br>• Action : envoyer planning mis à jour',
-      complete:'<strong>Complément suggéré :</strong><br>En conclusion, les deux parties s\'accordent sur la nécessité d\'accélérer la phase de tests. Un comité de pilotage exceptionnel sera organisé la semaine prochaine pour valider le plan d\'action révisé.'
-    };
-    document.getElementById('aiArea').innerHTML = `<div class="ai-box">
-      <div class="ai-box-head">✦ Suggestion IA</div>
-      <div class="ai-box-text">${suggestions[action]}</div>
+
+    const { result } = await resp.json();
+    aiArea.innerHTML = `<div class="ai-box">
+      <div class="ai-box-head">✦ ${labels[action] || 'Suggestion IA'}</div>
+      <div class="ai-box-text">${result}</div>
       <div class="ai-box-actions">
         <button class="btn btn-primary" style="font-size:11px" onclick="acceptAI()">Accepter</button>
         <button class="btn" style="font-size:11px" onclick="document.getElementById('aiArea').innerHTML=''">Ignorer</button>
         <button class="btn" style="font-size:11px" onclick="aiAssist('${action}')">Régénérer</button>
       </div>
     </div>`;
-    document.getElementById('editorStatus').textContent='Prêt';
-  }, 1000);
+  } catch (e) {
+    console.error('AI error:', e);
+    aiArea.innerHTML = `<div class="ai-box"><div class="ai-box-head" style="color:var(--red)">Erreur IA</div><div class="ai-box-text">${e.message}</div><div class="ai-box-actions"><button class="btn" style="font-size:11px" onclick="document.getElementById('aiArea').innerHTML=''">Fermer</button><button class="btn" style="font-size:11px" onclick="aiAssist('${action}')">Réessayer</button></div></div>`;
+  } finally {
+    status.textContent = 'Prêt';
+  }
 }
 
 function acceptAI() {
