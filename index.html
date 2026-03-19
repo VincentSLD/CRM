@@ -5962,7 +5962,8 @@ async function sendReport() {
 
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      throw new Error(err.error || err.details || 'Erreur envoi');
+      console.error('[sendReport] API error:', resp.status, err);
+      throw new Error(err.details || err.error || 'Erreur envoi');
     }
 
     // Enregistrer l'envoi dans Supabase
