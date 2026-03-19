@@ -4480,8 +4480,8 @@ function renderObjectifs() {
 
 // ═══ COMPTES RENDUS ═══
 function crTypeBadge(type) {
-  const map = {reunion:'#4f8ff7',appel:'#f59e0b',visite:'#10b981',email:'#8b5cf6',autre:'#94a3b8'};
-  const labels = {reunion:'Réunion',appel:'Appel',visite:'Visite',email:'Email',autre:'Autre'};
+  const map = {rdv_ext:'#4f8ff7',rdv_int:'#6366f1',salon_foire:'#f59e0b',tel:'#10b981',visio:'#8b5cf6',autre:'#94a3b8'};
+  const labels = {rdv_ext:'RDV EXT.',rdv_int:'RDV INT.',salon_foire:'SALON-FOIRE',tel:'TEL.',visio:'VISIO.',autre:'AUTRE'};
   return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;color:#fff;background:${map[type]||map.autre}">${labels[type]||type||'Autre'}</span>`;
 }
 function crStatutBadge(s) {
@@ -4520,15 +4520,16 @@ function renderCR() {
         <div style="flex:1;min-width:130px">
           <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Type</label>
           <select id="crType" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)">
-            <option value="reunion" ${currentReport?.type_cr==='reunion'?'selected':''}>Réunion</option>
-            <option value="appel" ${currentReport?.type_cr==='appel'?'selected':''}>Appel</option>
-            <option value="visite" ${currentReport?.type_cr==='visite'?'selected':''}>Visite</option>
-            <option value="email" ${currentReport?.type_cr==='email'?'selected':''}>Email</option>
-            <option value="autre" ${currentReport?.type_cr==='autre'?'selected':''}>Autre</option>
+            <option value="rdv_ext" ${currentReport?.type_cr==='rdv_ext'?'selected':''}>RDV EXT.</option>
+            <option value="rdv_int" ${currentReport?.type_cr==='rdv_int'?'selected':''}>RDV INT.</option>
+            <option value="salon_foire" ${currentReport?.type_cr==='salon_foire'?'selected':''}>SALON-FOIRE</option>
+            <option value="tel" ${currentReport?.type_cr==='tel'?'selected':''}>TEL.</option>
+            <option value="visio" ${currentReport?.type_cr==='visio'?'selected':''}>VISIO.</option>
+            <option value="autre" ${currentReport?.type_cr==='autre'?'selected':''}>AUTRE</option>
           </select>
         </div>
         <div style="flex:1;min-width:130px">
-          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Date</label>
+          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Date RDV</label>
           <input type="date" id="crDate" value="${currentReport ? (currentReport.date_raw||'').substring(0,10) : today}"
             style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
         </div>
@@ -4776,7 +4777,7 @@ async function saveReport() {
   const contactId = document.getElementById('crContactId')?.value || '';
   const contactName = document.getElementById('crContactSearch')?.value || '';
   const titre = document.getElementById('crTitre')?.value.trim() || body.innerText.trim().substring(0, 60);
-  const typeCr = document.getElementById('crType')?.value || 'reunion';
+  const typeCr = document.getElementById('crType')?.value || 'rdv_ext';
   const dateCr = document.getElementById('crDate')?.value || new Date().toISOString().split('T')[0];
 
   const redacteurId = document.getElementById('crRedacteur')?.value || currentCommercial?.id || null;
