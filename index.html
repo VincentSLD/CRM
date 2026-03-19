@@ -5000,7 +5000,7 @@ async function removeCRAttachment(idx) {
   toast('Pièce jointe supprimée','success');
 }
 
-async function saveReport() {
+async function saveReport(silent) {
   const body = document.getElementById('editorBody');
   const titre = document.getElementById('crTitre')?.value.trim() || '';
   const typeCr = document.getElementById('crType')?.value || '';
@@ -5016,7 +5016,7 @@ async function saveReport() {
   if (!dateCr) missing.push('Date RDV');
   if (!redacteurId) missing.push('Rédacteur');
   if (!clientId) missing.push('Client');
-  if (missing.length) { toast('Champs obligatoires manquants : ' + missing.join(', '), 'error'); return; }
+  if (missing.length) { toast('Champs obligatoires manquants : ' + missing.join(', '), 'error'); return false; }
 
   const contactId = document.getElementById('crContactId')?.value || '';
   const contactName = document.getElementById('crContactSearch')?.value || '';
@@ -5038,22 +5038,25 @@ async function saveReport() {
   };
 
   if (currentReport) {
-    // Mise à jour
     const { error } = await sb.from('reports').update(reportData).eq('id', currentReport.id);
-    if (error) { toast('Erreur: '+error.message, 'error'); console.error('Update report error:', error); return; }
-    toast('Compte-rendu mis à jour', 'success');
+    if (error) { toast('Erreur: '+error.message, 'error'); return false; }
+    // Mettre à jour currentReport avec les nouvelles données
+    Object.assign(currentReport, reportData, { client: clientName, contact_name: contactName });
+    if (!silent) toast('Compte-rendu mis à jour', 'success');
   } else {
-    // Création
     reportData.statut_cr = 'brouillon';
     const { data, error } = await sb.from('reports').insert(reportData).select();
-    if (error) { toast('Erreur: '+error.message, 'error'); console.error('Insert report error:', error); return; }
-    toast('Compte-rendu enregistré', 'success');
-    if (data && data[0]) currentReport = data[0];
+    if (error) { toast('Erreur: '+error.message, 'error'); return false; }
+    if (!silent) toast('Compte-rendu enregistré', 'success');
+    if (data && data[0]) currentReport = { ...data[0], client: clientName, contact_name: contactName };
   }
-  await loadDB();
-  closeCRModal(); // ferme la modale si nouveau CR
-  crViewMode = 'list';
-  renderPage('cr');
+  if (!silent) {
+    await loadDB();
+    closeCRModal();
+    crViewMode = 'list';
+    renderPage('cr');
+  }
+  return true;
 }
 
 // ═══ ENVOIS ═══
@@ -5752,15 +5755,18 @@ function closeModal(id) { const el=document.getElementById('modal-'+id); if(el) 
 let sendRecipients = []; // [{id, name, email}]
 let sendSearchTimeout = null;
 
-function openSendModal() {
+async function openSendModal() {
   const body = document.getElementById('editorBody');
   if (!body || !body.innerText.trim()) { toast('Écrivez du contenu avant d\'envoyer','error'); return; }
-  // Récupérer les infos depuis le formulaire CR
-  _sendData.titre = document.getElementById('crTitre')?.value || '';
-  _sendData.clientName = document.getElementById('crClientSearch')?.value || '';
-  _sendData.contactId = document.getElementById('crContactId')?.value || '';
-  _sendData.contactName = document.getElementById('crContactSearch')?.value || '';
-  _sendData.clientId = document.getElementById('crClientId')?.value || '';
+  // Sauvegarder le CR avant de passer en vue envoi
+  const saved = await saveReport(true);
+  if (!saved) return;
+  // Récupérer les infos depuis currentReport (sauvegardé)
+  _sendData.titre = currentReport?.titre || '';
+  _sendData.clientName = currentReport?.client || '';
+  _sendData.contactId = currentReport?.contact_id || '';
+  _sendData.contactName = currentReport?.contact_name || '';
+  _sendData.clientId = currentReport?.client_id || '';
   // Passer en vue envoi
   sendRecipients = [];
   crViewMode = 'send';
@@ -5836,18 +5842,14 @@ document.addEventListener('click', e => {
 });
 
 async function sendReport() {
-  if (!sendRecipients.length) { toast('Ajoutez au moins un destinataire','error'); return; }
+  console.log('[sendReport] sendRecipients:', sendRecipients.length, sendRecipients);
+  if (!sendRecipients || !sendRecipients.length) { toast('Ajoutez au moins un destinataire','error'); return; }
   const subject = document.getElementById('sendSubject')?.value || 'Compte-rendu';
   const message = document.getElementById('sendMessage')?.value || '';
-  const body = document.getElementById('editorBody');
-  const contenu = body ? body.innerHTML : '';
+  // Récupérer le contenu depuis currentReport (le CR a été sauvegardé avant de passer en vue envoi)
+  const contenu = currentReport?.contenu || currentReport?.text || '';
   const includeFull = document.getElementById('sendOptFull')?.checked;
   const copyToMe = document.getElementById('sendOptCopy')?.checked;
-
-  // Sauvegarder le CR s'il n'est pas encore sauvegardé
-  if (!currentReport) {
-    await saveReport();
-  }
 
   // Préparer les emails
   const emails = sendRecipients.filter(r => r.email).map(r => r.email);
@@ -5873,7 +5875,9 @@ async function sendReport() {
 
   // Ouvrir le client mail avec mailto:
   if (emails.length > 0) {
-    const bodyText = message + (includeFull ? '\n\n---\n\n' + (body ? body.innerText : '') : '');
+    // Extraire le texte brut du contenu HTML du CR
+    const tmp = document.createElement('div'); tmp.innerHTML = contenu; const plainText = tmp.innerText || tmp.textContent || '';
+    const bodyText = message + (includeFull ? '\n\n---\n\n' + plainText : '');
     const mailto = 'mailto:' + emails.join(',') +
       '?subject=' + encodeURIComponent(subject) +
       '&body=' + encodeURIComponent(bodyText) +
