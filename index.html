@@ -4976,7 +4976,8 @@ async function submitNewContactFromCR() {
   const mobile = document.getElementById('nco-mobile').value.trim();
   const fonction = document.getElementById('nco-fonction').value.trim();
 
-  const contactData = { nom, client_id: clientId };
+  const contactId2 = crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + '_' + Math.random().toString(36).substr(2,9));
+  const contactData = { id: contactId2, nom, client_id: clientId };
   if (prenom) contactData.prenom = prenom;
   if (email) contactData.email = email;
   if (phone) contactData.telephone = phone;
