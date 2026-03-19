@@ -5848,43 +5848,66 @@ async function sendReport() {
   const contenu = currentReport?.contenu || currentReport?.text || '';
   const includeFull = document.getElementById('sendOptFull')?.checked;
   const copyToMe = document.getElementById('sendOptCopy')?.checked;
-  const destNames = sendRecipients.map(r => r.name);
 
-  // Enregistrer l'envoi dans Supabase
-  const envoi = {
-    report_id: currentReport?.id || null,
-    objet: subject,
-    message: message,
-    destinataires: JSON.stringify(emails),
-    nb_destinataires: emails.length,
-    contenu: includeFull ? contenu : '',
-    date_envoi: new Date().toISOString()
-  };
-  const { error } = await sb.from('envois').insert(envoi);
-  if (error) { console.error('Envoi save error:', error); }
-
-  // Mettre à jour le statut du CR
-  if (currentReport) {
-    await sb.from('reports').update({ statut_cr: 'envoye', updated_at: new Date().toISOString() }).eq('id', currentReport.id);
+  // Construire le HTML de l'email
+  const senderName = currentCommercial?.nom || 'CRM';
+  const senderEmail = currentCommercial?.email || '';
+  let htmlBody = '';
+  if (message) htmlBody += `<p>${message.replace(/\n/g, '<br>')}</p>`;
+  if (includeFull && contenu) {
+    htmlBody += '<hr style="border:none;border-top:1px solid #ddd;margin:20px 0">';
+    htmlBody += `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6">${contenu}</div>`;
   }
+  htmlBody += `<br><p style="color:#888;font-size:12px">Envoyé depuis le CRM par ${senderName}</p>`;
 
-  // Ouvrir le client mail avec mailto:
-  if (emails.length > 0) {
-    // Extraire le texte brut du contenu HTML du CR
-    const tmp = document.createElement('div'); tmp.innerHTML = contenu; const plainText = tmp.innerText || tmp.textContent || '';
-    const bodyText = message + (includeFull ? '\n\n---\n\n' + plainText : '');
-    const mailto = 'mailto:' + emails.join(',') +
-      '?subject=' + encodeURIComponent(subject) +
-      '&body=' + encodeURIComponent(bodyText) +
-      (copyToMe && currentCommercial?.email ? '&cc=' + encodeURIComponent(currentCommercial.email) : '');
-    window.open(mailto, '_blank');
+  // Envoyer via l'API
+  toast('Envoi en cours...','info');
+  try {
+    const resp = await fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: emails,
+        subject,
+        html: htmlBody,
+        from_name: senderName,
+        from_email: senderEmail,
+        reply_to: senderEmail,
+        cc: copyToMe && senderEmail ? [senderEmail] : undefined
+      })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || err.details || 'Erreur envoi');
+    }
+
+    // Enregistrer l'envoi dans Supabase
+    const envoi = {
+      report_id: currentReport?.id || null,
+      objet: subject,
+      message: message,
+      destinataires: JSON.stringify(emails),
+      nb_destinataires: emails.length,
+      contenu: includeFull ? contenu : '',
+      date_envoi: new Date().toISOString()
+    };
+    await sb.from('envois').insert(envoi);
+
+    // Mettre à jour le statut du CR
+    if (currentReport) {
+      await sb.from('reports').update({ statut_cr: 'envoye', updated_at: new Date().toISOString() }).eq('id', currentReport.id);
+    }
+
+    envoisCache = null;
+    toast('Email envoyé à ' + emails.length + ' destinataire(s)','success');
+    await loadDB();
+    crViewMode = 'list';
+    renderPage('cr');
+  } catch (e) {
+    console.error('Send error:', e);
+    toast('Erreur envoi : ' + e.message, 'error');
   }
-
-  envoisCache = null;
-  toast('Envoi enregistré' + (emails.length ? ' — Client mail ouvert' : ' — Aucun email disponible'), emails.length ? 'success' : 'warning');
-  await loadDB();
-  crViewMode = 'list';
-  renderPage('cr');
 }
 
 // ═══ FORM SUBMISSIONS ═══
