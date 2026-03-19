@@ -2717,6 +2717,7 @@ let currentReport = null;
 
 function go(page) {
   currentPage = page;
+  if (page === 'cr') { crViewMode = 'list'; currentReport = null; }
   const navPage = page === 'client-detail' ? 'clients' : page === 'contact-detail' ? 'contacts' : page === 'marche-detail' ? 'marches' : page === 'affaire-detail' ? 'marches' : page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
   const titles = {dashboard:'Tableau de bord',clients:'Clients',contacts:'Contacts',pipeline:'Pipeline commercial',carte:'Carte clients',
@@ -4501,8 +4502,14 @@ function crStatutBadge(s) {
   return '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;color:var(--t3);background:var(--bg-1)">Brouillon</span>';
 }
 let crFilterAuteur = '__mine__'; // '__mine__' = mes CR, '__all__' = tous, ou un id commercial
+let crViewMode = 'list'; // 'list' ou 'detail'
 
 function renderCR() {
+  if (crViewMode === 'detail' && currentReport) return renderCRDetail();
+  return renderCRList();
+}
+
+function renderCRList() {
   const myId = currentCommercial?.id || '';
   let filteredReports = DB.reports;
   if (crFilterAuteur === '__mine__') {
@@ -4510,7 +4517,6 @@ function renderCR() {
   } else if (crFilterAuteur !== '__all__') {
     filteredReports = DB.reports.filter(r => r.redacteur_id == crFilterAuteur);
   }
-  // Tri par date RDV décroissante
   filteredReports.sort((a,b) => (b.date_raw||'').localeCompare(a.date_raw||''));
 
   return `
@@ -4549,7 +4555,7 @@ function renderCR() {
             const nbPj = r.pieces_jointes ? r.pieces_jointes.length : 0;
             return `<tr style="border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s"
               onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
-              onclick="openCRModal(${r.id})">
+              onclick="openCRDetail(${r.id})">
               <td style="padding:10px 14px;white-space:nowrap;font-weight:500">${dateRdv}</td>
               <td style="padding:10px 14px;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">${r.titre||'Sans titre'}${nbPj ? ' <span style="color:var(--t3);font-weight:400" title="'+nbPj+' pièce(s) jointe(s)">📎'+nbPj+'</span>' : ''}</td>
               <td style="padding:10px 14px;white-space:nowrap">${r.client||'—'}</td>
@@ -4565,12 +4571,37 @@ function renderCR() {
   </div>`;
 }
 
+function renderCRDetail() {
+  const r = currentReport;
+  if (!r) return renderCRList();
+  return `
+  <div style="margin-bottom:16px">
+    <a href="#" onclick="backToCRList();return false" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--accent);text-decoration:none;font-weight:500">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+      Retour aux comptes-rendus
+    </a>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Modifier le compte-rendu</div>
+      <span style="font-size:11px;color:var(--t3)">ID: ${r.id}</span>
+    </div>
+    ${getCREditorHTML(r)}
+  </div>`;
+}
+
+function backToCRList() {
+  crViewMode = 'list';
+  currentReport = null;
+  crAttachments = [];
+  renderPage('cr');
+}
+
 function initEditor() {}
 
-function getCRModalHTML(report) {
+function getCREditorHTML(r) {
   const today = new Date().toISOString().split('T')[0];
   const myId = currentCommercial?.id || '';
-  const r = report;
   return `
     <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:10px">
       <div style="flex:2;min-width:200px">
@@ -4666,39 +4697,41 @@ function getCRModalHTML(report) {
     </div>`;
 }
 
-async function openCRModal(reportId) {
-  if (reportId) {
-    // Charger le CR complet depuis Supabase
-    const { data } = await sb.from('reports').select('*').eq('id', reportId).single();
-    if (!data) { toast('CR introuvable','error'); return; }
-    currentReport = { ...data, client: data.client_name, text: data.contenu || '', date_raw: data.date, date: timeAgo(data.date), titre: data.titre };
-    crAttachments = currentReport.pieces_jointes || [];
-  } else {
-    currentReport = null;
-    crAttachments = [];
-  }
+async function openCRDetail(reportId) {
+  // Charger le CR complet depuis Supabase
+  const { data } = await sb.from('reports').select('*').eq('id', reportId).single();
+  if (!data) { toast('CR introuvable','error'); return; }
+  currentReport = { ...data, client: data.client_name, text: data.contenu || '', date_raw: data.date, date: timeAgo(data.date), titre: data.titre };
+  crAttachments = currentReport.pieces_jointes || [];
+  crViewMode = 'detail';
+  renderPage('cr');
+  // Remplir client/contact après render
+  setTimeout(() => {
+    const cs = document.getElementById('crClientSearch');
+    if (cs) cs.value = currentReport.client || '';
+    const ci = document.getElementById('crClientId');
+    if (ci) ci.value = currentReport.client_id || '';
+    const co = document.getElementById('crContactSearch');
+    if (co) { co.value = currentReport.contact_name || ''; co.disabled = !currentReport.client_id; co.style.opacity = currentReport.client_id ? '1' : '0.5'; }
+    const coi = document.getElementById('crContactId');
+    if (coi) coi.value = currentReport.contact_id || '';
+  }, 50);
+}
+
+// Modal uniquement pour Nouveau CR
+async function openCRModal() {
+  currentReport = null;
+  crAttachments = [];
   const el = document.getElementById('modal-cr');
-  document.getElementById('crModalTitle').textContent = currentReport ? 'Modifier le compte-rendu' : 'Nouveau compte-rendu';
-  document.getElementById('crModalBody').innerHTML = getCRModalHTML(currentReport);
+  document.getElementById('crModalTitle').textContent = 'Nouveau compte-rendu';
+  document.getElementById('crModalBody').innerHTML = getCREditorHTML(null);
   el.classList.add('active');
-  // Remplir client/contact si édition
-  if (currentReport) {
-    setTimeout(() => {
-      const cs = document.getElementById('crClientSearch');
-      if (cs) cs.value = currentReport.client || '';
-      const ci = document.getElementById('crClientId');
-      if (ci) ci.value = currentReport.client_id || '';
-      const co = document.getElementById('crContactSearch');
-      if (co) { co.value = currentReport.contact_name || ''; co.disabled = !currentReport.client_id; co.style.opacity = currentReport.client_id ? '1' : '0.5'; }
-      const coi = document.getElementById('crContactId');
-      if (coi) coi.value = currentReport.contact_id || '';
-    }, 50);
-  }
 }
 function clearEditor() {
   currentReport = null;
   crAttachments = [];
   _crPrefill = null;
+  crViewMode = 'list';
   closeCRModal();
   renderPage('cr');
 }
@@ -4714,12 +4747,12 @@ function goToCR(clientId, clientName, contactId, contactName) {
   currentReport = null;
   _crPrefill = { clientId, clientName, contactId: contactId || null, contactName: contactName || null };
   go('cr');
-  setTimeout(async () => {
-    await openCRModal(); // ouvre modal vide
-    if (!_crPrefill) return;
-    const p = _crPrefill;
-    _crPrefill = null;
+  setTimeout(() => {
+    openCRModal(); // ouvre modal vide pour nouveau CR
     setTimeout(() => {
+      if (!_crPrefill) return;
+      const p = _crPrefill;
+      _crPrefill = null;
       selectCRClient(p.clientId, p.clientName);
       if (p.contactId && p.contactName) {
         const waitAndSelect = () => selectCRContact(p.contactId, p.contactName);
@@ -4730,7 +4763,7 @@ function goToCR(clientId, clientName, contactId, contactName) {
   }, 100);
 }
 async function loadReport(id) {
-  await openCRModal(id);
+  await openCRDetail(id);
 }
 async function deleteReport() {
   if (!currentReport) return;
@@ -4745,6 +4778,7 @@ async function deleteReport() {
   toast('Compte-rendu supprimé', 'success');
   currentReport = null;
   crAttachments = [];
+  crViewMode = 'list';
   closeCRModal();
   await loadDB();
   renderPage('cr');
@@ -4964,7 +4998,8 @@ async function saveReport() {
     if (data && data[0]) currentReport = data[0];
   }
   await loadDB();
-  closeCRModal();
+  closeCRModal(); // ferme la modale si nouveau CR
+  crViewMode = 'list';
   renderPage('cr');
 }
 
