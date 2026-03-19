@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   if (!subject) return res.status(400).json({ error: 'Missing subject' });
 
   // Domaine d'envoi vérifié dans Resend
-  const SEND_DOMAIN = process.env.RESEND_DOMAIN || 'noreply@novam.fr';
+  const SEND_DOMAIN = process.env.RESEND_DOMAIN || 'noreply@be-gph.fr';
   const fromAddress = `${from_name || 'CRM'} <${SEND_DOMAIN}>`;
 
   try {
