@@ -4602,13 +4602,8 @@ function renderCRSend() {
         </div>
       </div>
       <div class="fg">
-        <label class="fl">Destinataires</label>
-        <div style="position:relative">
-          <input class="fi" id="sendRecipientSearch" placeholder="Rechercher un contact par nom ou email..." autocomplete="off"
-            oninput="searchSendRecipients(this.value)" onfocus="searchSendRecipients(this.value)">
-          <div id="sendRecipientDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
-        </div>
-        <div class="chips" style="margin-top:8px" id="sendRecipientChips"></div>
+        <label class="fl">Destinataires (emails séparés par ; ou ,)</label>
+        <textarea class="fi" id="sendEmails" rows="3" style="resize:vertical;font-size:13px" placeholder="email1@exemple.com; email2@exemple.com"></textarea>
       </div>
       <div class="fg">
         <label class="fl">Message complémentaire au CR</label>
@@ -5349,14 +5344,16 @@ function applyDiffusionGroup(groupId) {
   if (!groupId) return;
   const g = diffusionGroups.find(x => x.id == groupId);
   if (!g || !g.membres) return;
-  // Ajouter tous les membres du groupe aux destinataires
-  g.membres.forEach(m => {
-    if (!sendRecipients.find(r => r.id == m.id)) {
-      sendRecipients.push({ id: m.id, name: m.name, email: m.email });
-    }
-  });
-  renderSendChips();
-  toast(g.membres.length + ' contact(s) ajouté(s) depuis "' + g.nom + '"','success');
+  const textarea = document.getElementById('sendEmails');
+  if (!textarea) return;
+  // Récupérer les emails existants
+  const existing = textarea.value.split(/[;,\s]+/).map(e => e.trim().toLowerCase()).filter(Boolean);
+  // Ajouter les emails du groupe qui ne sont pas déjà présents
+  const newEmails = g.membres.filter(m => m.email && !existing.includes(m.email.toLowerCase())).map(m => m.email);
+  if (newEmails.length) {
+    textarea.value = (textarea.value.trim() ? textarea.value.trim() + '; ' : '') + newEmails.join('; ');
+  }
+  toast(newEmails.length + ' email(s) ajouté(s) depuis "' + g.nom + '"','success');
 }
 
 // Fermer dropdown membres groupe
@@ -5768,19 +5765,20 @@ async function openSendModal() {
   _sendData.contactName = currentReport?.contact_name || '';
   _sendData.clientId = currentReport?.client_id || '';
   // Passer en vue envoi
-  sendRecipients = [];
   crViewMode = 'send';
   renderPage('cr');
   setTimeout(async () => {
     await loadSendGroups();
     const subj = document.getElementById('sendSubject');
     if (subj) subj.value = _sendData.titre || 'Compte-rendu' + (_sendData.clientName ? ' — ' + _sendData.clientName : '');
-    const chips = document.getElementById('sendRecipientChips');
-    if (chips) chips.innerHTML = '';
-    if (_sendData.contactId && _sendData.contactName) {
+    // Pré-remplir l'email du contact sélectionné
+    if (_sendData.contactId) {
       const cached = crContactsCache[_sendData.clientId] || [];
       const contact = cached.find(c => c.id == _sendData.contactId);
-      addSendRecipient(_sendData.contactId, _sendData.contactName, contact?.email || '');
+      if (contact?.email) {
+        const textarea = document.getElementById('sendEmails');
+        if (textarea) textarea.value = contact.email;
+      }
     }
   }, 50);
 }
@@ -5842,17 +5840,14 @@ document.addEventListener('click', e => {
 });
 
 async function sendReport() {
-  console.log('[sendReport] sendRecipients:', sendRecipients.length, sendRecipients);
-  if (!sendRecipients || !sendRecipients.length) { toast('Ajoutez au moins un destinataire','error'); return; }
+  const emailsRaw = document.getElementById('sendEmails')?.value || '';
+  const emails = emailsRaw.split(/[;,\s]+/).map(e => e.trim()).filter(e => e && e.includes('@'));
+  if (!emails.length) { toast('Ajoutez au moins un email destinataire','error'); return; }
   const subject = document.getElementById('sendSubject')?.value || 'Compte-rendu';
   const message = document.getElementById('sendMessage')?.value || '';
-  // Récupérer le contenu depuis currentReport (le CR a été sauvegardé avant de passer en vue envoi)
   const contenu = currentReport?.contenu || currentReport?.text || '';
   const includeFull = document.getElementById('sendOptFull')?.checked;
   const copyToMe = document.getElementById('sendOptCopy')?.checked;
-
-  // Préparer les emails
-  const emails = sendRecipients.filter(r => r.email).map(r => r.email);
   const destNames = sendRecipients.map(r => r.name);
 
   // Enregistrer l'envoi dans Supabase
@@ -5860,8 +5855,8 @@ async function sendReport() {
     report_id: currentReport?.id || null,
     objet: subject,
     message: message,
-    destinataires: JSON.stringify(sendRecipients),
-    nb_destinataires: sendRecipients.length,
+    destinataires: JSON.stringify(emails),
+    nb_destinataires: emails.length,
     contenu: includeFull ? contenu : '',
     date_envoi: new Date().toISOString()
   };
