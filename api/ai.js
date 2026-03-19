@@ -26,6 +26,20 @@ ${text}`,
     complete: `Tu es un assistant commercial. À partir du compte-rendu ci-dessous, propose un complément pertinent : conclusion, prochaines étapes, points de vigilance ou recommandations. Réponds en HTML (utilise <strong>, <br>, <ul><li> si pertinent). Ne répète pas le contenu existant.
 
 Compte-rendu :
+${text}`,
+
+    preprdv: `Tu es un assistant commercial expert. Voici l'historique des comptes-rendus précédents avec le client ${clientName || ''}.
+
+Analyse cet historique et produis un résumé structuré pour préparer le prochain RDV. Inclus :
+- Les sujets principaux abordés lors des échanges précédents
+- Les décisions prises et engagements en cours
+- Les points en attente ou non résolus
+- Les opportunités identifiées
+- Les éventuels risques ou points de vigilance
+
+Réponds en HTML structuré (utilise <strong>, <br>, <ul><li>). Sois concis et orienté action.
+
+Historique des CR :
 ${text}`
   };
 

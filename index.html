@@ -5245,10 +5245,62 @@ async function aiAssist(action) {
   const aiArea = document.getElementById('aiArea');
   const status = document.getElementById('editorStatus');
 
-  // Préparer RDV : pas besoin de contenu
+  // Préparer RDV : trame + résumé IA des anciens CR client
   if (action === 'preprdv') {
     const clientName = document.getElementById('crClientSearch')?.value || 'le client';
+    const clientId = document.getElementById('crClientId')?.value || '';
+
+    // Afficher spinner
+    status.textContent = '✦ Préparation en cours...';
+    aiArea.innerHTML = `<div class="ai-box"><div class="ai-box-head">✦ Préparation RDV en cours...</div><div class="ai-box-text" style="text-align:center;padding:20px;color:var(--t3)"><div style="display:inline-block;width:20px;height:20px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></div><br>Recherche des anciens CR avec ${clientName}...</div></div>`;
+
+    // Charger les anciens CR de ce client
+    let historiqueHtml = '';
+    if (clientId) {
+      try {
+        const { data: oldCRs } = await sb.from('reports').select('titre,contenu,date,type_cr')
+          .eq('client_id', clientId).order('date', { ascending: false }).limit(10);
+
+        if (oldCRs && oldCRs.length > 0) {
+          // Préparer le texte des anciens CR pour l'IA
+          const crTexts = oldCRs.map(cr => {
+            const d = cr.date ? fmtDateFR(cr.date) : '?';
+            const plain = cr.contenu ? cr.contenu.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '';
+            return `[${d}] ${cr.titre || 'Sans titre'} : ${plain.substring(0, 500)}`;
+          }).join('\n\n');
+
+          // Appeler l'IA pour résumer l'historique
+          const resp = await fetch('/api/ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'preprdv',
+              text: crTexts,
+              clientName
+            })
+          });
+
+          if (resp.ok) {
+            const { result } = await resp.json();
+            historiqueHtml = `<div style="background:var(--bg-1);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px">
+              <strong style="color:var(--accent)">Historique client (${oldCRs.length} CR)</strong><br><br>${result}</div>`;
+          }
+        } else {
+          historiqueHtml = `<div style="background:var(--bg-1);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px;color:var(--t3)">
+            <strong>Historique client</strong><br>Aucun compte-rendu précédent avec ${clientName}.</div>`;
+        }
+      } catch (e) {
+        console.error('Erreur chargement historique CR:', e);
+        historiqueHtml = `<div style="background:var(--bg-1);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px;color:var(--t3)">
+          <strong>Historique client</strong><br>Impossible de charger l'historique.</div>`;
+      }
+    } else {
+      historiqueHtml = `<div style="background:var(--bg-1);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px;color:var(--t3)">
+        <strong>Historique client</strong><br>Sélectionnez un client pour voir l'historique.</div>`;
+    }
+
     const prepHtml = `<strong>Préparation RDV — ${clientName}</strong><br><br>`
+      + historiqueHtml
       + `<strong>1. Pourquoi je suis là ? Motif commercial valable ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
       + `<strong>2. Qu'est-ce que je veux savoir ? Informations à obtenir ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
       + `<strong>3. Qu'est-ce que je veux échanger comme informations ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
@@ -5263,6 +5315,7 @@ async function aiAssist(action) {
         <button class="btn" style="font-size:11px" onclick="document.getElementById('aiArea').innerHTML=''">Ignorer</button>
       </div>
     </div>`;
+    status.textContent = 'Prêt';
     return;
   }
 
