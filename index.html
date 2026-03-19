@@ -1586,7 +1586,7 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
       <div class="nav-item" data-page="clients" onclick="go('clients')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        Clients
+        Sociétés
         <span class="nav-badge" id="navBadgeClients"></span>
       </div>
       <div class="nav-item" data-page="contacts" onclick="go('contacts')">
@@ -1600,7 +1600,7 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
       <div class="nav-item" data-page="carte" onclick="go('carte')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-        Carte clients
+        Carte sociétés
       </div>
     </div>
     <div class="nav-section">
@@ -1716,7 +1716,7 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
     <div class="modal-body">
       <div class="fg">
-        <label class="fl">Client</label>
+        <label class="fl">Société</label>
         <select class="fs" id="proposalClient">
           <option value="">Sélectionner...</option>
         </select>
@@ -1751,7 +1751,7 @@ tbody tr:last-child td { border-bottom: none; }
 <div class="modal-overlay" id="modal-new-client">
   <div class="modal" style="max-width:750px;max-height:90vh;overflow-y:auto">
     <div class="modal-head">
-      <h3>Nouveau client</h3>
+      <h3>Nouvelle société</h3>
       <button class="modal-close" onclick="closeModal('new-client')">×</button>
     </div>
     <div class="modal-body">
@@ -1812,7 +1812,7 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('new-client')">Annuler</button>
-      <button class="btn btn-primary" onclick="submitNewClient()">Créer le client</button>
+      <button class="btn btn-primary" onclick="submitNewClient()">Créer la société</button>
     </div>
   </div>
 </div>
@@ -1850,7 +1850,7 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
     <div class="modal-body">
       <div class="fg"><label class="fl">Référence *</label><input class="fi" id="nd-ref" placeholder="DV-2024-XXX"></div>
-      <div class="fg"><label class="fl">Client *</label><select class="fs" id="nd-client"><option value="">Sélectionner...</option></select></div>
+      <div class="fg"><label class="fl">Société *</label><select class="fs" id="nd-client"><option value="">Sélectionner...</option></select></div>
       <div class="fg"><label class="fl">Sujet</label><input class="fi" id="nd-sujet" placeholder="Objet du devis"></div>
       <div class="fg"><label class="fl">Montant</label><input class="fi" id="nd-montant" type="number" placeholder="0"></div>
       <div class="fg"><label class="fl">Statut</label><select class="fs" id="nd-statut">
@@ -1873,7 +1873,7 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
     <div class="modal-body">
       <div class="fg"><label class="fl">Référence *</label><input class="fi" id="ncm-ref" placeholder="CM-2024-XXX"></div>
-      <div class="fg"><label class="fl">Client *</label><select class="fs" id="ncm-client"><option value="">Sélectionner...</option></select></div>
+      <div class="fg"><label class="fl">Société *</label><select class="fs" id="ncm-client"><option value="">Sélectionner...</option></select></div>
       <div class="fg"><label class="fl">Montant</label><input class="fi" id="ncm-montant" type="number" placeholder="0"></div>
       <div class="fg"><label class="fl">Date livraison</label><input class="fi" id="ncm-livraison" type="date"></div>
       <div class="fg"><label class="fl">Statut</label><select class="fs" id="ncm-statut">
@@ -1896,7 +1896,7 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
     <div class="modal-body">
       <div class="fg"><label class="fl">Référence *</label><input class="fi" id="nf-ref" placeholder="FA-2024-XXX"></div>
-      <div class="fg"><label class="fl">Client *</label><select class="fs" id="nf-client"><option value="">Sélectionner...</option></select></div>
+      <div class="fg"><label class="fl">Société *</label><select class="fs" id="nf-client"><option value="">Sélectionner...</option></select></div>
       <div class="fg"><label class="fl">Montant</label><input class="fi" id="nf-montant" type="number" placeholder="0"></div>
       <div class="fg"><label class="fl">Date échéance</label><input class="fi" id="nf-echeance" type="date"></div>
       <div class="fg"><label class="fl">Statut</label><select class="fs" id="nf-statut">
@@ -1914,7 +1914,7 @@ tbody tr:last-child td { border-bottom: none; }
 <div class="modal-overlay" id="modal-edit-client">
   <div class="modal" style="max-width:750px;max-height:90vh;overflow-y:auto">
     <div class="modal-head">
-      <h3>Modifier le client</h3>
+      <h3>Modifier la société</h3>
       <button class="modal-close" onclick="closeModal('edit-client')">×</button>
     </div>
     <div class="modal-body">
@@ -2623,7 +2623,7 @@ function generateAlerts() {
   if (dormant.length) {
     alerts.push({
       type:'warn', title:'Clients sans contact > 10 jours',
-      desc: `${dormant.length} client(s) n'ont pas été contactés depuis plus de 10 jours`,
+      desc: `${dormant.length} société(s) n'ont pas été contactés depuis plus de 10 jours`,
       items: dormant.map(c => `${c.name} — dernier contact ${c.lastContact}`)
     });
   }
@@ -2631,7 +2631,7 @@ function generateAlerts() {
   if (lowScore.length) {
     alerts.push({
       type:'warn', title:'Scoring client en baisse',
-      desc: `${lowScore.length} client(s) avec un score inférieur à 50/100`,
+      desc: `${lowScore.length} société(s) avec un score inférieur à 50/100`,
       items: lowScore.map(c => `${c.name} — Score ${c.score}/100`)
     });
   }
@@ -2639,7 +2639,7 @@ function generateAlerts() {
   if (behindObj.length) {
     alerts.push({
       type:'info', title:'Objectifs à risque',
-      desc: `${behindObj.length} client(s) en retard sur leurs objectifs`,
+      desc: `${behindObj.length} société(s) en retard sur leurs objectifs`,
       items: behindObj.map(c => `${c.name} — ${pct(c.ca,c.obj)}%`)
     });
   }
@@ -2647,7 +2647,7 @@ function generateAlerts() {
   if (highDSO.length) {
     alerts.push({
       type:'info', title:'DSO élevé',
-      desc: `${highDSO.length} client(s) dépassent 60 jours de DSO`,
+      desc: `${highDSO.length} société(s) dépassent 60 jours de DSO`,
       items: highDSO.map(c => `${c.name} — DSO ${c.dso} jours`)
     });
   }
@@ -2714,9 +2714,9 @@ function go(page) {
   if (page === 'cr') { crViewMode = 'list'; currentReport = null; }
   const navPage = page === 'client-detail' ? 'clients' : page === 'contact-detail' ? 'contacts' : page === 'marche-detail' ? 'marches' : page === 'affaire-detail' ? 'marches' : page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
-  const titles = {dashboard:'Tableau de bord',clients:'Clients',contacts:'Contacts',pipeline:'Pipeline commercial',carte:'Carte clients',
+  const titles = {dashboard:'Tableau de bord',clients:'Sociétés',contacts:'Contacts',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',devis:'Devis',commandes:'Commandes',factures:'Factures',objectifs:'Objectifs',
-    cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client','contact-detail':'Fiche contact',
+    cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche société','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire'};
   document.getElementById('pageTitle').textContent = titles[page]||page;
   renderPage(page);
@@ -2835,7 +2835,7 @@ function renderDashboard() {
   if(dormantClients.length) {
     alertsHTML += `<div class="alert-panel warn">
       <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <div class="alert-text"><strong>${dormantClients.length} client(s) sans contact récent.</strong> ${dormantClients.map(c=>c.name).join(', ')}. <a href="#" onclick="go('alertes');return false" style="color:var(--accent);text-decoration:none">Planifier une relance →</a></div>
+      <div class="alert-text"><strong>${dormantClients.length} société(s) sans contact récent.</strong> ${dormantClients.map(c=>c.name).join(', ')}. <a href="#" onclick="go('alertes');return false" style="color:var(--accent);text-decoration:none">Planifier une relance →</a></div>
     </div>`;
   }
 
@@ -2872,7 +2872,7 @@ function renderDashboard() {
     </div>
   <div class="grid-2 equal">
     <div class="card">
-      <div class="card-header"><div class="card-title">Top clients — Score & CA</div><button class="btn" onclick="go('clients')">Voir tout</button></div>
+      <div class="card-header"><div class="card-title">Top sociétés — Score & CA</div><button class="btn" onclick="go('clients')">Voir tout</button></div>
       <div class="card-body" style="padding:0"><div class="table-wrap">${renderTopClients()}</div></div>
     </div>
     <div class="card">
@@ -2978,8 +2978,8 @@ async function loadTopClients() {
 
 function renderTopClients() {
   const sorted = (topClientsCache || DB.clients).slice(0, 10);
-  if (!sorted.length) return '<div style="text-align:center;padding:20px;color:var(--t3)">Aucun client</div>';
-  return `<table><thead><tr><th>Client</th><th>Ville</th><th>Secteur</th></tr></thead>
+  if (!sorted.length) return '<div style="text-align:center;padding:20px;color:var(--t3)">Aucune société</div>';
+  return `<table><thead><tr><th>Société</th><th>Ville</th><th>Secteur</th></tr></thead>
   <tbody>${sorted.map(c => {
     return `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
       <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div><div><div class="cell-name">${c.name}</div><div class="cell-code">${c.code}</div></div></div></td>
@@ -3029,7 +3029,7 @@ function renderPortfolioHealth() {
       <div style="font-size:11px;color:var(--t2);margin-top:2px">En retard</div>
     </div>
   </div>
-  <div style="font-size:11px;text-align:center;color:var(--t3);margin-bottom:12px">${s.total} clients au total</div>`;
+  <div style="font-size:11px;text-align:center;color:var(--t3);margin-bottom:12px">${s.total} sociétés au total</div>`;
 }
 
 // ═══ CLIENTS PAGE ═══
@@ -3041,12 +3041,12 @@ function renderClients(filter='all') {
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-      <span style="font-size:13px;color:var(--t2)">${clientsTotalCount} clients</span>
-      <button class="btn btn-primary" onclick="openModal('new-client')">+ Nouveau client</button>
+      <span style="font-size:13px;color:var(--t2)">${clientsTotalCount} sociétés</span>
+      <button class="btn btn-primary" onclick="openModal('new-client')">+ Nouvelle société</button>
       <button class="btn" onclick="exportCSV('clients')">⤓ Export CSV</button>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
-      <input type="text" id="clientSearchInput" placeholder="Rechercher un client..." value="${clientsSearch}"
+      <input type="text" id="clientSearchInput" placeholder="Rechercher une société..." value="${clientsSearch}"
         style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:220px;background:var(--card);color:var(--t1)"
         onkeydown="if(event.key==='Enter'){loadClientsPage(0, '', this.value)}">
       <button class="btn" onclick="loadClientsPage(0, '', document.getElementById('clientSearchInput').value)">Rechercher</button>
@@ -3058,8 +3058,8 @@ function renderClients(filter='all') {
     ${letters.map(l => `<button class="btn ${clientsLetter===l?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'${l}','')">${l}</button>`).join('')}
   </div>
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Client</th><th>Ville</th><th>Secteur</th><th>Statut</th></tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">Aucun client trouvé</td></tr>' : filtered.map(c => {
+    <table><thead><tr><th>Société</th><th>Ville</th><th>Secteur</th><th>Statut</th></tr></thead>
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">Aucune société trouvée</td></tr>' : filtered.map(c => {
       const s = statusMap[c.status] || {cls:'',label:c.status};
       return `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
         <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div><div><div class="cell-name">${c.name}</div><div class="cell-code">${c.code}</div></div></div></td>
@@ -3088,7 +3088,7 @@ async function showClient(id) {
   // Si le client n'est pas en mémoire (pagination), le charger depuis Supabase
   if (!currentClient) {
     const { data } = await sb.from('clients').select('*').eq('id', id).maybeSingle();
-    if (!data) { toast('Client non trouvé','error'); return; }
+    if (!data) { toast('Société non trouvée','error'); return; }
     currentClient = mapClient(data);
   }
   currentPage = 'client-detail';
@@ -3100,11 +3100,11 @@ async function showClient(id) {
 
 function renderClientDetail() {
   const c = currentClient;
-  if(!c) return '<p>Client non trouvé</p>';
+  if(!c) return '<p>Société non trouvée</p>';
   const s = statusMap[c.status] || statusMap['objectif'];
 
   return `
-  <button class="btn" onclick="go('clients')" style="margin-bottom:14px">← Retour aux clients</button>
+  <button class="btn" onclick="go('clients')" style="margin-bottom:14px">← Retour aux sociétés</button>
   <div class="client-hero">
     <div class="client-big-av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div>
     <div class="client-info">
@@ -3437,7 +3437,7 @@ function renderMarches() {
     <thead><tr>
       <th style="width:100px">Réf</th>
       <th>Nom du marché</th>
-      <th>Client</th>
+      <th>Société</th>
       <th style="width:80px">Début</th>
       <th style="width:80px">Fin</th>
       <th style="width:90px;text-align:right">Montant HT</th>
@@ -3628,7 +3628,7 @@ function renderMarcheDetail() {
     ${detailSection('Informations générales', [
       detailRow('Référence', m.ref),
       detailRow('Nom', m.nom),
-      detailRow('Client', m.client_name ? '<a href="#" onclick="showClient(&#39;'+m.client_id+'&#39;);return false" style="color:var(--accent)">'+m.client_name+'</a>' : null),
+      detailRow('Société', m.client_name ? '<a href="#" onclick="showClient(&#39;'+m.client_id+'&#39;);return false" style="color:var(--accent)">'+m.client_name+'</a>' : null),
       detailRow('Description', m.description),
       detailRow('Statut', marcheStatutBadge(m.statut)),
       detailRow('Agence', m.agence),
@@ -3774,7 +3774,7 @@ function renderAffaireDetail() {
       detailRow('Référence', a.ref),
       detailRow('Nom', a.nom),
       detailRow('Code projet', a.code_projet),
-      detailRow('Client', a.client_name ? '<a href="#" onclick="showClient(&#39;'+a.client_id+'&#39;);return false" style="color:var(--accent)">'+a.client_name+'</a>' : null),
+      detailRow('Société', a.client_name ? '<a href="#" onclick="showClient(&#39;'+a.client_id+'&#39;);return false" style="color:var(--accent)">'+a.client_name+'</a>' : null),
       detailRow('Apporteur d\'affaire', a.apporteur_affaire),
       detailRow('Responsable', a.responsable),
       detailRow('Marché', marche ? '<a href="#" onclick="showMarcheDetail(&#39;'+marche.id+'&#39;);return false" style="color:var(--accent)">'+( marche.ref||'')+' - '+(marche.nom||'')+'</a>' : '—'),
@@ -3963,14 +3963,14 @@ async function movePipeDevis(id, newStatut) {
 let carteMap = null;
 function renderCarte() {
   return `
-  <div style="margin-bottom:16px;font-size:13px;color:var(--t2)">Géolocalisation de vos clients pour planifier vos tournées</div>
+  <div style="margin-bottom:16px;font-size:13px;color:var(--t2)">Géolocalisation de vos sociétés pour planifier vos tournées</div>
   <div class="map-container">
     <div id="mapLeaflet"></div>
   </div>
   <div class="card" style="margin-top:16px">
-    <div class="card-header"><div class="card-title">Clients par zone géographique</div></div>
+    <div class="card-header"><div class="card-title">Sociétés par zone géographique</div></div>
     <div class="card-body" style="padding:0"><div class="table-wrap">
-      <table><thead><tr><th>Client</th><th>Ville</th><th>Secteur</th></tr></thead>
+      <table><thead><tr><th>Société</th><th>Ville</th><th>Secteur</th></tr></thead>
       <tbody>${DB.clients.map(c => `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
         <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div><div class="cell-name">${c.name}</div></div></td>
         <td>${c.city}</td><td>${c.sector||''}</td>
@@ -4295,7 +4295,7 @@ async function showDevisDetail(id) {
       ${detailSection('Informations générales', [
         detailRow('Référence', d.ref),
         detailRow('ID Akuiteo', d.akuiteo_id),
-        detailRow('Client', d.client),
+        detailRow('Société', d.client),
         detailRow('Sujet', d.sujet),
         detailRow('Description', d.description),
         detailRow('Référence complémentaire', d.reference1),
@@ -4345,7 +4345,7 @@ async function showCommandeDetail(id) {
       ${detailSection('Informations générales', [
         detailRow('Référence', c.ref),
         detailRow('ID Akuiteo', c.akuiteo_id),
-        detailRow('Client', c.client),
+        detailRow('Société', c.client),
         detailRow('Nom', c.nom),
         detailRow('Description', c.description),
         detailRow('Référence complémentaire', c.reference1),
@@ -4413,7 +4413,7 @@ async function showFactureDetail(id) {
       ${detailSection('Informations générales', [
         detailRow('Référence', f.ref),
         detailRow('ID Akuiteo', f.akuiteo_id),
-        detailRow('Client', f.client),
+        detailRow('Société', f.client),
         detailRow('Type', f.type_facture === 'CREDIT' ? '<span style="color:var(--red)">Avoir</span>' : f.type_facture === 'INVOICE' ? 'Facture' : f.type_facture),
         detailRow('Description', f.description),
         detailRow('Référence complémentaire', f.reference1),
@@ -4469,14 +4469,14 @@ function renderObjectifs() {
   return `
   <div class="kpi-grid" style="margin-bottom:20px">
     <div class="kpi-card green"><div class="kpi-value" style="font-size:20px">${objCA}%</div><div class="kpi-label">Objectif CA global</div></div>
-    <div class="kpi-card blue"><div class="kpi-value" style="font-size:20px">${txClientsActifs}%</div><div class="kpi-label">Clients actifs (avec devis)</div></div>
+    <div class="kpi-card blue"><div class="kpi-value" style="font-size:20px">${txClientsActifs}%</div><div class="kpi-label">Sociétés actives (avec devis)</div></div>
     <div class="kpi-card amber"><div class="kpi-value" style="font-size:20px">${txConvObj}%</div><div class="kpi-label">Taux conversion</div></div>
-    <div class="kpi-card green"><div class="kpi-value" style="font-size:20px">${txSatisfaction}%</div><div class="kpi-label">Clients score &gt; 60</div></div>
+    <div class="kpi-card green"><div class="kpi-value" style="font-size:20px">${txSatisfaction}%</div><div class="kpi-label">Sociétés score &gt; 60</div></div>
   </div>
   <div class="card">
     <div class="card-header"><div class="card-title">Objectifs par commercial</div></div>
     <div class="card-body" style="padding:0"><div class="table-wrap">
-      <table><thead><tr><th>Commercial</th><th>Score</th><th>CA Réalisé</th><th>Objectif</th><th>Progression</th><th>Clients</th><th>Conversion</th></tr></thead>
+      <table><thead><tr><th>Commercial</th><th>Score</th><th>CA Réalisé</th><th>Objectif</th><th>Progression</th><th>Sociétés</th><th>Conversion</th></tr></thead>
       <tbody>${commerciaux.map(c => {const p=pct(c.ca,c.obj); return `<tr>
         <td style="font-weight:600">${c.nom}</td><td>${scoreRing(c.score)}</td><td class="mono">${fmt(c.ca)}</td><td class="mono">${fmt(c.obj)}</td>
         <td><div class="prog"><div class="prog-bar"><div class="prog-fill ${pctColor(p)}" style="width:${p}%"></div></div><span class="prog-text">${p}%</span></div></td>
@@ -4536,7 +4536,7 @@ function renderCRList() {
           <tr style="background:var(--bg-1);border-bottom:2px solid var(--border)">
             <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase;white-space:nowrap">Date RDV</th>
             <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Titre</th>
-            <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Client</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Société</th>
             <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Contact</th>
             <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Type</th>
             <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Rédacteur</th>
@@ -4699,8 +4699,8 @@ function getCREditorHTML(r) {
     </div>
     <div style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
       <div style="flex:1;min-width:200px;position:relative">
-        <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Client <span style="color:var(--red)">*</span></label>
-        <input type="text" id="crClientSearch" placeholder="Rechercher un client..." autocomplete="off"
+        <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Société <span style="color:var(--red)">*</span></label>
+        <input type="text" id="crClientSearch" placeholder="Rechercher une société..." autocomplete="off"
           style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)"
           oninput="searchCRClient(this.value)" onfocus="searchCRClient(this.value)">
         <input type="hidden" id="crClientId" value="">
@@ -4862,17 +4862,17 @@ async function searchCRClient(q) {
       .or(`name.ilike.%${q}%,code.ilike.%${q}%`)
       .order('name').limit(10);
     if (!data || !data.length) {
-      dd.innerHTML = `<div style="padding:10px;font-size:12px;color:var(--t3)">Aucun client trouvé</div>
+      dd.innerHTML = `<div style="padding:10px;font-size:12px;color:var(--t3)">Aucune société trouvée</div>
         <div style="padding:10px 12px;cursor:pointer;font-size:13px;color:var(--accent);font-weight:600;border-top:1px solid var(--border)"
           onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
-          onclick="openNewClientFromCR()">+ Créer un nouveau client</div>`;
+          onclick="openNewClientFromCR()">+ Créer une nouvelle société</div>`;
     } else {
       dd.innerHTML = data.map(c => `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
         onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
         onclick="selectCRClient('${c.id}','${(c.name||'').replace(/'/g,"&#39;")}')">${c.name} <span style="color:var(--t3);font-size:11px">${c.code||''} ${c.city ? '- '+c.city : ''}</span></div>`).join('')
         + `<div style="padding:10px 12px;cursor:pointer;font-size:12px;color:var(--accent);font-weight:600;border-top:1px solid var(--border)"
           onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
-          onclick="openNewClientFromCR()">+ Créer un nouveau client</div>`;
+          onclick="openNewClientFromCR()">+ Créer une nouvelle société</div>`;
     }
     dd.style.display = 'block';
   }, 200);
@@ -4967,7 +4967,7 @@ async function submitNewContactFromCR() {
   const nom = document.getElementById('nco-nom').value.trim();
   if (!nom) { toast('Le nom est obligatoire','error'); return; }
   const clientId = document.getElementById('crClientId')?.value;
-  if (!clientId) { toast('Aucun client sélectionné','error'); return; }
+  if (!clientId) { toast('Aucune société sélectionnée','error'); return; }
   const clientName = document.getElementById('crClientSearch')?.value || '';
 
   const prenom = document.getElementById('nco-prenom').value.trim();
@@ -5567,7 +5567,7 @@ async function loadAkuiteoManagerIds() {
       if (!managers[mid].name && c.accountManager) managers[mid].name = c.accountManager;
     }
     const sorted = Object.entries(managers).sort((a, b) => b[1].count - a[1].count);
-    el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>accountManagerId</th><th>Nom</th><th>Nb clients</th><th>Action</th></tr></thead><tbody>'
+    el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>accountManagerId</th><th>Nom</th><th>Nb sociétés</th><th>Action</th></tr></thead><tbody>'
       + sorted.map(([mid, info]) => `<tr>
         <td class="mono">${mid}</td>
         <td>${info.name || '<span style="color:var(--t3)">—</span>'}</td>
@@ -5660,20 +5660,20 @@ async function aiAssist(action) {
           if (resp.ok) {
             const { result } = await resp.json();
             historiqueHtml = `<div style="background:var(--bg-1);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px">
-              <strong style="color:var(--accent)">Historique client (${oldCRs.length} CR)</strong><br><br>${result}</div>`;
+              <strong style="color:var(--accent)">Historique société (${oldCRs.length} CR)</strong><br><br>${result}</div>`;
           }
         } else {
           historiqueHtml = `<div style="background:var(--bg-1);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px;color:var(--t3)">
-            <strong>Historique client</strong><br>Aucun compte-rendu précédent avec ${clientName}.</div>`;
+            <strong>Historique société</strong><br>Aucun compte-rendu précédent avec ${clientName}.</div>`;
         }
       } catch (e) {
         console.error('Erreur chargement historique CR:', e);
         historiqueHtml = `<div style="background:var(--bg-1);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px;color:var(--t3)">
-          <strong>Historique client</strong><br>Impossible de charger l'historique.</div>`;
+          <strong>Historique société</strong><br>Impossible de charger l'historique.</div>`;
       }
     } else {
       historiqueHtml = `<div style="background:var(--bg-1);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px;color:var(--t3)">
-        <strong>Historique client</strong><br>Sélectionnez un client pour voir l'historique.</div>`;
+        <strong>Historique société</strong><br>Sélectionnez une société pour voir l'historique.</div>`;
     }
 
     const prepHtml = `<strong>Préparation RDV — ${clientName}</strong><br><br>`
@@ -6378,7 +6378,7 @@ async function syncAkuiteo() {
     console.log('[Akuiteo] Total clients:', akCustomers.length);
 
     if (akCustomers.length === 0) {
-      toast('Aucun client trouvé dans Akuiteo', 'warn');
+      toast('Aucune société trouvée dans Akuiteo', 'warn');
       return;
     }
 
@@ -6886,11 +6886,11 @@ async function syncAkuiteo() {
 // Pousser un client CRM vers Akuiteo
 async function pushClientToAkuiteo(clientId) {
   const c = DB.clients.find(x => x.id === clientId);
-  if (!c) { toast('Client non trouvé', 'error'); return; }
+  if (!c) { toast('Société non trouvée', 'error'); return; }
 
   // Charger toutes les données du client depuis Supabase (pas juste la page courante)
   const { data: full } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
-  if (!full) { toast('Client non trouvé en base', 'error'); return; }
+  if (!full) { toast('Société non trouvée en base', 'error'); return; }
 
   const akData = {
     name: full.name || '',
