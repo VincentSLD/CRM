@@ -2746,7 +2746,8 @@ function renderPage(page) {
   // Post-render hooks
   if (page === 'cr') initEditor();
   if (page === 'carte') setTimeout(initCarteMap, 50);
-  if (page === 'admin') setTimeout(loadAdminAccessList, 50);
+  if (page === 'admin') setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); }, 50);
+  if (page === 'cr' && crViewMode === 'send') setTimeout(loadSendGroups, 50);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -4593,6 +4594,14 @@ function renderCRSend() {
         <input class="fi" placeholder="CR Réunion — Client" id="sendSubject">
       </div>
       <div class="fg">
+        <label class="fl">Groupe de diffusion</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="sendGroupSelect" class="fi" style="flex:1" onchange="applyDiffusionGroup(this.value)">
+            <option value="">— Aucun groupe —</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg">
         <label class="fl">Destinataires</label>
         <div style="position:relative">
           <input class="fi" id="sendRecipientSearch" placeholder="Rechercher un contact par nom ou email..." autocomplete="off"
@@ -5146,6 +5155,16 @@ function renderAdmin() {
     </div></div>
   </div>
   <div class="card" style="margin-top:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <div class="card-title">Groupes de diffusion</div>
+      <button class="btn btn-primary" onclick="openNewGroupForm()" style="font-size:12px">+ Nouveau groupe</button>
+    </div>
+    <div class="card-body" style="padding:0">
+      <div id="adminGroupsList" style="padding:16px;color:var(--t3);font-size:13px">Chargement...</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
     <div class="card-header"><div class="card-title">IDs Akuiteo disponibles</div></div>
     <div class="card-body">
       <p style="font-size:13px;color:var(--t2);margin-bottom:12px">Cliquez "Charger" pour récupérer la liste des accountManagerId depuis Akuiteo et voir combien de clients chacun gère.</p>
@@ -5154,6 +5173,195 @@ function renderAdmin() {
     </div>
   </div>`;
 }
+
+// ═══ GROUPES DE DIFFUSION ═══
+let diffusionGroups = [];
+
+async function loadDiffusionGroups() {
+  const { data } = await sb.from('groupes_diffusion').select('*').order('nom');
+  diffusionGroups = data || [];
+}
+
+async function renderAdminGroups() {
+  const el = document.getElementById('adminGroupsList');
+  if (!el) return;
+  await loadDiffusionGroups();
+  if (!diffusionGroups.length) {
+    el.innerHTML = '<div style="text-align:center;color:var(--t3);padding:16px">Aucun groupe de diffusion</div>';
+    return;
+  }
+  el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+    '<thead><tr style="background:var(--bg-1);border-bottom:2px solid var(--border)">' +
+    '<th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Nom</th>' +
+    '<th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Membres</th>' +
+    '<th style="padding:10px 14px;text-align:right;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Actions</th>' +
+    '</tr></thead><tbody>' +
+    diffusionGroups.map(g => {
+      const membres = g.membres || [];
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:10px 14px;font-weight:600">${g.nom}</td>
+        <td style="padding:10px 14px;color:var(--t2)">${membres.length} contact${membres.length>1?'s':''} — <span style="font-size:11px;color:var(--t3)">${membres.map(m=>m.name).join(', ') || '—'}</span></td>
+        <td style="padding:10px 14px;text-align:right;white-space:nowrap">
+          <button class="btn" onclick="editGroup('${g.id}')" style="font-size:11px">Modifier</button>
+          <button class="btn" onclick="deleteGroup('${g.id}')" style="font-size:11px;color:var(--red)">Supprimer</button>
+        </td>
+      </tr>`;
+    }).join('') +
+    '</tbody></table>';
+}
+
+function openNewGroupForm() {
+  _editingGroupId = null;
+  _groupMembres = [];
+  const el = document.getElementById('adminGroupsList');
+  el.innerHTML = getGroupFormHTML('Nouveau groupe de diffusion', '', []);
+}
+
+let _editingGroupId = null;
+let _groupMembres = [];
+
+async function editGroup(id) {
+  const g = diffusionGroups.find(x => x.id == id);
+  if (!g) return;
+  _editingGroupId = g.id;
+  _groupMembres = g.membres || [];
+  const el = document.getElementById('adminGroupsList');
+  el.innerHTML = getGroupFormHTML('Modifier le groupe', g.nom, _groupMembres);
+}
+
+function getGroupFormHTML(title, nom, membres) {
+  return `<div style="padding:16px">
+    <div style="font-weight:600;margin-bottom:12px">${title}</div>
+    <div class="fg" style="margin-bottom:12px">
+      <label class="fl">Nom du groupe</label>
+      <input class="fi" id="groupNom" value="${(nom||'').replace(/"/g,'&quot;')}" placeholder="Ex: Direction, Commerciaux, Technique...">
+    </div>
+    <div class="fg" style="margin-bottom:12px">
+      <label class="fl">Ajouter des membres</label>
+      <div style="position:relative">
+        <input class="fi" id="groupMemberSearch" placeholder="Rechercher un contact..." autocomplete="off"
+          oninput="searchGroupMember(this.value)" onfocus="searchGroupMember(this.value)">
+        <div id="groupMemberDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
+      </div>
+      <div class="chips" style="margin-top:8px" id="groupMemberChips">
+        ${membres.map((m,i) => `<div class="chip on" style="display:inline-flex;align-items:center;gap:4px">
+          ${m.name} ${m.email ? '<span style="font-size:11px;opacity:.7">'+m.email+'</span>' : ''}
+          <span style="cursor:pointer;opacity:0.5;font-size:14px" onclick="removeGroupMember(${i})">&times;</span>
+        </div>`).join('')}
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="renderAdminGroups()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveGroup()">Enregistrer</button>
+    </div>
+  </div>`;
+}
+
+let _groupSearchTimeout = null;
+function searchGroupMember(q) {
+  const dd = document.getElementById('groupMemberDropdown');
+  if (!q || q.length < 2) { dd.style.display='none'; return; }
+  clearTimeout(_groupSearchTimeout);
+  _groupSearchTimeout = setTimeout(async () => {
+    const { data } = await sb.from('contacts').select('id,nom,prenom,email,fonction')
+      .or(`nom.ilike.%${q}%,prenom.ilike.%${q}%,email.ilike.%${q}%`)
+      .order('nom').limit(10);
+    if (!data || !data.length) {
+      dd.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucun contact trouvé</div>';
+    } else {
+      dd.innerHTML = data.filter(c => !_groupMembres.find(m => m.id == c.id)).map(c => {
+        const fullName = [c.prenom, c.nom].filter(Boolean).join(' ');
+        return `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
+          onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
+          onclick="addGroupMember('${c.id}','${fullName.replace(/'/g,"&#39;")}','${(c.email||'').replace(/'/g,"&#39;")}')">
+          <div>${fullName} ${c.email ? '<span style="color:var(--accent);font-size:11px">'+c.email+'</span>' : ''}</div>
+          <div style="font-size:11px;color:var(--t3)">${c.fonction||''}</div>
+        </div>`;
+      }).join('');
+    }
+    dd.style.display='block';
+  }, 200);
+}
+
+function addGroupMember(id, name, email) {
+  if (_groupMembres.find(m => m.id == id)) return;
+  _groupMembres.push({ id, name, email });
+  renderGroupChips();
+  const dd = document.getElementById('groupMemberDropdown'); if(dd) dd.style.display='none';
+  const input = document.getElementById('groupMemberSearch'); if(input) input.value='';
+}
+
+function removeGroupMember(idx) {
+  _groupMembres.splice(idx, 1);
+  renderGroupChips();
+}
+
+function renderGroupChips() {
+  const el = document.getElementById('groupMemberChips');
+  if (!el) return;
+  el.innerHTML = _groupMembres.map((m,i) => `<div class="chip on" style="display:inline-flex;align-items:center;gap:4px">
+    ${m.name} ${m.email ? '<span style="font-size:11px;opacity:.7">'+m.email+'</span>' : ''}
+    <span style="cursor:pointer;opacity:0.5;font-size:14px" onclick="removeGroupMember(${i})">&times;</span>
+  </div>`).join('');
+}
+
+async function saveGroup() {
+  const nom = document.getElementById('groupNom')?.value.trim();
+  if (!nom) { toast('Entrez un nom de groupe','error'); return; }
+  if (!_groupMembres.length) { toast('Ajoutez au moins un membre','error'); return; }
+
+  const groupData = { nom, membres: _groupMembres, updated_at: new Date().toISOString() };
+
+  if (_editingGroupId) {
+    const { error } = await sb.from('groupes_diffusion').update(groupData).eq('id', _editingGroupId);
+    if (error) { toast('Erreur: '+error.message,'error'); return; }
+    toast('Groupe mis à jour','success');
+  } else {
+    groupData.created_at = new Date().toISOString();
+    const { error } = await sb.from('groupes_diffusion').insert(groupData);
+    if (error) { toast('Erreur: '+error.message,'error'); return; }
+    toast('Groupe créé','success');
+  }
+  await renderAdminGroups();
+}
+
+async function deleteGroup(id) {
+  if (!confirm('Supprimer ce groupe de diffusion ?')) return;
+  const { error } = await sb.from('groupes_diffusion').delete().eq('id', id);
+  if (error) { toast('Erreur: '+error.message,'error'); return; }
+  toast('Groupe supprimé','success');
+  await renderAdminGroups();
+}
+
+// Charger les groupes dans le select d'envoi
+async function loadSendGroups() {
+  if (!diffusionGroups.length) await loadDiffusionGroups();
+  const sel = document.getElementById('sendGroupSelect');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Aucun groupe —</option>' +
+    diffusionGroups.map(g => `<option value="${g.id}">${g.nom} (${(g.membres||[]).length})</option>`).join('');
+}
+
+function applyDiffusionGroup(groupId) {
+  if (!groupId) return;
+  const g = diffusionGroups.find(x => x.id == groupId);
+  if (!g || !g.membres) return;
+  // Ajouter tous les membres du groupe aux destinataires
+  g.membres.forEach(m => {
+    if (!sendRecipients.find(r => r.id == m.id)) {
+      sendRecipients.push({ id: m.id, name: m.name, email: m.email });
+    }
+  });
+  renderSendChips();
+  toast(g.membres.length + ' contact(s) ajouté(s) depuis "' + g.nom + '"','success');
+}
+
+// Fermer dropdown membres groupe
+document.addEventListener('click', e => {
+  if (!e.target.closest('#groupMemberSearch') && !e.target.closest('#groupMemberDropdown')) {
+    const d = document.getElementById('groupMemberDropdown'); if(d) d.style.display='none';
+  }
+});
 
 async function loadAdminAccessList() {
   const el = document.getElementById('adminAccessList');
@@ -5557,7 +5765,8 @@ function openSendModal() {
   sendRecipients = [];
   crViewMode = 'send';
   renderPage('cr');
-  setTimeout(() => {
+  setTimeout(async () => {
+    await loadSendGroups();
     const subj = document.getElementById('sendSubject');
     if (subj) subj.value = _sendData.titre || 'Compte-rendu' + (_sendData.clientName ? ' — ' + _sendData.clientName : '');
     const chips = document.getElementById('sendRecipientChips');
