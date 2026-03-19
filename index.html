@@ -4838,14 +4838,31 @@ async function searchCRClient(q) {
       .or(`name.ilike.%${q}%,code.ilike.%${q}%`)
       .order('name').limit(10);
     if (!data || !data.length) {
-      dd.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucun client trouvé</div>';
+      dd.innerHTML = `<div style="padding:10px;font-size:12px;color:var(--t3)">Aucun client trouvé</div>
+        <div style="padding:10px 12px;cursor:pointer;font-size:13px;color:var(--accent);font-weight:600;border-top:1px solid var(--border)"
+          onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
+          onclick="openNewClientFromCR()">+ Créer un nouveau client</div>`;
     } else {
       dd.innerHTML = data.map(c => `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
         onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
-        onclick="selectCRClient('${c.id}','${(c.name||'').replace(/'/g,"&#39;")}')">${c.name} <span style="color:var(--t3);font-size:11px">${c.code||''} ${c.city ? '- '+c.city : ''}</span></div>`).join('');
+        onclick="selectCRClient('${c.id}','${(c.name||'').replace(/'/g,"&#39;")}')">${c.name} <span style="color:var(--t3);font-size:11px">${c.code||''} ${c.city ? '- '+c.city : ''}</span></div>`).join('')
+        + `<div style="padding:10px 12px;cursor:pointer;font-size:12px;color:var(--accent);font-weight:600;border-top:1px solid var(--border)"
+          onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
+          onclick="openNewClientFromCR()">+ Créer un nouveau client</div>`;
     }
     dd.style.display = 'block';
   }, 200);
+}
+
+function openNewClientFromCR() {
+  document.getElementById('crClientDropdown').style.display = 'none';
+  // Pré-remplir le nom avec ce qui a été tapé dans la recherche
+  const q = document.getElementById('crClientSearch')?.value || '';
+  openModal('new-client');
+  setTimeout(() => {
+    const nameInput = document.getElementById('nc-name');
+    if (nameInput && q) nameInput.value = q;
+  }, 50);
 }
 
 function selectCRClient(id, name) {
