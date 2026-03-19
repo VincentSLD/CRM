@@ -5961,9 +5961,11 @@ async function sendReport() {
     });
 
     if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      console.error('[sendReport] API error:', resp.status, err);
-      throw new Error(err.details || err.error || 'Erreur envoi');
+      const errText = await resp.text();
+      console.error('[sendReport] API error:', resp.status, errText);
+      let errMsg = 'Erreur envoi email';
+      try { const e = JSON.parse(errText); errMsg = e.details || e.error || errMsg; } catch(x) { errMsg = errText || errMsg; }
+      throw new Error(errMsg);
     }
 
     // Enregistrer l'envoi dans Supabase

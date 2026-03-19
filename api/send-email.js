@@ -41,16 +41,18 @@ export default async function handler(req, res) {
       body: JSON.stringify(payload)
     });
 
+    const responseText = await response.text();
+    console.log('Resend response:', response.status, responseText);
+
     if (!response.ok) {
-      const err = await response.text();
-      console.error('Resend API error:', err);
-      return res.status(502).json({ error: 'Erreur envoi email', details: err });
+      return res.status(502).json({ error: 'Erreur envoi email', details: responseText });
     }
 
-    const data = await response.json();
+    let data;
+    try { data = JSON.parse(responseText); } catch(e) { data = {}; }
     return res.status(200).json({ success: true, id: data.id });
   } catch (e) {
-    console.error('Send email error:', e);
+    console.error('Send email error:', e.message, e.stack);
     return res.status(500).json({ error: e.message });
   }
 }
