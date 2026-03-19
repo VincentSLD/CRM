@@ -4572,6 +4572,7 @@ function renderCR() {
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
             </button>
             <div class="tb-div"></div>
+            <button class="tb tb-ai" onclick="aiAssist('preprdv')">✦ Préparer RDV</button>
             <button class="tb tb-ai" onclick="aiAssist('rewrite')">✦ Reformuler</button>
             <button class="tb tb-ai" onclick="aiAssist('summarize')">✦ Synthèse</button>
             <button class="tb tb-ai" onclick="aiAssist('complete')">✦ Compléter</button>
@@ -5196,9 +5197,29 @@ function toggleDictation() {
 // ═══ AI ASSIST ═══
 function aiAssist(action) {
   const editor = document.getElementById('editorBody');
-  if(!editor||!editor.innerText.trim()) { toast('Écrivez d\'abord du contenu','error'); return; }
+  if(action !== 'preprdv' && (!editor||!editor.innerText.trim())) { toast('Écrivez d\'abord du contenu','error'); return; }
   document.getElementById('editorStatus').textContent='✦ IA en traitement...';
   setTimeout(() => {
+    if (action === 'preprdv') {
+      const clientName = document.getElementById('crClientSearch')?.value || 'le client';
+      const prepHtml = `<strong>Préparation RDV — ${clientName}</strong><br><br>`
+        + `<strong>1. Pourquoi je suis là ? Motif commercial valable ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
+        + `<strong>2. Qu'est-ce que je veux savoir ? Informations à obtenir ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
+        + `<strong>3. Qu'est-ce que je veux échanger comme informations ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
+        + `<strong>4. Quelles sont les objections possibles ? Doutes ou incertitudes ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
+        + `<strong>5. Quels sont mes différenciateurs clés ? Et mes faiblesses "critiques" ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
+        + `<strong>6. Quels engagements d'actions prendre à la fin de l'entretien ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span>`;
+      document.getElementById('aiArea').innerHTML = `<div class="ai-box">
+        <div class="ai-box-head">✦ Trame de préparation RDV</div>
+        <div class="ai-box-text">${prepHtml}</div>
+        <div class="ai-box-actions">
+          <button class="btn btn-primary" style="font-size:11px" onclick="acceptAI()">Insérer dans le CR</button>
+          <button class="btn" style="font-size:11px" onclick="document.getElementById('aiArea').innerHTML=''">Ignorer</button>
+        </div>
+      </div>`;
+      document.getElementById('editorStatus').textContent='Prêt';
+      return;
+    }
     const suggestions = {
       rewrite:'<strong>Reformulation :</strong><br>Suite à notre échange, plusieurs axes stratégiques ont été identifiés. Les prochaines étapes incluent la finalisation du planning et la validation des ressources. Un point de suivi consolidera les avancées.',
       summarize:'<strong>Synthèse IA :</strong><br>• Réunion de suivi avec validation des jalons Q2<br>• Budget complémentaire approuvé<br>• Tests UAT planifiés semaine 12<br>• Action : envoyer planning mis à jour',
