@@ -1817,6 +1817,30 @@ tbody tr:last-child td { border-bottom: none; }
   </div>
 </div>
 
+<!-- ═══ MODAL: NEW CONTACT (depuis CR) ═══ -->
+<div class="modal-overlay" id="modal-new-contact">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-head">
+      <h3>Nouveau contact</h3>
+      <button class="modal-close" onclick="closeModal('new-contact')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="fg"><label class="fl">Prénom</label><input class="fi" id="nco-prenom"></div>
+        <div class="fg"><label class="fl">Nom *</label><input class="fi" id="nco-nom"></div>
+        <div class="fg"><label class="fl">Email</label><input class="fi" id="nco-email" type="email"></div>
+        <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="nco-phone"></div>
+        <div class="fg"><label class="fl">Mobile</label><input class="fi" id="nco-mobile"></div>
+        <div class="fg"><label class="fl">Fonction</label><input class="fi" id="nco-fonction"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('new-contact')">Annuler</button>
+      <button class="btn btn-primary" onclick="submitNewContactFromCR()">Créer le contact</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ MODAL: NEW DEVIS ═══ -->
 <div class="modal-overlay" id="modal-new-devis">
   <div class="modal" style="max-width:520px">
@@ -4904,8 +4928,11 @@ async function searchCRContact(q) {
     (c.fonction||'').toLowerCase().includes(ql)
   ) : contacts;
 
+  const createBtn = `<div style="padding:10px 12px;cursor:pointer;font-size:12px;color:var(--accent);font-weight:600;border-top:1px solid var(--border)"
+    onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
+    onclick="openNewContactFromCR()">+ Créer un nouveau contact</div>`;
   if (!filtered.length) {
-    dd.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucun contact trouvé</div>';
+    dd.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucun contact trouvé</div>' + createBtn;
   } else {
     dd.innerHTML = filtered.map(c => {
       const fullName = [c.prenom, c.nom].filter(Boolean).join(' ');
@@ -4915,9 +4942,60 @@ async function searchCRContact(q) {
         <div>${fullName}</div>
         <div style="font-size:11px;color:var(--t3)">${c.fonction||''} ${c.email ? '- '+c.email : ''}</div>
       </div>`;
-    }).join('');
+    }).join('') + createBtn;
   }
   dd.style.display = 'block';
+}
+
+function openNewContactFromCR() {
+  document.getElementById('crContactDropdown').style.display = 'none';
+  const q = document.getElementById('crContactSearch')?.value || '';
+  openModal('new-contact');
+  setTimeout(() => {
+    // Pré-remplir le nom avec la recherche
+    const parts = q.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      document.getElementById('nco-prenom').value = parts[0];
+      document.getElementById('nco-nom').value = parts.slice(1).join(' ');
+    } else if (parts.length === 1 && parts[0]) {
+      document.getElementById('nco-nom').value = parts[0];
+    }
+  }, 50);
+}
+
+async function submitNewContactFromCR() {
+  const nom = document.getElementById('nco-nom').value.trim();
+  if (!nom) { toast('Le nom est obligatoire','error'); return; }
+  const clientId = document.getElementById('crClientId')?.value;
+  if (!clientId) { toast('Aucun client sélectionné','error'); return; }
+  const clientName = document.getElementById('crClientSearch')?.value || '';
+
+  const prenom = document.getElementById('nco-prenom').value.trim();
+  const email = document.getElementById('nco-email').value.trim();
+  const phone = document.getElementById('nco-phone').value.trim();
+  const mobile = document.getElementById('nco-mobile').value.trim();
+  const fonction = document.getElementById('nco-fonction').value.trim();
+
+  const { data, error } = await sb.from('contacts').insert({
+    nom, prenom: prenom || null,
+    email: email || null, telephone: phone || null, mobile: mobile || null,
+    fonction: fonction || null,
+    client_id: clientId, client_name: clientName,
+    created_at: new Date().toISOString()
+  }).select();
+
+  if (error) { toast('Erreur: '+error.message,'error'); return; }
+  toast('Contact créé','success');
+  closeModal('new-contact');
+
+  // Vider le cache contacts pour ce client et sélectionner le nouveau
+  delete crContactsCache[clientId];
+  const fullName = [prenom, nom].filter(Boolean).join(' ');
+  if (data && data[0]) {
+    selectCRContact(data[0].id, fullName);
+  }
+  // Reset form
+  ['nco-prenom','nco-nom','nco-email','nco-phone','nco-mobile','nco-fonction'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
 }
 
 function selectCRContact(id, name) {
