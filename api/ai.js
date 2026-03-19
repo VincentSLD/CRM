@@ -68,7 +68,9 @@ ${text}`
     }
 
     const data = await response.json();
-    const result = data.content?.[0]?.text || '';
+    let result = data.content?.[0]?.text || '';
+    // Nettoyer les blocs markdown ```html ... ``` que Claude ajoute parfois
+    result = result.replace(/^```(?:html)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
     return res.status(200).json({ result });
   } catch (e) {
     console.error('AI proxy error:', e);
