@@ -4505,7 +4505,7 @@ let crFilterAuteur = '__mine__'; // '__mine__' = mes CR, '__all__' = tous, ou un
 let crViewMode = 'list'; // 'list' ou 'detail'
 
 function renderCR() {
-  if (crViewMode === 'detail' && currentReport) return renderCRDetail();
+  if (crViewMode === 'detail') return renderCRDetail();
   return renderCRList();
 }
 
@@ -4573,7 +4573,6 @@ function renderCRList() {
 
 function renderCRDetail() {
   const r = currentReport;
-  if (!r) return renderCRList();
   return `
   <div style="margin-bottom:16px">
     <a href="#" onclick="backToCRList();return false" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--accent);text-decoration:none;font-weight:500">
@@ -4583,8 +4582,8 @@ function renderCRDetail() {
   </div>
   <div class="card">
     <div class="card-header">
-      <div class="card-title">Modifier le compte-rendu</div>
-      <span style="font-size:11px;color:var(--t3)">ID: ${r.id}</span>
+      <div class="card-title">${r ? 'Modifier le compte-rendu' : 'Nouveau compte-rendu'}</div>
+      ${r ? '<span style="font-size:11px;color:var(--t3)">ID: '+r.id+'</span>' : ''}
     </div>
     ${getCREditorHTML(r)}
   </div>`;
@@ -4719,13 +4718,11 @@ async function openCRDetail(reportId) {
 }
 
 // Modal uniquement pour Nouveau CR
-async function openCRModal() {
+function openCRModal() {
   currentReport = null;
   crAttachments = [];
-  const el = document.getElementById('modal-cr');
-  document.getElementById('crModalTitle').textContent = 'Nouveau compte-rendu';
-  document.getElementById('crModalBody').innerHTML = getCREditorHTML(null);
-  el.classList.add('active');
+  crViewMode = 'detail';
+  renderPage('cr');
 }
 function clearEditor() {
   currentReport = null;
@@ -4745,21 +4742,24 @@ function closeCRModal() {
 let _crPrefill = null;
 function goToCR(clientId, clientName, contactId, contactName) {
   currentReport = null;
+  crAttachments = [];
   _crPrefill = { clientId, clientName, contactId: contactId || null, contactName: contactName || null };
-  go('cr');
+  crViewMode = 'detail';
+  currentPage = 'cr';
+  renderPage('cr');
+  // Mettre à jour la nav
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === 'cr'));
+  document.getElementById('pageTitle').textContent = 'Comptes-rendus';
   setTimeout(() => {
-    openCRModal(); // ouvre modal vide pour nouveau CR
-    setTimeout(() => {
-      if (!_crPrefill) return;
-      const p = _crPrefill;
-      _crPrefill = null;
-      selectCRClient(p.clientId, p.clientName);
-      if (p.contactId && p.contactName) {
-        const waitAndSelect = () => selectCRContact(p.contactId, p.contactName);
-        if (crContactsCache[p.clientId]) waitAndSelect();
-        else setTimeout(waitAndSelect, 500);
-      }
-    }, 100);
+    if (!_crPrefill) return;
+    const p = _crPrefill;
+    _crPrefill = null;
+    selectCRClient(p.clientId, p.clientName);
+    if (p.contactId && p.contactName) {
+      const waitAndSelect = () => selectCRContact(p.contactId, p.contactName);
+      if (crContactsCache[p.clientId]) waitAndSelect();
+      else setTimeout(waitAndSelect, 500);
+    }
   }, 100);
 }
 async function loadReport(id) {
