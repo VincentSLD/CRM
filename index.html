@@ -1974,6 +1974,16 @@ Cordialement,</textarea>
   </div>
 </div>
 
+<div class="modal-overlay" id="modal-cr" onclick="if(event.target===this)closeCRModal()">
+  <div class="modal" style="max-width:900px;max-height:92vh;overflow-y:auto">
+    <div class="modal-head">
+      <h3 id="crModalTitle">Nouveau compte-rendu</h3>
+      <button class="modal-close" onclick="closeCRModal()">×</button>
+    </div>
+    <div id="crModalBody"></div>
+  </div>
+</div>
+
 <div class="toasts" id="toasts"></div>
 
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -2275,7 +2285,7 @@ async function loadDB() {
       fetchFast('devis', DEVIS_LITE),
       fetchFast('commandes', CMD_LITE),
       fetchFast('factures', FACT_LITE),
-      sb.from('reports').select('id,client_id,client_name,date,titre,created_at').order('date', {ascending:false}).limit(500).then(r => r.data || []),
+      sb.from('reports').select('id,client_id,client_name,contact_name,date,titre,type_cr,statut_cr,redacteur_id,pieces_jointes,created_at').order('date', {ascending:false}).limit(500).then(r => r.data || []),
       sb.from('notifications').select('id,type,text,time_label,read,created_at').order('created_at', {ascending:false}).limit(100).then(r => r.data || []),
       sb.from('commerciaux').select('*').then(r => r.data || []),
       fetchFast('marches', MARCHE_LITE, 'date_debut').catch(() => []),
@@ -4491,157 +4501,209 @@ function crStatutBadge(s) {
 let crFilterAuteur = '__mine__'; // '__mine__' = mes CR, '__all__' = tous, ou un id commercial
 
 function renderCR() {
-  const today = new Date().toISOString().split('T')[0];
   const myId = currentCommercial?.id || '';
-  // Filtrer la liste des CR
   let filteredReports = DB.reports;
   if (crFilterAuteur === '__mine__') {
     filteredReports = DB.reports.filter(r => !r.redacteur_id || r.redacteur_id == myId);
   } else if (crFilterAuteur !== '__all__') {
     filteredReports = DB.reports.filter(r => r.redacteur_id == crFilterAuteur);
   }
+  // Tri par date RDV décroissante
+  filteredReports.sort((a,b) => (b.date_raw||'').localeCompare(a.date_raw||''));
+
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-    <div style="font-size:13px;color:var(--t2)">Dictez, rédigez et partagez vos comptes-rendus avec l&#39;aide de l&#39;IA</div>
-    <button class="btn btn-primary" onclick="clearEditor()">+ Nouveau CR</button>
-  </div>
-  <div class="grid-2">
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">${currentReport ? 'Modifier le CR' : 'Nouveau compte-rendu'}</div>
-        ${currentReport ? '<span style="font-size:11px;color:var(--t3)">ID: '+currentReport.id+'</span>' : ''}
-      </div>
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:10px">
-        <div style="flex:2;min-width:200px">
-          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Titre <span style="color:var(--red)">*</span></label>
-          <input type="text" id="crTitre" placeholder="Titre du compte-rendu..." value="${currentReport ? (currentReport.titre||'').replace(/"/g,'&quot;') : ''}"
-            style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)">
-        </div>
-        <div style="flex:1;min-width:130px">
-          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Type <span style="color:var(--red)">*</span></label>
-          <select id="crType" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)">
-            <option value="rdv_ext" ${currentReport?.type_cr==='rdv_ext'?'selected':''}>RDV EXT.</option>
-            <option value="rdv_int" ${currentReport?.type_cr==='rdv_int'?'selected':''}>RDV INT.</option>
-            <option value="salon_foire" ${currentReport?.type_cr==='salon_foire'?'selected':''}>SALON-FOIRE</option>
-            <option value="tel" ${currentReport?.type_cr==='tel'?'selected':''}>TEL.</option>
-            <option value="visio" ${currentReport?.type_cr==='visio'?'selected':''}>VISIO.</option>
-            <option value="autre" ${currentReport?.type_cr==='autre'?'selected':''}>AUTRE</option>
-          </select>
-        </div>
-        <div style="flex:1;min-width:130px">
-          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Date RDV <span style="color:var(--red)">*</span></label>
-          <input type="date" id="crDate" value="${currentReport ? (currentReport.date_raw||'').substring(0,10) : today}"
-            style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
-        </div>
-        <div style="flex:1;min-width:150px">
-          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Rédacteur <span style="color:var(--red)">*</span></label>
-          <select id="crRedacteur" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
-            ${(DB.commerciaux||[]).map(co => `<option value="${co.id}" ${(currentReport ? currentReport.redacteur_id == co.id : co.id == myId) ? 'selected' : ''}>${co.nom||co.email}</option>`).join('')}
-          </select>
-        </div>
-      </div>
-      <div style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
-        <div style="flex:1;min-width:200px;position:relative">
-          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Client <span style="color:var(--red)">*</span></label>
-          <input type="text" id="crClientSearch" placeholder="Rechercher un client..." autocomplete="off"
-            style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)"
-            oninput="searchCRClient(this.value)" onfocus="searchCRClient(this.value)">
-          <input type="hidden" id="crClientId" value="">
-          <div id="crClientDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
-        </div>
-        <div style="flex:1;min-width:200px;position:relative">
-          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Contact</label>
-          <input type="text" id="crContactSearch" placeholder="Choisir un contact..." autocomplete="off" disabled
-            style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1);opacity:0.5"
-            oninput="searchCRContact(this.value)" onfocus="searchCRContact(this.value)">
-          <input type="hidden" id="crContactId" value="">
-          <div id="crContactDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
-        </div>
-      </div>
-      <div class="card-body" style="padding:0">
-        <div class="editor">
-          <div class="editor-toolbar">
-            <button class="tb" title="Gras" onclick="document.execCommand('bold')"><b>B</b></button>
-            <button class="tb" title="Italique" onclick="document.execCommand('italic')"><i>I</i></button>
-            <button class="tb" title="Souligné" onclick="document.execCommand('underline')"><u>U</u></button>
-            <div class="tb-div"></div>
-            <button class="tb" title="Liste" onclick="document.execCommand('insertUnorderedList')">☰</button>
-            <button class="tb" title="Numérotée" onclick="document.execCommand('insertOrderedList')">1.</button>
-            <div class="tb-div"></div>
-            <button class="tb" title="Dictée vocale" id="dictBtn" onclick="toggleDictation()">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
-            </button>
-            <div class="tb-div"></div>
-            <button class="tb tb-ai" onclick="aiAssist('preprdv')">✦ Préparer RDV</button>
-            <button class="tb tb-ai" onclick="aiAssist('rewrite')">✦ Reformuler</button>
-            <button class="tb tb-ai" onclick="aiAssist('summarize')">✦ Synthèse</button>
-            <button class="tb tb-ai" onclick="aiAssist('complete')">✦ Compléter</button>
-          </div>
-          <div class="editor-body" contenteditable="true" id="editorBody">${currentReport ? currentReport.contenu||'' : ''}</div>
-          <div id="aiArea"></div>
-          <div id="crAttachZone" style="padding:10px 16px;border-top:1px solid var(--border)">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-              <span style="font-size:12px;font-weight:600;color:var(--t2)">Pièces jointes</span>
-              <label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border:1px dashed var(--border);border-radius:6px;font-size:11px;color:var(--accent);background:var(--bg-1);transition:background .15s" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background='var(--bg-1)'">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-                Ajouter
-                <input type="file" multiple style="display:none" onchange="uploadCRAttachments(this.files)">
-              </label>
-              <span id="crUploadStatus" style="font-size:11px;color:var(--t3)"></span>
-            </div>
-            <div id="crAttachList" style="display:flex;flex-wrap:wrap;gap:6px">
-              ${currentReport && currentReport.pieces_jointes ? currentReport.pieces_jointes.map((pj,i) => renderAttachment(pj,i)).join('') : '<span style="font-size:11px;color:var(--t3)">Aucune pièce jointe</span>'}
-            </div>
-          </div>
-          <div class="editor-foot">
-            <div style="font-size:11px;color:var(--t3)" id="editorStatus">Prêt</div>
-            <div style="display:flex;gap:6px">
-              ${currentReport ? '<button class="btn" style="color:var(--red)" onclick="deleteReport()">Supprimer</button>' : ''}
-              <button class="btn" onclick="saveReport()">${currentReport ? 'Mettre à jour' : 'Sauvegarder'}</button>
-              <button class="btn btn-primary" onclick="openSendModal()">Envoyer</button>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <div style="font-size:13px;color:var(--t2)">Comptes-rendus</div>
+      <select style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--bg-1);color:var(--t1)"
+        onchange="crFilterAuteur=this.value;renderPage('cr')">
+        <option value="__mine__" ${crFilterAuteur==='__mine__'?'selected':''}>Mes CR</option>
+        <option value="__all__" ${crFilterAuteur==='__all__'?'selected':''}>Tous</option>
+        ${(DB.commerciaux||[]).map(co => `<option value="${co.id}" ${crFilterAuteur==co.id?'selected':''}>${co.nom||co.email}</option>`).join('')}
+      </select>
+      <span style="font-size:11px;color:var(--t3)">${filteredReports.length} CR</span>
     </div>
-    <div class="card">
-      <div class="card-header" style="flex-wrap:wrap;gap:8px">
-        <div class="card-title">Comptes-rendus</div>
-        <div style="display:flex;gap:6px;align-items:center">
-          <select style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--bg-1);color:var(--t1)"
-            onchange="crFilterAuteur=this.value;renderPage('cr')">
-            <option value="__mine__" ${crFilterAuteur==='__mine__'?'selected':''}>Mes CR</option>
-            <option value="__all__" ${crFilterAuteur==='__all__'?'selected':''}>Tous</option>
-            ${(DB.commerciaux||[]).map(co => `<option value="${co.id}" ${crFilterAuteur==co.id?'selected':''}>${co.nom||co.email}</option>`).join('')}
-          </select>
-          <span style="font-size:11px;color:var(--t3)">${filteredReports.length} CR</span>
-        </div>
-      </div>
-      <div class="card-body" style="max-height:600px;overflow-y:auto;padding:0">
-        ${filteredReports.length === 0 ? '<div style="padding:30px;text-align:center;color:var(--t3);font-size:13px">Aucun compte-rendu</div>' :
-        filteredReports.map(r => {
-          const isActive = currentReport && currentReport.id === r.id;
-          const auteur = (DB.commerciaux||[]).find(co => co.id == r.redacteur_id);
-          return `<div style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s${isActive?';background:var(--hover);border-left:3px solid var(--accent)':''}"
-          onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="loadReport(${r.id})">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <div style="font-size:13px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.titre||'Sans titre'}</div>
-            <div style="display:flex;gap:4px;margin-left:8px">${crTypeBadge(r.type_cr)} ${crStatutBadge(r.statut_cr)}</div>
-          </div>
-          <div style="font-size:11px;color:var(--t3);margin-bottom:4px">${r.client||''}${r.contact_name ? ' — '+r.contact_name : ''} | ${r.date}${auteur ? ' | '+auteur.nom : ''}</div>
-          <div style="font-size:12px;color:var(--t2);line-height:1.4;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${(r.text||'').substring(0,150)}</div>
-        </div>`;}).join('')}
-      </div>
+    <button class="btn btn-primary" onclick="openCRModal()">+ Nouveau CR</button>
+  </div>
+  <div class="card">
+    <div class="card-body" style="padding:0;overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:var(--bg-1);border-bottom:2px solid var(--border)">
+            <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase;white-space:nowrap">Date RDV</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Titre</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Client</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Contact</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Type</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Rédacteur</th>
+            <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Statut</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filteredReports.length === 0 ? '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--t3)">Aucun compte-rendu</td></tr>' :
+          filteredReports.map(r => {
+            const auteur = (DB.commerciaux||[]).find(co => co.id == r.redacteur_id);
+            const dateRdv = r.date_raw ? fmtDateFR(r.date_raw) : '—';
+            const nbPj = r.pieces_jointes ? r.pieces_jointes.length : 0;
+            return `<tr style="border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s"
+              onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
+              onclick="openCRModal(${r.id})">
+              <td style="padding:10px 14px;white-space:nowrap;font-weight:500">${dateRdv}</td>
+              <td style="padding:10px 14px;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">${r.titre||'Sans titre'}${nbPj ? ' <span style="color:var(--t3);font-weight:400" title="'+nbPj+' pièce(s) jointe(s)">📎'+nbPj+'</span>' : ''}</td>
+              <td style="padding:10px 14px;white-space:nowrap">${r.client||'—'}</td>
+              <td style="padding:10px 14px;white-space:nowrap;color:var(--t2)">${r.contact_name||'—'}</td>
+              <td style="padding:10px 14px;white-space:nowrap">${crTypeBadge(r.type_cr)}</td>
+              <td style="padding:10px 14px;white-space:nowrap;color:var(--t2)">${auteur ? auteur.nom : '—'}</td>
+              <td style="padding:10px 14px;white-space:nowrap">${crStatutBadge(r.statut_cr)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
     </div>
   </div>`;
 }
 
 function initEditor() {}
+
+function getCRModalHTML(report) {
+  const today = new Date().toISOString().split('T')[0];
+  const myId = currentCommercial?.id || '';
+  const r = report;
+  return `
+    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:10px">
+      <div style="flex:2;min-width:200px">
+        <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Titre <span style="color:var(--red)">*</span></label>
+        <input type="text" id="crTitre" placeholder="Titre du compte-rendu..." value="${r ? (r.titre||'').replace(/"/g,'&quot;') : ''}"
+          style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)">
+      </div>
+      <div style="flex:1;min-width:130px">
+        <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Type <span style="color:var(--red)">*</span></label>
+        <select id="crType" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)">
+          <option value="rdv_ext" ${r?.type_cr==='rdv_ext'?'selected':''}>RDV EXT.</option>
+          <option value="rdv_int" ${r?.type_cr==='rdv_int'?'selected':''}>RDV INT.</option>
+          <option value="salon_foire" ${r?.type_cr==='salon_foire'?'selected':''}>SALON-FOIRE</option>
+          <option value="tel" ${r?.type_cr==='tel'?'selected':''}>TEL.</option>
+          <option value="visio" ${r?.type_cr==='visio'?'selected':''}>VISIO.</option>
+          <option value="autre" ${r?.type_cr==='autre'?'selected':''}>AUTRE</option>
+        </select>
+      </div>
+      <div style="flex:1;min-width:130px">
+        <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Date RDV <span style="color:var(--red)">*</span></label>
+        <input type="date" id="crDate" value="${r ? (r.date_raw||'').substring(0,10) : today}"
+          style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
+      </div>
+      <div style="flex:1;min-width:150px">
+        <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Rédacteur <span style="color:var(--red)">*</span></label>
+        <select id="crRedacteur" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
+          ${(DB.commerciaux||[]).map(co => `<option value="${co.id}" ${(r ? r.redacteur_id == co.id : co.id == myId) ? 'selected' : ''}>${co.nom||co.email}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <div style="flex:1;min-width:200px;position:relative">
+        <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Client <span style="color:var(--red)">*</span></label>
+        <input type="text" id="crClientSearch" placeholder="Rechercher un client..." autocomplete="off"
+          style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)"
+          oninput="searchCRClient(this.value)" onfocus="searchCRClient(this.value)">
+        <input type="hidden" id="crClientId" value="">
+        <div id="crClientDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
+      </div>
+      <div style="flex:1;min-width:200px;position:relative">
+        <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Contact</label>
+        <input type="text" id="crContactSearch" placeholder="Choisir un contact..." autocomplete="off" disabled
+          style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1);opacity:0.5"
+          oninput="searchCRContact(this.value)" onfocus="searchCRContact(this.value)">
+        <input type="hidden" id="crContactId" value="">
+        <div id="crContactDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
+      </div>
+    </div>
+    <div style="padding:0">
+      <div class="editor">
+        <div class="editor-toolbar">
+          <button class="tb" title="Gras" onclick="document.execCommand('bold')"><b>B</b></button>
+          <button class="tb" title="Italique" onclick="document.execCommand('italic')"><i>I</i></button>
+          <button class="tb" title="Souligné" onclick="document.execCommand('underline')"><u>U</u></button>
+          <div class="tb-div"></div>
+          <button class="tb" title="Liste" onclick="document.execCommand('insertUnorderedList')">☰</button>
+          <button class="tb" title="Numérotée" onclick="document.execCommand('insertOrderedList')">1.</button>
+          <div class="tb-div"></div>
+          <button class="tb" title="Dictée vocale" id="dictBtn" onclick="toggleDictation()">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+          </button>
+          <div class="tb-div"></div>
+          <button class="tb tb-ai" onclick="aiAssist('preprdv')">✦ Préparer RDV</button>
+          <button class="tb tb-ai" onclick="aiAssist('rewrite')">✦ Reformuler</button>
+          <button class="tb tb-ai" onclick="aiAssist('summarize')">✦ Synthèse</button>
+          <button class="tb tb-ai" onclick="aiAssist('complete')">✦ Compléter</button>
+        </div>
+        <div class="editor-body" contenteditable="true" id="editorBody">${r ? r.contenu||'' : ''}</div>
+        <div id="aiArea"></div>
+        <div id="crAttachZone" style="padding:10px 16px;border-top:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="font-size:12px;font-weight:600;color:var(--t2)">Pièces jointes</span>
+            <label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border:1px dashed var(--border);border-radius:6px;font-size:11px;color:var(--accent);background:var(--bg-1);transition:background .15s" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background='var(--bg-1)'">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              Ajouter
+              <input type="file" multiple style="display:none" onchange="uploadCRAttachments(this.files)">
+            </label>
+            <span id="crUploadStatus" style="font-size:11px;color:var(--t3)"></span>
+          </div>
+          <div id="crAttachList" style="display:flex;flex-wrap:wrap;gap:6px">
+            ${r && r.pieces_jointes ? r.pieces_jointes.map((pj,i) => renderAttachment(pj,i)).join('') : '<span style="font-size:11px;color:var(--t3)">Aucune pièce jointe</span>'}
+          </div>
+        </div>
+        <div class="editor-foot">
+          <div style="font-size:11px;color:var(--t3)" id="editorStatus">Prêt</div>
+          <div style="display:flex;gap:6px">
+            ${r ? '<button class="btn" style="color:var(--red)" onclick="deleteReport()">Supprimer</button>' : ''}
+            <button class="btn" onclick="saveReport()">${r ? 'Mettre à jour' : 'Sauvegarder'}</button>
+            <button class="btn btn-primary" onclick="openSendModal()">Envoyer</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function openCRModal(reportId) {
+  if (reportId) {
+    // Charger le CR complet depuis Supabase
+    const { data } = await sb.from('reports').select('*').eq('id', reportId).single();
+    if (!data) { toast('CR introuvable','error'); return; }
+    currentReport = { ...data, client: data.client_name, text: data.contenu || '', date_raw: data.date, date: timeAgo(data.date), titre: data.titre };
+    crAttachments = currentReport.pieces_jointes || [];
+  } else {
+    currentReport = null;
+    crAttachments = [];
+  }
+  const el = document.getElementById('modal-cr');
+  document.getElementById('crModalTitle').textContent = currentReport ? 'Modifier le compte-rendu' : 'Nouveau compte-rendu';
+  document.getElementById('crModalBody').innerHTML = getCRModalHTML(currentReport);
+  el.classList.add('active');
+  // Remplir client/contact si édition
+  if (currentReport) {
+    setTimeout(() => {
+      const cs = document.getElementById('crClientSearch');
+      if (cs) cs.value = currentReport.client || '';
+      const ci = document.getElementById('crClientId');
+      if (ci) ci.value = currentReport.client_id || '';
+      const co = document.getElementById('crContactSearch');
+      if (co) { co.value = currentReport.contact_name || ''; co.disabled = !currentReport.client_id; co.style.opacity = currentReport.client_id ? '1' : '0.5'; }
+      const coi = document.getElementById('crContactId');
+      if (coi) coi.value = currentReport.contact_id || '';
+    }, 50);
+  }
+}
 function clearEditor() {
   currentReport = null;
   crAttachments = [];
   _crPrefill = null;
+  closeCRModal();
   renderPage('cr');
+}
+
+function closeCRModal() {
+  const el = document.getElementById('modal-cr');
+  if (el) el.classList.remove('active');
 }
 
 // Pré-remplissage CR depuis fiche client ou contact
@@ -4650,40 +4712,23 @@ function goToCR(clientId, clientName, contactId, contactName) {
   currentReport = null;
   _crPrefill = { clientId, clientName, contactId: contactId || null, contactName: contactName || null };
   go('cr');
-  setTimeout(() => {
+  setTimeout(async () => {
+    await openCRModal(); // ouvre modal vide
     if (!_crPrefill) return;
     const p = _crPrefill;
     _crPrefill = null;
-    selectCRClient(p.clientId, p.clientName);
-    if (p.contactId && p.contactName) {
-      // Attendre le chargement des contacts puis sélectionner
-      const waitAndSelect = () => {
-        selectCRContact(p.contactId, p.contactName);
-      };
-      if (crContactsCache[p.clientId]) waitAndSelect();
-      else setTimeout(waitAndSelect, 500);
-    }
+    setTimeout(() => {
+      selectCRClient(p.clientId, p.clientName);
+      if (p.contactId && p.contactName) {
+        const waitAndSelect = () => selectCRContact(p.contactId, p.contactName);
+        if (crContactsCache[p.clientId]) waitAndSelect();
+        else setTimeout(waitAndSelect, 500);
+      }
+    }, 100);
   }, 100);
 }
 async function loadReport(id) {
-  // Charger le CR complet depuis Supabase (contenu + pieces_jointes)
-  const { data } = await sb.from('reports').select('*').eq('id', id).single();
-  if (!data) return;
-  const r = { ...data, client: data.client_name, text: data.contenu || '', date_raw: data.date, date: timeAgo(data.date), titre: data.titre };
-  currentReport = r;
-  crAttachments = r.pieces_jointes || [];
-  renderPage('cr');
-  // Après le render, remplir les champs client/contact
-  setTimeout(() => {
-    const cs = document.getElementById('crClientSearch');
-    if (cs) cs.value = r.client || '';
-    const ci = document.getElementById('crClientId');
-    if (ci) ci.value = r.client_id || '';
-    const co = document.getElementById('crContactSearch');
-    if (co) { co.value = r.contact_name || ''; co.disabled = !r.client_id; co.style.opacity = r.client_id ? '1' : '0.5'; }
-    const coi = document.getElementById('crContactId');
-    if (coi) coi.value = r.contact_id || '';
-  }, 50);
+  await openCRModal(id);
 }
 async function deleteReport() {
   if (!currentReport) return;
@@ -4698,6 +4743,7 @@ async function deleteReport() {
   toast('Compte-rendu supprimé', 'success');
   currentReport = null;
   crAttachments = [];
+  closeCRModal();
   await loadDB();
   renderPage('cr');
 }
@@ -4916,11 +4962,8 @@ async function saveReport() {
     if (data && data[0]) currentReport = data[0];
   }
   await loadDB();
+  closeCRModal();
   renderPage('cr');
-  // Recharger le CR en cours
-  if (currentReport) {
-    setTimeout(() => loadReport(currentReport.id), 100);
-  }
 }
 
 // ═══ ENVOIS ═══
