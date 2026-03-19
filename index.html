@@ -4513,12 +4513,12 @@ function renderCR() {
       </div>
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:10px">
         <div style="flex:2;min-width:200px">
-          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Titre</label>
+          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Titre <span style="color:var(--red)">*</span></label>
           <input type="text" id="crTitre" placeholder="Titre du compte-rendu..." value="${currentReport ? (currentReport.titre||'').replace(/"/g,'&quot;') : ''}"
             style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)">
         </div>
         <div style="flex:1;min-width:130px">
-          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Type</label>
+          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Type <span style="color:var(--red)">*</span></label>
           <select id="crType" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)">
             <option value="rdv_ext" ${currentReport?.type_cr==='rdv_ext'?'selected':''}>RDV EXT.</option>
             <option value="rdv_int" ${currentReport?.type_cr==='rdv_int'?'selected':''}>RDV INT.</option>
@@ -4529,12 +4529,12 @@ function renderCR() {
           </select>
         </div>
         <div style="flex:1;min-width:130px">
-          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Date RDV</label>
+          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Date RDV <span style="color:var(--red)">*</span></label>
           <input type="date" id="crDate" value="${currentReport ? (currentReport.date_raw||'').substring(0,10) : today}"
             style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
         </div>
         <div style="flex:1;min-width:150px">
-          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Rédacteur</label>
+          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Rédacteur <span style="color:var(--red)">*</span></label>
           <select id="crRedacteur" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
             ${(DB.commerciaux||[]).map(co => `<option value="${co.id}" ${(currentReport ? currentReport.redacteur_id == co.id : co.id == myId) ? 'selected' : ''}>${co.nom||co.email}</option>`).join('')}
           </select>
@@ -4542,7 +4542,7 @@ function renderCR() {
       </div>
       <div style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
         <div style="flex:1;min-width:200px;position:relative">
-          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Client</label>
+          <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Client <span style="color:var(--red)">*</span></label>
           <input type="text" id="crClientSearch" placeholder="Rechercher un client..." autocomplete="off"
             style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)"
             oninput="searchCRClient(this.value)" onfocus="searchCRClient(this.value)">
@@ -4866,16 +4866,24 @@ async function removeCRAttachment(idx) {
 
 async function saveReport() {
   const body = document.getElementById('editorBody');
-  if (!body || !body.innerText.trim()) { toast('Écrivez du contenu avant de sauvegarder','error'); return; }
+  const titre = document.getElementById('crTitre')?.value.trim() || '';
+  const typeCr = document.getElementById('crType')?.value || '';
+  const dateCr = document.getElementById('crDate')?.value || '';
+  const redacteurId = document.getElementById('crRedacteur')?.value || '';
   const clientId = document.getElementById('crClientId')?.value || '';
-  const clientName = document.getElementById('crClientSearch')?.value || 'Non assigné';
+  const clientName = document.getElementById('crClientSearch')?.value || '';
+
+  // Validation champs obligatoires
+  const missing = [];
+  if (!titre) missing.push('Titre');
+  if (!typeCr) missing.push('Type');
+  if (!dateCr) missing.push('Date RDV');
+  if (!redacteurId) missing.push('Rédacteur');
+  if (!clientId) missing.push('Client');
+  if (missing.length) { toast('Champs obligatoires manquants : ' + missing.join(', '), 'error'); return; }
+
   const contactId = document.getElementById('crContactId')?.value || '';
   const contactName = document.getElementById('crContactSearch')?.value || '';
-  const titre = document.getElementById('crTitre')?.value.trim() || body.innerText.trim().substring(0, 60);
-  const typeCr = document.getElementById('crType')?.value || 'rdv_ext';
-  const dateCr = document.getElementById('crDate')?.value || new Date().toISOString().split('T')[0];
-
-  const redacteurId = document.getElementById('crRedacteur')?.value || currentCommercial?.id || null;
   const redacteur = (DB.commerciaux||[]).find(co => co.id == redacteurId);
 
   const reportData = {
