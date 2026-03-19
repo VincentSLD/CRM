@@ -6058,6 +6058,21 @@ async function submitNewClient() {
     status: 'objectif',
   });
   closeModal('new-client');
+  // Si on venait du formulaire CR, sélectionner le nouveau client
+  if (crViewMode === 'detail') {
+    await loadDB();
+    renderPage('cr');
+    setTimeout(() => {
+      selectCRClient(id, name);
+      // Re-remplir les autres champs du CR si on éditait
+      if (currentReport) {
+        const co = document.getElementById('crContactSearch');
+        if (co) { co.value = currentReport.contact_name || ''; co.disabled = !id; co.style.opacity = '1'; }
+        const coi = document.getElementById('crContactId');
+        if (coi) coi.value = currentReport.contact_id || '';
+      }
+    }, 100);
+  }
 }
 
 async function submitNewDevis() {
