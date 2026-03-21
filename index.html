@@ -6365,7 +6365,7 @@ async function syncAkuiteo() {
       if (!Array.isArray(batch) || batch.length === 0) break;
       allAkCustomers = allAkCustomers.concat(batch);
       console.log(`[Akuiteo] Page ${page}: ${batch.length} clients (total: ${allAkCustomers.length})`);
-      if (batch.length < PAGE_SIZE) break; // dernière page
+      if (batch.length <= PAGE_SIZE) break; // dernière page ou API a tout renvoyé d'un coup
       page++;
       // Sécurité : max 25000 clients
       if (allAkCustomers.length >= 25000) { console.warn('[Akuiteo] Limite 25000 clients atteinte'); break; }
