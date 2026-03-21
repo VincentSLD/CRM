@@ -6437,9 +6437,51 @@ async function syncAkuiteo() {
     }
 
     console.log(`[Akuiteo] Clients : ${created} créés, ${updated} mis à jour`);
-    toast(`Clients : ${created} créés, ${updated} mis à jour. Géocodage en cours...`, 'info');
+    toast(`Clients : ${created} créés, ${updated} mis à jour. Sync contacts...`, 'info');
 
-    // --- ETAPE 1b : Géocoder les clients sans coordonnées ---
+    // --- ETAPE 2 : Sync contacts en PRIORITE ---
+    console.log('[Akuiteo] === ETAPE 2 : Sync contacts (prioritaire, parallèle ×10) ===');
+    // Construire le map client depuis allClientsMap (déjà en mémoire, pas besoin de recharger Supabase)
+    const akClientMapForContacts = {};
+    for (const c of allClientsBatch) { if (c.akuiteo_id) akClientMapForContacts[c.akuiteo_id] = c; }
+    const akClientIdsForContacts = akCustomers.map(c => String(c.id));
+    console.log(`[Akuiteo] akClientMap contacts: ${Object.keys(akClientMapForContacts).length}, akClientIds: ${akClientIdsForContacts.length}`);
+    let syncedContacts = 0, errContacts = 0, skippedContacts = 0;
+    const CONTACT_BATCH = 10;
+
+    for (let i = 0; i < akClientIdsForContacts.length; i += CONTACT_BATCH) {
+      const batch = akClientIdsForContacts.slice(i, i + CONTACT_BATCH);
+      const results = await Promise.allSettled(batch.map(async (akCid) => {
+        const crmClient = akClientMapForContacts[akCid];
+        if (!crmClient) { skippedContacts++; return 0; }
+        const contacts = await akuiteoFetch('GET', '/crm/customers/' + akCid + '/contacts').catch(e => { console.warn(`[Akuiteo] Fetch contacts ${akCid} err:`, e.message); return []; });
+        if (!Array.isArray(contacts) || contacts.length === 0) return 0;
+        const rows = contacts.map(ct => {
+          const ctId = 'ct_' + String(ct.id).replace(/[^a-zA-Z0-9]/g, '_') + '_' + crmClient.id.substring(0, 8);
+          return {
+            id: ctId, client_id: crmClient.id, akuiteo_id: String(ct.id), akuiteo_customer_id: akCid,
+            code: ct.code || '', nom: ct.name || '', prenom: ct.firstName || '', titre: ct.title || '',
+            fonction: ct.functionTitle || ct.position || '', service: ct.service || '',
+            email: ct.email || '', email2: ct.email2 || '', telephone: ct.phone || '', mobile: ct.mobilePhone || '',
+            adresse: ct.address?.line1 || '', code_postal: ct.address?.postalCode || '', ville: ct.address?.city || '',
+            commentaire: ct.comment || '',
+          };
+        });
+        const { error } = await sb.from('contacts').upsert(rows, { onConflict: 'id' });
+        if (error) { console.warn(`[Akuiteo] Upsert contacts ${akCid} err:`, error.message); return 0; }
+        return rows.length;
+      }));
+      for (const r of results) {
+        if (r.status === 'fulfilled') syncedContacts += (r.value || 0);
+        else { errContacts++; console.warn('[Akuiteo] Contact batch err:', r.reason?.message); }
+      }
+      if ((i + CONTACT_BATCH) % 100 < CONTACT_BATCH) console.log(`[Akuiteo] Contacts: ${i + batch.length}/${akClientIdsForContacts.length} clients (${syncedContacts} contacts)`);
+    }
+    console.log(`[Akuiteo] Contacts : ${syncedContacts} synchro, ${errContacts} erreurs, ${skippedContacts} ignorés`);
+    toast(`${syncedContacts} contacts synchronisés. Géocodage en cours...`, 'info');
+
+    // --- ETAPE 3 : Géocoder les clients sans coordonnées ---
+    console.log('[Akuiteo] === ETAPE 3 : Géocodage clients ===');
     console.log('[Akuiteo] === ETAPE 1b : Géocodage clients ===');
     const { data: clientsNoCoords } = await sb.from('clients').select('id,adresse_ligne1,code_postal,city').is('lat', null);
     const toGeocode = (clientsNoCoords || []).filter(c => c.city || c.code_postal || c.adresse_ligne1);
@@ -6820,43 +6862,7 @@ async function syncAkuiteo() {
     })();
 
     console.log(`[Akuiteo] Marchés: ${syncedMarches}, Affaires: ${syncedAffaires}`);
-    toast(`${syncedDocs.devis}D ${syncedDocs.commandes}C ${syncedDocs.factures}F, ${syncedMarches} marchés, ${syncedAffaires} affaires. Contacts...`, 'info');
-
-    // --- ETAPE 5 : Sync contacts en PARALLELE par lots de 10 ---
-    console.log('[Akuiteo] === ETAPE 5 : Sync contacts (parallèle ×10) ===');
-    console.log(`[Akuiteo] akClientIds: ${akClientIds.length}, akClientMap keys: ${Object.keys(akClientMap).length}`);
-    let syncedContacts = 0, errContacts = 0, skippedContacts = 0;
-    const BATCH_SIZE = 10;
-
-    for (let i = 0; i < akClientIds.length; i += BATCH_SIZE) {
-      const batch = akClientIds.slice(i, i + BATCH_SIZE);
-      const results = await Promise.allSettled(batch.map(async (akCid) => {
-        const crmClient = akClientMap[akCid];
-        if (!crmClient) { skippedContacts++; return 0; }
-        const contacts = await akuiteoFetch('GET', '/crm/customers/' + akCid + '/contacts').catch(e => { console.warn(`[Akuiteo] Fetch contacts ${akCid} err:`, e.message); return []; });
-        if (!Array.isArray(contacts) || contacts.length === 0) return 0;
-        const rows = contacts.map(ct => {
-          const ctId = 'ct_' + String(ct.id).replace(/[^a-zA-Z0-9]/g, '_') + '_' + crmClient.id.substring(0, 8);
-          return {
-            id: ctId, client_id: crmClient.id, akuiteo_id: String(ct.id), akuiteo_customer_id: akCid,
-            code: ct.code || '', nom: ct.name || '', prenom: ct.firstName || '', titre: ct.title || '',
-            fonction: ct.functionTitle || ct.position || '', service: ct.service || '',
-            email: ct.email || '', email2: ct.email2 || '', telephone: ct.phone || '', mobile: ct.mobilePhone || '',
-            adresse: ct.address?.line1 || '', code_postal: ct.address?.postalCode || '', ville: ct.address?.city || '',
-            commentaire: ct.comment || '',
-          };
-        });
-        const { error } = await sb.from('contacts').upsert(rows, { onConflict: 'id' });
-        if (error) throw error;
-        return rows.length;
-      }));
-      for (const r of results) {
-        if (r.status === 'fulfilled') syncedContacts += (r.value || 0);
-        else { errContacts++; console.warn('[Akuiteo] Contact batch err:', r.reason?.message); }
-      }
-      if ((i + BATCH_SIZE) % 100 < BATCH_SIZE) console.log(`[Akuiteo] Contacts: ${i + batch.length}/${akClientIds.length} clients (${syncedContacts} contacts)`);
-    }
-    console.log(`[Akuiteo] Contacts : ${syncedContacts} synchro, ${errContacts} erreurs, ${skippedContacts} clients ignorés (pas dans map)`);
+    toast(`${syncedDocs.devis}D ${syncedDocs.commandes}C ${syncedDocs.factures}F, ${syncedMarches} marchés, ${syncedAffaires} affaires`, 'info');
 
     // --- ETAPE 6 : Auto-assign commercial (managerId des commandes) ---
     console.log('[Akuiteo] === ETAPE 6 : Auto-assign commerciaux ===');
