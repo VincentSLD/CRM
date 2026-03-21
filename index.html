@@ -6514,9 +6514,17 @@ async function syncAkuiteo() {
     console.log('[Akuiteo] === ETAPE 4 : Sync docs BULK ===');
     let syncedDocs = { devis: 0, commandes: 0, factures: 0 };
     const akClientMap = {};
-    const { data: allClientsMap2 } = await sb.from('clients').select('id,akuiteo_id,name');
-    for (const c of (allClientsMap2 || [])) { if (c.akuiteo_id) akClientMap[c.akuiteo_id] = c; }
-    console.log(`[Akuiteo] akClientMap: ${Object.keys(akClientMap).length} clients mappés`);
+    // Charger TOUS les clients (Supabase limite à 1000 par défaut)
+    let allClientsMap2 = [], cOff = 0;
+    while (true) {
+      const { data: chunk } = await sb.from('clients').select('id,akuiteo_id,name').range(cOff, cOff + 999);
+      if (!chunk || chunk.length === 0) break;
+      allClientsMap2 = allClientsMap2.concat(chunk);
+      if (chunk.length < 1000) break;
+      cOff += 1000;
+    }
+    for (const c of allClientsMap2) { if (c.akuiteo_id) akClientMap[c.akuiteo_id] = c; }
+    console.log(`[Akuiteo] akClientMap: ${Object.keys(akClientMap).length} clients mappés (${allClientsMap2.length} chargés)`);
     const akClientIds = akCustomers.map(c => String(c.id));
     const allFetchedDocs = [];
     const projectDeliverySite = {};
@@ -6764,69 +6772,68 @@ async function syncAkuiteo() {
         console.log(`[Akuiteo] Liens docs terminé: ${linkOk} ok, ${linkErr} erreurs`);
       })();
     }
-    // --- ETAPE 4c : Récupérer adresses des marchés via deliverySiteId ---
-    console.log('[Akuiteo] === ETAPE 4c : Adresses des marchés (sites de livraison) ===');
-    // Regrouper les deliverySiteId par customerId et par préfixe marché
-    const customerSitesToFetch = {}; // customerId → Set de deliverySiteId
-    const marcheDeliverySite = {}; // marchePrefix → deliverySiteId
-    for (const [pid, info] of Object.entries(projectDeliverySite)) {
-      const prefix = getMarchePrefix(pid);
-      if (!marcheDeliverySite[prefix]) marcheDeliverySite[prefix] = info;
-      if (!customerSitesToFetch[info.customerId]) customerSitesToFetch[info.customerId] = new Set();
-      customerSitesToFetch[info.customerId].add(info.deliverySiteId);
-    }
-    // Récupérer les sites par client (en parallèle ×10)
-    const siteAddresses = {}; // siteId → { line1, postalCode, city, ... }
-    const custIds = Object.keys(customerSitesToFetch);
-    console.log(`[Akuiteo] Sites à récupérer pour ${custIds.length} clients`);
-    for (let i = 0; i < custIds.length; i += PARALLEL) {
-      const batch = custIds.slice(i, i + PARALLEL);
-      const results = await Promise.allSettled(batch.map(async (cid) => {
-        const sites = await akuiteoFetch('GET', '/crm/customers/' + cid + '/sites');
-        if (!Array.isArray(sites)) return;
-        for (const s of sites) {
-          const a = s.address;
-          if (a && (a.line1 || a.city || a.postalCode)) {
-            siteAddresses[s.id] = { line1: a.line1 || '', postalCode: a.postalCode || '', city: a.city || '', department: a.geographicalDepartmentName || '', region: a.regionName || '' };
-          }
+    // --- ETAPE 4c : Récupérer adresses des marchés via deliverySiteId (en arrière-plan) ---
+    console.log('[Akuiteo] === ETAPE 4c : Adresses des marchés (en arrière-plan) ===');
+    (async () => {
+      try {
+        const customerSitesToFetch = {};
+        const marcheDeliverySite = {};
+        for (const [pid, info] of Object.entries(projectDeliverySite)) {
+          const prefix = getMarchePrefix(pid);
+          if (!marcheDeliverySite[prefix]) marcheDeliverySite[prefix] = info;
+          if (!customerSitesToFetch[info.customerId]) customerSitesToFetch[info.customerId] = new Set();
+          customerSitesToFetch[info.customerId].add(info.deliverySiteId);
         }
-      }));
-    }
-    console.log(`[Akuiteo] Sites avec adresse: ${Object.keys(siteAddresses).length}`);
-    // Mettre à jour les marchés avec les adresses et géocoder
-    let geoOk = 0, geoFail = 0;
-    for (const [prefix, info] of Object.entries(marcheDeliverySite)) {
-      const addr = siteAddresses[info.deliverySiteId];
-      if (!addr) continue;
-      const mId = 'akm_' + prefix.replace(/[^a-zA-Z0-9.]/g, '_');
-      const update = { adresse: addr.line1, code_postal: addr.postalCode, ville: addr.city };
-      // Géocoder via API adresse gouv.fr
-      const fullAddr = [addr.line1, addr.postalCode, addr.city].filter(Boolean).join(', ');
-      if (fullAddr.length > 8) {
-        const coords = await geocodeAddress(fullAddr);
-        if (coords) { update.lat = coords.lat; update.lng = coords.lng; geoOk++; }
-        else { geoFail++; }
-      }
-      const { error } = await sb.from('marches').update(update).eq('id', mId);
-      if (error) console.warn(`[Akuiteo] Update adresse marché ${mId}:`, error.message);
-    }
-    console.log(`[Akuiteo] Adresses marchés: ${geoOk} géocodées, ${geoFail} non trouvées`);
+        const siteAddresses = {};
+        const custIds = Object.keys(customerSitesToFetch);
+        console.log(`[Akuiteo] Sites à récupérer pour ${custIds.length} clients`);
+        for (let i = 0; i < custIds.length; i += 10) {
+          const batch = custIds.slice(i, i + 10);
+          await Promise.allSettled(batch.map(async (cid) => {
+            const sites = await akuiteoFetch('GET', '/crm/customers/' + cid + '/sites').catch(() => []);
+            if (!Array.isArray(sites)) return;
+            for (const s of sites) {
+              const a = s.address;
+              if (a && (a.line1 || a.city || a.postalCode)) {
+                siteAddresses[s.id] = { line1: a.line1 || '', postalCode: a.postalCode || '', city: a.city || '', department: a.geographicalDepartmentName || '', region: a.regionName || '' };
+              }
+            }
+          }));
+        }
+        console.log(`[Akuiteo] Sites avec adresse: ${Object.keys(siteAddresses).length}`);
+        let geoOk = 0, geoFail = 0;
+        for (const [prefix, info] of Object.entries(marcheDeliverySite)) {
+          const addr = siteAddresses[info.deliverySiteId];
+          if (!addr) continue;
+          const mId = 'akm_' + prefix.replace(/[^a-zA-Z0-9.]/g, '_');
+          const update = { adresse: addr.line1, code_postal: addr.postalCode, ville: addr.city };
+          const fullAddr = [addr.line1, addr.postalCode, addr.city].filter(Boolean).join(', ');
+          if (fullAddr.length > 8) {
+            const coords = await geocodeAddress(fullAddr);
+            if (coords) { update.lat = coords.lat; update.lng = coords.lng; geoOk++; }
+            else { geoFail++; }
+          }
+          await sb.from('marches').update(update).eq('id', mId).catch(() => {});
+        }
+        console.log(`[Akuiteo] Adresses marchés: ${geoOk} géocodées, ${geoFail} non trouvées`);
+      } catch (e) { console.warn('[Akuiteo] Erreur adresses marchés:', e.message); }
+    })();
 
     console.log(`[Akuiteo] Marchés: ${syncedMarches}, Affaires: ${syncedAffaires}`);
     toast(`${syncedDocs.devis}D ${syncedDocs.commandes}C ${syncedDocs.factures}F, ${syncedMarches} marchés, ${syncedAffaires} affaires. Contacts...`, 'info');
 
     // --- ETAPE 5 : Sync contacts en PARALLELE par lots de 10 ---
     console.log('[Akuiteo] === ETAPE 5 : Sync contacts (parallèle ×10) ===');
-    let syncedContacts = 0, errContacts = 0;
-    // akClientIds déjà déclaré plus haut (ETAPE 4)
+    console.log(`[Akuiteo] akClientIds: ${akClientIds.length}, akClientMap keys: ${Object.keys(akClientMap).length}`);
+    let syncedContacts = 0, errContacts = 0, skippedContacts = 0;
     const BATCH_SIZE = 10;
 
     for (let i = 0; i < akClientIds.length; i += BATCH_SIZE) {
       const batch = akClientIds.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(batch.map(async (akCid) => {
         const crmClient = akClientMap[akCid];
-        if (!crmClient) return 0;
-        const contacts = await akuiteoFetch('GET', '/crm/customers/' + akCid + '/contacts');
+        if (!crmClient) { skippedContacts++; return 0; }
+        const contacts = await akuiteoFetch('GET', '/crm/customers/' + akCid + '/contacts').catch(e => { console.warn(`[Akuiteo] Fetch contacts ${akCid} err:`, e.message); return []; });
         if (!Array.isArray(contacts) || contacts.length === 0) return 0;
         const rows = contacts.map(ct => {
           const ctId = 'ct_' + String(ct.id).replace(/[^a-zA-Z0-9]/g, '_') + '_' + crmClient.id.substring(0, 8);
@@ -6849,7 +6856,7 @@ async function syncAkuiteo() {
       }
       if ((i + BATCH_SIZE) % 100 < BATCH_SIZE) console.log(`[Akuiteo] Contacts: ${i + batch.length}/${akClientIds.length} clients (${syncedContacts} contacts)`);
     }
-    console.log(`[Akuiteo] Contacts : ${syncedContacts} synchro, ${errContacts} erreurs`);
+    console.log(`[Akuiteo] Contacts : ${syncedContacts} synchro, ${errContacts} erreurs, ${skippedContacts} clients ignorés (pas dans map)`);
 
     // --- ETAPE 6 : Auto-assign commercial (managerId des commandes) ---
     console.log('[Akuiteo] === ETAPE 6 : Auto-assign commerciaux ===');
