@@ -6514,7 +6514,9 @@ async function syncAkuiteo() {
     console.log('[Akuiteo] === ETAPE 4 : Sync docs BULK ===');
     let syncedDocs = { devis: 0, commandes: 0, factures: 0 };
     const akClientMap = {};
-    for (const c of DB.clients) { if (c.akuiteo_id) akClientMap[c.akuiteo_id] = c; }
+    const { data: allClientsMap2 } = await sb.from('clients').select('id,akuiteo_id,name');
+    for (const c of (allClientsMap2 || [])) { if (c.akuiteo_id) akClientMap[c.akuiteo_id] = c; }
+    console.log(`[Akuiteo] akClientMap: ${Object.keys(akClientMap).length} clients mappés`);
     const akClientIds = akCustomers.map(c => String(c.id));
     const allFetchedDocs = [];
     const projectDeliverySite = {};
@@ -6732,19 +6734,35 @@ async function syncAkuiteo() {
           else syncedAffaires += affairesBatch.slice(i, i + 100).length;
         }
       }
-      // Lier docs → affaires/marchés + propager apporteur d'affaire
+      // Lier docs → affaires/marchés + propager apporteur d'affaire (non bloquant)
       console.log('[Akuiteo] Liens docs → affaires/marchés + apporteur...');
-      for (const [pid, affId] of Object.entries(projectToAffaire)) {
-        const mId = projectToMarche[pid] || null;
-        const aff = affairesByProject[pid];
-        const apporteur = aff?.apporteur || null;
-        const updateData = { affaire_id: affId, marche_id: mId, apporteur_affaire: apporteur };
-        await Promise.all([
-          sb.from('devis').update(updateData).eq('projet', pid),
-          sb.from('commandes').update(updateData).eq('projet', pid),
-          sb.from('factures').update(updateData).eq('projet', pid),
-        ]);
-      }
+      const linkPids = Object.entries(projectToAffaire);
+      console.log(`[Akuiteo] ${linkPids.length} projets à lier (en arrière-plan)`);
+      // Lancer en arrière-plan pour ne pas bloquer la sync contacts
+      (async () => {
+        let linkOk = 0, linkErr = 0;
+        for (let li = 0; li < linkPids.length; li += 5) {
+          const linkBatch = linkPids.slice(li, li + 5);
+          await Promise.allSettled(linkBatch.map(async ([pid, affId]) => {
+            try {
+              const mId = projectToMarche[pid] || null;
+              const aff = affairesByProject[pid];
+              const apporteur = aff?.apporteur || null;
+              const updateData = { affaire_id: affId, marche_id: mId, apporteur_affaire: apporteur };
+              await Promise.allSettled([
+                sb.from('devis').update(updateData).eq('projet', pid),
+                sb.from('commandes').update(updateData).eq('projet', pid),
+                sb.from('factures').update(updateData).eq('projet', pid),
+              ]);
+              linkOk++;
+            } catch (e) {
+              linkErr++;
+            }
+          }));
+          if ((li + 5) % 100 < 5) console.log(`[Akuiteo] Liens docs: ${li + linkBatch.length}/${linkPids.length}`);
+        }
+        console.log(`[Akuiteo] Liens docs terminé: ${linkOk} ok, ${linkErr} erreurs`);
+      })();
     }
     // --- ETAPE 4c : Récupérer adresses des marchés via deliverySiteId ---
     console.log('[Akuiteo] === ETAPE 4c : Adresses des marchés (sites de livraison) ===');
