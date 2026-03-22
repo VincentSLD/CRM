@@ -532,6 +532,12 @@ body::before {
 
 .btn-danger { background: var(--red-bg); color: var(--red); border-color: rgba(248,113,113,0.2); }
 
+.btn-not-synced { background: rgba(251,146,60,0.12); color: #f59e0b; border-color: rgba(251,146,60,0.35); font-weight: 700; animation: pulse-sync 2s ease-in-out infinite; }
+.btn-not-synced:hover { background: rgba(251,146,60,0.25); border-color: #f59e0b; }
+@keyframes pulse-sync { 0%,100% { box-shadow: 0 0 0 0 rgba(251,146,60,0.3); } 50% { box-shadow: 0 0 0 6px rgba(251,146,60,0); } }
+.btn-synced { background: rgba(34,197,94,0.10); color: #22c55e; border-color: rgba(34,197,94,0.3); }
+.btn-synced:hover { background: rgba(34,197,94,0.20); border-color: #22c55e; }
+
 .btn-lg { padding: 10px 20px; font-size: 13px; border-radius: var(--r); }
 
 .btn-icon {
@@ -2459,7 +2465,7 @@ function renderContacts() {
     <tbody>${contactsList.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--t3)">Aucun contact trouvé</td></tr>' : contactsList.map(c => {
       const fullName = [c.titre, c.prenom, c.nom].filter(Boolean).join(' ');
       return `<tr onclick="showContact('${c.id}')" style="cursor:pointer">
-        <td><div style="font-weight:600;font-size:13px">${fullName}</div><div style="font-size:11px;color:var(--t3)">${c.code||''}</div></td>
+        <td><div style="font-weight:600;font-size:13px">${fullName} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'};margin-left:4px;vertical-align:middle" title="${c.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span></div><div style="font-size:11px;color:var(--t3)">${c.code||''}</div></td>
         <td style="font-size:12px">${c.fonction||'—'}</td>
         <td style="font-size:12px">${c.email ? '<a href="mailto:'+c.email+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+c.email+'</a>' : '—'}</td>
         <td style="font-size:12px;font-family:monospace">${c.telephone ? '<a href="tel:'+c.telephone+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+c.telephone+'</a>' : '—'}</td>
@@ -2499,7 +2505,7 @@ function renderContactDetail() {
         ${c.telephone ? '<a href="tel:'+c.telephone+'" class="btn" style="text-decoration:none">Appeler</a>' : ''}
         <button class="btn" onclick="goToCR('${c.client_id||''}','${(c._clientName||'').replace(/'/g,"\\'")}','${c.id||''}','${([c.prenom,c.nom].filter(Boolean).join(' ')).replace(/'/g,"\\'")}')">Rédiger CR</button>
         <button class="btn" onclick="toggleEditContact()">Modifier</button>
-        <button class="btn" onclick="pushContactToAkuiteo('${c.id}')">Sync Akuiteo</button>
+        <button class="btn ${c.akuiteo_id ? 'btn-synced' : 'btn-not-synced'}" onclick="pushContactToAkuiteo('${c.id}')" title="${c.akuiteo_id ? 'Synchronisé (ID: '+c.akuiteo_id+')' : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? '✔ Synchronisé' : '⬆ Sync Akuiteo'}</button>
       </div>
     </div>
   </div>
@@ -3062,7 +3068,7 @@ function renderClients(filter='all') {
     <tbody>${filtered.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">Aucune société trouvée</td></tr>' : filtered.map(c => {
       const s = statusMap[c.status] || {cls:'',label:c.status};
       return `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
-        <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div><div><div class="cell-name">${c.name}</div><div class="cell-code">${c.code}</div></div></div></td>
+        <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div><div><div class="cell-name">${c.name} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'};margin-left:4px;vertical-align:middle" title="${c.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span></div><div class="cell-code">${c.code}</div></div></div></td>
         <td style="font-size:12px">${c.city||''}</td>
         <td style="font-size:12px">${c.sector||''}</td>
         <td><span class="badge ${s.cls}">${s.label}</span></td>
@@ -3115,7 +3121,7 @@ function renderClientDetail() {
     </div>
     <div class="client-actions">
       <button class="btn" onclick="openModal('edit-client')">✎ Modifier</button>
-      <button class="btn" onclick="pushClientToAkuiteo('${c.id}')">↑ Sync Akuiteo</button>
+      <button class="btn ${c.akuiteo_id ? 'btn-synced' : 'btn-not-synced'}" onclick="pushClientToAkuiteo('${c.id}')" title="${c.akuiteo_id ? 'Synchronisé (ID: '+c.akuiteo_id+')' : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? '✔ Synchronisé' : '⬆ Sync Akuiteo'}</button>
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
     </div>
   </div>
@@ -6957,6 +6963,7 @@ async function pushClientToAkuiteo(clientId) {
   if (!akData.address.country) akData.address.country = 'FR';
 
   toast('Envoi vers Akuiteo...', 'info');
+  let customerAkId = full.akuiteo_id;
   try {
     if (full.akuiteo_id) {
       // Update : id dans le body + Accept text/plain obligatoires
@@ -6969,12 +6976,22 @@ async function pushClientToAkuiteo(clientId) {
       akData.type = 'CUSTOMER';
       const result = await akuiteoFetch('PUT', '/crm/customers', akData, { accept: 'text/plain' });
       if (result) {
-        const newAkId = String(typeof result === 'object' ? result.id || result : result);
-        await sb.from('clients').update({ akuiteo_id: newAkId }).eq('id', clientId);
+        customerAkId = String(typeof result === 'object' ? result.id || result : result);
+        await sb.from('clients').update({ akuiteo_id: customerAkId }).eq('id', clientId);
         await loadDB();
         renderPage(currentPage);
       }
       toast('Client créé dans Akuiteo', 'success');
+    }
+    // --- Synchroniser aussi les contacts du client vers Akuiteo ---
+    if (customerAkId) {
+      const { data: contacts } = await sb.from('contacts').select('id').eq('client_id', clientId);
+      if (contacts && contacts.length > 0) {
+        toast(`Synchronisation de ${contacts.length} contact(s)...`, 'info');
+        for (const ct of contacts) {
+          await pushContactToAkuiteo(ct.id);
+        }
+      }
     }
   } catch (e) {
     console.error('Push Akuiteo error:', e);
@@ -7025,6 +7042,16 @@ async function pushContactToAkuiteo(contactId) {
       toast('Contact mis à jour dans Akuiteo', 'success');
     } else {
       akData.code = ct.code || null;
+      // Akuiteo exige qu'un contact soit rattaché à un site — on récupère le site principal du client
+      let mainSiteId = customerAkId; // par défaut, le site principal a souvent le même ID que le client
+      try {
+        const sites = await akuiteoFetch('GET', `/crm/customers/${customerAkId}/sites`);
+        if (Array.isArray(sites) && sites.length > 0) {
+          const main = sites.find(s => s.main) || sites[0];
+          mainSiteId = String(main.id);
+        }
+      } catch (e) { console.warn('[Akuiteo] Impossible de charger les sites, utilisation ID client:', e.message); }
+      akData.sitesRelatedInformation = [{ siteId: mainSiteId }];
       const result = await akuiteoFetch('PUT', `/crm/customers/${customerAkId}/contacts/`, akData, { accept: 'text/plain' });
       if (result) {
         const newAkId = String(typeof result === 'object' ? result.id || result : result);
