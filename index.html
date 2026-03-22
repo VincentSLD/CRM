@@ -7173,7 +7173,7 @@ async function pushClientToAkuiteo(clientId) {
       postalCode: full.code_postal || null,
       city: full.city || null,
       department: (full.departement && /^\d{2,3}[AB]?$/i.test(full.departement.trim())) ? full.departement.trim() : null,
-      country: full.pays || null,
+      country: (full.pays && /^[A-Z]{2}$/.test(full.pays.trim())) ? full.pays.trim() : null,
       phone: full.phone || null,
       phone2: full.telephone2 || null,
       mobilePhone: full.mobile || null,
