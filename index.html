@@ -6152,6 +6152,10 @@ async function submitNewClient() {
         if (coi) coi.value = currentReport.contact_id || '';
       }
     }, 100);
+  } else {
+    // Naviguer vers la fiche de la société créée
+    await loadDB();
+    showClient(id);
   }
 }
 
