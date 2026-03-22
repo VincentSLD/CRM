@@ -3306,7 +3306,7 @@ async function loadClientContacts(clientId) {
     + data.map(ct => {
       const fullName = [ct.titre, ct.prenom, ct.nom].filter(Boolean).join(' ');
       return `<tr style="cursor:pointer" onclick="showContact('${ct.id}')">
-        <td><strong>${fullName}</strong>${ct.service ? '<div style="font-size:10px;color:var(--t3)">'+ct.service+'</div>' : ''}</td>
+        <td><strong>${fullName}</strong> <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ct.akuiteo_id ? '#22c55e' : '#f59e0b'};vertical-align:middle" title="${ct.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span>${ct.service ? '<div style="font-size:10px;color:var(--t3)">'+ct.service+'</div>' : ''}</td>
         <td style="font-size:12px">${ct.fonction || '—'}</td>
         <td style="font-size:12px">${ct.email ? '<a href="mailto:'+ct.email+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+ct.email+'</a>' : '—'}</td>
         <td class="mono" style="font-size:12px">${ct.telephone ? '<a href="tel:'+ct.telephone+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+ct.telephone+'</a>' : '—'}</td>
@@ -6997,6 +6997,14 @@ async function pushClientToAkuiteo(clientId) {
         }
       }
     }
+    // Rafraîchir la fiche pour mettre à jour les boutons
+    await loadDB();
+    if (currentClient && currentClient.id === clientId) {
+      currentClient = DB.clients.find(x => x.id === clientId) || currentClient;
+    }
+    renderPage(currentPage);
+    // Recharger la liste des contacts sur la fiche client
+    if (currentPage === 'client-detail') loadClientContacts(clientId);
   } catch (e) {
     console.error('Push Akuiteo error:', e);
     toast('Erreur Akuiteo: ' + e.message, 'error');
@@ -7063,6 +7071,11 @@ async function pushContactToAkuiteo(contactId) {
         if (currentContact && currentContact.id === contactId) currentContact.akuiteo_id = newAkId;
       }
       toast('Contact créé dans Akuiteo', 'success');
+    }
+    // Rafraîchir la fiche pour mettre à jour le bouton
+    if (currentContact && currentContact.id === contactId) {
+      const { data: updated } = await sb.from('contacts').select('*').eq('id', contactId).maybeSingle();
+      if (updated) { Object.assign(currentContact, updated); renderPage(currentPage); }
     }
   } catch (e) {
     console.error('Push contact Akuiteo error:', e);
