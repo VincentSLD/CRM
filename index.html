@@ -3143,6 +3143,7 @@ function renderClientDetail() {
       ${!c.siret ? '<button class="btn btn-not-synced" onclick="searchSirene(\''+c.id+'\',\''+((c.name||'').replace(/'/g,"\\'"))+'\')" title="Compléter la fiche avec les données SIRENE">SIRET manquant</button>' : '<button class="btn" onclick="searchSirene(\''+c.id+'\',\''+((c.name||'').replace(/'/g,"\\'"))+'\')" title="Rechercher dans l\'annuaire SIRENE">SIRENE</button>'}
       <button class="btn ${c.akuiteo_id ? 'btn-synced' : 'btn-not-synced'}" onclick="pushClientToAkuiteo('${c.id}')" title="${c.akuiteo_id ? 'Synchronisé (ID: '+c.akuiteo_id+')' : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? '✔ Synchronisé' : '⬆ Sync Akuiteo'}</button>
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
+      <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer cette société">Supprimer</button>
     </div>
   </div>
   <div class="card" style="margin-bottom:16px">
@@ -5293,6 +5294,19 @@ function renderAdmin() {
   </div>
 
   <div class="card" style="margin-top:16px">
+    <div class="card-header"><div class="card-title">Mot de passe de suppression</div></div>
+    <div class="card-body">
+      <p style="font-size:13px;color:var(--t2);margin-bottom:12px">Ce mot de passe sera demandé pour supprimer une société. Laissez vide pour désactiver la protection.</p>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="password" id="admin-delete-pwd" value="${localStorage.getItem('crm_delete_pwd') || ''}" placeholder="Mot de passe de suppression"
+          style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:250px;background:var(--card);color:var(--t1)">
+        <button class="btn btn-primary" onclick="saveDeletePassword()" style="font-size:13px">Enregistrer</button>
+        <span id="delete-pwd-status" style="font-size:12px;color:var(--t3)">${localStorage.getItem('crm_delete_pwd') ? 'Mot de passe défini' : 'Aucun mot de passe'}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
     <div class="card-header"><div class="card-title">IDs Akuiteo disponibles</div></div>
     <div class="card-body">
       <p style="font-size:13px;color:var(--t2);margin-bottom:12px">Cliquez "Charger" pour récupérer la liste des accountManagerId depuis Akuiteo et voir combien de clients chacun gère.</p>
@@ -6293,6 +6307,34 @@ async function submitEditClient() {
   if (currentClient.akuiteo_id && confirm('Voulez-vous mettre à jour la fiche dans Akuiteo ?')) {
     await pushClientToAkuiteo(currentClient.id);
   }
+}
+
+// ═══ MOT DE PASSE SUPPRESSION ═══
+function saveDeletePassword() {
+  const pwd = document.getElementById('admin-delete-pwd').value;
+  if (pwd) {
+    localStorage.setItem('crm_delete_pwd', pwd);
+    toast('Mot de passe de suppression enregistré', 'success');
+    document.getElementById('delete-pwd-status').textContent = 'Mot de passe défini';
+  } else {
+    localStorage.removeItem('crm_delete_pwd');
+    toast('Protection par mot de passe désactivée', 'info');
+    document.getElementById('delete-pwd-status').textContent = 'Aucun mot de passe';
+  }
+}
+
+async function deleteClient(clientId, clientName) {
+  if (!confirm(`Êtes-vous sûr de vouloir supprimer la société "${clientName}" ?\n\nCette action est irréversible. Les contacts, devis, commandes et factures liés ne seront pas supprimés.`)) return;
+  const pwd = localStorage.getItem('crm_delete_pwd');
+  if (pwd) {
+    const input = prompt('Entrez le mot de passe de suppression :');
+    if (input !== pwd) { toast('Mot de passe incorrect', 'error'); return; }
+  }
+  const { error } = await sb.from('clients').delete().eq('id', clientId);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  toast(`Société "${clientName}" supprimée`, 'success');
+  await loadDB();
+  go('clients');
 }
 
 // ═══ DELETE RECORD ═══
