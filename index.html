@@ -7142,6 +7142,9 @@ async function applySirene(index) {
   const { data: refreshed } = await sb.from('clients').select('*').eq('id', sireneClientId).maybeSingle();
   if (refreshed) currentClient = refreshed;
   renderPage(currentPage);
+  if (currentClient && currentClient.akuiteo_id && confirm('Voulez-vous mettre à jour la fiche dans Akuiteo ?')) {
+    await pushClientToAkuiteo(currentClient.id);
+  }
 }
 
 // Pousser un client CRM vers Akuiteo
