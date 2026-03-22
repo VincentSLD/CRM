@@ -1917,6 +1917,22 @@ tbody tr:last-child td { border-bottom: none; }
 </div>
 
 <!-- ═══ MODAL: EDIT CLIENT ═══ -->
+<div class="modal-overlay" id="modal-sirene">
+  <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto">
+    <div class="modal-head">
+      <h3>Recherche SIRENE</h3>
+      <button class="modal-close" onclick="closeModal('sirene')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <input type="text" id="sirene-query" class="fi" placeholder="Nom de l'entreprise, SIRET, SIREN..." style="flex:1;padding:8px 12px;font-size:13px" onkeydown="if(event.key==='Enter')doSearchSirene()">
+        <button class="btn btn-primary" onclick="doSearchSirene()">Rechercher</button>
+      </div>
+      <div id="sirene-results" style="font-size:13px;color:var(--t3);text-align:center">Saisissez un nom ou un numéro SIRET</div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-edit-client">
   <div class="modal" style="max-width:750px;max-height:90vh;overflow-y:auto">
     <div class="modal-head">
@@ -3124,6 +3140,7 @@ function renderClientDetail() {
     </div>
     <div class="client-actions">
       <button class="btn" onclick="openModal('edit-client')">✎ Modifier</button>
+      ${!c.siret ? '<button class="btn btn-not-synced" onclick="searchSirene(\''+c.id+'\',\''+((c.name||'').replace(/'/g,"\\'"))+'\')" title="Compléter la fiche avec les données SIRENE">SIRET manquant</button>' : '<button class="btn" onclick="searchSirene(\''+c.id+'\',\''+((c.name||'').replace(/'/g,"\\'"))+'\')" title="Rechercher dans l\'annuaire SIRENE">SIRENE</button>'}
       <button class="btn ${c.akuiteo_id ? 'btn-synced' : 'btn-not-synced'}" onclick="pushClientToAkuiteo('${c.id}')" title="${c.akuiteo_id ? 'Synchronisé (ID: '+c.akuiteo_id+')' : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? '✔ Synchronisé' : '⬆ Sync Akuiteo'}</button>
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
     </div>
@@ -7026,6 +7043,99 @@ async function analyseCAClient(clientId) {
         </div>`;
       }).join('')}
     </div>`;
+}
+
+// ═══ RECHERCHE SIRENE ═══
+let sireneClientId = null;
+
+function searchSirene(clientId, clientName) {
+  sireneClientId = clientId;
+  document.getElementById('sirene-query').value = clientName || '';
+  document.getElementById('sirene-results').innerHTML = '<div style="color:var(--t3);text-align:center">Saisissez un nom ou un numéro SIRET</div>';
+  openModal('sirene');
+  setTimeout(() => { document.getElementById('sirene-query').focus(); doSearchSirene(); }, 100);
+}
+
+async function doSearchSirene() {
+  const q = document.getElementById('sirene-query').value.trim();
+  if (!q) return;
+  const el = document.getElementById('sirene-results');
+  el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t3)">Recherche en cours...</div>';
+  try {
+    const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + encodeURIComponent(q) + '&page=1&per_page=8');
+    const data = await r.json();
+    if (!data.results || data.results.length === 0) {
+      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t3)">Aucun résultat</div>';
+      return;
+    }
+    el.innerHTML = data.results.map(e => {
+      const s = e.siege || {};
+      const nj = { '1000':'EI','5410':'SARL','5499':'SARL','5505':'SA','5710':'SAS','5720':'SASU','6540':'SCI' };
+      return `<div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer;transition:background 0.15s"
+        onmouseover="this.style.background='var(--bg-1)'" onmouseout="this.style.background=''"
+        onclick="applySirene(${JSON.stringify(JSON.stringify({
+          name: e.nom_complet,
+          raison_sociale: e.nom_raison_sociale,
+          siren: e.siren,
+          siret: s.siret,
+          ape: e.activite_principale,
+          forme_juridique: nj[e.nature_juridique] || e.nature_juridique || '',
+          adresse_ligne1: [s.numero_voie, s.type_voie, s.libelle_voie].filter(Boolean).join(' '),
+          adresse_ligne2: s.complement_adresse || '',
+          code_postal: s.code_postal,
+          city: s.libelle_commune,
+          departement: s.departement,
+          effectif: s.tranche_effectif_salarie,
+        }))})">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+          <div>
+            <div style="font-weight:700;font-size:14px;color:var(--t1)">${e.nom_complet}</div>
+            <div style="font-size:12px;color:var(--t3);margin-top:2px">${s.adresse || '—'}</div>
+            <div style="font-size:11px;color:var(--t3);margin-top:2px">APE: ${e.activite_principale || '—'} | ${nj[e.nature_juridique] || e.nature_juridique || '—'} | Effectif: ${s.tranche_effectif_salarie || '?'}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:12px;font-weight:600;color:var(--accent);font-family:monospace">${s.siret || '—'}</div>
+            <div style="font-size:11px;color:var(--t3)">SIREN: ${e.siren || '—'}</div>
+            <div style="font-size:10px;margin-top:4px;color:${e.etat_administratif === 'A' ? 'var(--green)' : 'var(--red)'}">${e.etat_administratif === 'A' ? 'Active' : 'Fermée'}</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (err) {
+    el.innerHTML = '<div style="color:var(--red);text-align:center;padding:20px">Erreur: ' + err.message + '</div>';
+  }
+}
+
+async function applySirene(jsonStr) {
+  const data = JSON.parse(jsonStr);
+  const fields = {
+    raison_sociale: data.raison_sociale,
+    siren: data.siren,
+    siret: data.siret,
+    ape: data.ape,
+    forme_juridique: data.forme_juridique,
+    adresse_ligne1: data.adresse_ligne1,
+    adresse_ligne2: data.adresse_ligne2 || null,
+    code_postal: data.code_postal,
+    city: data.city,
+    departement: data.departement,
+  };
+  if (data.effectif && !isNaN(data.effectif)) fields.effectif = Number(data.effectif);
+
+  // Construire le résumé des modifications
+  const labels = { raison_sociale:'Raison sociale', siren:'SIREN', siret:'SIRET', ape:'Code APE', forme_juridique:'Forme juridique',
+    adresse_ligne1:'Adresse', adresse_ligne2:'Complément', code_postal:'Code postal', city:'Ville', departement:'Département', effectif:'Effectif' };
+  const summary = Object.entries(fields).filter(([,v]) => v).map(([k,v]) => `  ${labels[k] || k}: ${v}`).join('\n');
+
+  if (!confirm('Mettre à jour la fiche avec ces données SIRENE ?\n\n' + summary)) return;
+
+  const { error } = await sb.from('clients').update(fields).eq('id', sireneClientId);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  toast('Fiche mise à jour avec les données SIRENE', 'success');
+  closeModal('sirene');
+  const { data: refreshed } = await sb.from('clients').select('*').eq('id', sireneClientId).maybeSingle();
+  if (refreshed) currentClient = refreshed;
+  renderPage(currentPage);
 }
 
 // Pousser un client CRM vers Akuiteo
