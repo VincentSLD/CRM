@@ -3125,8 +3125,20 @@ function renderClientDetail() {
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
     </div>
   </div>
-  <div class="kpi-grid">
-    <div class="kpi-card cyan"><div class="kpi-value" style="font-size:22px">${c.devis}</div><div class="kpi-label">Devis en cours</div></div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header">
+      <div class="card-title">Analyse CA facturé</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:12px;color:var(--t3)">Du</label>
+        <input type="date" id="ca-date-from" class="fi" style="padding:4px 8px;font-size:12px;width:auto" value="${new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0,10)}">
+        <label style="font-size:12px;color:var(--t3)">au</label>
+        <input type="date" id="ca-date-to" class="fi" style="padding:4px 8px;font-size:12px;width:auto" value="${new Date().toISOString().slice(0,10)}">
+        <button class="btn" onclick="analyseCAClient('${c.id}')" style="font-size:12px">Analyser</button>
+      </div>
+    </div>
+    <div class="card-body" id="ca-analysis-result" style="padding:16px">
+      <div style="text-align:center;color:var(--t3);font-size:13px">Cliquez sur "Analyser" pour afficher le CA facturé sur la période</div>
+    </div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
     ${detailSection('Adresse', [
@@ -6936,6 +6948,76 @@ async function syncAkuiteo() {
     console.error('Sync Akuiteo error:', e);
     toast('Erreur de synchronisation: ' + e.message, 'error');
   }
+}
+
+// Analyse CA facturé d'un client entre deux dates
+async function analyseCAClient(clientId) {
+  const el = document.getElementById('ca-analysis-result');
+  if (!el) return;
+  const dateFrom = document.getElementById('ca-date-from')?.value;
+  const dateTo = document.getElementById('ca-date-to')?.value;
+  if (!dateFrom || !dateTo) { toast('Veuillez sélectionner les deux dates', 'error'); return; }
+  el.innerHTML = '<div style="text-align:center;color:var(--t3)">Chargement...</div>';
+
+  let query = sb.from('factures').select('ref,montant,date,statut,type_facture,reste_a_payer').eq('client_id', clientId);
+  if (dateFrom) query = query.gte('date', dateFrom);
+  if (dateTo) query = query.lte('date', dateTo);
+  const { data: factures, error } = await query.order('date', { ascending: true });
+  if (error) { el.innerHTML = '<div style="color:var(--red)">Erreur: ' + error.message + '</div>'; return; }
+  if (!factures || factures.length === 0) {
+    el.innerHTML = '<div style="text-align:center;color:var(--t3);font-size:13px">Aucune facture sur cette période</div>';
+    return;
+  }
+
+  const total = factures.reduce((s, f) => s + (Number(f.montant) || 0), 0);
+  const resteAPayer = factures.reduce((s, f) => s + (Number(f.reste_a_payer) || 0), 0);
+  const nbFactures = factures.length;
+
+  // Ventilation par mois
+  const parMois = {};
+  factures.forEach(f => {
+    const mois = (f.date || '').substring(0, 7); // YYYY-MM
+    if (!mois) return;
+    if (!parMois[mois]) parMois[mois] = { total: 0, count: 0 };
+    parMois[mois].total += Number(f.montant) || 0;
+    parMois[mois].count++;
+  });
+  const moisKeys = Object.keys(parMois).sort();
+  const maxMois = Math.max(...moisKeys.map(k => parMois[k].total), 1);
+  const moisLabels = { '01':'Jan','02':'Fév','03':'Mar','04':'Avr','05':'Mai','06':'Juin','07':'Jul','08':'Aoû','09':'Sep','10':'Oct','11':'Nov','12':'Déc' };
+
+  el.innerHTML = `
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="text-align:center;flex:1;min-width:120px">
+        <div style="font-size:28px;font-weight:800;color:var(--accent)">${fmt(total)}</div>
+        <div style="font-size:12px;color:var(--t3)">CA facturé total</div>
+      </div>
+      <div style="text-align:center;flex:1;min-width:120px">
+        <div style="font-size:28px;font-weight:800;color:var(--t1)">${nbFactures}</div>
+        <div style="font-size:12px;color:var(--t3)">Facture(s)</div>
+      </div>
+      <div style="text-align:center;flex:1;min-width:120px">
+        <div style="font-size:28px;font-weight:800;color:${resteAPayer > 0 ? 'var(--red)' : 'var(--green)'}">${fmt(resteAPayer)}</div>
+        <div style="font-size:12px;color:var(--t3)">Reste à payer</div>
+      </div>
+      <div style="text-align:center;flex:1;min-width:120px">
+        <div style="font-size:28px;font-weight:800;color:var(--t1)">${fmt(Math.round(total / (moisKeys.length || 1)))}</div>
+        <div style="font-size:12px;color:var(--t3)">Moyenne / mois</div>
+      </div>
+    </div>
+    <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--t2)">Répartition mensuelle</div>
+    <div style="display:flex;align-items:flex-end;gap:4px;height:120px;padding-bottom:20px;position:relative">
+      ${moisKeys.map(k => {
+        const pct = (parMois[k].total / maxMois) * 100;
+        const mm = k.split('-')[1];
+        const label = (moisLabels[mm] || mm) + ' ' + k.split('-')[0].slice(2);
+        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%">
+          <div style="font-size:10px;font-weight:600;color:var(--t1);margin-bottom:2px">${fmt(parMois[k].total).replace(' €','')}</div>
+          <div style="width:100%;max-width:48px;background:linear-gradient(180deg,var(--accent),#3b82f6);border-radius:4px 4px 0 0;height:${Math.max(pct, 3)}%;min-height:3px" title="${parMois[k].count} facture(s)"></div>
+          <div style="font-size:9px;color:var(--t3);margin-top:4px;white-space:nowrap">${label}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
 }
 
 // Pousser un client CRM vers Akuiteo
