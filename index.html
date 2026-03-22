@@ -6922,10 +6922,7 @@ async function syncAkuiteo() {
 
 // Pousser un client CRM vers Akuiteo
 async function pushClientToAkuiteo(clientId) {
-  const c = DB.clients.find(x => x.id === clientId);
-  if (!c) { toast('Société non trouvée', 'error'); return; }
-
-  // Charger toutes les données du client depuis Supabase (pas juste la page courante)
+  // Charger les données du client depuis Supabase (pas DB.clients qui est paginé)
   const { data: full } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
   if (!full) { toast('Société non trouvée en base', 'error'); return; }
 
