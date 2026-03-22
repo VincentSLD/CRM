@@ -7047,6 +7047,7 @@ async function analyseCAClient(clientId) {
 
 // ═══ RECHERCHE SIRENE ═══
 let sireneClientId = null;
+let sireneResultsCache = [];
 
 function searchSirene(clientId, clientName) {
   sireneClientId = clientId;
@@ -7068,35 +7069,39 @@ async function doSearchSirene() {
       el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t3)">Aucun résultat</div>';
       return;
     }
-    el.innerHTML = data.results.map(e => {
+    const nj = { '1000':'EI','5410':'SARL','5499':'SARL','5505':'SA','5710':'SAS','5720':'SASU','6540':'SCI' };
+    sireneResultsCache = data.results.map(e => {
       const s = e.siege || {};
-      const nj = { '1000':'EI','5410':'SARL','5499':'SARL','5505':'SA','5710':'SAS','5720':'SASU','6540':'SCI' };
+      return {
+        name: e.nom_complet,
+        raison_sociale: e.nom_raison_sociale,
+        siren: e.siren,
+        siret: s.siret,
+        ape: e.activite_principale,
+        forme_juridique: nj[e.nature_juridique] || e.nature_juridique || '',
+        adresse_ligne1: [s.numero_voie, s.type_voie, s.libelle_voie].filter(Boolean).join(' '),
+        adresse_ligne2: s.complement_adresse || '',
+        code_postal: s.code_postal,
+        city: s.libelle_commune,
+        departement: s.departement,
+        effectif: s.tranche_effectif_salarie,
+        _display: { adresse: s.adresse, etat: e.etat_administratif, nj: nj[e.nature_juridique] || e.nature_juridique || '—' },
+      };
+    });
+    el.innerHTML = sireneResultsCache.map((e, i) => {
       return `<div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer;transition:background 0.15s"
         onmouseover="this.style.background='var(--bg-1)'" onmouseout="this.style.background=''"
-        onclick="applySirene(${JSON.stringify(JSON.stringify({
-          name: e.nom_complet,
-          raison_sociale: e.nom_raison_sociale,
-          siren: e.siren,
-          siret: s.siret,
-          ape: e.activite_principale,
-          forme_juridique: nj[e.nature_juridique] || e.nature_juridique || '',
-          adresse_ligne1: [s.numero_voie, s.type_voie, s.libelle_voie].filter(Boolean).join(' '),
-          adresse_ligne2: s.complement_adresse || '',
-          code_postal: s.code_postal,
-          city: s.libelle_commune,
-          departement: s.departement,
-          effectif: s.tranche_effectif_salarie,
-        }))})">
+        onclick="applySirene(${i})">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
           <div>
-            <div style="font-weight:700;font-size:14px;color:var(--t1)">${e.nom_complet}</div>
-            <div style="font-size:12px;color:var(--t3);margin-top:2px">${s.adresse || '—'}</div>
-            <div style="font-size:11px;color:var(--t3);margin-top:2px">APE: ${e.activite_principale || '—'} | ${nj[e.nature_juridique] || e.nature_juridique || '—'} | Effectif: ${s.tranche_effectif_salarie || '?'}</div>
+            <div style="font-weight:700;font-size:14px;color:var(--t1)">${e.name}</div>
+            <div style="font-size:12px;color:var(--t3);margin-top:2px">${e._display.adresse || '—'}</div>
+            <div style="font-size:11px;color:var(--t3);margin-top:2px">APE: ${e.ape || '—'} | ${e._display.nj} | Effectif: ${e.effectif || '?'}</div>
           </div>
           <div style="text-align:right;flex-shrink:0">
-            <div style="font-size:12px;font-weight:600;color:var(--accent);font-family:monospace">${s.siret || '—'}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--accent);font-family:monospace">${e.siret || '—'}</div>
             <div style="font-size:11px;color:var(--t3)">SIREN: ${e.siren || '—'}</div>
-            <div style="font-size:10px;margin-top:4px;color:${e.etat_administratif === 'A' ? 'var(--green)' : 'var(--red)'}">${e.etat_administratif === 'A' ? 'Active' : 'Fermée'}</div>
+            <div style="font-size:10px;margin-top:4px;color:${e._display.etat === 'A' ? 'var(--green)' : 'var(--red)'}">${e._display.etat === 'A' ? 'Active' : 'Fermée'}</div>
           </div>
         </div>
       </div>`;
@@ -7106,8 +7111,9 @@ async function doSearchSirene() {
   }
 }
 
-async function applySirene(jsonStr) {
-  const data = JSON.parse(jsonStr);
+async function applySirene(index) {
+  const data = sireneResultsCache[index];
+  if (!data) return;
   const fields = {
     raison_sociale: data.raison_sociale,
     siren: data.siren,
