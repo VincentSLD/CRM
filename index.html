@@ -7002,7 +7002,8 @@ async function pushClientToAkuiteo(clientId) {
     // Rafraîchir la fiche pour mettre à jour les boutons
     await loadDB();
     if (currentClient && currentClient.id === clientId) {
-      currentClient = DB.clients.find(x => x.id === clientId) || currentClient;
+      const { data: refreshed } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
+      if (refreshed) currentClient = refreshed;
     }
     renderPage(currentPage);
     // Recharger la liste des contacts sur la fiche client
