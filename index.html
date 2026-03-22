@@ -2790,7 +2790,7 @@ function renderPage(page) {
   // Post-render hooks
   if (page === 'cr') initEditor();
   if (page === 'carte') setTimeout(initCarteMap, 50);
-  if (page === 'admin') setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); }, 50);
+  if (page === 'admin') setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); }, 50);
   if (page === 'cr' && crViewMode === 'send') setTimeout(loadSendGroups, 50);
 }
 
@@ -5298,10 +5298,10 @@ function renderAdmin() {
     <div class="card-body">
       <p style="font-size:13px;color:var(--t2);margin-bottom:12px">Ce mot de passe sera demandé pour supprimer une société. Laissez vide pour désactiver la protection.</p>
       <div style="display:flex;gap:8px;align-items:center">
-        <input type="password" id="admin-delete-pwd" value="${localStorage.getItem('crm_delete_pwd') || ''}" placeholder="Mot de passe de suppression"
+        <input type="password" id="admin-delete-pwd" placeholder="Mot de passe de suppression"
           style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:250px;background:var(--card);color:var(--t1)">
         <button class="btn btn-primary" onclick="saveDeletePassword()" style="font-size:13px">Enregistrer</button>
-        <span id="delete-pwd-status" style="font-size:12px;color:var(--t3)">${localStorage.getItem('crm_delete_pwd') ? 'Mot de passe défini' : 'Aucun mot de passe'}</span>
+        <span id="delete-pwd-status" style="font-size:12px;color:var(--t3)">Chargement...</span>
       </div>
     </div>
   </div>
@@ -6309,23 +6309,38 @@ async function submitEditClient() {
   }
 }
 
-// ═══ MOT DE PASSE SUPPRESSION ═══
-function saveDeletePassword() {
+// ═══ MOT DE PASSE SUPPRESSION (Supabase crm_config) ═══
+async function loadAdminDeletePwd() {
+  const pwd = await loadDeletePassword();
+  const input = document.getElementById('admin-delete-pwd');
+  const status = document.getElementById('delete-pwd-status');
+  if (input) input.value = pwd;
+  if (status) status.textContent = pwd ? 'Mot de passe défini' : 'Aucun mot de passe';
+}
+async function loadDeletePassword() {
+  try {
+    const { data } = await sb.from('crm_config').select('value').eq('key', 'delete_password').maybeSingle();
+    return data?.value || '';
+  } catch (e) { return localStorage.getItem('crm_delete_pwd') || ''; }
+}
+
+async function saveDeletePassword() {
   const pwd = document.getElementById('admin-delete-pwd').value;
-  if (pwd) {
-    localStorage.setItem('crm_delete_pwd', pwd);
-    toast('Mot de passe de suppression enregistré', 'success');
-    document.getElementById('delete-pwd-status').textContent = 'Mot de passe défini';
-  } else {
-    localStorage.removeItem('crm_delete_pwd');
-    toast('Protection par mot de passe désactivée', 'info');
-    document.getElementById('delete-pwd-status').textContent = 'Aucun mot de passe';
+  try {
+    await sb.from('crm_config').upsert({ key: 'delete_password', value: pwd, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    toast(pwd ? 'Mot de passe de suppression enregistré' : 'Protection par mot de passe désactivée', pwd ? 'success' : 'info');
+    document.getElementById('delete-pwd-status').textContent = pwd ? 'Mot de passe défini' : 'Aucun mot de passe';
+  } catch (e) {
+    // Fallback localStorage si la table n'existe pas
+    if (pwd) localStorage.setItem('crm_delete_pwd', pwd);
+    else localStorage.removeItem('crm_delete_pwd');
+    toast('Enregistré localement (table crm_config absente)', 'warn');
   }
 }
 
 async function deleteClient(clientId, clientName) {
   if (!confirm(`Êtes-vous sûr de vouloir supprimer la société "${clientName}" ?\n\nCette action est irréversible. Les contacts, devis, commandes et factures liés ne seront pas supprimés.`)) return;
-  const pwd = localStorage.getItem('crm_delete_pwd');
+  const pwd = await loadDeletePassword();
   if (pwd) {
     const input = prompt('Entrez le mot de passe de suppression :');
     if (input !== pwd) { toast('Mot de passe incorrect', 'error'); return; }
