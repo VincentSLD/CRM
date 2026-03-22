@@ -2610,6 +2610,9 @@ async function saveEditContact() {
   toast('Contact mis à jour', 'success');
   Object.assign(currentContact, update);
   renderPage('contact-detail');
+  if (currentContact.akuiteo_id && confirm('Voulez-vous mettre à jour la fiche dans Akuiteo ?')) {
+    await pushContactToAkuiteo(currentContact.id);
+  }
 }
 
 function generateAlerts() {
@@ -6267,7 +6270,12 @@ async function submitEditClient() {
     notes: document.getElementById('ec-notes').value.trim() || null,
   });
   closeModal('edit-client');
-  currentClient = DB.clients.find(c=>c.id===currentClient.id);
+  const { data: refreshed } = await sb.from('clients').select('*').eq('id', currentClient.id).maybeSingle();
+  if (refreshed) currentClient = refreshed;
+  renderPage(currentPage);
+  if (currentClient.akuiteo_id && confirm('Voulez-vous mettre à jour la fiche dans Akuiteo ?')) {
+    await pushClientToAkuiteo(currentClient.id);
+  }
 }
 
 // ═══ DELETE RECORD ═══
