@@ -6102,10 +6102,23 @@ function fillFromSirene(index) {
 async function submitNewClient() {
   const name = document.getElementById('nc-name').value.trim();
   if (!name) { toast('Le nom est obligatoire','error'); return; }
-  // Vérifier si une société avec le même nom existe déjà
-  const { data: existing } = await sb.from('clients').select('id,name').ilike('name', name).limit(1);
-  if (existing && existing.length > 0) {
-    if (!confirm(`Une société "${existing[0].name}" existe déjà. Voulez-vous quand même créer un doublon ?`)) return;
+  // Vérifier les doublons sur nom, SIRET ou téléphone
+  const siret = document.getElementById('nc-siret').value.trim();
+  const phone = document.getElementById('nc-phone').value.trim();
+  const duplicates = [];
+  const { data: byName } = await sb.from('clients').select('id,name').ilike('name', name).limit(3);
+  if (byName && byName.length > 0) duplicates.push(...byName.map(c => ({ ...c, reason: 'nom' })));
+  if (siret) {
+    const { data: bySiret } = await sb.from('clients').select('id,name,siret').eq('siret', siret).limit(3);
+    if (bySiret && bySiret.length > 0) bySiret.filter(c => !duplicates.some(d => d.id === c.id)).forEach(c => duplicates.push({ ...c, reason: 'SIRET' }));
+  }
+  if (phone) {
+    const { data: byPhone } = await sb.from('clients').select('id,name,phone').eq('phone', phone).limit(3);
+    if (byPhone && byPhone.length > 0) byPhone.filter(c => !duplicates.some(d => d.id === c.id)).forEach(c => duplicates.push({ ...c, reason: 'téléphone' }));
+  }
+  if (duplicates.length > 0) {
+    const details = duplicates.map(d => `- "${d.name}" (même ${d.reason})`).join('\n');
+    if (!confirm(`Doublon(s) détecté(s) :\n${details}\n\nVoulez-vous quand même créer cette société ?`)) return;
   }
   const id = name.toLowerCase().replace(/[^a-z0-9]/g,'_').substring(0,20) + '_' + String(Date.now()).slice(-4);
   const ini = name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
