@@ -6102,6 +6102,11 @@ function fillFromSirene(index) {
 async function submitNewClient() {
   const name = document.getElementById('nc-name').value.trim();
   if (!name) { toast('Le nom est obligatoire','error'); return; }
+  // Vérifier si une société avec le même nom existe déjà
+  const { data: existing } = await sb.from('clients').select('id,name').ilike('name', name).limit(1);
+  if (existing && existing.length > 0) {
+    if (!confirm(`Une société "${existing[0].name}" existe déjà. Voulez-vous quand même créer un doublon ?`)) return;
+  }
   const id = name.toLowerCase().replace(/[^a-z0-9]/g,'_').substring(0,20) + '_' + String(Date.now()).slice(-4);
   const ini = name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
   const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
