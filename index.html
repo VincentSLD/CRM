@@ -1616,6 +1616,11 @@ tbody tr:last-child td { border-bottom: none; }
         Marchés
         <span class="nav-badge" id="navBadgeMarches" style="display:none"></span>
       </div>
+      <div class="nav-item" data-page="affaires" onclick="go('affaires')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        Affaires
+        <span class="nav-badge" id="navBadgeAffaires" style="display:none"></span>
+      </div>
       <div class="nav-item" data-page="devis" onclick="go('devis')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         Devis <span class="nav-badge" id="navBadgeDevis"></span>
@@ -2049,7 +2054,7 @@ let factDateFrom = _yearAgo, factDateTo = _today;
 
 // Pagination tables (100 lignes par page)
 const TBL_PAGE_SIZE = 100;
-let devisPage = 0, cmdPage = 0, factPage = 0, marchesPage = 0;
+let devisPage = 0, cmdPage = 0, factPage = 0, marchesPage = 0, affairesPage = 0;
 
 function renderTablePagination(total, currentPage, onPageFn) {
   const totalPages = Math.ceil(total / TBL_PAGE_SIZE);
@@ -2740,7 +2745,7 @@ function go(page) {
   const navPage = page === 'client-detail' ? 'clients' : page === 'contact-detail' ? 'contacts' : page === 'marche-detail' ? 'marches' : page === 'affaire-detail' ? 'marches' : page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
   const titles = {dashboard:'Tableau de bord',clients:'Sociétés',contacts:'Contacts',pipeline:'Pipeline commercial',carte:'Carte sociétés',
-    marches:'Marchés',devis:'Devis',commandes:'Commandes',factures:'Factures',objectifs:'Objectifs',
+    marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures',objectifs:'Objectifs',
     cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche société','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire'};
   document.getElementById('pageTitle').textContent = titles[page]||page;
@@ -2767,6 +2772,7 @@ function renderPage(page) {
     pipeline: renderPipeline,
     carte: renderCarte,
     marches: renderMarches,
+    affaires: renderAffaires,
     'marche-detail': renderMarcheDetail,
     'affaire-detail': renderAffaireDetail,
     devis: renderDevis,
@@ -3770,6 +3776,111 @@ function renderMarcheDetail() {
   </div></div></div>` : ''}`;
 }
 
+// ═══ LISTE DES AFFAIRES ═══
+function renderAffaires() {
+  let affaires = filterByCommercial(DB.affaires);
+  affaires = filterByDateRange(affaires, affairesDateFrom, affairesDateTo);
+  if (affairesSearch) {
+    const q = affairesSearch.toLowerCase();
+    affaires = affaires.filter(a =>
+      (a.nom||'').toLowerCase().includes(q) ||
+      (a.ref||'').toLowerCase().includes(q) ||
+      (a.client_name||'').toLowerCase().includes(q) ||
+      (a.code_projet||'').toLowerCase().includes(q)
+    );
+  }
+  const totalHT = affaires.reduce((a, x) => a + Number(x.montant || 0), 0);
+  const totalTTC = affaires.reduce((a, x) => a + Number(x.montant_ttc || 0), 0);
+  const enCours = affaires.filter(a => a.statut === 'en_cours').length;
+  const termines = affaires.filter(a => a.statut === 'termine').length;
+
+  return `
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px">
+    <div class="card"><div class="card-body" style="text-align:center;padding:12px">
+      <div style="font-size:20px;font-weight:700;color:var(--accent)">${affaires.length}</div>
+      <div style="font-size:11px;color:var(--t3)">Affaires</div>
+    </div></div>
+    <div class="card"><div class="card-body" style="text-align:center;padding:12px">
+      <div style="font-size:20px;font-weight:700;color:var(--green)">${enCours}</div>
+      <div style="font-size:11px;color:var(--t3)">En cours</div>
+    </div></div>
+    <div class="card"><div class="card-body" style="text-align:center;padding:12px">
+      <div style="font-size:20px;font-weight:700;color:var(--t2)">${termines}</div>
+      <div style="font-size:11px;color:var(--t3)">Terminées</div>
+    </div></div>
+    <div class="card"><div class="card-body" style="text-align:center;padding:12px">
+      <div style="font-size:20px;font-weight:700;color:var(--accent)">${fmt(totalHT)}</div>
+      <div style="font-size:11px;color:var(--t3)">Total HT</div>
+    </div></div>
+    <div class="card"><div class="card-body" style="text-align:center;padding:12px">
+      <div style="font-size:20px;font-weight:700;color:var(--t1)">${fmt(totalTTC)}</div>
+      <div style="font-size:11px;color:var(--t3)">Total TTC</div>
+    </div></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <label style="font-size:12px;color:var(--t3)">Du</label>
+      <input type="date" value="${affairesDateFrom}"
+        style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--t1)"
+        onchange="affairesDateFrom=this.value;renderAffairesRefresh()">
+      <label style="font-size:12px;color:var(--t3)">au</label>
+      <input type="date" value="${affairesDateTo}"
+        style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--t1)"
+        onchange="affairesDateTo=this.value;renderAffairesRefresh()">
+      <span style="font-size:12px;color:var(--t2);margin-left:6px">${affaires.length} affaire(s)</span>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <input type="text" placeholder="Rechercher affaire, client, réf..." value="${affairesSearch}"
+        style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:220px;background:var(--card);color:var(--t1)"
+        oninput="affairesSearch=this.value;renderAffairesRefresh()">
+      ${affairesSearch ? '<button class="btn" onclick="affairesSearch=&#39;&#39;;renderAffairesRefresh()" style="font-size:11px">Effacer</button>' : ''}
+    </div>
+  </div>
+  <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
+    <table class="tbl-compact">
+    <thead><tr>
+      <th>Nom</th>
+      <th>Société</th>
+      <th>Marché</th>
+      <th>Code projet</th>
+      <th style="width:80px">Début</th>
+      <th style="width:80px">Fin</th>
+      <th style="width:90px;text-align:right">Montant HT</th>
+      <th style="width:70px">Devis</th>
+      <th style="width:70px">Cmd</th>
+      <th style="width:70px">Factures</th>
+      <th style="width:80px">Statut</th>
+    </tr></thead>
+    <tbody>${affaires.length === 0 ? '<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--t3)">Aucune affaire trouvée</td></tr>' : affaires.slice(affairesPage*TBL_PAGE_SIZE, (affairesPage+1)*TBL_PAGE_SIZE).map(a => {
+      const marche = DB.marches.find(m => m.id === a.marche_id);
+      const nbDevis = DB.devis.filter(d => d.affaire_id === a.id).length;
+      const nbCmd = DB.commandes.filter(c => c.affaire_id === a.id).length;
+      const nbFact = DB.factures.filter(f => f.affaire_id === a.id).length;
+      return `<tr onclick="showAffaireDetail('${a.id}')" style="cursor:pointer">
+        <td><strong>${a.nom || '—'}</strong></td>
+        <td>${a.client_name || '—'}</td>
+        <td>${marche ? '<a href="#" onclick="event.stopPropagation();showMarcheDetail(&#39;'+marche.id+'&#39;)" style="color:var(--accent)">'+(marche.ref || marche.nom || '—')+'</a>' : '—'}</td>
+        <td class="mono">${a.code_projet || '—'}</td>
+        <td>${a.date_debut ? fmtDateFR(a.date_debut) : '—'}</td>
+        <td>${a.date_fin ? fmtDateFR(a.date_fin) : '—'}</td>
+        <td style="text-align:right" class="mono">${fmt(a.montant)}</td>
+        <td style="text-align:center">${nbDevis}</td>
+        <td style="text-align:center">${nbCmd}</td>
+        <td style="text-align:center">${nbFact}</td>
+        <td>${marcheStatutBadge(a.statut)}</td>
+      </tr>`;
+    }).join('')}</tbody>
+    </table>
+  ${renderTablePagination(affaires.length, affairesPage, 'goAffairesPage')}
+  </div></div></div>`;
+}
+
+function renderAffairesRefresh() {
+  affairesPage = 0;
+  document.getElementById('contentArea').innerHTML = '<div class="page active">' + renderAffaires() + '</div>';
+}
+function goAffairesPage(p) { affairesPage=p; document.getElementById('contentArea').innerHTML='<div class="page active">'+renderAffaires()+'</div>'; }
+
 function showAffaireDetail(id) {
   currentAffaireId = id;
   currentPage = 'affaire-detail';
@@ -3792,7 +3903,7 @@ function renderAffaireDetail() {
   return `
   <div style="display:flex;gap:8px;margin-bottom:16px">
     ${marche ? '<button class="btn" onclick="showMarcheDetail(&#39;'+marche.id+'&#39;)">&#8592; Marché '+( marche.ref || marche.nom)+'</button>' : ''}
-    <button class="btn" onclick="go('marches')">&#8592; Tous les marchés</button>
+    <button class="btn" onclick="go('affaires')">&#8592; Toutes les affaires</button>
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px">
     <div class="card"><div class="card-body" style="text-align:center;padding:12px">
@@ -3871,6 +3982,8 @@ let pipeDateFrom = _yearAgo, pipeDateTo = _today;
 const _fiveYearsAgo = new Date(new Date().setFullYear(new Date().getFullYear() - 5)).toISOString().split('T')[0];
 let marchesDateFrom = _fiveYearsAgo, marchesDateTo = _today;
 let marchesSearch = '';
+let affairesDateFrom = _fiveYearsAgo, affairesDateTo = _today;
+let affairesSearch = '';
 
 function renderPipeline() {
   // Filtrer par commercial, société puis par date
