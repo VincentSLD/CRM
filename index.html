@@ -7463,26 +7463,29 @@ async function pushClientToAkuiteo(clientId) {
         // Intercepter l'erreur "Ce code SIREN est déjà utilisé"
         if (createErr.message && createErr.message.includes('SIREN') && createErr.message.includes('déjà utilisé')) {
           toast('La société existe déjà dans Akuiteo (même SIREN/SIRET)', 'error');
-          // Chercher le client existant par SIREN pour proposer le rattachement
-          if (full.siren) {
-            try {
-              const existing = await akuiteoFetch('POST', '/crm/customers/search?limit=5', {
-                SIREN: { operator: 'EQUALS', value: full.siren }
-              });
-              if (existing && existing.length > 0) {
-                if (confirm(`La société "${existing[0].name || existing[0].legalName}" existe déjà dans Akuiteo (ID: ${existing[0].id}).\n\nVoulez-vous rattacher cette fiche CRM à la fiche Akuiteo existante ?`)) {
-                  await sb.from('clients').update({ akuiteo_id: String(existing[0].id) }).eq('id', clientId);
-                  await loadDB();
-                  if (currentClient && currentClient.id === clientId) {
-                    const { data: refreshed } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
-                    if (refreshed) currentClient = refreshed;
-                  }
-                  renderPage(currentPage);
-                  toast('Fiche rattachée à Akuiteo', 'success');
+          // Chercher le client existant par nom pour proposer le rattachement
+          try {
+            const searchName = (full.name || '').substring(0, 30);
+            const existing = await akuiteoFetch('POST', '/crm/customers/search?limit=20', {
+              name: { operator: 'LIKE', value: '%' + searchName + '%' }
+            });
+            // Filtrer par SIREN si disponible
+            const match = full.siren
+              ? (existing || []).find(e => e.SIREN === full.siren || e.SIRET === full.siret)
+              : (existing || []).length === 1 ? existing[0] : null;
+            if (match) {
+              if (confirm(`La société "${match.name || match.legalName}" existe déjà dans Akuiteo (ID: ${match.id}).\n\nVoulez-vous rattacher cette fiche CRM à la fiche Akuiteo existante ?`)) {
+                await sb.from('clients').update({ akuiteo_id: String(match.id) }).eq('id', clientId);
+                await loadDB();
+                if (currentClient && currentClient.id === clientId) {
+                  const { data: refreshed } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
+                  if (refreshed) currentClient = refreshed;
                 }
+                renderPage(currentPage);
+                toast('Fiche rattachée à Akuiteo', 'success');
               }
-            } catch (searchErr) { console.warn('Recherche SIREN Akuiteo:', searchErr.message); }
-          }
+            }
+          } catch (searchErr) { console.warn('Recherche Akuiteo:', searchErr.message); }
           return;
         }
         throw createErr; // Relancer les autres erreurs
