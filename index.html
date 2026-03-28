@@ -2126,14 +2126,19 @@ function filterBySociete(items) {
 function societeSelect(code) {
   const all = getAllSocietes();
   if (code === '__ALL__') {
-    selectedSocietes.clear();
+    // Toggle : si déjà "Toutes" → sélectionner toutes explicitement (pour pouvoir décocher individuellement)
+    // Si pas "Toutes" → revenir à "Toutes"
+    if (selectedSocietes.size === 0) {
+      // "Toutes" était coché → on décoche = sélectionner toutes explicitement pour permettre de décocher
+      selectedSocietes = new Set(all);
+    } else {
+      selectedSocietes.clear();
+    }
   } else if (selectedSocietes.size === 0) {
     // Etait sur "Toutes" → on décoche une : sélectionner toutes sauf celle-ci
     selectedSocietes = new Set(all.filter(x => x !== code));
   } else if (selectedSocietes.has(code)) {
     selectedSocietes.delete(code);
-    // Si plus rien coché → revenir à "Toutes"
-    if (selectedSocietes.size === 0) selectedSocietes.clear();
   } else {
     selectedSocietes.add(code);
     // Si tout est coché → revenir à "Toutes"
