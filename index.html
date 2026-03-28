@@ -6481,15 +6481,40 @@ async function saveDeletePassword() {
 }
 
 async function deleteClient(clientId, clientName) {
-  if (!confirm(`Êtes-vous sûr de vouloir supprimer la société "${clientName}" ?\n\nCette action est irréversible. Les contacts, devis, commandes et factures liés ne seront pas supprimés.`)) return;
+  // Vérifier si la société est rattachée à des devis, commandes ou factures
+  const linkedDevis = DB.devis.filter(d => d.client_id === clientId);
+  const linkedCmd = DB.commandes.filter(c => c.client_id === clientId);
+  const linkedFact = DB.factures.filter(f => f.client_id === clientId);
+  if (linkedDevis.length || linkedCmd.length || linkedFact.length) {
+    const details = [];
+    if (linkedDevis.length) details.push(linkedDevis.length + ' devis');
+    if (linkedCmd.length) details.push(linkedCmd.length + ' commande(s)');
+    if (linkedFact.length) details.push(linkedFact.length + ' facture(s)');
+    toast(`Impossible de supprimer "${clientName}" : société rattachée à ${details.join(', ')}`, 'error');
+    return;
+  }
+  const linkedReports = DB.reports.filter(r => r.client_id === clientId);
+  const confirmMsg = `Êtes-vous sûr de vouloir supprimer la société "${clientName}" ?\n\n` +
+    (linkedReports.length ? `${linkedReports.length} compte(s)-rendu(s) seront également supprimés.\n\n` : '') +
+    'Cette action est irréversible.';
+  if (!confirm(confirmMsg)) return;
   const pwd = await loadDeletePassword();
   if (pwd) {
     const input = prompt('Entrez le mot de passe de suppression :');
     if (input !== pwd) { toast('Mot de passe incorrect', 'error'); return; }
   }
+  // Supprimer les comptes-rendus liés
+  if (linkedReports.length) {
+    const { error: crErr } = await sb.from('reports').delete().eq('client_id', clientId);
+    if (crErr) { toast('Erreur suppression comptes-rendus: ' + crErr.message, 'error'); return; }
+  }
+  // Supprimer les contacts liés
+  const { error: ctErr } = await sb.from('contacts').delete().eq('client_id', clientId);
+  if (ctErr) { toast('Erreur suppression contacts: ' + ctErr.message, 'error'); return; }
+  // Supprimer la société
   const { error } = await sb.from('clients').delete().eq('id', clientId);
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
-  toast(`Société "${clientName}" supprimée`, 'success');
+  toast(`Société "${clientName}" supprimée` + (linkedReports.length ? ` (+ ${linkedReports.length} CR)` : ''), 'success');
   await loadDB();
   go('clients');
 }
