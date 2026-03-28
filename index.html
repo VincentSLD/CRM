@@ -3146,7 +3146,7 @@ function renderClientDetail() {
     </div>
     <div class="client-actions">
       <button class="btn" onclick="openModal('edit-client')">✎ Modifier</button>
-      ${!c.siret ? '<button class="btn btn-not-synced" onclick="searchSirene(\''+c.id+'\',\''+((c.name||'').replace(/'/g,"\\'"))+'\')" title="Compléter la fiche avec les données SIRENE">SIRET manquant</button>' : '<button class="btn" onclick="searchSirene(\''+c.id+'\',\''+((c.name||'').replace(/'/g,"\\'"))+'\')" title="Rechercher dans l\'annuaire SIRENE">SIRENE</button>'}
+      ${!c.siret ? '<button class="btn btn-not-synced" onclick="openSireneModal(\''+c.id+'\',\''+((c.name||'').replace(/'/g,"\\'"))+'\')" title="Compléter la fiche avec les données SIRENE">SIRET manquant</button>' : '<button class="btn" onclick="openSireneModal(\''+c.id+'\',\''+((c.name||'').replace(/'/g,"\\'"))+'\')" title="Rechercher dans l\'annuaire SIRENE">SIRENE</button>'}
       <button class="btn ${c.akuiteo_id ? 'btn-synced' : 'btn-not-synced'}" onclick="pushClientToAkuiteo('${c.id}')" title="${c.akuiteo_id ? 'Synchronisé (ID: '+c.akuiteo_id+')' : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? '✔ Synchronisé' : '⬆ Sync Akuiteo'}</button>
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
       <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer cette société">Supprimer</button>
@@ -7273,7 +7273,7 @@ async function analyseCAClient(clientId) {
 let sireneClientId = null;
 let sireneResultsCache = [];
 
-function searchSirene(clientId, clientName) {
+function openSireneModal(clientId, clientName) {
   sireneClientId = clientId;
   document.getElementById('sirene-query').value = clientName || '';
   document.getElementById('sirene-results').innerHTML = '<div style="color:var(--t3);text-align:center">Saisissez un nom ou un numéro SIRET</div>';
