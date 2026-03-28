@@ -7453,6 +7453,29 @@ async function pushClientToAkuiteo(clientId) {
       await akuiteoFetch('POST', '/crm/customers/' + full.akuiteo_id, akData, { accept: 'text/plain' });
       toast('Client mis à jour dans Akuiteo', 'success');
     } else {
+      // Vérifier si un client avec le même SIRET existe déjà dans Akuiteo
+      if (full.siret) {
+        try {
+          const existing = await akuiteoFetch('POST', '/crm/customers/search?limit=5', {
+            SIRET: { operator: 'EQUALS', value: full.siret }
+          });
+          if (existing && existing.length > 0) {
+            toast(`La société existe déjà dans Akuiteo (SIRET ${full.siret}, ID: ${existing[0].id})`, 'error');
+            // Proposer de rattacher
+            if (confirm(`La société "${existing[0].name || existing[0].legalName}" existe déjà dans Akuiteo (ID: ${existing[0].id}).\n\nVoulez-vous rattacher cette fiche CRM à la fiche Akuiteo existante ?`)) {
+              await sb.from('clients').update({ akuiteo_id: String(existing[0].id) }).eq('id', clientId);
+              await loadDB();
+              if (currentClient && currentClient.id === clientId) {
+                const { data: refreshed } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
+                if (refreshed) currentClient = refreshed;
+              }
+              renderPage(currentPage);
+              toast('Fiche rattachée à Akuiteo', 'success');
+            }
+            return;
+          }
+        } catch (e) { console.warn('Recherche SIRET Akuiteo:', e.message); }
+      }
       // Création : code + type obligatoires + Accept text/plain
       akData.code = full.code || null;
       akData.type = 'CUSTOMER';
