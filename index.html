@@ -4282,6 +4282,11 @@ function facStatusLabel(s) {
 }
 
 // ═══ FICHE DETAIL helpers ═══
+function resolveManagerName(akuiteoId) {
+  if (!akuiteoId) return null;
+  const comm = (DB.commerciaux || []).find(c => c.akuiteo_manager_id === akuiteoId);
+  return comm ? comm.nom + ' <span style="color:var(--t3);font-size:11px">(' + akuiteoId + ')</span>' : akuiteoId;
+}
 function detailRow(label, value) {
   if (value === null || value === undefined || value === '') return '';
   return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
@@ -4359,8 +4364,8 @@ async function showDevisDetail(id) {
         detailRow('Apporteur d\'affaire', d.apporteur_affaire),
         detailRow('Projet', d.projet),
         detailRow('Agence', d.agence),
-        detailRow('Responsable ID', d.responsable_id),
-        detailRow('Commercial ID', d.commercial_id),
+        detailRow('Responsable', resolveManagerName(d.responsable_id)),
+        detailRow('Commercial', resolveManagerName(d.commercial_id)),
         detailRow('Nombre de lignes', d.nb_lignes),
       ])}
       ${renderCustomData(d.custom_data)}
@@ -4409,8 +4414,8 @@ async function showCommandeDetail(id) {
         detailRow('Apporteur d\'affaire', c.apporteur_affaire),
         detailRow('Projet', c.projet),
         detailRow('Agence', c.agence),
-        detailRow('Responsable ID', c.responsable_id),
-        detailRow('Commercial ID', c.commercial_id),
+        detailRow('Responsable', resolveManagerName(c.responsable_id)),
+        detailRow('Commercial', resolveManagerName(c.commercial_id)),
         detailRow('Nombre de lignes', c.nb_lignes),
       ])}
       ${(() => {
@@ -4480,7 +4485,7 @@ async function showFactureDetail(id) {
         detailRow('Projet', f.projet),
         detailRow('Agence', f.agence),
         detailRow('Mode de paiement', f.mode_paiement === 'BANK_TRANSFER' ? 'Virement bancaire' : f.mode_paiement === 'CHECK' ? 'Chèque' : f.mode_paiement === 'CASH' ? 'Espèces' : f.mode_paiement),
-        detailRow('Responsable ID', f.responsable_id),
+        detailRow('Responsable', resolveManagerName(f.responsable_id)),
         detailRow('Nombre de lignes', f.nb_lignes),
       ])}
       ${renderCustomData(f.custom_data)}
