@@ -2264,9 +2264,9 @@ async function loadDB() {
     }
 
     // Colonnes minimales pour agrégation + affichage liste
-    const DEVIS_LITE = 'id,ref,client_id,client_name,sujet,montant,date,statut,projet,agence,societe,responsable_id,commercial_id,probabilite';
-    const CMD_LITE = 'id,ref,client_id,client_name,nom,montant,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id';
-    const FACT_LITE = 'id,ref,client_id,client_name,montant,date,echeance,statut,jours_retard,projet,agence,societe,responsable_id,type_facture,reste_a_payer,date_paiement';
+    const DEVIS_LITE = 'id,ref,client_id,client_name,sujet,montant,date,statut,projet,agence,societe,responsable_id,commercial_id,probabilite,marche_id,affaire_id';
+    const CMD_LITE = 'id,ref,client_id,client_name,nom,montant,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id,marche_id,affaire_id';
+    const FACT_LITE = 'id,ref,client_id,client_name,montant,date,echeance,statut,jours_retard,projet,agence,societe,responsable_id,type_facture,reste_a_payer,date_paiement,marche_id,affaire_id';
     const MARCHE_LITE = 'id,nom,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,adresse,code_postal,ville,lat,lng,nb_affaires,responsable_id';
     const AFFAIRE_LITE = 'id,nom,marche_id,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,code_projet,apporteur_affaire,responsable';
 
@@ -4101,7 +4101,7 @@ function renderDevis(filter='all') {
     <table class="tbl-compact"><colgroup>
       <col class="col-ref"><col class="col-client"><col class="col-sujet">
       <col class="col-montant"><col class="col-montant"><col class="col-date">
-      <col class="col-agence"><col class="col-statut">
+      <col class="col-agence"><col><col><col class="col-statut">
     </colgroup><thead><tr>
       ${sortTh('devis','ref','Réf','filterDevis')}
       ${sortTh('devis','client','Client','filterDevis')}
@@ -4110,9 +4110,11 @@ function renderDevis(filter='all') {
       ${sortTh('devis','montant_ttc','TTC','filterDevis')}
       ${sortTh('devis','date_raw','Date','filterDevis')}
       ${sortTh('devis','agence','Agence','filterDevis')}
+      <th style="font-size:11px">Marché</th>
+      <th style="font-size:11px">Affaire</th>
       ${sortTh('devis','statut','Statut','filterDevis')}
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis trouvé</td></tr>' : filtered.slice(devisPage*TBL_PAGE_SIZE, (devisPage+1)*TBL_PAGE_SIZE).map(d => `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis trouvé</td></tr>' : filtered.slice(devisPage*TBL_PAGE_SIZE, (devisPage+1)*TBL_PAGE_SIZE).map(d => `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer">
       <td class="mono">${d.ref}</td>
       <td>${d.client}</td>
       <td>${d.sujet||''}</td>
@@ -4120,6 +4122,8 @@ function renderDevis(filter='all') {
       <td class="mono">${fmt(d.montant_ttc)}</td>
       <td>${d.date}</td>
       <td>${d.agence||''}</td>
+      <td>${linkMarche(d.marche_id)}</td>
+      <td>${linkAffaire(d.affaire_id)}</td>
       <td>${devisStatusLabel(d.statut)}</td>
     </tr>`).join('')}</tbody></table>
   ${renderTablePagination(filtered.length, devisPage, 'goDevisPage')}
@@ -4167,7 +4171,7 @@ function renderCommandes(filter='all') {
     <table class="tbl-compact"><colgroup>
       <col class="col-ref"><col class="col-client"><col class="col-sujet">
       <col class="col-montant"><col class="col-montant"><col class="col-date">
-      <col class="col-date"><col class="col-statut">
+      <col class="col-date"><col><col><col class="col-statut">
     </colgroup><thead><tr>
       ${sortTh('commandes','ref','Réf','filterCmd')}
       ${sortTh('commandes','client','Client','filterCmd')}
@@ -4176,9 +4180,11 @@ function renderCommandes(filter='all') {
       ${sortTh('commandes','montant_ttc','TTC','filterCmd')}
       ${sortTh('commandes','date_raw','Date','filterCmd')}
       ${sortTh('commandes','livraison','Livraison','filterCmd')}
+      <th style="font-size:11px">Marché</th>
+      <th style="font-size:11px">Affaire</th>
       ${sortTh('commandes','statut','Statut','filterCmd')}
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucune commande trouvée</td></tr>' : filtered.slice(cmdPage*TBL_PAGE_SIZE, (cmdPage+1)*TBL_PAGE_SIZE).map(c => `<tr onclick="showCommandeDetail('${c.id}')" style="cursor:pointer">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--t3)">Aucune commande trouvée</td></tr>' : filtered.slice(cmdPage*TBL_PAGE_SIZE, (cmdPage+1)*TBL_PAGE_SIZE).map(c => `<tr onclick="showCommandeDetail('${c.id}')" style="cursor:pointer">
       <td class="mono">${c.ref}</td>
       <td>${c.client}</td>
       <td>${c.nom||''}</td>
@@ -4186,6 +4192,8 @@ function renderCommandes(filter='all') {
       <td class="mono">${fmt(c.montant_ttc)}</td>
       <td>${c.date}</td>
       <td>${c.livraison}</td>
+      <td>${linkMarche(c.marche_id)}</td>
+      <td>${linkAffaire(c.affaire_id)}</td>
       <td>${cmdStatusLabel(c.statut)}</td>
     </tr>`).join('')}</tbody></table>
   ${renderTablePagination(filtered.length, cmdPage, 'goCmdPage')}
@@ -4234,7 +4242,7 @@ function renderFactures(filter='all') {
     <table class="tbl-compact"><colgroup>
       <col class="col-ref"><col class="col-client"><col class="col-type">
       <col class="col-montant"><col class="col-montant"><col class="col-reste">
-      <col class="col-date"><col class="col-date"><col class="col-statut">
+      <col class="col-date"><col class="col-date"><col><col><col class="col-statut">
     </colgroup><thead><tr>
       ${sortTh('factures','ref','Réf','filterFact')}
       ${sortTh('factures','client','Client','filterFact')}
@@ -4244,9 +4252,11 @@ function renderFactures(filter='all') {
       ${sortTh('factures','reste_a_payer','Reste','filterFact')}
       ${sortTh('factures','date_raw','Date','filterFact')}
       ${sortTh('factures','date_paiement','Paiement','filterFact')}
+      <th style="font-size:11px">Marché</th>
+      <th style="font-size:11px">Affaire</th>
       ${sortTh('factures','statut','Statut','filterFact')}
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3)">Aucune facture trouvée</td></tr>' : filtered.slice(factPage*TBL_PAGE_SIZE, (factPage+1)*TBL_PAGE_SIZE).map(f => `<tr onclick="showFactureDetail('${f.id}')" style="cursor:pointer">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--t3)">Aucune facture trouvée</td></tr>' : filtered.slice(factPage*TBL_PAGE_SIZE, (factPage+1)*TBL_PAGE_SIZE).map(f => `<tr onclick="showFactureDetail('${f.id}')" style="cursor:pointer">
       <td class="mono">${f.ref}</td>
       <td>${f.client}</td>
       <td>${f.type_facture === 'CREDIT' ? '<span style="color:var(--red)">Avoir</span>' : f.type_facture === 'INVOICE' ? 'Facture' : f.type_facture || ''}</td>
@@ -4255,6 +4265,8 @@ function renderFactures(filter='all') {
       <td class="mono" style="${(f.reste_a_payer||0)>0?'color:var(--red)':''}">${f.reste_a_payer != null ? fmt(f.reste_a_payer) : ''}</td>
       <td>${f.date}</td>
       <td>${f.date_paiement ? fmtDateFR(f.date_paiement) : ''}</td>
+      <td>${linkMarche(f.marche_id)}</td>
+      <td>${linkAffaire(f.affaire_id)}</td>
       <td>${facStatusLabel(f.statut)}</td>
     </tr>`).join('')}</tbody></table>
   ${renderTablePagination(filtered.length, factPage, 'goFactPage')}
@@ -4282,6 +4294,18 @@ function facStatusLabel(s) {
 }
 
 // ═══ FICHE DETAIL helpers ═══
+function linkMarche(marcheId) {
+  if (!marcheId) return '';
+  const m = DB.marches.find(x => x.id === marcheId);
+  const label = m ? (m.ref || m.nom || marcheId) : marcheId;
+  return `<a href="#" onclick="showMarcheDetail('${marcheId}');return false" style="color:var(--accent);font-size:12px" title="${m ? (m.nom||'') : ''}">${label}</a>`;
+}
+function linkAffaire(affaireId) {
+  if (!affaireId) return '';
+  const a = DB.affaires.find(x => x.id === affaireId);
+  const label = a ? (a.ref || a.nom || affaireId) : affaireId;
+  return `<a href="#" onclick="showAffaireDetail('${affaireId}');return false" style="color:var(--accent);font-size:12px" title="${a ? (a.nom||'') : ''}">${label}</a>`;
+}
 function resolveManagerName(akuiteoId) {
   if (!akuiteoId) return null;
   const comm = (DB.commerciaux || []).find(c => c.akuiteo_manager_id === akuiteoId);
