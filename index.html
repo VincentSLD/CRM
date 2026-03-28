@@ -2336,6 +2336,8 @@ async function loadDB() {
     await Promise.all([loadTopClients(), loadPortfolioStats()]);
 
     console.log(`Données chargées depuis Supabase (${DB.clients.length} clients affichés / ${clientsTotalCount} total)`, DB);
+    // Sélectionner toutes les sociétés par défaut
+    selectedSocietes = new Set(getAllSocietes());
     updateNavBadges();
     return true;
   } catch (err) {
