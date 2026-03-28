@@ -2119,7 +2119,7 @@ let _societeRefreshFn = null;
 
 function getAllSocietes() {
   const s = new Set();
-  [...(DB.devis||[]), ...(DB.commandes||[]), ...(DB.factures||[])].forEach(d => { if (d.societe) s.add(d.societe); });
+  [...(DB.devis||[]), ...(DB.commandes||[]), ...(DB.factures||[]), ...(DB.marches||[]), ...(DB.affaires||[])].forEach(d => { if (d.societe) s.add(d.societe); });
   return [...s].sort();
 }
 
@@ -2334,6 +2334,10 @@ async function loadDB() {
     DB.commerciaux = coAll;
     DB.marches = maAll.map(m => ({ ...m, client: m.client_name, date_raw: m.date_debut, date: fmtDateFR(m.date_debut) }));
     DB.affaires = afAll.map(a => ({ ...a, client: a.client_name, date_raw: a.date_debut, date: fmtDateFR(a.date_debut) }));
+    // Enrichir marchés/affaires avec le champ societe (déduit des devis/commandes/factures liés)
+    const allDocs = [...DB.devis, ...DB.commandes, ...DB.factures];
+    DB.marches.forEach(m => { if (!m.societe) { const d = allDocs.find(x => x.marche_id === m.id && x.societe); if (d) m.societe = d.societe; } });
+    DB.affaires.forEach(a => { if (!a.societe) { const d = allDocs.find(x => x.affaire_id === a.id && x.societe); if (d) a.societe = d.societe; } });
 
     DB.alerts = generateAlerts();
 
@@ -3412,7 +3416,9 @@ function marcheStatutBadge(s) {
 
 function renderMarches() {
   let marches = filterByCommercial(DB.marches);
+  marches = filterBySociete(marches);
   marches = filterByDateRange(marches, marchesDateFrom, marchesDateTo);
+  if (marchesStatutFilter !== 'all') marches = marches.filter(m => m.statut === marchesStatutFilter);
   if (marchesSearch) {
     const q = marchesSearch.toLowerCase();
     marches = marches.filter(m =>
@@ -3423,10 +3429,21 @@ function renderMarches() {
   }
   const totalHT = marches.reduce((a, m) => a + Number(m.montant || 0), 0);
   const totalTTC = marches.reduce((a, m) => a + Number(m.montant_ttc || 0), 0);
-  const enCours = marches.filter(m => m.statut === 'en_cours').length;
-  const termines = marches.filter(m => m.statut === 'termine').length;
+  const allBeforeStatus = filterBySociete(filterByDateRange(filterByCommercial(DB.marches), marchesDateFrom, marchesDateTo));
+  const enCours = allBeforeStatus.filter(m => m.statut === 'en_cours').length;
+  const termines = allBeforeStatus.filter(m => m.statut === 'termine').length;
+  const suspendus = allBeforeStatus.filter(m => m.statut === 'suspendu').length;
+  const annules = allBeforeStatus.filter(m => m.statut === 'annule').length;
 
   return `
+  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+    <button class="btn ${marchesStatutFilter==='all'?'active':''}" onclick="marchesStatutFilter='all';renderMarchesRefresh()">Tous <span style="opacity:.4">${allBeforeStatus.length}</span></button>
+    <button class="btn ${marchesStatutFilter==='en_cours'?'active':''}" onclick="marchesStatutFilter='en_cours';renderMarchesRefresh()">En cours <span style="opacity:.4">${enCours}</span></button>
+    <button class="btn ${marchesStatutFilter==='termine'?'active':''}" onclick="marchesStatutFilter='termine';renderMarchesRefresh()">Terminés <span style="opacity:.4">${termines}</span></button>
+    <button class="btn ${marchesStatutFilter==='suspendu'?'active':''}" onclick="marchesStatutFilter='suspendu';renderMarchesRefresh()">Suspendus <span style="opacity:.4">${suspendus}</span></button>
+    <button class="btn ${marchesStatutFilter==='annule'?'active':''}" onclick="marchesStatutFilter='annule';renderMarchesRefresh()">Annulés <span style="opacity:.4">${annules}</span></button>
+    ${renderSocieteFilter(() => renderMarchesRefresh())}
+  </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px">
     <div class="card"><div class="card-body" style="text-align:center;padding:12px">
       <div style="font-size:20px;font-weight:700;color:var(--accent)">${marches.length}</div>
@@ -3779,7 +3796,9 @@ function renderMarcheDetail() {
 // ═══ LISTE DES AFFAIRES ═══
 function renderAffaires() {
   let affaires = filterByCommercial(DB.affaires);
+  affaires = filterBySociete(affaires);
   affaires = filterByDateRange(affaires, affairesDateFrom, affairesDateTo);
+  if (affairesStatutFilter !== 'all') affaires = affaires.filter(a => a.statut === affairesStatutFilter);
   if (affairesSearch) {
     const q = affairesSearch.toLowerCase();
     affaires = affaires.filter(a =>
@@ -3791,10 +3810,21 @@ function renderAffaires() {
   }
   const totalHT = affaires.reduce((a, x) => a + Number(x.montant || 0), 0);
   const totalTTC = affaires.reduce((a, x) => a + Number(x.montant_ttc || 0), 0);
-  const enCours = affaires.filter(a => a.statut === 'en_cours').length;
-  const termines = affaires.filter(a => a.statut === 'termine').length;
+  const allBeforeStatus = filterBySociete(filterByDateRange(filterByCommercial(DB.affaires), affairesDateFrom, affairesDateTo));
+  const enCours = allBeforeStatus.filter(a => a.statut === 'en_cours').length;
+  const termines = allBeforeStatus.filter(a => a.statut === 'termine').length;
+  const suspendus = allBeforeStatus.filter(a => a.statut === 'suspendu').length;
+  const annules = allBeforeStatus.filter(a => a.statut === 'annule').length;
 
   return `
+  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+    <button class="btn ${affairesStatutFilter==='all'?'active':''}" onclick="affairesStatutFilter='all';renderAffairesRefresh()">Toutes <span style="opacity:.4">${allBeforeStatus.length}</span></button>
+    <button class="btn ${affairesStatutFilter==='en_cours'?'active':''}" onclick="affairesStatutFilter='en_cours';renderAffairesRefresh()">En cours <span style="opacity:.4">${enCours}</span></button>
+    <button class="btn ${affairesStatutFilter==='termine'?'active':''}" onclick="affairesStatutFilter='termine';renderAffairesRefresh()">Terminées <span style="opacity:.4">${termines}</span></button>
+    <button class="btn ${affairesStatutFilter==='suspendu'?'active':''}" onclick="affairesStatutFilter='suspendu';renderAffairesRefresh()">Suspendues <span style="opacity:.4">${suspendus}</span></button>
+    <button class="btn ${affairesStatutFilter==='annule'?'active':''}" onclick="affairesStatutFilter='annule';renderAffairesRefresh()">Annulées <span style="opacity:.4">${annules}</span></button>
+    ${renderSocieteFilter(() => renderAffairesRefresh())}
+  </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px">
     <div class="card"><div class="card-body" style="text-align:center;padding:12px">
       <div style="font-size:20px;font-weight:700;color:var(--accent)">${affaires.length}</div>
@@ -3981,9 +4011,9 @@ let pipelineSearch = '';
 let pipeDateFrom = _yearAgo, pipeDateTo = _today;
 const _fiveYearsAgo = new Date(new Date().setFullYear(new Date().getFullYear() - 5)).toISOString().split('T')[0];
 let marchesDateFrom = _fiveYearsAgo, marchesDateTo = _today;
-let marchesSearch = '';
+let marchesSearch = '', marchesStatutFilter = 'all';
 let affairesDateFrom = _fiveYearsAgo, affairesDateTo = _today;
-let affairesSearch = '';
+let affairesSearch = '', affairesStatutFilter = 'all';
 
 function renderPipeline() {
   // Filtrer par commercial, société puis par date
