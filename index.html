@@ -4849,7 +4849,7 @@ function renderCRSend() {
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
         <button class="btn" onclick="backFromSend()">Annuler</button>
-        <button class="btn btn-primary" onclick="sendReport()">Envoyer</button>
+        <button class="btn btn-primary" onclick="sendReport()"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Envoyer</button>
       </div>
     </div>
   </div>`;
@@ -4966,8 +4966,8 @@ function getCREditorHTML(r) {
           <div style="display:flex;gap:6px">
             <button class="btn" onclick="backToCRList()">Annuler</button>
             ${r ? '<button class="btn" style="color:var(--red)" onclick="deleteReport()">Supprimer</button>' : ''}
-            <button class="btn" onclick="saveReport()">${r ? 'Mettre à jour' : 'Sauvegarder'}</button>
-            <button class="btn btn-primary" onclick="openSendModal()">Envoyer</button>
+            <button class="btn" onclick="saveReport()" style="background:#1a1a1a;color:#ffd600;border-color:#ffd600;font-weight:600">${r ? 'Mettre à jour' : 'Enregistrer'}</button>
+            <button class="btn btn-primary" onclick="openSendModal()"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Envoyer</button>
           </div>
         </div>
       </div>
