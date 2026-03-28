@@ -4219,10 +4219,10 @@ function renderDevis(filter='all') {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <button class="btn ${filter==='all'?'active':''}" onclick="filterDevis('all')">Tous <span style="opacity:.4">${dated.length}</span></button>
-      <button class="btn ${filter==='pending'?'active':''}" onclick="filterDevis('pending')">En attente</button>
-      <button class="btn ${filter==='accepted'?'active':''}" onclick="filterDevis('accepted')">Acceptés</button>
-      <button class="btn ${filter==='sent'?'active':''}" onclick="filterDevis('sent')">Envoyés</button>
-      <button class="btn ${filter==='refused'?'active':''}" onclick="filterDevis('refused')">Refusés</button>
+      <button class="btn ${filter==='pending'?'active':''}" onclick="filterDevis('pending')">En attente <span style="opacity:.4">${dated.filter(d=>d.statut==='pending').length}</span></button>
+      <button class="btn ${filter==='accepted'?'active':''}" onclick="filterDevis('accepted')">Acceptés <span style="opacity:.4">${dated.filter(d=>d.statut==='accepted').length}</span></button>
+      <button class="btn ${filter==='sent'?'active':''}" onclick="filterDevis('sent')">Envoyés <span style="opacity:.4">${dated.filter(d=>d.statut==='sent').length}</span></button>
+      <button class="btn ${filter==='refused'?'active':''}" onclick="filterDevis('refused')">Refusés <span style="opacity:.4">${dated.filter(d=>d.statut==='refused').length}</span></button>
       ${renderSocieteFilter(() => filterDevis(filter))}
     </div>
     <div style="display:flex;gap:6px;align-items:center">
@@ -4290,9 +4290,9 @@ function renderCommandes(filter='all') {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <button class="btn ${filter==='all'?'active':''}" onclick="filterCmd('all')">Toutes <span style="opacity:.4">${dated.length}</span></button>
-      <button class="btn ${filter==='en_cours'?'active':''}" onclick="filterCmd('en_cours')">En cours</button>
-      <button class="btn ${filter==='livree'?'active':''}" onclick="filterCmd('livree')">Livrées</button>
-      <button class="btn ${filter==='annulee'?'active':''}" onclick="filterCmd('annulee')">Annulées</button>
+      <button class="btn ${filter==='en_cours'?'active':''}" onclick="filterCmd('en_cours')">En cours <span style="opacity:.4">${dated.filter(c=>c.statut==='en_cours').length}</span></button>
+      <button class="btn ${filter==='livree'?'active':''}" onclick="filterCmd('livree')">Livrées <span style="opacity:.4">${dated.filter(c=>c.statut==='livree').length}</span></button>
+      <button class="btn ${filter==='annulee'?'active':''}" onclick="filterCmd('annulee')">Annulées <span style="opacity:.4">${dated.filter(c=>c.statut==='annulee').length}</span></button>
       ${renderSocieteFilter(() => filterCmd(filter))}
     </div>
     <div style="display:flex;gap:6px;align-items:center">
@@ -4361,9 +4361,9 @@ function renderFactures(filter='all') {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <button class="btn ${filter==='all'?'active':''}" onclick="filterFact('all')">Toutes <span style="opacity:.4">${dated.length}</span></button>
-      <button class="btn ${filter==='payee'?'active':''}" onclick="filterFact('payee')">Payées</button>
-      <button class="btn ${filter==='attente'?'active':''}" onclick="filterFact('attente')">En attente</button>
-      <button class="btn ${filter==='retard'?'active':''}" onclick="filterFact('retard')">En retard</button>
+      <button class="btn ${filter==='payee'?'active':''}" onclick="filterFact('payee')">Payées <span style="opacity:.4">${dated.filter(f=>f.statut==='payee').length}</span></button>
+      <button class="btn ${filter==='attente'?'active':''}" onclick="filterFact('attente')">En attente <span style="opacity:.4">${dated.filter(f=>f.statut==='attente').length}</span></button>
+      <button class="btn ${filter==='retard'?'active':''}" onclick="filterFact('retard')">En retard <span style="opacity:.4">${dated.filter(f=>f.statut==='retard').length}</span></button>
       ${renderSocieteFilter(() => filterFact(filter))}
     </div>
     <div style="display:flex;gap:6px;align-items:center">
