@@ -4494,14 +4494,15 @@ function detailSection(title, rows) {
 async function fetchAkuiteoCustomData(table, id, akuiteoId, apiPath) {
   if (!akuiteoId) return null;
   try {
+    console.log(`[Akuiteo] Chargement customData: POST ${apiPath}/${akuiteoId}/read`);
     const detail = await akuiteoFetch('POST', apiPath + '/' + akuiteoId + '/read', { options: ['CUSTOM_DATA'] });
+    console.log('[Akuiteo] Réponse customData:', detail?.customData);
     if (detail && detail.customData && Object.keys(detail.customData).length > 0) {
       const cd = detail.customData;
-      // Sauvegarder en base pour le cache
       await sb.from(table).update({ custom_data: cd }).eq('id', id);
       return cd;
     }
-  } catch (e) { console.warn(`[Akuiteo] Fetch customData ${apiPath}/${akuiteoId}/read:`, e.message); }
+  } catch (e) { console.error(`[Akuiteo] Erreur customData ${apiPath}/${akuiteoId}/read:`, e.message); }
   return null;
 }
 
