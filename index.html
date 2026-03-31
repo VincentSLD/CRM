@@ -4489,6 +4489,21 @@ function detailSection(title, rows) {
   </div>`;
 }
 
+// Charger les customData depuis l'API Akuiteo pour un document
+async function fetchAkuiteoCustomData(table, id, akuiteoId, apiPath) {
+  if (!akuiteoId) return null;
+  try {
+    const detail = await akuiteoFetch('GET', apiPath + '/' + akuiteoId);
+    if (detail && detail.customData && Object.keys(detail.customData).length > 0) {
+      const cd = detail.customData;
+      // Sauvegarder en base pour le cache
+      await sb.from(table).update({ custom_data: cd }).eq('id', id);
+      return cd;
+    }
+  } catch (e) { console.warn(`[Akuiteo] Fetch customData ${apiPath}/${akuiteoId}:`, e.message); }
+  return null;
+}
+
 // ═══ FICHE DEVIS ═══
 async function showDevisDetail(id) {
   const d = DB.devis.find(x => x.id === id);
@@ -4497,6 +4512,10 @@ async function showDevisDetail(id) {
   if (d.custom_data === undefined) {
     const { data } = await sb.from('devis').select('custom_data,description').eq('id', id).maybeSingle();
     if (data) { d.custom_data = data.custom_data; d.description = data.description; }
+  }
+  // Si toujours pas de customData, charger depuis l'API Akuiteo
+  if (!d.custom_data && d.akuiteo_id) {
+    d.custom_data = await fetchAkuiteoCustomData('devis', id, d.akuiteo_id, '/sales/quotations');
   }
   currentPage = 'devis-detail';
   document.getElementById('pageTitle').textContent = 'Devis ' + (d.ref || d.id);
@@ -4547,6 +4566,9 @@ async function showCommandeDetail(id) {
   if (c.custom_data === undefined) {
     const { data } = await sb.from('commandes').select('custom_data,description').eq('id', id).maybeSingle();
     if (data) { c.custom_data = data.custom_data; c.description = data.description; }
+  }
+  if (!c.custom_data && c.akuiteo_id) {
+    c.custom_data = await fetchAkuiteoCustomData('commandes', id, c.akuiteo_id, '/sales/orders');
   }
   currentPage = 'commande-detail';
   document.getElementById('pageTitle').textContent = 'Commande ' + (c.ref || c.id);
@@ -4615,6 +4637,9 @@ async function showFactureDetail(id) {
   if (f.custom_data === undefined) {
     const { data } = await sb.from('factures').select('custom_data,description').eq('id', id).maybeSingle();
     if (data) { f.custom_data = data.custom_data; f.description = data.description; }
+  }
+  if (!f.custom_data && f.akuiteo_id) {
+    f.custom_data = await fetchAkuiteoCustomData('factures', id, f.akuiteo_id, '/sales/invoices');
   }
   currentPage = 'facture-detail';
   document.getElementById('pageTitle').textContent = 'Facture ' + (f.ref || f.id);
