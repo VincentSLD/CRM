@@ -4490,17 +4490,18 @@ function detailSection(title, rows) {
 }
 
 // Charger les customData depuis l'API Akuiteo pour un document
+// L'endpoint GET ne renvoie pas les customData, il faut utiliser POST /read avec l'option CUSTOM_DATA
 async function fetchAkuiteoCustomData(table, id, akuiteoId, apiPath) {
   if (!akuiteoId) return null;
   try {
-    const detail = await akuiteoFetch('GET', apiPath + '/' + akuiteoId);
+    const detail = await akuiteoFetch('POST', apiPath + '/' + akuiteoId + '/read', { options: ['CUSTOM_DATA'] });
     if (detail && detail.customData && Object.keys(detail.customData).length > 0) {
       const cd = detail.customData;
       // Sauvegarder en base pour le cache
       await sb.from(table).update({ custom_data: cd }).eq('id', id);
       return cd;
     }
-  } catch (e) { console.warn(`[Akuiteo] Fetch customData ${apiPath}/${akuiteoId}:`, e.message); }
+  } catch (e) { console.warn(`[Akuiteo] Fetch customData ${apiPath}/${akuiteoId}/read:`, e.message); }
   return null;
 }
 
