@@ -5695,14 +5695,15 @@ async function showLuccaAbsences(luccaId, fullName) {
     const resp = await luccaFetch('/api/v3/leaves', {
       'leavePeriod.ownerId': luccaId,
       date: `between,${yearStart},${yearEnd}`,
-      paging: '0,1000'
+      paging: '0,200'
     });
+    console.log('[Lucca Absences] Response for user ' + luccaId + ':', JSON.stringify(resp).substring(0, 500));
 
-    const items = resp?.data?.items || [];
+    const items = resp?.data?.items || resp?.items || [];
     const absences = items.filter(l => l.isActive !== false);
 
     if (absences.length === 0) {
-      document.getElementById('lucca-absences-body').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t3)">Aucune absence enregistrée pour ' + now.getFullYear() + '.</div>';
+      document.getElementById('lucca-absences-body').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t3)">Aucune absence enregistrée pour ' + now.getFullYear() + '.<br><br><span style="font-size:11px;color:var(--t3)">Debug: ' + JSON.stringify(Object.keys(resp||{})) + '</span></div>';
       return;
     }
 
