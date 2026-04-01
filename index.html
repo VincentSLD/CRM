@@ -2842,7 +2842,7 @@ function renderPage(page) {
   if (page === 'carte') setTimeout(initCarteMap, 50);
   if (page === 'admin') setTimeout(async () => { await loadCollaborateursLucca(); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); }, 50);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
-  if (page === 'collaborateurs-lucca') setTimeout(async () => { await loadCollaborateursLucca(); renderCollaborateursLuccaRefresh(); }, 50);
+  if (page === 'collaborateurs-lucca') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); renderCollaborateursLuccaRefresh(); }, 50);
   if (page === 'cr' && crViewMode === 'send') setTimeout(loadSendGroups, 50);
 }
 
@@ -5705,9 +5705,12 @@ function renderCollaborateursLucca() {
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
     <table class="tbl-compact">
     <thead><tr>
-      <th>N° Employé</th><th>Nom</th><th>Prénom</th><th>Email</th><th>Département</th><th>Poste</th><th>Début contrat</th><th>Fin contrat</th><th>ID Lucca</th>
+      <th>N° Employé</th><th>Nom</th><th>Prénom</th><th>Email</th><th>Département</th><th>Poste</th><th>Début contrat</th><th>Fin contrat</th><th>Lien Akuiteo</th>
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3)">Aucun collaborateur. Cliquez sur "Synchroniser depuis Lucca" pour charger la liste.</td></tr>' : filtered.map(c => `<tr style="cursor:pointer" onclick="showLuccaAbsences('${c.lucca_id}','${(c.prenom||'').replace(/'/g,"\\'")} ${(c.nom||'').replace(/'/g,"\\'")}')" title="Voir les absences">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3)">Aucun collaborateur. Cliquez sur "Synchroniser depuis Lucca" pour charger la liste.</td></tr>' : filtered.map(c => {
+      const akMatch = collaborateursData.find(a => a.lucca_id === c.lucca_id);
+      const akLabel = akMatch ? `<span style="color:var(--green);font-size:11px">&#10003; ${akMatch.prenom||''} ${akMatch.nom||''} <span class="mono" style="font-size:10px">(${akMatch.code||akMatch.akuiteo_id||''})</span></span>` : '<span style="color:var(--t3);font-size:11px">—</span>';
+      return `<tr style="cursor:pointer" onclick="showLuccaAbsences('${c.lucca_id}','${(c.prenom||'').replace(/'/g,"\\'")} ${(c.nom||'').replace(/'/g,"\\'")}')" title="Voir les absences">
       <td class="mono">${c.numero_employe||'—'}</td>
       <td><strong>${c.nom||'—'}</strong></td>
       <td>${c.prenom||'—'}</td>
@@ -5716,7 +5719,7 @@ function renderCollaborateursLucca() {
       <td>${c.poste||'—'}</td>
       <td>${c.date_debut_contrat ? new Date(c.date_debut_contrat).toLocaleDateString('fr-FR') : '—'}</td>
       <td>${c.date_fin_contrat ? new Date(c.date_fin_contrat).toLocaleDateString('fr-FR') : '—'}</td>
-      <td class="mono" style="font-size:11px">${c.lucca_id||'—'}</td>
+      <td>${akLabel}</td>`;}
     </tr>`).join('')}</tbody>
     </table>
   </div></div></div>`;
