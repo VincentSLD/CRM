@@ -5920,6 +5920,11 @@ async function loadAkuiteoManagerIds() {
     const customers = await akuiteoFetch('POST', '/crm/customers/search?limit=2000', {
       accountManagerId: { operator: 'IS_NOT_NULL', value: '' }
     });
+    // Charger les collaborateurs depuis Supabase pour enrichir
+    const { data: collabs } = await sb.from('collaborateurs').select('akuiteo_id,nom,prenom,code,email');
+    const collabMap = {};
+    (collabs || []).forEach(c => { if (c.akuiteo_id) collabMap[c.akuiteo_id] = c; });
+
     // Compter par manager et récupérer le nom
     const managers = {};
     for (const c of customers) {
@@ -5930,13 +5935,19 @@ async function loadAkuiteoManagerIds() {
       if (!managers[mid].name && c.accountManager) managers[mid].name = c.accountManager;
     }
     const sorted = Object.entries(managers).sort((a, b) => b[1].count - a[1].count);
-    el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>accountManagerId</th><th>Nom</th><th>Nb sociétés</th><th>Action</th></tr></thead><tbody>'
-      + sorted.map(([mid, info]) => `<tr>
+    el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>accountManagerId</th><th>Nom</th><th>Prénom</th><th>Code</th><th>Email</th><th>Nb sociétés</th><th>Action</th></tr></thead><tbody>'
+      + sorted.map(([mid, info]) => {
+        const collab = collabMap[mid];
+        return `<tr>
         <td class="mono">${mid}</td>
-        <td>${info.name || '<span style="color:var(--t3)">—</span>'}</td>
+        <td>${collab?.nom || info.name || '<span style="color:var(--t3)">—</span>'}</td>
+        <td>${collab?.prenom || '<span style="color:var(--t3)">—</span>'}</td>
+        <td class="mono">${collab?.code || '<span style="color:var(--t3)">—</span>'}</td>
+        <td>${collab?.email ? '<a href="mailto:'+collab.email+'" style="color:var(--accent)">'+collab.email+'</a>' : '<span style="color:var(--t3)">—</span>'}</td>
         <td class="mono">${info.count}</td>
         <td><button class="btn" onclick="navigator.clipboard.writeText('${mid}');toast('ID copié','success')" style="font-size:11px">Copier</button></td>
-      </tr>`).join('')
+      </tr>`;
+      }).join('')
       + '</tbody></table></div>';
   } catch (e) {
     el.innerHTML = '<div style="color:var(--red)">Erreur: ' + e.message + '. Le proxy est-il lancé ?</div>';
