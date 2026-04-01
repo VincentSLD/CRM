@@ -2008,6 +2008,19 @@ tbody tr:last-child td { border-bottom: none; }
   </div>
 </div>
 
+<!-- ═══ MODAL: ABSENCES LUCCA ═══ -->
+<div class="modal-overlay" id="modal-lucca-absences" onclick="if(event.target===this)closeModal('lucca-absences')">
+  <div class="modal" style="max-width:800px;max-height:90vh;overflow-y:auto">
+    <div class="modal-head">
+      <h3 id="lucca-absences-title">Absences</h3>
+      <button class="modal-close" onclick="closeModal('lucca-absences')">×</button>
+    </div>
+    <div class="modal-body" id="lucca-absences-body">
+      <div style="text-align:center;padding:20px;color:var(--t3)">Chargement...</div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-cr" onclick="if(event.target===this)closeCRModal()">
   <div class="modal" style="max-width:900px;max-height:92vh;overflow-y:auto">
     <div class="modal-head">
@@ -5600,11 +5613,11 @@ function renderCollaborateursLucca() {
     <thead><tr>
       <th>N° Employé</th><th>Nom</th><th>Prénom</th><th>Email</th><th>Département</th><th>Poste</th><th>Début contrat</th><th>Fin contrat</th><th>ID Lucca</th>
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3)">Aucun collaborateur. Cliquez sur "Synchroniser depuis Lucca" pour charger la liste.</td></tr>' : filtered.map(c => `<tr>
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3)">Aucun collaborateur. Cliquez sur "Synchroniser depuis Lucca" pour charger la liste.</td></tr>' : filtered.map(c => `<tr style="cursor:pointer" onclick="showLuccaAbsences('${c.lucca_id}','${(c.prenom||'').replace(/'/g,"\\'")} ${(c.nom||'').replace(/'/g,"\\'")}')" title="Voir les absences">
       <td class="mono">${c.numero_employe||'—'}</td>
       <td><strong>${c.nom||'—'}</strong></td>
       <td>${c.prenom||'—'}</td>
-      <td>${c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : '—'}</td>
+      <td>${c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)" onclick="event.stopPropagation()">'+c.email+'</a>' : '—'}</td>
       <td>${c.departement||'—'}</td>
       <td>${c.poste||'—'}</td>
       <td>${c.date_debut_contrat ? new Date(c.date_debut_contrat).toLocaleDateString('fr-FR') : '—'}</td>
@@ -5666,6 +5679,63 @@ async function syncCollaborateursLucca() {
   } catch (e) {
     console.error('Sync collaborateurs Lucca error:', e);
     toast('Erreur: ' + e.message, 'error');
+  }
+}
+
+async function showLuccaAbsences(luccaId, fullName) {
+  document.getElementById('lucca-absences-title').textContent = 'Absences — ' + fullName;
+  document.getElementById('lucca-absences-body').innerHTML = '<div style="text-align:center;padding:20px;color:var(--t3)">Chargement des absences...</div>';
+  openModal('lucca-absences');
+
+  try {
+    const now = new Date();
+    const yearStart = now.getFullYear() + '-01-01';
+    const yearEnd = now.getFullYear() + '-12-31';
+
+    const resp = await luccaFetch('/api/v3/leaves', {
+      'leavePeriod.ownerId': luccaId,
+      date: `between,${yearStart},${yearEnd}`,
+      paging: '0,1000'
+    });
+
+    const items = resp?.data?.items || [];
+    const absences = items.filter(l => l.isActive !== false);
+
+    if (absences.length === 0) {
+      document.getElementById('lucca-absences-body').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t3)">Aucune absence enregistrée pour ' + now.getFullYear() + '.</div>';
+      return;
+    }
+
+    // Group by leave type
+    const byType = {};
+    absences.forEach(a => {
+      const type = a.leaveAccount?.name || 'Autre';
+      if (!byType[type]) byType[type] = [];
+      byType[type].push(a);
+    });
+
+    let html = `<div style="margin-bottom:12px;font-size:12px;color:var(--t3)">${absences.length} absence(s) en ${now.getFullYear()}</div>`;
+
+    for (const [type, leaves] of Object.entries(byType).sort((a,b) => b[1].length - a[1].length)) {
+      const days = leaves.reduce((sum, l) => sum + (l.isAm !== undefined ? 0.5 : 1), 0);
+      html += `<div style="margin-bottom:16px">
+        <div style="font-weight:600;font-size:13px;margin-bottom:6px;color:var(--t1)">${type} <span style="font-weight:400;color:var(--t3);font-size:12px">(${days} j)</span></div>
+        <div class="card" style="margin:0"><div class="card-body" style="padding:0"><div class="table-wrap">
+          <table class="tbl-compact">
+          <thead><tr><th>Date</th><th>Période</th></tr></thead>
+          <tbody>${leaves.sort((a,b) => (a.date||'').localeCompare(b.date||'')).map(l => `<tr>
+            <td>${l.date ? new Date(l.date).toLocaleDateString('fr-FR', {weekday:'short',day:'numeric',month:'short'}) : '—'}</td>
+            <td>${l.isAm === true ? 'Matin' : l.isAm === false ? 'Après-midi' : 'Journée'}</td>
+          </tr>`).join('')}</tbody>
+          </table>
+        </div></div></div>
+      </div>`;
+    }
+
+    document.getElementById('lucca-absences-body').innerHTML = html;
+  } catch (e) {
+    console.error('Lucca absences error:', e);
+    document.getElementById('lucca-absences-body').innerHTML = '<div style="text-align:center;padding:20px;color:var(--danger)">Erreur: ' + e.message + '</div>';
   }
 }
 
