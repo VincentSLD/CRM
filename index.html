@@ -2840,7 +2840,7 @@ function renderPage(page) {
   // Post-render hooks
   if (page === 'cr') initEditor();
   if (page === 'carte') setTimeout(initCarteMap, 50);
-  if (page === 'admin') setTimeout(async () => { await loadCollaborateursLucca(); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); }, 50);
+  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); }, 50);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
   if (page === 'collaborateurs-lucca') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); renderCollaborateursLuccaRefresh(); }, 50);
   if (page === 'cr' && crViewMode === 'send') setTimeout(loadSendGroups, 50);
@@ -6233,17 +6233,29 @@ async function autoLinkCommerciaux() {
     toast('Chargez d\'abord les collaborateurs Lucca (Paramétrage → Collaborateurs LUCCA)', 'error');
     return;
   }
-  let linked = 0;
+  let linkedLucca = 0, linkedAk = 0;
   for (const c of DB.commerciaux) {
-    if (c.lucca_id) continue;
-    if (!c.email) continue;
-    const match = collaborateursLuccaData.find(l => l.email && l.email.toLowerCase() === c.email.toLowerCase());
-    if (match) {
-      const { error } = await sb.from('commerciaux').update({ lucca_id: match.lucca_id }).eq('id', c.id);
-      if (!error) { c.lucca_id = match.lucca_id; linked++; }
+    // 1. Auto-link Lucca par email
+    if (!c.lucca_id && c.email) {
+      const match = collaborateursLuccaData.find(l => l.email && l.email.toLowerCase() === c.email.toLowerCase());
+      if (match) {
+        const { error } = await sb.from('commerciaux').update({ lucca_id: match.lucca_id }).eq('id', c.id);
+        if (!error) { c.lucca_id = match.lucca_id; linkedLucca++; }
+      }
+    }
+    // 2. Auto-fill Akuiteo ID via la liaison Lucca → Collaborateur Akuiteo
+    if (c.lucca_id && !c.akuiteo_manager_id) {
+      const akCollab = collaborateursData.find(a => a.lucca_id === c.lucca_id);
+      if (akCollab && akCollab.akuiteo_id) {
+        const { error } = await sb.from('commerciaux').update({ akuiteo_manager_id: akCollab.akuiteo_id }).eq('id', c.id);
+        if (!error) { c.akuiteo_manager_id = akCollab.akuiteo_id; linkedAk++; }
+      }
     }
   }
-  toast(linked > 0 ? `${linked} commercial(aux) lié(s) avec Lucca` : 'Aucune nouvelle liaison trouvée (par email)', linked > 0 ? 'success' : 'info');
+  const msgs = [];
+  if (linkedLucca > 0) msgs.push(`${linkedLucca} liaison(s) Lucca`);
+  if (linkedAk > 0) msgs.push(`${linkedAk} ID Akuiteo rempli(s)`);
+  toast(msgs.length > 0 ? msgs.join(', ') : 'Aucune nouvelle liaison trouvée', msgs.length > 0 ? 'success' : 'info');
   renderPage('admin');
   setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); }, 50);
 }
