@@ -2008,6 +2008,20 @@ tbody tr:last-child td { border-bottom: none; }
   </div>
 </div>
 
+<!-- ═══ MODAL: LIER MANUELLEMENT LUCCA ═══ -->
+<div class="modal-overlay" id="modal-link-lucca" onclick="if(event.target===this)closeModal('link-lucca')">
+  <div class="modal" style="max-width:600px;max-height:80vh;overflow-y:auto">
+    <div class="modal-head">
+      <h3 id="link-lucca-title">Lier avec un collaborateur Lucca</h3>
+      <button class="modal-close" onclick="closeModal('link-lucca')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="text" id="link-lucca-search" class="fi" placeholder="Rechercher un collaborateur Lucca..." style="width:100%;padding:8px 12px;font-size:13px;margin-bottom:12px" oninput="renderLinkLuccaList()">
+      <div id="link-lucca-list" style="max-height:400px;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ MODAL: ABSENCES LUCCA ═══ -->
 <div class="modal-overlay" id="modal-lucca-absences" onclick="if(event.target===this)closeModal('lucca-absences')">
   <div class="modal" style="max-width:800px;max-height:90vh;overflow-y:auto">
@@ -2827,7 +2841,7 @@ function renderPage(page) {
   if (page === 'cr') initEditor();
   if (page === 'carte') setTimeout(initCarteMap, 50);
   if (page === 'admin') setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); }, 50);
-  if (page === 'collaborateurs') setTimeout(async () => { await loadCollaborateurs(); renderCollaborateursRefresh(); }, 50);
+  if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
   if (page === 'collaborateurs-lucca') setTimeout(async () => { await loadCollaborateursLucca(); renderCollaborateursLuccaRefresh(); }, 50);
   if (page === 'cr' && crViewMode === 'send') setTimeout(loadSendGroups, 50);
 }
@@ -5490,6 +5504,7 @@ function renderCollaborateurs() {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:8px;align-items:center">
       <button class="btn btn-primary" onclick="syncCollaborateurs()">Synchroniser depuis Akuiteo</button>
+      <button class="btn" onclick="autoLinkLucca()" title="Lier automatiquement par email puis nom+prénom">Lier avec Lucca</button>
       <span style="font-size:12px;color:var(--t3)">${collaborateursData.length} collaborateur(s)</span>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
@@ -5502,9 +5517,12 @@ function renderCollaborateurs() {
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
     <table class="tbl-compact">
     <thead><tr>
-      <th>Code</th><th>Nom</th><th>Prénom</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th>Fonction</th><th>ID Akuiteo</th>
+      <th>Code</th><th>Nom</th><th>Prénom</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th>Fonction</th><th>Lien Lucca</th>
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucun collaborateur. Cliquez sur "Synchroniser depuis Akuiteo" pour charger la liste.</td></tr>' : filtered.map(c => `<tr>
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucun collaborateur. Cliquez sur "Synchroniser depuis Akuiteo" pour charger la liste.</td></tr>' : filtered.map(c => {
+      const lucca = c.lucca_id ? collaborateursLuccaData.find(l => l.lucca_id === c.lucca_id) : null;
+      const luccaLabel = lucca ? `<span style="color:var(--green);font-size:11px;cursor:pointer" onclick="event.stopPropagation();showLuccaAbsences('${lucca.lucca_id}','${(lucca.prenom||'').replace(/'/g,"\\'")} ${(lucca.nom||'').replace(/'/g,"\\'")}')">&#10003; ${lucca.prenom||''} ${lucca.nom||''}</span> <button class="btn" style="font-size:10px;padding:1px 5px;margin-left:4px" onclick="event.stopPropagation();unlinkLucca('${c.id}')" title="Délier">&#10005;</button>` : `<button class="btn" style="font-size:10px;padding:2px 8px" onclick="event.stopPropagation();openManualLinkLucca('${c.id}','${(c.prenom||'').replace(/'/g,"\\'")} ${(c.nom||'').replace(/'/g,"\\'")}')" title="Lier manuellement">Lier</button>`;
+      return `<tr>
       <td class="mono">${c.code||'—'}</td>
       <td><strong>${c.nom||'—'}</strong></td>
       <td>${c.prenom||'—'}</td>
@@ -5512,8 +5530,8 @@ function renderCollaborateurs() {
       <td>${c.telephone||'—'}</td>
       <td>${c.mobile||'—'}</td>
       <td>${c.fonction||'—'}</td>
-      <td class="mono" style="font-size:11px">${c.akuiteo_id||'—'}</td>
-    </tr>`).join('')}</tbody>
+      <td>${luccaLabel}</td>
+    </tr>`;}).join('')}</tbody>
     </table>
   </div></div></div>`;
 }
@@ -5570,6 +5588,80 @@ async function syncCollaborateurs() {
     console.error('Sync collaborateurs error:', e);
     toast('Erreur: ' + e.message, 'error');
   }
+}
+
+// ═══ LIAISON AKUITEO ↔ LUCCA ═══
+async function autoLinkLucca() {
+  if (collaborateursLuccaData.length === 0) {
+    toast('Chargez d\'abord les collaborateurs Lucca (page Collaborateurs LUCCA → Synchroniser)', 'error');
+    return;
+  }
+  toast('Liaison automatique en cours...', 'info');
+  let linked = 0, already = 0;
+  const unlinked = collaborateursData.filter(c => !c.lucca_id);
+
+  for (const ak of unlinked) {
+    let match = null;
+    // 1. Match par email
+    if (ak.email) {
+      match = collaborateursLuccaData.find(l => l.email && l.email.toLowerCase() === ak.email.toLowerCase());
+    }
+    // 2. Match par nom + prénom
+    if (!match && ak.nom) {
+      match = collaborateursLuccaData.find(l =>
+        l.nom && l.prenom &&
+        l.nom.toLowerCase() === (ak.nom||'').toLowerCase() &&
+        l.prenom.toLowerCase() === (ak.prenom||'').toLowerCase()
+      );
+    }
+    if (match) {
+      const { error } = await sb.from('collaborateurs').update({ lucca_id: match.lucca_id }).eq('id', ak.id);
+      if (!error) { ak.lucca_id = match.lucca_id; linked++; }
+    }
+  }
+  already = collaborateursData.filter(c => c.lucca_id).length - linked;
+  toast(`${linked} nouvelle(s) liaison(s) créée(s)` + (already > 0 ? `, ${already} déjà liés` : ''), 'success');
+  await loadCollaborateurs();
+  renderCollaborateursRefresh();
+}
+
+let linkLuccaForAkId = null;
+function openManualLinkLucca(akId, akName) {
+  linkLuccaForAkId = akId;
+  document.getElementById('link-lucca-title').textContent = 'Lier ' + akName + ' avec Lucca';
+  document.getElementById('link-lucca-search').value = '';
+  renderLinkLuccaList();
+  openModal('link-lucca');
+}
+
+function renderLinkLuccaList() {
+  const q = (document.getElementById('link-lucca-search')?.value || '').toLowerCase();
+  const alreadyLinked = new Set(collaborateursData.filter(c => c.lucca_id).map(c => c.lucca_id));
+  let list = collaborateursLuccaData.filter(l => !alreadyLinked.has(l.lucca_id));
+  if (q) list = list.filter(l => ((l.nom||'')+(l.prenom||'')+(l.email||'')).toLowerCase().includes(q));
+  document.getElementById('link-lucca-list').innerHTML = list.length === 0
+    ? '<div style="text-align:center;padding:16px;color:var(--t3)">Aucun collaborateur Lucca disponible</div>'
+    : list.slice(0, 50).map(l => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:6px" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''" onclick="confirmLinkLucca('${l.lucca_id}')">
+        <div><strong>${l.prenom||''} ${l.nom||''}</strong> <span style="color:var(--t3);font-size:12px">${l.email||''}</span></div>
+        <div style="font-size:11px;color:var(--t3)">${l.departement||''}</div>
+      </div>`).join('');
+}
+
+async function confirmLinkLucca(luccaId) {
+  const { error } = await sb.from('collaborateurs').update({ lucca_id: luccaId }).eq('id', linkLuccaForAkId);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  closeModal('link-lucca');
+  toast('Liaison effectuée', 'success');
+  await loadCollaborateurs();
+  renderCollaborateursRefresh();
+}
+
+async function unlinkLucca(akId) {
+  const { error } = await sb.from('collaborateurs').update({ lucca_id: null }).eq('id', akId);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  toast('Liaison supprimée', 'success');
+  await loadCollaborateurs();
+  renderCollaborateursRefresh();
 }
 
 // ═══ COLLABORATEURS LUCCA ═══
