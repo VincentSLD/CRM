@@ -1655,7 +1655,11 @@ tbody tr:last-child td { border-bottom: none; }
       <div class="nav-section-title">Paramétrage</div>
       <div class="nav-item" data-page="collaborateurs" onclick="go('collaborateurs')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        Collaborateurs
+        Collaborateurs AKUITEO
+      </div>
+      <div class="nav-item" data-page="collaborateurs-lucca" onclick="go('collaborateurs-lucca')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Collaborateurs LUCCA
       </div>
       <div class="nav-item" data-page="admin" onclick="go('admin')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -2758,7 +2762,7 @@ function go(page) {
   const titles = {dashboard:'Tableau de bord',clients:'Sociétés',contacts:'Contacts',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures',objectifs:'Objectifs',
     cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche société','contact-detail':'Fiche contact',
-    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs'};
+    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA'};
   document.getElementById('pageTitle').textContent = titles[page]||page;
   renderPage(page);
   if(window.innerWidth<=768) toggleSidebar(false);
@@ -2794,6 +2798,7 @@ function renderPage(page) {
     envois: renderEnvois,
     alertes: renderAlertes,
     collaborateurs: renderCollaborateurs,
+    'collaborateurs-lucca': renderCollaborateursLucca,
     admin: renderAdmin,
   };
   // Charger les données envois si nécessaire
@@ -2810,6 +2815,7 @@ function renderPage(page) {
   if (page === 'carte') setTimeout(initCarteMap, 50);
   if (page === 'admin') setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); }, 50);
   if (page === 'collaborateurs') setTimeout(async () => { await loadCollaborateurs(); renderCollaborateursRefresh(); }, 50);
+  if (page === 'collaborateurs-lucca') setTimeout(async () => { await loadCollaborateursLucca(); renderCollaborateursLuccaRefresh(); }, 50);
   if (page === 'cr' && crViewMode === 'send') setTimeout(loadSendGroups, 50);
 }
 
@@ -5549,6 +5555,116 @@ async function syncCollaborateurs() {
     renderCollaborateursRefresh();
   } catch (e) {
     console.error('Sync collaborateurs error:', e);
+    toast('Erreur: ' + e.message, 'error');
+  }
+}
+
+// ═══ COLLABORATEURS LUCCA ═══
+let collaborateursLuccaData = [];
+let collaborateursLuccaSearch = '';
+
+async function luccaFetch(path, params = {}) {
+  const qp = new URLSearchParams({ path, ...params });
+  const url = IS_LOCAL ? `http://localhost:8889${path}?${new URLSearchParams(params)}` : `/api/lucca?${qp}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Lucca API ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+function renderCollaborateursLucca() {
+  let filtered = collaborateursLuccaData;
+  if (collaborateursLuccaSearch) {
+    const q = collaborateursLuccaSearch.toLowerCase();
+    filtered = filtered.filter(c =>
+      (c.nom||'').toLowerCase().includes(q) ||
+      (c.prenom||'').toLowerCase().includes(q) ||
+      (c.email||'').toLowerCase().includes(q) ||
+      (c.numero_employe||'').toLowerCase().includes(q)
+    );
+  }
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn btn-primary" onclick="syncCollaborateursLucca()">Synchroniser depuis Lucca</button>
+      <span style="font-size:12px;color:var(--t3)">${collaborateursLuccaData.length} collaborateur(s)</span>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <input type="text" placeholder="Rechercher nom, prénom, email, n° employé..." value="${collaborateursLuccaSearch}"
+        style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:260px;background:var(--card);color:var(--t1)"
+        oninput="collaborateursLuccaSearch=this.value;renderCollaborateursLuccaRefresh()">
+      ${collaborateursLuccaSearch ? '<button class="btn" onclick="collaborateursLuccaSearch=&#39;&#39;;renderCollaborateursLuccaRefresh()" style="font-size:11px">Effacer</button>' : ''}
+    </div>
+  </div>
+  <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
+    <table class="tbl-compact">
+    <thead><tr>
+      <th>N° Employé</th><th>Nom</th><th>Prénom</th><th>Email</th><th>Département</th><th>Poste</th><th>Début contrat</th><th>Fin contrat</th><th>ID Lucca</th>
+    </tr></thead>
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3)">Aucun collaborateur. Cliquez sur "Synchroniser depuis Lucca" pour charger la liste.</td></tr>' : filtered.map(c => `<tr>
+      <td class="mono">${c.numero_employe||'—'}</td>
+      <td><strong>${c.nom||'—'}</strong></td>
+      <td>${c.prenom||'—'}</td>
+      <td>${c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : '—'}</td>
+      <td>${c.departement||'—'}</td>
+      <td>${c.poste||'—'}</td>
+      <td>${c.date_debut_contrat ? new Date(c.date_debut_contrat).toLocaleDateString('fr-FR') : '—'}</td>
+      <td>${c.date_fin_contrat ? new Date(c.date_fin_contrat).toLocaleDateString('fr-FR') : '—'}</td>
+      <td class="mono" style="font-size:11px">${c.lucca_id||'—'}</td>
+    </tr>`).join('')}</tbody>
+    </table>
+  </div></div></div>`;
+}
+
+function renderCollaborateursLuccaRefresh() {
+  document.getElementById('contentArea').innerHTML = '<div class="page active">' + renderCollaborateursLucca() + '</div>';
+}
+
+async function loadCollaborateursLucca() {
+  const { data } = await sb.from('collaborateurs_lucca').select('*').order('nom');
+  collaborateursLuccaData = data || [];
+}
+
+async function syncCollaborateursLucca() {
+  toast('Chargement des collaborateurs depuis Lucca...', 'info');
+  try {
+    let all = [], page = 0;
+    while (true) {
+      const resp = await luccaFetch('/api/v3/users', {
+        fields: 'id,firstName,lastName,mail,department,dtContractStart,dtContractEnd,employeeNumber,jobTitle',
+        paging: `${page * 200},200`
+      });
+      const items = resp?.data?.items || [];
+      if (items.length === 0) break;
+      all = all.concat(items);
+      if (items.length < 200) break;
+      page++;
+    }
+    console.log(`[Lucca] ${all.length} collaborateurs récupérés`);
+
+    const rows = all.map(e => ({
+      id: 'lucca_' + String(e.id),
+      lucca_id: String(e.id),
+      nom: e.lastName || '',
+      prenom: e.firstName || null,
+      email: e.mail || null,
+      departement: e.department?.name || null,
+      poste: e.jobTitle || null,
+      numero_employe: e.employeeNumber || null,
+      date_debut_contrat: e.dtContractStart || null,
+      date_fin_contrat: e.dtContractEnd || null,
+      updated_at: new Date().toISOString(),
+    }));
+
+    for (let i = 0; i < rows.length; i += 100) {
+      const { error } = await sb.from('collaborateurs_lucca').upsert(rows.slice(i, i + 100), { onConflict: 'id' });
+      if (error) console.warn('[Collaborateurs Lucca] Upsert err:', error.message);
+    }
+
+    toast(`${rows.length} collaborateur(s) Lucca synchronisés`, 'success');
+    await loadCollaborateursLucca();
+    renderCollaborateursLuccaRefresh();
+  } catch (e) {
+    console.error('Sync collaborateurs Lucca error:', e);
     toast('Erreur: ' + e.message, 'error');
   }
 }
