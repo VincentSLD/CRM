@@ -5638,8 +5638,7 @@ function openManualLinkLucca(akId, akName) {
 
 function renderLinkLuccaList() {
   const q = (document.getElementById('link-lucca-search')?.value || '').toLowerCase();
-  const alreadyLinked = new Set(collaborateursData.filter(c => c.lucca_id).map(c => c.lucca_id));
-  let list = collaborateursLuccaData.filter(l => !alreadyLinked.has(l.lucca_id));
+  let list = collaborateursLuccaData;
   if (q) list = list.filter(l => ((l.nom||'')+(l.prenom||'')+(l.email||'')).toLowerCase().includes(q));
   document.getElementById('link-lucca-list').innerHTML = list.length === 0
     ? '<div style="text-align:center;padding:16px;color:var(--t3)">Aucun collaborateur Lucca disponible</div>'
