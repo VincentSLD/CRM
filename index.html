@@ -1653,6 +1653,10 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
     <div class="nav-section">
       <div class="nav-section-title">Paramétrage</div>
+      <div class="nav-item" data-page="collaborateurs" onclick="go('collaborateurs')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Collaborateurs
+      </div>
       <div class="nav-item" data-page="admin" onclick="go('admin')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         Admin
@@ -2754,7 +2758,7 @@ function go(page) {
   const titles = {dashboard:'Tableau de bord',clients:'Sociétés',contacts:'Contacts',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures',objectifs:'Objectifs',
     cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche société','contact-detail':'Fiche contact',
-    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire'};
+    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs'};
   document.getElementById('pageTitle').textContent = titles[page]||page;
   renderPage(page);
   if(window.innerWidth<=768) toggleSidebar(false);
@@ -2789,6 +2793,7 @@ function renderPage(page) {
     cr: renderCR,
     envois: renderEnvois,
     alertes: renderAlertes,
+    collaborateurs: renderCollaborateurs,
     admin: renderAdmin,
   };
   // Charger les données envois si nécessaire
@@ -2804,6 +2809,7 @@ function renderPage(page) {
   if (page === 'cr') initEditor();
   if (page === 'carte') setTimeout(initCarteMap, 50);
   if (page === 'admin') setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); }, 50);
+  if (page === 'collaborateurs') setTimeout(async () => { await loadCollaborateurs(); renderCollaborateursRefresh(); }, 50);
   if (page === 'cr' && crViewMode === 'send') setTimeout(loadSendGroups, 50);
 }
 
@@ -5444,6 +5450,107 @@ function renderEnvois() {
       </table></div>`}
     </div>
   </div>`;
+}
+
+// ═══ COLLABORATEURS ═══
+let collaborateursData = [];
+let collaborateursSearch = '';
+
+function renderCollaborateurs() {
+  let filtered = collaborateursData;
+  if (collaborateursSearch) {
+    const q = collaborateursSearch.toLowerCase();
+    filtered = filtered.filter(c =>
+      (c.nom||'').toLowerCase().includes(q) ||
+      (c.prenom||'').toLowerCase().includes(q) ||
+      (c.code||'').toLowerCase().includes(q) ||
+      (c.email||'').toLowerCase().includes(q)
+    );
+  }
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn btn-primary" onclick="syncCollaborateurs()">Synchroniser depuis Akuiteo</button>
+      <span style="font-size:12px;color:var(--t3)">${collaborateursData.length} collaborateur(s)</span>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <input type="text" placeholder="Rechercher nom, prénom, code, email..." value="${collaborateursSearch}"
+        style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:260px;background:var(--card);color:var(--t1)"
+        oninput="collaborateursSearch=this.value;renderCollaborateursRefresh()">
+      ${collaborateursSearch ? '<button class="btn" onclick="collaborateursSearch=&#39;&#39;;renderCollaborateursRefresh()" style="font-size:11px">Effacer</button>' : ''}
+    </div>
+  </div>
+  <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
+    <table class="tbl-compact">
+    <thead><tr>
+      <th>Code</th><th>Nom</th><th>Prénom</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th>Fonction</th><th>ID Akuiteo</th>
+    </tr></thead>
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucun collaborateur. Cliquez sur "Synchroniser depuis Akuiteo" pour charger la liste.</td></tr>' : filtered.map(c => `<tr>
+      <td class="mono">${c.code||'—'}</td>
+      <td><strong>${c.nom||'—'}</strong></td>
+      <td>${c.prenom||'—'}</td>
+      <td>${c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : '—'}</td>
+      <td>${c.telephone||'—'}</td>
+      <td>${c.mobile||'—'}</td>
+      <td>${c.fonction||'—'}</td>
+      <td class="mono" style="font-size:11px">${c.akuiteo_id||'—'}</td>
+    </tr>`).join('')}</tbody>
+    </table>
+  </div></div></div>`;
+}
+
+function renderCollaborateursRefresh() {
+  document.getElementById('contentArea').innerHTML = '<div class="page active">' + renderCollaborateurs() + '</div>';
+}
+
+async function loadCollaborateurs() {
+  const { data } = await sb.from('collaborateurs').select('*').order('nom');
+  collaborateursData = data || [];
+}
+
+async function syncCollaborateurs() {
+  toast('Chargement des collaborateurs depuis Akuiteo...', 'info');
+  try {
+    let all = [], offset = 0;
+    while (true) {
+      const batch = await akuiteoFetch('POST', `/workforce/employees/search?limit=200&offset=${offset}`, {
+        code: { operator: 'LIKE', value: '%' }
+      });
+      if (!Array.isArray(batch) || batch.length === 0) break;
+      all = all.concat(batch);
+      if (batch.length < 200) break;
+      offset += 200;
+    }
+    console.log(`[Akuiteo] ${all.length} collaborateurs récupérés`);
+
+    const rows = all.map(e => ({
+      id: 'emp_' + String(e.id).replace(/[^a-zA-Z0-9]/g, '_'),
+      akuiteo_id: String(e.id),
+      code: e.code || null,
+      nom: e.name || '',
+      prenom: e.firstName || null,
+      titre: e.title || null,
+      email: e.email || null,
+      telephone: e.phone || null,
+      mobile: e.mobilePhone || null,
+      fonction: e.jobType || null,
+      externe: e.external || false,
+      generique: e.generic || false,
+      cadre: e.executive || false,
+    }));
+
+    for (let i = 0; i < rows.length; i += 100) {
+      const { error } = await sb.from('collaborateurs').upsert(rows.slice(i, i + 100), { onConflict: 'id' });
+      if (error) console.warn('[Collaborateurs] Upsert err:', error.message);
+    }
+
+    toast(`${rows.length} collaborateur(s) synchronisés`, 'success');
+    await loadCollaborateurs();
+    renderCollaborateursRefresh();
+  } catch (e) {
+    console.error('Sync collaborateurs error:', e);
+    toast('Erreur: ' + e.message, 'error');
+  }
 }
 
 // ═══ ALERTES ═══
