@@ -5674,9 +5674,18 @@ let collaborateursLuccaEtab = '';
 async function luccaFetch(path, params = {}) {
   const qp = new URLSearchParams({ path, ...params });
   const url = IS_LOCAL ? `http://localhost:8889${path}?${new URLSearchParams(params)}` : `/api/lucca?${qp}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Lucca API ${res.status}: ${await res.text()}`);
-  return res.json();
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const res = await fetch(url);
+    if (res.status === 429) {
+      const wait = Math.min(2000 * Math.pow(2, attempt), 30000);
+      console.warn(`[Lucca] Rate limited, retry in ${wait}ms (attempt ${attempt + 1}/5)`);
+      await new Promise(r => setTimeout(r, wait));
+      continue;
+    }
+    if (!res.ok) throw new Error(`Lucca API ${res.status}: ${await res.text()}`);
+    return res.json();
+  }
+  throw new Error('Lucca API: rate limit exceeded after 5 retries');
 }
 
 function renderCollaborateursLucca() {
@@ -5789,8 +5798,8 @@ async function syncCollaborateursLucca() {
     const yearEnd = now.getFullYear() + '-12-31';
     let totalAbsences = 0;
     const luccaIds = all.map(e => String(e.id));
-    const BATCH = 10;
-    const DELAY = 1200; // ms between batches to avoid rate limit
+    const BATCH = 20;
+    const DELAY = 3000; // ms between batches to avoid rate limit
 
     for (let b = 0; b < luccaIds.length; b += BATCH) {
       const batch = luccaIds.slice(b, b + BATCH);
