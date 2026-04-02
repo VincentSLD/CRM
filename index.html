@@ -5783,58 +5783,66 @@ async function syncCollaborateursLucca() {
 
     toast(`${rows.length} collaborateur(s) Lucca synchronisés. Sync absences...`, 'info');
 
-    // Sync absences for all collaborators
+    // Sync absences per collaborator (API requires ownerId filter)
     const now = new Date();
     const yearStart = now.getFullYear() + '-01-01';
     const yearEnd = now.getFullYear() + '-12-31';
     let totalAbsences = 0;
+    const luccaIds = all.map(e => String(e.id));
 
-    // Fetch all absences in one call (no per-user loop)
-    let allLeaves = [], leavePage = 0;
-    while (true) {
-      const resp = await luccaFetch('/api/v3/leaves', {
-        fields: 'id,date,isAm,leaveAccount,isActive,leavePeriod',
-        date: `between,${yearStart},${yearEnd}`,
-        paging: `${leavePage * 200},200`
-      });
-      const items = resp?.data?.items || [];
-      if (items.length === 0) break;
-      allLeaves = allLeaves.concat(items);
-      if (items.length < 200) break;
-      leavePage++;
-    }
-    console.log(`[Lucca] ${allLeaves.length} absences récupérées`);
+    for (let u = 0; u < luccaIds.length; u++) {
+      const uid = luccaIds[u];
+      if (u % 20 === 0) toast(`Absences : ${u}/${luccaIds.length} collaborateurs...`, 'info');
+      try {
+        let leaves = [], leavePage = 0;
+        while (true) {
+          const resp = await luccaFetch('/api/v3/leaves', {
+            fields: 'id,date,isAm,leaveAccount,isActive',
+            'leavePeriod.ownerId': uid,
+            date: `between,${yearStart},${yearEnd}`,
+            paging: `${leavePage * 200},200`
+          });
+          const items = resp?.data?.items || [];
+          if (items.length === 0) break;
+          leaves = leaves.concat(items);
+          if (items.length < 200) break;
+          leavePage++;
+        }
+        if (leaves.length === 0) continue;
 
-    const absRows = allLeaves.map(l => {
-      let period = 'unknown';
-      if (l.isAm === true) period = 'AM';
-      else if (l.isAm === false) period = 'PM';
-      else if (typeof l.id === 'string') {
-        if (l.id.endsWith('-AM')) period = 'AM';
-        else if (l.id.endsWith('-PM')) period = 'PM';
+        const absRows = leaves.map(l => {
+          let period = 'unknown';
+          if (l.isAm === true) period = 'AM';
+          else if (l.isAm === false) period = 'PM';
+          else if (typeof l.id === 'string') {
+            if (l.id.endsWith('-AM')) period = 'AM';
+            else if (l.id.endsWith('-PM')) period = 'PM';
+          }
+          let dateStr = l.date || null;
+          if (!dateStr && typeof l.id === 'string') {
+            const m = l.id.match(/(\d{4})(\d{2})(\d{2})/);
+            if (m) dateStr = `${m[1]}-${m[2]}-${m[3]}`;
+          }
+          return {
+            id: String(l.id),
+            lucca_id: uid,
+            date_absence: dateStr,
+            periode: period,
+            type_absence: l.leaveAccount?.name || 'Autre',
+            actif: l.isActive !== false,
+            updated_at: new Date().toISOString(),
+          };
+        });
+
+        for (let i = 0; i < absRows.length; i += 100) {
+          const { error } = await sb.from('absences_lucca').upsert(absRows.slice(i, i + 100), { onConflict: 'id' });
+          if (error) console.warn('[Absences Lucca] Upsert err:', error.message);
+        }
+        totalAbsences += absRows.length;
+      } catch (err) {
+        console.warn(`[Absences Lucca] Erreur user ${uid}:`, err.message);
       }
-      let dateStr = l.date || null;
-      if (!dateStr && typeof l.id === 'string') {
-        const m = l.id.match(/(\d{4})(\d{2})(\d{2})/);
-        if (m) dateStr = `${m[1]}-${m[2]}-${m[3]}`;
-      }
-      const ownerId = l.leavePeriod?.ownerId || (typeof l.id === 'string' ? l.id.split('-')[0] : null);
-      return {
-        id: String(l.id),
-        lucca_id: String(ownerId),
-        date_absence: dateStr,
-        periode: period,
-        type_absence: l.leaveAccount?.name || 'Autre',
-        actif: l.isActive !== false,
-        updated_at: new Date().toISOString(),
-      };
-    }).filter(r => r.lucca_id && r.lucca_id !== 'null');
-
-    for (let i = 0; i < absRows.length; i += 100) {
-      const { error } = await sb.from('absences_lucca').upsert(absRows.slice(i, i + 100), { onConflict: 'id' });
-      if (error) console.warn('[Absences Lucca] Upsert err:', error.message);
     }
-    totalAbsences = absRows.length;
 
     toast(`${rows.length} collaborateur(s) et ${totalAbsences} absence(s) synchronisés`, 'success');
     await loadCollaborateursLucca();
