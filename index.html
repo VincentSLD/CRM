@@ -5792,25 +5792,24 @@ async function syncCollaborateursLucca() {
 
     toast(`${rows.length} collaborateur(s) Lucca synchronisés. Sync absences...`, 'info');
 
-    // Sync absences by batches of 10 users (API requires ownerId filter)
+    // Sync absences per user (on connaît le lucca_id exact à chaque appel)
     const now = new Date();
     const yearStart = now.getFullYear() + '-01-01';
     const yearEnd = now.getFullYear() + '-12-31';
     let totalAbsences = 0;
     const luccaIds = all.map(e => String(e.id));
-    const BATCH = 20;
-    const DELAY = 3000; // ms between batches to avoid rate limit
+    const DELAY = 500; // ms between users
 
-    for (let b = 0; b < luccaIds.length; b += BATCH) {
-      const batch = luccaIds.slice(b, b + BATCH);
-      toast(`Absences : ${b}/${luccaIds.length} collaborateurs...`, 'info');
+    for (let u = 0; u < luccaIds.length; u++) {
+      const uid = luccaIds[u];
+      if (u % 20 === 0) toast(`Absences : ${u}/${luccaIds.length} collaborateurs...`, 'info');
 
       try {
         let leaves = [], leavePage = 0;
         while (true) {
           const resp = await luccaFetch('/api/v3/leaves', {
-            fields: 'id,date,isAm,leaveAccount,isActive,leavePeriod',
-            'leavePeriod.ownerId': batch.join(','),
+            fields: 'id,date,isAm,leaveAccount,isActive',
+            'leavePeriod.ownerId': uid,
             date: `between,${yearStart},${yearEnd}`,
             paging: `${leavePage * 200},200`
           });
@@ -5835,17 +5834,16 @@ async function syncCollaborateursLucca() {
               const m = l.id.match(/(\d{4})(\d{2})(\d{2})/);
               if (m) dateStr = `${m[1]}-${m[2]}-${m[3]}`;
             }
-            const ownerId = l.leavePeriod?.ownerId || l.leavePeriod?.owner?.id || null;
             return {
               id: String(l.id),
-              lucca_id: String(ownerId),
+              lucca_id: uid,
               date_absence: dateStr,
               periode: period,
               type_absence: l.leaveAccount?.name || 'Autre',
               actif: l.isActive !== false,
               updated_at: new Date().toISOString(),
             };
-          }).filter(r => r.lucca_id && r.lucca_id !== 'null');
+          });
 
           for (let i = 0; i < absRows.length; i += 100) {
             const { error } = await sb.from('absences_lucca').upsert(absRows.slice(i, i + 100), { onConflict: 'id' });
@@ -5854,11 +5852,11 @@ async function syncCollaborateursLucca() {
           totalAbsences += absRows.length;
         }
       } catch (err) {
-        console.warn(`[Absences Lucca] Erreur batch ${b}:`, err.message);
+        console.warn(`[Absences Lucca] Erreur user ${uid}:`, err.message);
       }
 
-      // Delay between batches to respect rate limit
-      if (b + BATCH < luccaIds.length) await new Promise(r => setTimeout(r, DELAY));
+      // Delay between users to respect rate limit (retry in luccaFetch handles 429)
+      if (u + 1 < luccaIds.length) await new Promise(r => setTimeout(r, DELAY));
     }
 
     toast(`${rows.length} collaborateur(s) et ${totalAbsences} absence(s) synchronisés`, 'success');
