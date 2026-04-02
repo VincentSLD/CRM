@@ -5835,7 +5835,7 @@ async function syncCollaborateursLucca() {
               const m = l.id.match(/(\d{4})(\d{2})(\d{2})/);
               if (m) dateStr = `${m[1]}-${m[2]}-${m[3]}`;
             }
-            const ownerId = l.leavePeriod?.ownerId || (typeof l.id === 'string' ? l.id.split('-')[0] : null);
+            const ownerId = l.leavePeriod?.ownerId || l.leavePeriod?.owner?.id || null;
             return {
               id: String(l.id),
               lucca_id: String(ownerId),
