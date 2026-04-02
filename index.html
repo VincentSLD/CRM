@@ -7371,19 +7371,48 @@ async function syncAkuiteo() {
     console.log(`[Akuiteo] Clients : ${created} créés, ${updated} mis à jour`);
     toast(`Clients : ${created} créés, ${updated} mis à jour. Sync contacts...`, 'info');
 
-    // --- ETAPE 2 : Sync contacts (parallèle ×20, uniquement clients avec akuiteo_id) ---
+    // --- ETAPE 2 : Sync contacts (uniquement nouveaux clients ou modifiés) ---
     console.log('[Akuiteo] === ETAPE 2 : Sync contacts ===');
     const akClientMapForContacts = {};
     for (const c of allClientsBatch) { if (c.akuiteo_id) akClientMapForContacts[c.akuiteo_id] = c; }
-    // Ne requêter que les clients qui existent en base (skip les IDs sans correspondance)
-    const akClientIdsForContacts = akCustomers.map(c => String(c.id)).filter(id => akClientMapForContacts[id]);
-    console.log(`[Akuiteo] Contacts : ${akClientIdsForContacts.length} clients à traiter (sur ${akCustomers.length})`);
+
+    // Trouver la date du dernier sync contacts
+    const { data: lastContactSync } = await sb.from('contacts').select('updated_at').order('updated_at', { ascending: false }).limit(1);
+    const lastSyncDate = lastContactSync?.[0]?.updated_at || '2000-01-01T00:00:00Z';
+    console.log(`[Akuiteo] Dernier sync contacts: ${lastSyncDate}`);
+
+    // Clients sans contacts (nouveaux)
+    const { data: clientsWithContacts } = await sb.from('contacts').select('client_id');
+    const clientIdsWithContacts = new Set((clientsWithContacts || []).map(c => c.client_id));
+
+    // Clients modifiés depuis le dernier sync (updated_at > lastSyncDate via upsert Supabase)
+    const allAkIds = akCustomers.map(c => String(c.id)).filter(id => akClientMapForContacts[id]);
+    const akClientIdsForContacts = allAkIds.filter(akId => {
+      const crmClient = akClientMapForContacts[akId];
+      if (!crmClient) return false;
+      // Nouveau client (pas de contacts en base)
+      if (!clientIdsWithContacts.has(crmClient.id)) return true;
+      // Client mis à jour lors de ce sync (created ou updated = récent)
+      return !existingMap[akId] || updated > 0;
+    });
+
+    // Limiter aux clients vraiment nouveaux + ceux modifiés dans ce sync
+    const newClientIds = allAkIds.filter(akId => {
+      const crmClient = akClientMapForContacts[akId];
+      return crmClient && !clientIdsWithContacts.has(crmClient.id);
+    });
+    const updatedClientIds = allAkIds.filter(akId => !newClientIds.includes(akId) && akClientMapForContacts[akId]);
+
+    // Prioriser : d'abord les nouveaux, puis les 50 premiers modifiés (pour ne pas tout refaire)
+    const priorityIds = [...newClientIds, ...updatedClientIds.slice(0, 50)];
+    console.log(`[Akuiteo] Contacts : ${newClientIds.length} nouveaux, ${updatedClientIds.length} existants (${priorityIds.length} à traiter)`);
+
     let syncedContacts = 0, errContacts = 0;
     const CONTACT_BATCH = 20;
     const contactRows = [];
 
-    for (let i = 0; i < akClientIdsForContacts.length; i += CONTACT_BATCH) {
-      const batch = akClientIdsForContacts.slice(i, i + CONTACT_BATCH);
+    for (let i = 0; i < priorityIds.length; i += CONTACT_BATCH) {
+      const batch = priorityIds.slice(i, i + CONTACT_BATCH);
       const results = await Promise.allSettled(batch.map(async (akCid) => {
         const crmClient = akClientMapForContacts[akCid];
         const contacts = await akuiteoFetch('GET', '/crm/customers/' + akCid + '/contacts').catch(() => []);
@@ -7404,7 +7433,7 @@ async function syncAkuiteo() {
         if (r.status === 'fulfilled') syncedContacts += (r.value || 0);
         else errContacts++;
       }
-      if ((i + CONTACT_BATCH) % 100 < CONTACT_BATCH) console.log(`[Akuiteo] Contacts: ${i + batch.length}/${akClientIdsForContacts.length} clients (${syncedContacts} contacts)`);
+      if ((i + CONTACT_BATCH) % 100 < CONTACT_BATCH) console.log(`[Akuiteo] Contacts: ${i + batch.length}/${priorityIds.length} clients (${syncedContacts} contacts)`);
     }
     // Upsert all contacts in bulk (batches of 200)
     for (let i = 0; i < contactRows.length; i += 200) {
