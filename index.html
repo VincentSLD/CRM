@@ -5781,7 +5781,62 @@ async function syncCollaborateursLucca() {
       if (error) console.warn('[Collaborateurs Lucca] Upsert err:', error.message);
     }
 
-    toast(`${rows.length} collaborateur(s) Lucca synchronisés`, 'success');
+    toast(`${rows.length} collaborateur(s) Lucca synchronisés. Sync absences...`, 'info');
+
+    // Sync absences for all collaborators
+    const now = new Date();
+    const yearStart = now.getFullYear() + '-01-01';
+    const yearEnd = now.getFullYear() + '-12-31';
+    let totalAbsences = 0;
+
+    // Fetch all absences in one call (no per-user loop)
+    let allLeaves = [], leavePage = 0;
+    while (true) {
+      const resp = await luccaFetch('/api/v3/leaves', {
+        fields: 'id,date,isAm,leaveAccount,isActive,leavePeriod',
+        date: `between,${yearStart},${yearEnd}`,
+        paging: `${leavePage * 200},200`
+      });
+      const items = resp?.data?.items || [];
+      if (items.length === 0) break;
+      allLeaves = allLeaves.concat(items);
+      if (items.length < 200) break;
+      leavePage++;
+    }
+    console.log(`[Lucca] ${allLeaves.length} absences récupérées`);
+
+    const absRows = allLeaves.map(l => {
+      let period = 'unknown';
+      if (l.isAm === true) period = 'AM';
+      else if (l.isAm === false) period = 'PM';
+      else if (typeof l.id === 'string') {
+        if (l.id.endsWith('-AM')) period = 'AM';
+        else if (l.id.endsWith('-PM')) period = 'PM';
+      }
+      let dateStr = l.date || null;
+      if (!dateStr && typeof l.id === 'string') {
+        const m = l.id.match(/(\d{4})(\d{2})(\d{2})/);
+        if (m) dateStr = `${m[1]}-${m[2]}-${m[3]}`;
+      }
+      const ownerId = l.leavePeriod?.ownerId || (typeof l.id === 'string' ? l.id.split('-')[0] : null);
+      return {
+        id: String(l.id),
+        lucca_id: String(ownerId),
+        date_absence: dateStr,
+        periode: period,
+        type_absence: l.leaveAccount?.name || 'Autre',
+        actif: l.isActive !== false,
+        updated_at: new Date().toISOString(),
+      };
+    }).filter(r => r.lucca_id && r.lucca_id !== 'null');
+
+    for (let i = 0; i < absRows.length; i += 100) {
+      const { error } = await sb.from('absences_lucca').upsert(absRows.slice(i, i + 100), { onConflict: 'id' });
+      if (error) console.warn('[Absences Lucca] Upsert err:', error.message);
+    }
+    totalAbsences = absRows.length;
+
+    toast(`${rows.length} collaborateur(s) et ${totalAbsences} absence(s) synchronisés`, 'success');
     await loadCollaborateursLucca();
     renderCollaborateursLuccaRefresh();
   } catch (e) {
@@ -5800,43 +5855,29 @@ async function showLuccaAbsences(luccaId, fullName) {
     const yearStart = now.getFullYear() + '-01-01';
     const yearEnd = now.getFullYear() + '-12-31';
 
-    const resp = await luccaFetch('/api/v3/leaves', {
-      fields: 'id,date,isAm,leaveAccount,isActive',
-      'leavePeriod.ownerId': luccaId,
-      date: `between,${yearStart},${yearEnd}`,
-      paging: '0,200'
-    });
+    // Read from Supabase
+    const { data: items, error } = await sb.from('absences_lucca')
+      .select('*')
+      .eq('lucca_id', luccaId)
+      .eq('actif', true)
+      .gte('date_absence', yearStart)
+      .lte('date_absence', yearEnd)
+      .order('date_absence');
 
-    const items = resp?.data?.items || [];
-    const absences = items.filter(l => l.isActive !== false).map(l => {
-      // Parse period from isAm field or fallback to ID pattern (e.g. "23843-20260102-AM")
-      let period = 'unknown';
-      if (l.isAm === true) period = 'AM';
-      else if (l.isAm === false) period = 'PM';
-      else if (typeof l.id === 'string') {
-        if (l.id.endsWith('-AM')) period = 'AM';
-        else if (l.id.endsWith('-PM')) period = 'PM';
-      }
-      // Parse date from field or ID (e.g. "23843-20260102-AM" → "20260102")
-      let dateStr = l.date || null;
-      if (!dateStr && typeof l.id === 'string') {
-        const m = l.id.match(/(\d{4})(\d{2})(\d{2})/);
-        if (m) dateStr = `${m[1]}-${m[2]}-${m[3]}`;
-      }
-      return { ...l, _period: period, _date: dateStr, _type: l.leaveAccount?.name || 'Autre' };
-    });
+    if (error) throw new Error(error.message);
+    const absences = items || [];
 
     if (absences.length === 0) {
-      document.getElementById('lucca-absences-body').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t3)">Aucune absence enregistrée pour ' + now.getFullYear() + '.</div>';
+      document.getElementById('lucca-absences-body').innerHTML = '<div style="text-align:center;padding:30px;color:var(--t3)">Aucune absence enregistrée pour ' + now.getFullYear() + '. Synchronisez d\'abord les collaborateurs Lucca.</div>';
       return;
     }
 
     // Group half-days into days: same date + same type → merge AM+PM = Journée
     const dayMap = {};
     absences.forEach(a => {
-      const key = a._date + '|' + a._type;
-      if (!dayMap[key]) dayMap[key] = { date: a._date, type: a._type, periods: [] };
-      dayMap[key].periods.push(a._period);
+      const key = a.date_absence + '|' + a.type_absence;
+      if (!dayMap[key]) dayMap[key] = { date: a.date_absence, type: a.type_absence, periods: [] };
+      dayMap[key].periods.push(a.periode);
     });
     const days = Object.values(dayMap).map(d => {
       const hasAM = d.periods.includes('AM');
