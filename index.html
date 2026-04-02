@@ -7291,7 +7291,7 @@ async function syncAkuiteo() {
     let page = 0;
     const PAGE_SIZE = 200;
     while (true) {
-      const batch = await akuiteoFetch('POST', `/crm/customers/search?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`, {
+      const batch = await akuiteoFetch('POST', `/crm/customers/search?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}&sort=id&order=DESC`, {
         code: { operator: 'LIKE', value: '%' }
       });
       if (!Array.isArray(batch) || batch.length === 0) break;
@@ -7410,33 +7410,9 @@ async function syncAkuiteo() {
       if ((i + CONTACT_BATCH) % 100 < CONTACT_BATCH) console.log(`[Akuiteo] Contacts: ${i + batch.length}/${akClientIdsForContacts.length} clients (${syncedContacts} contacts)`);
     }
     console.log(`[Akuiteo] Contacts : ${syncedContacts} synchro, ${errContacts} erreurs, ${skippedContacts} ignorés`);
-    toast(`${syncedContacts} contacts synchronisés. Géocodage en cours...`, 'info');
+    toast(`${syncedContacts} contacts synchronisés. Sync docs en cours...`, 'info');
 
-    // --- ETAPE 3 : Géocoder les clients sans coordonnées ---
-    console.log('[Akuiteo] === ETAPE 3 : Géocodage clients ===');
-    console.log('[Akuiteo] === ETAPE 1b : Géocodage clients ===');
-    const { data: clientsNoCoords } = await sb.from('clients').select('id,adresse_ligne1,code_postal,city').is('lat', null);
-    const toGeocode = (clientsNoCoords || []).filter(c => c.city || c.code_postal || c.adresse_ligne1);
-    console.log(`[Akuiteo] Clients sans coordonnées avec adresse: ${toGeocode.length}`);
-    let geoClientsOk = 0;
-    const GEO_BATCH = 5;
-    for (let i = 0; i < toGeocode.length; i += GEO_BATCH) {
-      const batch = toGeocode.slice(i, i + GEO_BATCH);
-      const results = await Promise.allSettled(batch.map(async (c) => {
-        const addr = [c.adresse_ligne1, c.code_postal, c.city].filter(Boolean).join(', ');
-        if (addr.length < 3) return null;
-        const coords = await geocodeAddress(addr);
-        if (coords) {
-          await sb.from('clients').update({ lat: coords.lat, lng: coords.lng }).eq('id', c.id);
-          return true;
-        }
-        return null;
-      }));
-      geoClientsOk += results.filter(r => r.status === 'fulfilled' && r.value).length;
-      if ((i + GEO_BATCH) % 50 < GEO_BATCH) console.log(`[Akuiteo] Géocodage: ${i + batch.length}/${toGeocode.length} (${geoClientsOk} ok)`);
-    }
-    console.log(`[Akuiteo] Géocodage terminé: ${geoClientsOk}/${toGeocode.length} clients géocodés`);
-    toast(`${geoClientsOk} clients géocodés. Sync docs en cours...`, 'info');
+    // Géocodage GPS désactivé pour optimiser le temps de sync
 
     // --- ETAPE 2 : Recharger DB ---
     console.log('[Akuiteo] === ETAPE 2 : Rechargement DB ===');
@@ -7505,11 +7481,11 @@ async function syncAkuiteo() {
     const bulkCrit = { companyCode: { operator: 'IS_NOT_NULL' } };
     const BULK_PAGE = 200;
 
-    // Fonction paginée bulk
+    // Fonction paginée bulk (tri par ID décroissant)
     async function fetchAllBulk(path, criteria) {
       let all = [], off = 0;
       while (true) {
-        const res = await akuiteoFetch('POST', path + `?limit=${BULK_PAGE}&offset=${off}`, criteria).catch(() => []);
+        const res = await akuiteoFetch('POST', path + `?limit=${BULK_PAGE}&offset=${off}&sort=id&order=DESC`, criteria).catch(() => []);
         if (!Array.isArray(res) || res.length === 0) break;
         all = all.concat(res);
         console.log(`[Akuiteo] ${path}: offset=${off} → ${res.length} (total: ${all.length})`);
