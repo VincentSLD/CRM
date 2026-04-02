@@ -5792,24 +5792,25 @@ async function syncCollaborateursLucca() {
 
     toast(`${rows.length} collaborateur(s) Lucca synchronisés. Sync absences...`, 'info');
 
-    // Sync absences per user (on connaît le lucca_id exact à chaque appel)
+    // Sync absences by batch (leavePeriod.ownerId dans fields pour identifier le propriétaire)
     const now = new Date();
     const yearStart = now.getFullYear() + '-01-01';
     const yearEnd = now.getFullYear() + '-12-31';
     let totalAbsences = 0;
     const luccaIds = all.map(e => String(e.id));
-    const DELAY = 500; // ms between users
+    const BATCH = 50;
+    const DELAY = 5000; // 5s between batches
 
-    for (let u = 0; u < luccaIds.length; u++) {
-      const uid = luccaIds[u];
-      if (u % 20 === 0) toast(`Absences : ${u}/${luccaIds.length} collaborateurs...`, 'info');
+    for (let b = 0; b < luccaIds.length; b += BATCH) {
+      const batch = luccaIds.slice(b, b + BATCH);
+      toast(`Absences : ${b}/${luccaIds.length} collaborateurs...`, 'info');
 
       try {
         let leaves = [], leavePage = 0;
         while (true) {
           const resp = await luccaFetch('/api/v3/leaves', {
-            fields: 'id,date,isAm,leaveAccount,isActive',
-            'leavePeriod.ownerId': uid,
+            fields: 'id,date,isAm,leaveAccount,isActive,leavePeriod.ownerId',
+            'leavePeriod.ownerId': batch.join(','),
             date: `between,${yearStart},${yearEnd}`,
             paging: `${leavePage * 200},200`
           });
@@ -5818,6 +5819,8 @@ async function syncCollaborateursLucca() {
           leaves = leaves.concat(items);
           if (items.length < 200) break;
           leavePage++;
+          // Delay between pagination calls
+          await new Promise(r => setTimeout(r, 2000));
         }
 
         if (leaves.length > 0) {
@@ -5834,29 +5837,31 @@ async function syncCollaborateursLucca() {
               const m = l.id.match(/(\d{4})(\d{2})(\d{2})/);
               if (m) dateStr = `${m[1]}-${m[2]}-${m[3]}`;
             }
+            // ownerId from nested leavePeriod field
+            const ownerId = l.leavePeriod?.ownerId || l.leavePeriod?.owner?.id || null;
             return {
               id: String(l.id),
-              lucca_id: uid,
+              lucca_id: ownerId ? String(ownerId) : null,
               date_absence: dateStr,
               periode: period,
               type_absence: l.leaveAccount?.name || 'Autre',
               actif: l.isActive !== false,
               updated_at: new Date().toISOString(),
             };
-          });
+          }).filter(r => r.lucca_id);
 
           for (let i = 0; i < absRows.length; i += 100) {
             const { error } = await sb.from('absences_lucca').upsert(absRows.slice(i, i + 100), { onConflict: 'id' });
             if (error) console.warn('[Absences Lucca] Upsert err:', error.message);
           }
           totalAbsences += absRows.length;
+          console.log(`[Lucca] Batch ${b}: ${absRows.length} absences, ownerIds sample:`, [...new Set(absRows.slice(0,5).map(r => r.lucca_id))]);
         }
       } catch (err) {
-        console.warn(`[Absences Lucca] Erreur user ${uid}:`, err.message);
+        console.warn(`[Absences Lucca] Erreur batch ${b}:`, err.message);
       }
 
-      // Delay between users to respect rate limit (retry in luccaFetch handles 429)
-      if (u + 1 < luccaIds.length) await new Promise(r => setTimeout(r, DELAY));
+      if (b + BATCH < luccaIds.length) await new Promise(r => setTimeout(r, DELAY));
     }
 
     toast(`${rows.length} collaborateur(s) et ${totalAbsences} absence(s) synchronisés`, 'success');
