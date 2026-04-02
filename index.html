@@ -5669,6 +5669,7 @@ async function unlinkLucca(akId) {
 // ═══ COLLABORATEURS LUCCA ═══
 let collaborateursLuccaData = [];
 let collaborateursLuccaSearch = '';
+let collaborateursLuccaEtab = '';
 
 async function luccaFetch(path, params = {}) {
   const qp = new URLSearchParams({ path, ...params });
@@ -5680,6 +5681,9 @@ async function luccaFetch(path, params = {}) {
 
 function renderCollaborateursLucca() {
   let filtered = collaborateursLuccaData;
+  if (collaborateursLuccaEtab) {
+    filtered = filtered.filter(c => (c.etablissement||'') === collaborateursLuccaEtab);
+  }
   if (collaborateursLuccaSearch) {
     const q = collaborateursLuccaSearch.toLowerCase();
     filtered = filtered.filter(c =>
@@ -5689,11 +5693,16 @@ function renderCollaborateursLucca() {
       (c.numero_employe||'').toLowerCase().includes(q)
     );
   }
+  const etabs = [...new Set(collaborateursLuccaData.map(c => c.etablissement).filter(Boolean))].sort();
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:8px;align-items:center">
       <button class="btn btn-primary" onclick="syncCollaborateursLucca()">Synchroniser depuis Lucca</button>
-      <span style="font-size:12px;color:var(--t3)">${collaborateursLuccaData.length} collaborateur(s)</span>
+      <select onchange="collaborateursLuccaEtab=this.value;renderCollaborateursLuccaRefresh()" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--t1)">
+        <option value="">Tous les établissements</option>
+        ${etabs.map(e => `<option value="${e}" ${collaborateursLuccaEtab===e?'selected':''}>${e}</option>`).join('')}
+      </select>
+      <span style="font-size:12px;color:var(--t3)">${filtered.length} collaborateur(s)</span>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       <input type="text" placeholder="Rechercher nom, prénom, email, n° employé..." value="${collaborateursLuccaSearch}"
@@ -5705,9 +5714,9 @@ function renderCollaborateursLucca() {
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
     <table class="tbl-compact">
     <thead><tr>
-      <th>N° Employé</th><th>Nom</th><th>Prénom</th><th>Email</th><th>Département</th><th>Poste</th><th>Début contrat</th><th>Fin contrat</th><th>Lien Akuiteo</th>
+      <th>N° Employé</th><th>Nom</th><th>Prénom</th><th>Email</th><th>Établissement</th><th>Département</th><th>Poste</th><th>Début contrat</th><th>Fin contrat</th><th>Lien Akuiteo</th>
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3)">Aucun collaborateur. Cliquez sur "Synchroniser depuis Lucca" pour charger la liste.</td></tr>' : filtered.map(c => {
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--t3)">Aucun collaborateur. Cliquez sur "Synchroniser depuis Lucca" pour charger la liste.</td></tr>' : filtered.map(c => {
       const akMatch = collaborateursData.find(a => a.lucca_id === c.lucca_id);
       const akLabel = akMatch ? `<span style="color:var(--green);font-size:11px">&#10003; ${akMatch.prenom||''} ${akMatch.nom||''} <span class="mono" style="font-size:10px">(${akMatch.code||akMatch.akuiteo_id||''})</span></span>` : '<span style="color:var(--t3);font-size:11px">—</span>';
       return `<tr style="cursor:pointer" onclick="showLuccaAbsences('${c.lucca_id}','${(c.prenom||'').replace(/'/g,"\\'")} ${(c.nom||'').replace(/'/g,"\\'")}')" title="Voir les absences">
@@ -5715,6 +5724,7 @@ function renderCollaborateursLucca() {
       <td><strong>${c.nom||'—'}</strong></td>
       <td>${c.prenom||'—'}</td>
       <td>${c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)" onclick="event.stopPropagation()">'+c.email+'</a>' : '—'}</td>
+      <td>${c.etablissement||'—'}</td>
       <td>${c.departement||'—'}</td>
       <td>${c.poste||'—'}</td>
       <td>${c.date_debut_contrat ? new Date(c.date_debut_contrat).toLocaleDateString('fr-FR') : '—'}</td>
@@ -5740,7 +5750,7 @@ async function syncCollaborateursLucca() {
     let all = [], page = 0;
     while (true) {
       const resp = await luccaFetch('/api/v3/users', {
-        fields: 'id,firstName,lastName,mail,department,dtContractStart,dtContractEnd,employeeNumber,jobTitle',
+        fields: 'id,firstName,lastName,mail,department,legalEntity,dtContractStart,dtContractEnd,employeeNumber,jobTitle',
         paging: `${page * 200},200`
       });
       const items = resp?.data?.items || [];
@@ -5758,6 +5768,7 @@ async function syncCollaborateursLucca() {
       prenom: e.firstName || null,
       email: e.mail || null,
       departement: e.department?.name || null,
+      etablissement: e.legalEntity?.name || null,
       poste: e.jobTitle || null,
       numero_employe: e.employeeNumber || null,
       date_debut_contrat: e.dtContractStart || null,

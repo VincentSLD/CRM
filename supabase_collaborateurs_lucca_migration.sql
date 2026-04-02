@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS collaborateurs_lucca (
   prenom TEXT,
   email TEXT,
   departement TEXT,
+  etablissement TEXT,
   poste TEXT,
   numero_employe TEXT,
   date_debut_contrat TEXT,
