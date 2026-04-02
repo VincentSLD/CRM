@@ -7371,45 +7371,47 @@ async function syncAkuiteo() {
     console.log(`[Akuiteo] Clients : ${created} créés, ${updated} mis à jour`);
     toast(`Clients : ${created} créés, ${updated} mis à jour. Sync contacts...`, 'info');
 
-    // --- ETAPE 2 : Sync contacts en PRIORITE ---
-    console.log('[Akuiteo] === ETAPE 2 : Sync contacts (prioritaire, parallèle ×10) ===');
-    // Construire le map client depuis allClientsMap (déjà en mémoire, pas besoin de recharger Supabase)
+    // --- ETAPE 2 : Sync contacts (parallèle ×20, uniquement clients avec akuiteo_id) ---
+    console.log('[Akuiteo] === ETAPE 2 : Sync contacts ===');
     const akClientMapForContacts = {};
     for (const c of allClientsBatch) { if (c.akuiteo_id) akClientMapForContacts[c.akuiteo_id] = c; }
-    const akClientIdsForContacts = akCustomers.map(c => String(c.id));
-    console.log(`[Akuiteo] akClientMap contacts: ${Object.keys(akClientMapForContacts).length}, akClientIds: ${akClientIdsForContacts.length}`);
-    let syncedContacts = 0, errContacts = 0, skippedContacts = 0;
-    const CONTACT_BATCH = 10;
+    // Ne requêter que les clients qui existent en base (skip les IDs sans correspondance)
+    const akClientIdsForContacts = akCustomers.map(c => String(c.id)).filter(id => akClientMapForContacts[id]);
+    console.log(`[Akuiteo] Contacts : ${akClientIdsForContacts.length} clients à traiter (sur ${akCustomers.length})`);
+    let syncedContacts = 0, errContacts = 0;
+    const CONTACT_BATCH = 20;
+    const contactRows = [];
 
     for (let i = 0; i < akClientIdsForContacts.length; i += CONTACT_BATCH) {
       const batch = akClientIdsForContacts.slice(i, i + CONTACT_BATCH);
       const results = await Promise.allSettled(batch.map(async (akCid) => {
         const crmClient = akClientMapForContacts[akCid];
-        if (!crmClient) { skippedContacts++; return 0; }
-        const contacts = await akuiteoFetch('GET', '/crm/customers/' + akCid + '/contacts').catch(e => { console.warn(`[Akuiteo] Fetch contacts ${akCid} err:`, e.message); return []; });
+        const contacts = await akuiteoFetch('GET', '/crm/customers/' + akCid + '/contacts').catch(() => []);
         if (!Array.isArray(contacts) || contacts.length === 0) return 0;
-        const rows = contacts.map(ct => {
-          const ctId = 'ct_' + String(ct.id).replace(/[^a-zA-Z0-9]/g, '_') + '_' + crmClient.id.substring(0, 8);
-          return {
-            id: ctId, client_id: crmClient.id, akuiteo_id: String(ct.id), akuiteo_customer_id: akCid,
-            code: ct.code || '', nom: ct.name || '', prenom: ct.firstName || '', titre: ct.title || '',
-            fonction: ct.functionTitle || ct.position || '', service: ct.service || '',
-            email: ct.email || '', email2: ct.email2 || '', telephone: ct.phone || '', mobile: ct.mobilePhone || '',
-            adresse: ct.address?.line1 || '', code_postal: ct.address?.postalCode || '', ville: ct.address?.city || '',
-            commentaire: ct.comment || '',
-          };
-        });
-        const { error } = await sb.from('contacts').upsert(rows, { onConflict: 'id' });
-        if (error) { console.warn(`[Akuiteo] Upsert contacts ${akCid} err:`, error.message); return 0; }
+        const rows = contacts.map(ct => ({
+          id: 'ct_' + String(ct.id).replace(/[^a-zA-Z0-9]/g, '_') + '_' + crmClient.id.substring(0, 8),
+          client_id: crmClient.id, akuiteo_id: String(ct.id), akuiteo_customer_id: akCid,
+          code: ct.code || '', nom: ct.name || '', prenom: ct.firstName || '', titre: ct.title || '',
+          fonction: ct.functionTitle || ct.position || '', service: ct.service || '',
+          email: ct.email || '', email2: ct.email2 || '', telephone: ct.phone || '', mobile: ct.mobilePhone || '',
+          adresse: ct.address?.line1 || '', code_postal: ct.address?.postalCode || '', ville: ct.address?.city || '',
+          commentaire: ct.comment || '',
+        }));
+        contactRows.push(...rows);
         return rows.length;
       }));
       for (const r of results) {
         if (r.status === 'fulfilled') syncedContacts += (r.value || 0);
-        else { errContacts++; console.warn('[Akuiteo] Contact batch err:', r.reason?.message); }
+        else errContacts++;
       }
       if ((i + CONTACT_BATCH) % 100 < CONTACT_BATCH) console.log(`[Akuiteo] Contacts: ${i + batch.length}/${akClientIdsForContacts.length} clients (${syncedContacts} contacts)`);
     }
-    console.log(`[Akuiteo] Contacts : ${syncedContacts} synchro, ${errContacts} erreurs, ${skippedContacts} ignorés`);
+    // Upsert all contacts in bulk (batches of 200)
+    for (let i = 0; i < contactRows.length; i += 200) {
+      const { error } = await sb.from('contacts').upsert(contactRows.slice(i, i + 200), { onConflict: 'id' });
+      if (error) console.warn('[Akuiteo] Upsert contacts err:', error.message);
+    }
+    console.log(`[Akuiteo] Contacts : ${syncedContacts} synchro, ${errContacts} erreurs`);
     toast(`${syncedContacts} contacts synchronisés. Sync docs en cours...`, 'info');
 
     // Géocodage GPS désactivé pour optimiser le temps de sync
