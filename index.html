@@ -4285,28 +4285,26 @@ function renderDevis(filter='all') {
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
     <table class="tbl-compact"><colgroup>
       <col class="col-ref"><col class="col-client"><col class="col-sujet">
-      <col class="col-montant"><col class="col-montant"><col class="col-date">
-      <col class="col-agence"><col><col><col class="col-statut">
+      <col class="col-montant"><col class="col-date">
+      <col><col><col><col class="col-statut">
     </colgroup><thead><tr>
       ${sortTh('devis','ref','Réf','filterDevis')}
       ${sortTh('devis','client','Client','filterDevis')}
       ${sortTh('devis','sujet','Sujet','filterDevis')}
       ${sortTh('devis','montant','HT','filterDevis')}
-      ${sortTh('devis','montant_ttc','TTC','filterDevis')}
       ${sortTh('devis','date_raw','Date','filterDevis')}
-      ${sortTh('devis','agence','Agence','filterDevis')}
+      ${sortTh('devis','societe','Société','filterDevis')}
       <th style="font-size:11px">Marché</th>
       <th style="font-size:11px">Affaire</th>
       ${sortTh('devis','statut','Statut','filterDevis')}
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis trouvé</td></tr>' : filtered.slice(devisPage*TBL_PAGE_SIZE, (devisPage+1)*TBL_PAGE_SIZE).map(d => `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis trouvé</td></tr>' : filtered.slice(devisPage*TBL_PAGE_SIZE, (devisPage+1)*TBL_PAGE_SIZE).map(d => `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer">
       <td class="mono">${d.ref}</td>
       <td>${d.client}</td>
       <td>${d.sujet||''}</td>
       <td class="mono">${fmt(d.montant)}</td>
-      <td class="mono">${fmt(d.montant_ttc)}</td>
       <td>${d.date}</td>
-      <td>${d.agence||''}</td>
+      <td>${d.societe||''}</td>
       <td>${linkMarche(d.marche_id)}</td>
       <td>${linkAffaire(d.affaire_id)}</td>
       <td>${devisStatusLabel(d.statut)}</td>
@@ -4355,16 +4353,16 @@ function renderCommandes(filter='all') {
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
     <table class="tbl-compact"><colgroup>
       <col class="col-ref"><col class="col-client"><col class="col-sujet">
-      <col class="col-montant"><col class="col-montant"><col class="col-date">
-      <col class="col-date"><col><col><col class="col-statut">
+      <col class="col-montant"><col class="col-date">
+      <col class="col-date"><col><col><col><col class="col-statut">
     </colgroup><thead><tr>
       ${sortTh('commandes','ref','Réf','filterCmd')}
       ${sortTh('commandes','client','Client','filterCmd')}
       ${sortTh('commandes','nom','Nom','filterCmd')}
       ${sortTh('commandes','montant','HT','filterCmd')}
-      ${sortTh('commandes','montant_ttc','TTC','filterCmd')}
       ${sortTh('commandes','date_raw','Date','filterCmd')}
       ${sortTh('commandes','livraison','Livraison','filterCmd')}
+      ${sortTh('commandes','societe','Société','filterCmd')}
       <th style="font-size:11px">Marché</th>
       <th style="font-size:11px">Affaire</th>
       ${sortTh('commandes','statut','Statut','filterCmd')}
@@ -4374,9 +4372,9 @@ function renderCommandes(filter='all') {
       <td>${c.client}</td>
       <td>${c.nom||''}</td>
       <td class="mono">${fmt(c.montant)}</td>
-      <td class="mono">${fmt(c.montant_ttc)}</td>
       <td>${c.date}</td>
       <td>${c.livraison}</td>
+      <td>${c.societe||''}</td>
       <td>${linkMarche(c.marche_id)}</td>
       <td>${linkAffaire(c.affaire_id)}</td>
       <td>${cmdStatusLabel(c.statut)}</td>
@@ -4426,17 +4424,17 @@ function renderFactures(filter='all') {
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
     <table class="tbl-compact"><colgroup>
       <col class="col-ref"><col class="col-client"><col class="col-type">
-      <col class="col-montant"><col class="col-montant"><col class="col-reste">
-      <col class="col-date"><col class="col-date"><col><col><col class="col-statut">
+      <col class="col-montant"><col class="col-reste">
+      <col class="col-date"><col class="col-date"><col><col><col><col class="col-statut">
     </colgroup><thead><tr>
       ${sortTh('factures','ref','Réf','filterFact')}
       ${sortTh('factures','client','Client','filterFact')}
       ${sortTh('factures','type_facture','Type','filterFact')}
       ${sortTh('factures','montant','HT','filterFact')}
-      ${sortTh('factures','montant_ttc','TTC','filterFact')}
       ${sortTh('factures','reste_a_payer','Reste','filterFact')}
       ${sortTh('factures','date_raw','Date','filterFact')}
       ${sortTh('factures','date_paiement','Paiement','filterFact')}
+      ${sortTh('factures','societe','Société','filterFact')}
       <th style="font-size:11px">Marché</th>
       <th style="font-size:11px">Affaire</th>
       ${sortTh('factures','statut','Statut','filterFact')}
@@ -4446,10 +4444,10 @@ function renderFactures(filter='all') {
       <td>${f.client}</td>
       <td>${f.type_facture === 'CREDIT' ? '<span style="color:var(--red)">Avoir</span>' : f.type_facture === 'INVOICE' ? 'Facture' : f.type_facture || ''}</td>
       <td class="mono">${fmt(f.montant)}</td>
-      <td class="mono">${fmt(f.montant_ttc)}</td>
       <td class="mono" style="${(f.reste_a_payer||0)>0?'color:var(--red)':''}">${f.reste_a_payer != null ? fmt(f.reste_a_payer) : ''}</td>
       <td>${f.date}</td>
       <td>${f.date_paiement ? fmtDateFR(f.date_paiement) : ''}</td>
+      <td>${f.societe||''}</td>
       <td>${linkMarche(f.marche_id)}</td>
       <td>${linkAffaire(f.affaire_id)}</td>
       <td>${facStatusLabel(f.statut)}</td>
