@@ -1,0 +1,13 @@
+-- Ajouter les colonnes d'adresse du site à la table affaires
+ALTER TABLE affaires ADD COLUMN IF NOT EXISTS adresse TEXT;
+ALTER TABLE affaires ADD COLUMN IF NOT EXISTS ville TEXT;
+ALTER TABLE affaires ADD COLUMN IF NOT EXISTS code_postal TEXT;
+ALTER TABLE affaires ADD COLUMN IF NOT EXISTS lat FLOAT;
+ALTER TABLE affaires ADD COLUMN IF NOT EXISTS lng FLOAT;
+
+-- Ajouter aussi sur marchés si pas encore fait
+ALTER TABLE marches ADD COLUMN IF NOT EXISTS adresse TEXT;
+ALTER TABLE marches ADD COLUMN IF NOT EXISTS ville TEXT;
+ALTER TABLE marches ADD COLUMN IF NOT EXISTS code_postal TEXT;
+ALTER TABLE marches ADD COLUMN IF NOT EXISTS lat FLOAT;
+ALTER TABLE marches ADD COLUMN IF NOT EXISTS lng FLOAT;

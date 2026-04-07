@@ -7781,6 +7781,8 @@ async function syncAkuiteo() {
         }
         console.log(`[Akuiteo] Sites avec adresse: ${Object.keys(siteAddresses).length}`);
         let geoOk = 0, geoFail = 0;
+
+        // Mettre à jour les marchés
         for (const [prefix, info] of Object.entries(marcheDeliverySite)) {
           const addr = siteAddresses[info.deliverySiteId];
           if (!addr) continue;
@@ -7795,6 +7797,22 @@ async function syncAkuiteo() {
           await sb.from('marches').update(update).eq('id', mId).catch(() => {});
         }
         console.log(`[Akuiteo] Adresses marchés: ${geoOk} géocodées, ${geoFail} non trouvées`);
+
+        // Mettre à jour les affaires avec l'adresse du site
+        let affGeo = 0;
+        for (const [pid, info] of Object.entries(projectDeliverySite)) {
+          const addr = siteAddresses[info.deliverySiteId];
+          if (!addr) continue;
+          const affId = 'aka_' + pid.replace(/[^a-zA-Z0-9.]/g, '_');
+          const update = { adresse: addr.line1, code_postal: addr.postalCode, ville: addr.city };
+          const fullAddr = [addr.line1, addr.postalCode, addr.city].filter(Boolean).join(', ');
+          if (fullAddr.length > 8) {
+            const coords = await geocodeAddress(fullAddr);
+            if (coords) { update.lat = coords.lat; update.lng = coords.lng; affGeo++; }
+          }
+          await sb.from('affaires').update(update).eq('id', affId).catch(() => {});
+        }
+        console.log(`[Akuiteo] Adresses affaires: ${affGeo} géocodées (sur ${Object.keys(projectDeliverySite).length} sites)`);
       } catch (e) { console.warn('[Akuiteo] Erreur adresses marchés:', e.message); }
     })();
 
