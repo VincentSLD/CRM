@@ -7710,8 +7710,13 @@ async function syncAkuiteo() {
                 a.ville = addr.city || '';
                 a.code_postal = addr.postalCode || '';
               }
-              // Log premier projet pour debug
-              if (i === 0 && batch[0] === pid) console.log('[Akuiteo] Sample projet keys:', Object.keys(proj), 'address fields:', { deliveryAddress: proj.deliveryAddress, siteAddress: proj.siteAddress, address: proj.address, site: proj.site });
+              // Log premier projet pour debug (réponse complète)
+              if (i === 0 && batch[0] === pid) {
+                console.warn('========== [DEBUG PROJET AKUITEO] ==========');
+                console.warn('Project ID:', pid);
+                console.warn('Réponse complète:', JSON.stringify(proj, null, 2));
+                console.warn('=============================================');
+              }
             }
           } catch (e) { /* ignore */ }
         }));
