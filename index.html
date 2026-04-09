@@ -3746,35 +3746,6 @@ function renderMarcheDetail() {
     ])}
   </div>
 
-  <div class="card" style="margin-bottom:20px">
-    <div class="card-header"><div class="card-title">Adresse du marché</div></div>
-    <div class="card-body">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-        <div>
-          <label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Adresse</label>
-          <input type="text" id="marcheAdresse" value="${(m.adresse||'').replace(/"/g,'&quot;')}"
-            style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1);box-sizing:border-box">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div>
-            <label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Code postal</label>
-            <input type="text" id="marcheCp" value="${(m.code_postal||'').replace(/"/g,'&quot;')}"
-              style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1);box-sizing:border-box">
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Ville</label>
-            <input type="text" id="marcheVille" value="${(m.ville||'').replace(/"/g,'&quot;')}"
-              style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1);box-sizing:border-box">
-          </div>
-        </div>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:11px;color:var(--t3)">${m.lat && m.lng ? 'Coordonnées : '+Number(m.lat).toFixed(4)+', '+Number(m.lng).toFixed(4) : 'Pas encore géocodé'}</span>
-        <button class="btn" onclick="saveMarcheAddress('${m.id}')" style="font-size:12px">Enregistrer l&#39;adresse</button>
-      </div>
-    </div>
-  </div>
-
   <h3 style="font-size:14px;margin-bottom:10px;color:var(--t1)">Affaires (${affaires.length})</h3>
   ${affaires.length === 0 ? '<div class="card"><div class="card-body" style="text-align:center;padding:20px;color:var(--t3)">Aucune affaire rattachée</div></div>' : affaires.map(a => {
     const aDevis = DB.devis.filter(d => d.affaire_id === a.id);
@@ -3789,7 +3760,7 @@ function renderMarcheDetail() {
           </div>
           ${marcheStatutBadge(a.statut)}
         </div>
-        <div style="display:flex;gap:16px;font-size:12px;color:var(--t2)">
+        <div style="display:flex;gap:16px;font-size:12px;color:var(--t2);flex-wrap:wrap">
           <span>HT: <strong>${fmt(a.montant)}</strong></span>
           ${a.date_debut ? '<span>Début: '+fmtDateFR(a.date_debut)+'</span>' : ''}
           ${a.date_fin ? '<span>Fin: '+fmtDateFR(a.date_fin)+'</span>' : ''}
@@ -3797,6 +3768,7 @@ function renderMarcheDetail() {
           <span>${aCmd.length} cmd</span>
           <span>${aFact.length} fact</span>
         </div>
+        ${a.ville || a.adresse || a.code_postal ? '<div style="font-size:11px;color:var(--t3);margin-top:4px">Adresse : '+[a.adresse,a.code_postal,a.ville].filter(Boolean).join(', ')+(a.departement ? ' ('+a.departement+')' : '')+'</div>' : ''}
       </div>
     </div>`;
   }).join('')}
