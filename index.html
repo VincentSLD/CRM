@@ -3744,6 +3744,7 @@ function renderMarcheDetail() {
       detailRow('Montant TTC', fmt(m.montant_ttc)),
       detailRow('Devise', m.devise),
     ])}
+    ${(() => { const addr = affaires.find(a => a.adresse || a.ville || a.code_postal); return addr ? detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region)]) : ''; })()}
   </div>
 
   <h3 style="font-size:14px;margin-bottom:10px;color:var(--t1)">Affaires (${affaires.length})</h3>
