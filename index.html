@@ -7296,7 +7296,14 @@ async function akuiteoFetch(method, path, body = null, opts2 = {}) {
 // Sync rapide : récupérer UNIQUEMENT les adresses des affaires depuis Akuiteo (sans refaire tout le sync)
 async function syncAdressesAffaires() {
   toast('Récupération des adresses affaires...', 'info');
-  const { data: affaires } = await sb.from('affaires').select('id,akuiteo_id').not('akuiteo_id', 'is', null);
+  let affaires = [], from = 0;
+  while (true) {
+    const { data } = await sb.from('affaires').select('id,akuiteo_id').not('akuiteo_id', 'is', null).range(from, from + 999);
+    if (!data || data.length === 0) break;
+    affaires = affaires.concat(data);
+    if (data.length < 1000) break;
+    from += 1000;
+  }
   if (!affaires || affaires.length === 0) { toast('Aucune affaire trouvée', 'error'); return; }
   console.log(`[Akuiteo] ${affaires.length} affaires à traiter pour les adresses`);
   let updated = 0, noAddr = 0, errors = 0;
@@ -7319,7 +7326,14 @@ async function syncAdressesAffaires() {
     }));
   }
   // Propager aux documents
-  const { data: affWithAddr } = await sb.from('affaires').select('id,adresse,ville,code_postal').not('adresse', 'is', null);
+  let affWithAddr = [], fr2 = 0;
+  while (true) {
+    const { data } = await sb.from('affaires').select('id,adresse,ville,code_postal').not('adresse', 'is', null).range(fr2, fr2 + 999);
+    if (!data || data.length === 0) break;
+    affWithAddr = affWithAddr.concat(data);
+    if (data.length < 1000) break;
+    fr2 += 1000;
+  }
   for (const a of (affWithAddr || [])) {
     if (!a.adresse && !a.ville) continue;
     const upd = { adresse: a.adresse, ville: a.ville, code_postal: a.code_postal };
