@@ -4011,6 +4011,15 @@ function renderAffaireDetail() {
       detailRow('Devise', a.devise),
     ])}
   </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+    ${detailSection('Adresse du site', [
+      detailRow('Adresse', a.adresse),
+      detailRow('Code postal', a.code_postal),
+      detailRow('Ville', a.ville),
+      detailRow('Département', a.departement),
+      detailRow('Région', a.region),
+    ])}
+  </div>
 
   ${devis.length > 0 ? `
   <h3 style="font-size:14px;margin-bottom:10px;color:var(--t1)">Devis (${devis.length})</h3>
