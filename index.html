@@ -7808,7 +7808,7 @@ async function syncAkuiteo() {
             if (coords) { update.lat = coords.lat; update.lng = coords.lng; geoOk++; }
             else { geoFail++; }
           }
-          await sb.from('marches').update(update).eq('id', mId).catch(() => {});
+          await sb.from('marches').update(update).eq('id', mId);
         }
         console.log(`[Akuiteo] Adresses marchés: ${geoOk} géocodées, ${geoFail} non trouvées`);
 
@@ -7824,7 +7824,7 @@ async function syncAkuiteo() {
             const coords = await geocodeAddress(fullAddr);
             if (coords) { update.lat = coords.lat; update.lng = coords.lng; affGeoSite++; }
           }
-          await sb.from('affaires').update(update).eq('id', affId).catch(() => {});
+          await sb.from('affaires').update(update).eq('id', affId);
         }
         console.log(`[Akuiteo] Adresses affaires (via sites): ${affGeoSite} géocodées`);
 
@@ -7836,7 +7836,7 @@ async function syncAkuiteo() {
           if (fullAddr.length < 8) continue;
           const coords = await geocodeAddress(fullAddr);
           if (coords) {
-            await sb.from('affaires').update({ lat: coords.lat, lng: coords.lng }).eq('id', aff.id).catch(() => {});
+            await sb.from('affaires').update({ lat: coords.lat, lng: coords.lng }).eq('id', aff.id);
             affGeoProj++;
           }
         }
