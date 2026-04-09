@@ -7286,7 +7286,7 @@ async function testProjetAkuiteo(pid) {
   if (!pid) { console.error('Pas de projet trouvé'); return; }
   toast('Test projet ' + pid + '...', 'info');
   try {
-    const proj = await akuiteoFetch('POST', `/projectmanagement/projects/${pid}/read`, { options: ['PROJECT_SUB_CATEGORY', 'PROJECT_SUB_CATEGORY_LEVEL2', 'MANAGER'] });
+    const proj = await akuiteoFetch('POST', `/projectmanagement/projects/${pid}/read`, { options: ['PROJECT_SUB_CATEGORY', 'PROJECT_SUB_CATEGORY_LEVEL2', 'MANAGER', 'ADDRESS'] });
     console.warn('========== REPONSE PROJET AKUITEO ==========');
     console.warn('ID:', pid);
     console.warn('Toutes les clés:', Object.keys(proj));
@@ -7714,7 +7714,7 @@ async function syncAkuiteo() {
         const batch = projectPids.slice(i, i + PARALLEL);
         await Promise.allSettled(batch.map(async pid => {
           try {
-            const proj = await akuiteoFetch('POST', `/projectmanagement/projects/${pid}/read`, { options: ['PROJECT_SUB_CATEGORY', 'PROJECT_SUB_CATEGORY_LEVEL2', 'MANAGER'] });
+            const proj = await akuiteoFetch('POST', `/projectmanagement/projects/${pid}/read`, { options: ['PROJECT_SUB_CATEGORY', 'PROJECT_SUB_CATEGORY_LEVEL2', 'MANAGER', 'ADDRESS'] });
             if (proj) {
               const a = affairesByProject[pid];
               if (proj.name) a.nom = proj.name;
