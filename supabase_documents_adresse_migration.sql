@@ -1,0 +1,12 @@
+-- Ajouter les colonnes d'adresse du site aux documents
+ALTER TABLE devis ADD COLUMN IF NOT EXISTS adresse TEXT;
+ALTER TABLE devis ADD COLUMN IF NOT EXISTS ville TEXT;
+ALTER TABLE devis ADD COLUMN IF NOT EXISTS code_postal TEXT;
+
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS adresse TEXT;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS ville TEXT;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS code_postal TEXT;
+
+ALTER TABLE factures ADD COLUMN IF NOT EXISTS adresse TEXT;
+ALTER TABLE factures ADD COLUMN IF NOT EXISTS ville TEXT;
+ALTER TABLE factures ADD COLUMN IF NOT EXISTS code_postal TEXT;
