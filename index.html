@@ -3866,6 +3866,7 @@ function renderAffaires() {
     <button class="btn ${affairesStatutFilter==='suspendu'?'active':''}" onclick="affairesStatutFilter='suspendu';renderAffairesRefresh()">Suspendues <span style="opacity:.4">${suspendus}</span></button>
     <button class="btn ${affairesStatutFilter==='annule'?'active':''}" onclick="affairesStatutFilter='annule';renderAffairesRefresh()">Annulées <span style="opacity:.4">${annules}</span></button>
     ${renderSocieteFilter(() => renderAffairesRefresh())}
+    <button class="btn" onclick="syncAdressesAffaires()" title="Récupérer les adresses depuis Akuiteo">Sync adresses</button>
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px">
     <div class="card"><div class="card-body" style="text-align:center;padding:12px">
@@ -7292,21 +7293,44 @@ async function akuiteoFetch(method, path, body = null, opts2 = {}) {
   try { return JSON.parse(text); } catch(e) { return text; }
 }
 
-// Test rapide : vérifier la réponse d'un projet Akuiteo (appeler depuis la console : testProjetAkuiteo('24.0552.01'))
-async function testProjetAkuiteo(pid) {
-  if (!pid) { const { data } = await sb.from('affaires').select('akuiteo_id').limit(1); pid = data?.[0]?.akuiteo_id; }
-  if (!pid) { console.error('Pas de projet trouvé'); return; }
-  toast('Test projet ' + pid + '...', 'info');
-  try {
-    const proj = await akuiteoFetch('POST', `/projectmanagement/projects/${pid}/read`, { options: ['PROJECT_SUB_CATEGORY', 'PROJECT_SUB_CATEGORY_LEVEL2', 'MANAGER', 'ADDRESS'] });
-    console.warn('========== REPONSE PROJET AKUITEO ==========');
-    console.warn('ID:', pid);
-    console.warn('Toutes les clés:', Object.keys(proj));
-    console.warn('JSON complet:', JSON.stringify(proj, null, 2));
-    console.warn('=============================================');
-    toast('Voir console (F12) pour la réponse', 'success');
-    return proj;
-  } catch (e) { console.error('Erreur:', e.message); toast('Erreur: ' + e.message, 'error'); }
+// Sync rapide : récupérer UNIQUEMENT les adresses des affaires depuis Akuiteo (sans refaire tout le sync)
+async function syncAdressesAffaires() {
+  toast('Récupération des adresses affaires...', 'info');
+  const { data: affaires } = await sb.from('affaires').select('id,akuiteo_id').not('akuiteo_id', 'is', null);
+  if (!affaires || affaires.length === 0) { toast('Aucune affaire trouvée', 'error'); return; }
+  console.log(`[Akuiteo] ${affaires.length} affaires à traiter pour les adresses`);
+  let updated = 0, noAddr = 0, errors = 0;
+  const BATCH = 10;
+  for (let i = 0; i < affaires.length; i += BATCH) {
+    const batch = affaires.slice(i, i + BATCH);
+    if (i % 50 === 0) toast(`Adresses : ${i}/${affaires.length}...`, 'info');
+    await Promise.allSettled(batch.map(async (aff) => {
+      try {
+        const proj = await akuiteoFetch('POST', `/projectmanagement/projects/${aff.akuiteo_id}/read`, { options: ['ADDRESS'] });
+        const addr = proj?.address;
+        if (addr && (addr.line1 || addr.city || addr.postalCode)) {
+          await sb.from('affaires').update({
+            adresse: addr.line1 || '', ville: addr.city || '', code_postal: addr.postalCode || '',
+            departement: addr.geographicalDepartmentName || '', region: addr.regionName || ''
+          }).eq('id', aff.id);
+          updated++;
+        } else { noAddr++; }
+      } catch (e) { errors++; }
+    }));
+  }
+  // Propager aux documents
+  const { data: affWithAddr } = await sb.from('affaires').select('id,adresse,ville,code_postal').not('adresse', 'is', null);
+  for (const a of (affWithAddr || [])) {
+    if (!a.adresse && !a.ville) continue;
+    const upd = { adresse: a.adresse, ville: a.ville, code_postal: a.code_postal };
+    await sb.from('devis').update(upd).eq('affaire_id', a.id);
+    await sb.from('commandes').update(upd).eq('affaire_id', a.id);
+    await sb.from('factures').update(upd).eq('affaire_id', a.id);
+  }
+  toast(`${updated} adresses récupérées, ${noAddr} sans adresse, ${errors} erreurs. Documents mis à jour.`, 'success');
+  console.log(`[Akuiteo] Adresses: ${updated} ok, ${noAddr} vides, ${errors} erreurs`);
+  await loadDB();
+}
 }
 
 async function syncAkuiteo() {
