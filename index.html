@@ -7720,19 +7720,14 @@ async function syncAkuiteo() {
               if (proj.name) a.nom = proj.name;
               if (proj.projectSubCategory?.name) a.apporteur = proj.projectSubCategory.name;
               if (proj.manager?.name) a.responsable = [proj.manager.name, proj.manager.firstName].filter(Boolean).join(' ');
-              // Adresse du site depuis le projet
-              const addr = proj.deliveryAddress || proj.siteAddress || proj.address || proj.site?.address || null;
+              // Adresse du site depuis le projet (option ADDRESS)
+              const addr = proj.address || null;
               if (addr && (addr.line1 || addr.city || addr.postalCode)) {
                 a.adresse = addr.line1 || '';
                 a.ville = addr.city || '';
                 a.code_postal = addr.postalCode || '';
-              }
-              // Log premier projet pour debug (réponse complète)
-              if (i === 0 && batch[0] === pid) {
-                console.warn('========== [DEBUG PROJET AKUITEO] ==========');
-                console.warn('Project ID:', pid);
-                console.warn('Réponse complète:', JSON.stringify(proj, null, 2));
-                console.warn('=============================================');
+                a.departement = addr.geographicalDepartmentName || '';
+                a.region = addr.regionName || '';
               }
             }
           } catch (e) { /* ignore */ }
