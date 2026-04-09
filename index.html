@@ -4605,6 +4605,7 @@ async function showDevisDetail(id) {
         detailRow('Commercial', resolveManagerName(d.commercial_id)),
         detailRow('Nombre de lignes', d.nb_lignes),
       ])}
+      ${(() => { const addr = d.adresse || d.ville || d.code_postal ? d : (d.affaire_id ? DB.affaires.find(x=>x.id===d.affaire_id) : null); return addr && (addr.adresse || addr.ville || addr.code_postal) ? detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region)]) : ''; })()}
       ${renderCustomData(d.custom_data)}
     </div>
   </div>`;
@@ -4658,6 +4659,7 @@ async function showCommandeDetail(id) {
         detailRow('Commercial', resolveManagerName(c.commercial_id)),
         detailRow('Nombre de lignes', c.nb_lignes),
       ])}
+      ${(() => { const addr = c.adresse || c.ville || c.code_postal ? c : (c.affaire_id ? DB.affaires.find(x=>x.id===c.affaire_id) : null); return addr && (addr.adresse || addr.ville || addr.code_postal) ? detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region)]) : ''; })()}
       ${(() => {
         if (!c.custom_data || !c.custom_data._lines || c.custom_data._lines.length === 0) return '';
         const lines = c.custom_data._lines;
@@ -4731,6 +4733,7 @@ async function showFactureDetail(id) {
         detailRow('Responsable', resolveManagerName(f.responsable_id)),
         detailRow('Nombre de lignes', f.nb_lignes),
       ])}
+      ${(() => { const addr = f.adresse || f.ville || f.code_postal ? f : (f.affaire_id ? DB.affaires.find(x=>x.id===f.affaire_id) : null); return addr && (addr.adresse || addr.ville || addr.code_postal) ? detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region)]) : ''; })()}
       ${renderCustomData(f.custom_data)}
     </div>
   </div>`;
