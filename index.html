@@ -3361,8 +3361,8 @@ function renderClientDetail() {
     ${detailSection('Paiement & Tarification', [
       detailRow('Condition de paiement', c.condition_paiement || '—'),
       detailRow('Mode de paiement', c.mode_paiement || '—'),
-      detailRow('Mode de tarification', resolvePricingMethod(c.mode_tarification)),
-      detailRow('Mode de tarification 2', resolvePricingMethod(c.mode_tarification_2)),
+      detailRow('Mode de tarification', resolvePricingMethod(c.mode_tarification) || '—'),
+      detailRow('Mode de tarification 2', resolvePricingMethod(c.mode_tarification_2) || '—'),
     ])}
   </div>
   <div class="card" style="margin-bottom:16px"><div class="card-header"><div class="card-title">Habitudes Administratives</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes || '—'}</div></div></div>
