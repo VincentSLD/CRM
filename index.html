@@ -1824,27 +1824,36 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Code APE</label><input class="fi" id="nc-ape"></div>
         <div class="fg"><label class="fl">Réf. externe</label><input class="fi" id="nc-refext"></div>
       </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Entreprise</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg"><label class="fl">CA déclaré</label><input class="fi" id="nc-revenue" type="number"></div>
-        <div class="fg"><label class="fl">Capital</label><input class="fi" id="nc-capital" type="number"></div>
-        <div class="fg"><label class="fl">Effectif</label><input class="fi" id="nc-headcount" type="number"></div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Classification</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg"><label class="fl">Catégorie</label><input class="fi" id="nc-categorie" placeholder="Ex: PME"></div>
-        <div class="fg"><label class="fl">Profession</label><input class="fi" id="nc-profession" placeholder="Ex: BTP"></div>
-        <div class="fg"><label class="fl">Secteur d'activité</label><input class="fi" id="nc-secteur"></div>
-        <div class="fg"><label class="fl">Langue</label><input class="fi" id="nc-langue" value="fr"></div>
-        <div class="fg"><label class="fl">Mots-clés</label><input class="fi" id="nc-keywords" placeholder="mot1, mot2"></div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Paiement</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg"><label class="fl">Condition de paiement</label><input class="fi" id="nc-condpaiement"></div>
-        <div class="fg"><label class="fl">Mode de paiement</label><input class="fi" id="nc-modepaiement"></div>
-      </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Administratives</div>
       <div class="fg"><textarea class="fi" id="nc-notes" rows="3" style="resize:vertical" placeholder="Habitudes administratives..."></textarea></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Techniques</div>
+          <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+            <div style="display:flex;gap:2px;padding:4px 6px;border-bottom:1px solid var(--border);background:var(--bg-2)">
+              <button class="tb" title="Gras" onclick="fmtRTE('nc-hab-tech','bold')"><b>B</b></button>
+              <button class="tb" title="Italique" onclick="fmtRTE('nc-hab-tech','italic')"><i>I</i></button>
+              <button class="tb" title="Souligné" onclick="fmtRTE('nc-hab-tech','underline')"><u>U</u></button>
+              <div class="tb-div"></div>
+              <button class="tb" title="Liste" onclick="fmtRTE('nc-hab-tech','insertUnorderedList')">☰</button>
+            </div>
+            <div class="editor-body" contenteditable="true" id="nc-hab-tech" style="min-height:100px;max-height:250px;overflow-y:auto"></div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Géotechniques</div>
+          <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+            <div style="display:flex;gap:2px;padding:4px 6px;border-bottom:1px solid var(--border);background:var(--bg-2)">
+              <button class="tb" title="Gras" onclick="fmtRTE('nc-hab-geo','bold')"><b>B</b></button>
+              <button class="tb" title="Italique" onclick="fmtRTE('nc-hab-geo','italic')"><i>I</i></button>
+              <button class="tb" title="Souligné" onclick="fmtRTE('nc-hab-geo','underline')"><u>U</u></button>
+              <div class="tb-div"></div>
+              <button class="tb" title="Liste" onclick="fmtRTE('nc-hab-geo','insertUnorderedList')">☰</button>
+            </div>
+            <div class="editor-body" contenteditable="true" id="nc-hab-geo" style="min-height:100px;max-height:250px;overflow-y:auto"></div>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('new-client')">Annuler</button>
@@ -2006,31 +2015,6 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">TVA intracommunautaire</label><input class="fi" id="ec-tva" readonly style="background:var(--bg-3)"></div>
         <div class="fg"><label class="fl">Code APE</label><input class="fi" id="ec-ape"></div>
         <div class="fg"><label class="fl">Réf. externe</label><input class="fi" id="ec-refext"></div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Entreprise</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg"><label class="fl">CA déclaré</label><input class="fi" id="ec-revenue" type="number"></div>
-        <div class="fg"><label class="fl">Capital</label><input class="fi" id="ec-capital" type="number"></div>
-        <div class="fg"><label class="fl">Effectif</label><input class="fi" id="ec-headcount" type="number"></div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Classification</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg"><label class="fl">Catégorie</label><input class="fi" id="ec-categorie"></div>
-        <div class="fg"><label class="fl">Profession</label><input class="fi" id="ec-profession"></div>
-        <div class="fg"><label class="fl">Secteur d'activité</label><input class="fi" id="ec-secteur"></div>
-        <div class="fg"><label class="fl">Langue</label><input class="fi" id="ec-langue"></div>
-        <div class="fg"><label class="fl">Mots-clés</label><input class="fi" id="ec-keywords"></div>
-        <div class="fg"><label class="fl">Statut Akuiteo</label><input class="fi" id="ec-statut-ak"></div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Commercial</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg"><label class="fl">Contact commercial</label><input class="fi" id="ec-contact"></div>
-        <div class="fg"><label class="fl">Société Akuiteo</label><input class="fi" id="ec-codesociete"></div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Paiement</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg"><label class="fl">Condition de paiement</label><input class="fi" id="ec-condpaiement"></div>
-        <div class="fg"><label class="fl">Mode de paiement</label><input class="fi" id="ec-modepaiement"></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Administratives</div>
       <div class="fg"><textarea class="fi" id="ec-notes" rows="3" style="resize:vertical"></textarea></div>
@@ -6810,22 +6794,9 @@ function openModal(id) {
     document.getElementById('ec-siret').value = c.siret||'';
     document.getElementById('ec-ape').value = c.ape||'';
     document.getElementById('ec-refext').value = c.reference_externe||'';
-    document.getElementById('ec-revenue').value = c.chiffre_affaires||'';
-    document.getElementById('ec-capital').value = c.capital||'';
-    document.getElementById('ec-headcount').value = c.effectif||'';
     document.getElementById('ec-notes').value = c.notes||'';
     document.getElementById('ec-hab-tech').innerHTML = c.habitudes_techniques||'';
     document.getElementById('ec-hab-geo').innerHTML = c.habitudes_geotechniques||'';
-    document.getElementById('ec-categorie').value = c.categorie||'';
-    document.getElementById('ec-profession').value = c.profession||'';
-    document.getElementById('ec-secteur').value = c.secteur_activite||'';
-    document.getElementById('ec-langue').value = c.langue||'';
-    document.getElementById('ec-keywords').value = c.mots_cles||'';
-    document.getElementById('ec-statut-ak').value = c.statut_akuiteo||'';
-    document.getElementById('ec-contact').value = c.contact||'';
-    document.getElementById('ec-codesociete').value = c.code_societe||'';
-    document.getElementById('ec-condpaiement').value = c.condition_paiement||'';
-    document.getElementById('ec-modepaiement').value = c.mode_paiement||'';
     document.getElementById('ec-tva').value = c.tva_intracommunautaire || computeTVA(c.siren) || '';
   }
 }
@@ -7132,17 +7103,9 @@ async function submitNewClient() {
     siret: document.getElementById('nc-siret').value.trim() || null,
     ape: document.getElementById('nc-ape').value.trim() || null,
     reference_externe: document.getElementById('nc-refext').value.trim() || null,
-    chiffre_affaires: Number(document.getElementById('nc-revenue').value) || 0,
-    capital: Number(document.getElementById('nc-capital').value) || 0,
-    effectif: Number(document.getElementById('nc-headcount').value) || 0,
-    categorie: document.getElementById('nc-categorie').value.trim() || null,
-    profession: document.getElementById('nc-profession').value.trim() || null,
-    secteur_activite: document.getElementById('nc-secteur').value.trim() || null,
-    langue: document.getElementById('nc-langue').value.trim() || null,
-    mots_cles: document.getElementById('nc-keywords').value.trim() || null,
-    condition_paiement: document.getElementById('nc-condpaiement').value.trim() || null,
-    mode_paiement: document.getElementById('nc-modepaiement').value.trim() || null,
     notes: document.getElementById('nc-notes').value.trim() || null,
+    habitudes_techniques: document.getElementById('nc-hab-tech').innerHTML.trim() || null,
+    habitudes_geotechniques: document.getElementById('nc-hab-geo').innerHTML.trim() || null,
     ini, color: colors[Math.floor(Math.random()*colors.length)],
     status: 'objectif',
   });
@@ -7241,19 +7204,6 @@ async function submitEditClient() {
     ape: document.getElementById('ec-ape').value.trim() || null,
     reference_externe: document.getElementById('ec-refext').value.trim() || null,
     tva_intracommunautaire: document.getElementById('ec-tva').value.trim() || null,
-    chiffre_affaires: Number(document.getElementById('ec-revenue').value) || 0,
-    capital: Number(document.getElementById('ec-capital').value) || 0,
-    effectif: Number(document.getElementById('ec-headcount').value) || 0,
-    categorie: document.getElementById('ec-categorie').value.trim() || null,
-    profession: document.getElementById('ec-profession').value.trim() || null,
-    secteur_activite: document.getElementById('ec-secteur').value.trim() || null,
-    langue: document.getElementById('ec-langue').value.trim() || null,
-    mots_cles: document.getElementById('ec-keywords').value.trim() || null,
-    statut_akuiteo: document.getElementById('ec-statut-ak').value.trim() || null,
-    contact: document.getElementById('ec-contact').value.trim() || null,
-    code_societe: document.getElementById('ec-codesociete').value.trim() || null,
-    condition_paiement: document.getElementById('ec-condpaiement').value.trim() || null,
-    mode_paiement: document.getElementById('ec-modepaiement').value.trim() || null,
     notes: document.getElementById('ec-notes').value.trim() || null,
     habitudes_techniques: document.getElementById('ec-hab-tech').innerHTML.trim() || null,
     habitudes_geotechniques: document.getElementById('ec-hab-geo').innerHTML.trim() || null,
@@ -7266,7 +7216,7 @@ async function submitEditClient() {
     const safeCols = ['name','code','sector','city','email','phone','raison_sociale','raison_sociale2','forme_juridique',
       'adresse_ligne1','adresse_ligne2','adresse_ligne3','code_postal','departement','region','pays',
       'telephone2','mobile','fax','site_web','siren','siret','ape','reference_externe',
-      'chiffre_affaires','capital','effectif','notes','habitudes_techniques','habitudes_geotechniques'];
+      'notes','habitudes_techniques','habitudes_geotechniques'];
     toSend = {};
     for (const k of safeCols) { if (k in fields) toSend[k] = fields[k]; }
     const r2 = await sb.from('clients').update(toSend).eq('id', currentClient.id);
