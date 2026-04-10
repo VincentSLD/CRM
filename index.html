@@ -1843,8 +1843,8 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Condition de paiement</label><input class="fi" id="nc-condpaiement"></div>
         <div class="fg"><label class="fl">Mode de paiement</label><input class="fi" id="nc-modepaiement"></div>
       </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Notes</div>
-      <div class="fg"><textarea class="fi" id="nc-notes" rows="3" style="resize:vertical" placeholder="Notes internes..."></textarea></div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Administratives</div>
+      <div class="fg"><textarea class="fi" id="nc-notes" rows="3" style="resize:vertical" placeholder="Habitudes administratives..."></textarea></div>
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('new-client')">Annuler</button>
@@ -2032,8 +2032,36 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Condition de paiement</label><input class="fi" id="ec-condpaiement"></div>
         <div class="fg"><label class="fl">Mode de paiement</label><input class="fi" id="ec-modepaiement"></div>
       </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Notes</div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Administratives</div>
       <div class="fg"><textarea class="fi" id="ec-notes" rows="3" style="resize:vertical"></textarea></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Techniques</div>
+          <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+            <div style="display:flex;gap:2px;padding:4px 6px;border-bottom:1px solid var(--border);background:var(--bg-2)">
+              <button class="tb" title="Gras" onclick="fmtRTE('ec-hab-tech','bold')"><b>B</b></button>
+              <button class="tb" title="Italique" onclick="fmtRTE('ec-hab-tech','italic')"><i>I</i></button>
+              <button class="tb" title="Souligné" onclick="fmtRTE('ec-hab-tech','underline')"><u>U</u></button>
+              <div class="tb-div"></div>
+              <button class="tb" title="Liste" onclick="fmtRTE('ec-hab-tech','insertUnorderedList')">☰</button>
+            </div>
+            <div class="editor-body" contenteditable="true" id="ec-hab-tech" style="min-height:100px;max-height:250px;overflow-y:auto"></div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Géotechniques</div>
+          <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+            <div style="display:flex;gap:2px;padding:4px 6px;border-bottom:1px solid var(--border);background:var(--bg-2)">
+              <button class="tb" title="Gras" onclick="fmtRTE('ec-hab-geo','bold')"><b>B</b></button>
+              <button class="tb" title="Italique" onclick="fmtRTE('ec-hab-geo','italic')"><i>I</i></button>
+              <button class="tb" title="Souligné" onclick="fmtRTE('ec-hab-geo','underline')"><u>U</u></button>
+              <div class="tb-div"></div>
+              <button class="tb" title="Liste" onclick="fmtRTE('ec-hab-geo','insertUnorderedList')">☰</button>
+            </div>
+            <div class="editor-body" contenteditable="true" id="ec-hab-geo" style="min-height:100px;max-height:250px;overflow-y:auto"></div>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('edit-client')">Annuler</button>
@@ -2102,6 +2130,12 @@ function timeAgo(dateStr) {
   if (diff === 0) return "Aujourd'hui";
   if (diff === 1) return 'Hier';
   return `Il y a ${diff}j`;
+}
+
+function fmtRTE(editorId, command) {
+  const el = document.getElementById(editorId);
+  if (el) el.focus();
+  document.execCommand(command);
 }
 
 function computeTVA(siren) {
@@ -3249,7 +3283,13 @@ function renderClientDetail() {
     </div>
     <div class="client-actions">
       <button class="btn" onclick="openModal('edit-client')">✎ Modifier</button>
-      ${!c.siret ? '<button class="btn btn-not-synced" onclick="openSireneModal(\''+c.id+'\',\''+((c.name||'').replace(/'/g,"\\'"))+'\')" title="Compléter la fiche avec les données SIRENE">SIRET manquant</button>' : '<button class="btn" onclick="openSireneModal(\''+c.id+'\',\''+((c.name||'').replace(/'/g,"\\'"))+'\')" title="Rechercher dans l\'annuaire SIRENE">SIRENE</button>'}
+      ${(() => {
+        const hasSirene = c.siret && c.siren && c.ape && c.forme_juridique && c.raison_sociale;
+        const cls = !c.siret ? 'btn-not-synced' : hasSirene ? 'btn-synced' : '';
+        const label = !c.siret ? 'SIRET manquant' : hasSirene ? '✔ SIRENE' : 'SIRENE';
+        const title = !c.siret ? 'Compléter la fiche avec les données SIRENE' : hasSirene ? 'Données SIRENE complètes' : 'Rechercher dans l\'annuaire SIRENE';
+        return '<button class="btn '+cls+'" onclick="openSireneModal(\''+c.id+'\',\''+((c.name||'').replace(/'/g,"\\'"))+'\')" title="'+title+'">'+label+'</button>';
+      })()}
       <button class="btn ${c.akuiteo_id ? 'btn-synced' : 'btn-not-synced'}" onclick="pushClientToAkuiteo('${c.id}')" title="${c.akuiteo_id ? 'Synchronisé (ID: '+c.akuiteo_id+')' : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? '✔ Synchronisé' : '⬆ Sync Akuiteo'}</button>
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
       <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer cette société">Supprimer</button>
@@ -3326,7 +3366,11 @@ function renderClientDetail() {
       detailRow('Mode de paiement', c.mode_paiement || '—'),
     ])}
   </div>
-  <div class="card" style="margin-bottom:16px"><div class="card-header"><div class="card-title">Notes</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes || '—'}</div></div></div>
+  <div class="card" style="margin-bottom:16px"><div class="card-header"><div class="card-title">Habitudes Administratives</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes || '—'}</div></div></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <div class="card"><div class="card-header"><div class="card-title">Habitudes Techniques</div></div><div class="card-body"><div style="font-size:13px;line-height:1.6;color:var(--t2)">${c.habitudes_techniques || '—'}</div></div></div>
+    <div class="card"><div class="card-header"><div class="card-title">Habitudes Géotechniques</div></div><div class="card-body"><div style="font-size:13px;line-height:1.6;color:var(--t2)">${c.habitudes_geotechniques || '—'}</div></div></div>
+  </div>
   ${renderCustomData(c.custom_data)}
   <div class="grid-2 equal">
     <div class="card">
@@ -4542,9 +4586,18 @@ function detailRow(label, value) {
     <span style="font-size:13px;font-weight:500;text-align:right;max-width:60%">${value}</span>
   </div>`;
 }
+const CUSTOM_DATA_HIDDEN = new Set([
+  'Charpente bois','Charpente métallique / Bardage','Climatisation','Cloison/ Plafond/ Isolation/ Plâtrerie',
+  'Couverture / Etanchéïté','Dallage','Démolition / Désamiantage','Electricité','Espace verts / Clôture',
+  'Fondations spéciales','Gros-oeuvre','Menuiserie','Peinture','Piscine','Plomberie / Chauffage',
+  'Préfabricant','Ravalement / Enduit','Revêtements de sols','Serrurerie / Métallerie','VRD / Travaux publics','Immobilier'
+]);
 function renderCustomData(cd) {
   if (!cd || typeof cd !== 'object' || Object.keys(cd).length === 0) return '';
-  const rows = Object.entries(cd).map(([k, v]) => {
+  const rows = Object.entries(cd).filter(([k, v]) => {
+    const name = (v && typeof v === 'object' && v.name) ? v.name : k;
+    return !CUSTOM_DATA_HIDDEN.has(name);
+  }).map(([k, v]) => {
     // Format Akuiteo CustomData: { type, value, name, label, realOrder }
     if (v && typeof v === 'object' && 'value' in v && 'name' in v) {
       let displayVal = v.value;
@@ -6716,6 +6769,8 @@ function openModal(id) {
     document.getElementById('ec-capital').value = c.capital||'';
     document.getElementById('ec-headcount').value = c.effectif||'';
     document.getElementById('ec-notes').value = c.notes||'';
+    document.getElementById('ec-hab-tech').innerHTML = c.habitudes_techniques||'';
+    document.getElementById('ec-hab-geo').innerHTML = c.habitudes_geotechniques||'';
     document.getElementById('ec-categorie').value = c.categorie||'';
     document.getElementById('ec-profession').value = c.profession||'';
     document.getElementById('ec-secteur').value = c.secteur_activite||'';
@@ -7155,6 +7210,8 @@ async function submitEditClient() {
     condition_paiement: document.getElementById('ec-condpaiement').value.trim() || null,
     mode_paiement: document.getElementById('ec-modepaiement').value.trim() || null,
     notes: document.getElementById('ec-notes').value.trim() || null,
+    habitudes_techniques: document.getElementById('ec-hab-tech').innerHTML.trim() || null,
+    habitudes_geotechniques: document.getElementById('ec-hab-geo').innerHTML.trim() || null,
   };
   // Tenter l'update complet, si 400 (colonne inexistante) retirer les champs problématiques
   let toSend = { ...fields };
@@ -7164,7 +7221,7 @@ async function submitEditClient() {
     const safeCols = ['name','code','sector','city','email','phone','raison_sociale','raison_sociale2','forme_juridique',
       'adresse_ligne1','adresse_ligne2','adresse_ligne3','code_postal','departement','region','pays',
       'telephone2','mobile','fax','site_web','siren','siret','ape','reference_externe',
-      'chiffre_affaires','capital','effectif','notes'];
+      'chiffre_affaires','capital','effectif','notes','habitudes_techniques','habitudes_geotechniques'];
     toSend = {};
     for (const k of safeCols) { if (k in fields) toSend[k] = fields[k]; }
     const r2 = await sb.from('clients').update(toSend).eq('id', currentClient.id);

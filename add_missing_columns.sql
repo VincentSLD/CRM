@@ -12,3 +12,5 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS code_societe TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS condition_paiement TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS mode_paiement TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS tva_intracommunautaire TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS habitudes_techniques TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS habitudes_geotechniques TEXT;
