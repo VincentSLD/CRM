@@ -3262,8 +3262,8 @@ async function showClient(id) {
   currentPage = 'client-detail';
   document.getElementById('pageTitle').textContent = currentClient.name;
   renderPage('client-detail');
-  // Résoudre les noms des employés Akuiteo non trouvés en local
-  setTimeout(() => resolveEmployeeNames(), 50);
+  // Résoudre les noms des employés et modes de tarification Akuiteo
+  setTimeout(() => { resolveEmployeeNames(); resolvePricingMethodSpans(); }, 50);
   // Charger automatiquement les contacts depuis Supabase
   setTimeout(() => loadClientContacts(currentClient.id), 100);
 }
@@ -3361,8 +3361,8 @@ function renderClientDetail() {
     ${detailSection('Paiement & Tarification', [
       detailRow('Condition de paiement', c.condition_paiement || '—'),
       detailRow('Mode de paiement', c.mode_paiement || '—'),
-      detailRow('Mode de tarification', c.mode_tarification || '—'),
-      detailRow('Mode de tarification 2', c.mode_tarification_2 || '—'),
+      detailRow('Mode de tarification', resolvePricingMethod(c.mode_tarification)),
+      detailRow('Mode de tarification 2', resolvePricingMethod(c.mode_tarification_2)),
     ])}
   </div>
   <div class="card" style="margin-bottom:16px"><div class="card-header"><div class="card-title">Habitudes Administratives</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes || '—'}</div></div></div>
@@ -4573,6 +4573,33 @@ function linkAffaire(affaireId) {
   const label = a ? (a.ref || a.nom || affaireId) : affaireId;
   return `<a href="#" onclick="showAffaireDetail('${affaireId}');return false" style="color:var(--accent);font-size:12px" title="${a ? (a.nom||'') : ''}">${label}</a>`;
 }
+let _pricingMethodsCache = null;
+async function loadPricingMethods() {
+  if (_pricingMethodsCache) return _pricingMethodsCache;
+  try {
+    const data = await akuiteoFetch('POST', '/settings/pricing-methods/search?limit=100', {});
+    if (Array.isArray(data)) {
+      _pricingMethodsCache = {};
+      for (const pm of data) _pricingMethodsCache[pm.id] = pm.code + (pm.name ? ' — ' + pm.name : '');
+    }
+  } catch (e) { console.warn('[Akuiteo] pricing-methods:', e.message); }
+  return _pricingMethodsCache || {};
+}
+function resolvePricingMethod(id) {
+  if (!id) return null;
+  if (_pricingMethodsCache && _pricingMethodsCache[id]) return _pricingMethodsCache[id];
+  return '<span class="pricing-resolve" data-id="' + id + '">' + id + '</span>';
+}
+async function resolvePricingMethodSpans() {
+  const spans = document.querySelectorAll('.pricing-resolve');
+  if (spans.length === 0) return;
+  const cache = await loadPricingMethods();
+  for (const span of spans) {
+    const id = span.dataset.id;
+    if (cache[id]) span.textContent = cache[id];
+  }
+}
+
 const _employeeNameCache = {};
 function resolveManagerName(akuiteoId) {
   if (!akuiteoId) return null;
@@ -7568,8 +7595,8 @@ async function syncAkuiteo() {
         chiffre_affaires: ak.revenue || 0, capital: ak.equity || 0, effectif: ak.headcount || 0,
         categorie: ak.category || null, profession: ak.profession || null,
         secteur_activite: ak.sector || null, condition_paiement: ak.conditionOfPayment || null,
-        mode_paiement: ak.methodOfPayment || null, mode_tarification: ak.firstPricingMethod || null,
-        mode_tarification_2: ak.secondPricingMethod || null, reference_externe: ak.externalReference || null,
+        mode_paiement: ak.methodOfPayment || null, mode_tarification: ak.firstPricingMethodId || null,
+        mode_tarification_2: ak.secondPricingMethodId || null, reference_externe: ak.externalReference || null,
         statut_akuiteo: ak.status || null, langue: ak.languageCode || null,
         mots_cles: ak.keywords || null, code_societe: ak.companyCode || null,
         custom_data: ak.customData && Object.keys(ak.customData).length > 0 ? ak.customData : null,
