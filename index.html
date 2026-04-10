@@ -3344,21 +3344,12 @@ function renderClientDetail() {
     ])}
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
-    ${detailSection('Entreprise', [
-      detailRow('CA déclaré', c.chiffre_affaires ? fmt(c.chiffre_affaires) : '—'),
-      detailRow('Capital', c.capital ? fmt(c.capital) : '—'),
-      detailRow('Effectif', c.effectif || '—'),
-      detailRow('Catégorie', c.categorie || '—'),
-      detailRow('Profession', c.profession || '—'),
-      detailRow('Secteur', c.secteur_activite || '—'),
-      detailRow('Langue', c.langue || '—'),
-    ])}
     ${detailSection('Commercial', [
       detailRow('Commercial Novam', c.account_manager_name ? '<strong>' + c.account_manager_name + '</strong>' : resolveManagerName(c.account_manager_id) || '—'),
       detailRow('Commercial GPH', c.commerciaux_associes || '—'),
       detailRow('Société Akuiteo', c.code_societe || '—'),
     ])}
-    ${detailSection('Marketing', [
+    ${detailSection('Infos Entreprise', [
       detailRow('Catégorie', c.mk_categorie || '—'),
       detailRow('Sous-Catégorie', c.mk_sous_categorie || '—'),
       detailRow('Catégorie prof.', c.mk_categorie_pro || '—'),
