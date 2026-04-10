@@ -2011,6 +2011,25 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Capital</label><input class="fi" id="ec-capital" type="number"></div>
         <div class="fg"><label class="fl">Effectif</label><input class="fi" id="ec-headcount" type="number"></div>
       </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Classification</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">Catégorie</label><input class="fi" id="ec-categorie"></div>
+        <div class="fg"><label class="fl">Profession</label><input class="fi" id="ec-profession"></div>
+        <div class="fg"><label class="fl">Secteur d'activité</label><input class="fi" id="ec-secteur"></div>
+        <div class="fg"><label class="fl">Langue</label><input class="fi" id="ec-langue"></div>
+        <div class="fg"><label class="fl">Mots-clés</label><input class="fi" id="ec-keywords"></div>
+        <div class="fg"><label class="fl">Statut Akuiteo</label><input class="fi" id="ec-statut-ak"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Commercial</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">Contact commercial</label><input class="fi" id="ec-contact"></div>
+        <div class="fg"><label class="fl">Société Akuiteo</label><input class="fi" id="ec-codesociete"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Paiement</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">Condition de paiement</label><input class="fi" id="ec-condpaiement"></div>
+        <div class="fg"><label class="fl">Mode de paiement</label><input class="fi" id="ec-modepaiement"></div>
+      </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Notes</div>
       <div class="fg"><textarea class="fi" id="ec-notes" rows="3" style="resize:vertical"></textarea></div>
     </div>
@@ -6687,6 +6706,16 @@ function openModal(id) {
     document.getElementById('ec-capital').value = c.capital||'';
     document.getElementById('ec-headcount').value = c.effectif||'';
     document.getElementById('ec-notes').value = c.notes||'';
+    document.getElementById('ec-categorie').value = c.categorie||'';
+    document.getElementById('ec-profession').value = c.profession||'';
+    document.getElementById('ec-secteur').value = c.secteur_activite||'';
+    document.getElementById('ec-langue').value = c.langue||'';
+    document.getElementById('ec-keywords').value = c.mots_cles||'';
+    document.getElementById('ec-statut-ak').value = c.statut_akuiteo||'';
+    document.getElementById('ec-contact').value = c.contact||'';
+    document.getElementById('ec-codesociete').value = c.code_societe||'';
+    document.getElementById('ec-condpaiement').value = c.condition_paiement||'';
+    document.getElementById('ec-modepaiement').value = c.mode_paiement||'';
   }
 }
 function closeModal(id) { const el=document.getElementById('modal-'+id); if(el) el.classList.remove('active'); }
@@ -7103,6 +7132,16 @@ async function submitEditClient() {
     chiffre_affaires: Number(document.getElementById('ec-revenue').value) || 0,
     capital: Number(document.getElementById('ec-capital').value) || 0,
     effectif: Number(document.getElementById('ec-headcount').value) || 0,
+    categorie: document.getElementById('ec-categorie').value.trim() || null,
+    profession: document.getElementById('ec-profession').value.trim() || null,
+    secteur_activite: document.getElementById('ec-secteur').value.trim() || null,
+    langue: document.getElementById('ec-langue').value.trim() || null,
+    mots_cles: document.getElementById('ec-keywords').value.trim() || null,
+    statut_akuiteo: document.getElementById('ec-statut-ak').value.trim() || null,
+    contact: document.getElementById('ec-contact').value.trim() || null,
+    code_societe: document.getElementById('ec-codesociete').value.trim() || null,
+    condition_paiement: document.getElementById('ec-condpaiement').value.trim() || null,
+    mode_paiement: document.getElementById('ec-modepaiement').value.trim() || null,
     notes: document.getElementById('ec-notes').value.trim() || null,
   });
   closeModal('edit-client');
