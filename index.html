@@ -1824,6 +1824,21 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Code APE</label><input class="fi" id="nc-ape"></div>
         <div class="fg"><label class="fl">Réf. externe</label><input class="fi" id="nc-refext"></div>
       </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Infos Entreprise <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">Catégorie</label><select class="fi" id="nc-mk-categorie" onchange="document.getElementById('nc-mk-sous-categorie').innerHTML=akRefSubCatOptions('',this.value)"></select></div>
+        <div class="fg"><label class="fl">Sous-Catégorie</label><select class="fi" id="nc-mk-sous-categorie"></select></div>
+        <div class="fg"><label class="fl">Catégorie prof.</label><select class="fi" id="nc-mk-categorie-pro"></select></div>
+        <div class="fg"><label class="fl">Secteur</label><select class="fi" id="nc-mk-secteur"></select></div>
+        <div class="fg"><label class="fl">Type</label><select class="fi" id="nc-mk-type"></select></div>
+        <div class="fg"><label class="fl">Mode de tarification</label><select class="fi" id="nc-mk-tarification"></select></div>
+        <div class="fg"><label class="fl">Groupe</label><input class="fi" id="nc-mk-groupe"></div>
+        <div class="fg"><label class="fl">Origine</label><input class="fi" id="nc-mk-origine"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Commercial <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">Commercial Novam</label><select class="fi" id="nc-mk-manager"></select></div>
+      </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Administratives</div>
       <div class="fg"><textarea class="fi" id="nc-notes" rows="3" style="resize:vertical" placeholder="Habitudes administratives..."></textarea></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
@@ -2015,6 +2030,21 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">TVA intracommunautaire</label><input class="fi" id="ec-tva" readonly style="background:var(--bg-3)"></div>
         <div class="fg"><label class="fl">Code APE</label><input class="fi" id="ec-ape"></div>
         <div class="fg"><label class="fl">Réf. externe</label><input class="fi" id="ec-refext"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Infos Entreprise <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">Catégorie</label><select class="fi" id="ec-mk-categorie" onchange="document.getElementById('ec-mk-sous-categorie').innerHTML=akRefSubCatOptions('',this.value)"></select></div>
+        <div class="fg"><label class="fl">Sous-Catégorie</label><select class="fi" id="ec-mk-sous-categorie"></select></div>
+        <div class="fg"><label class="fl">Catégorie prof.</label><select class="fi" id="ec-mk-categorie-pro"></select></div>
+        <div class="fg"><label class="fl">Secteur</label><select class="fi" id="ec-mk-secteur"></select></div>
+        <div class="fg"><label class="fl">Type</label><select class="fi" id="ec-mk-type"></select></div>
+        <div class="fg"><label class="fl">Mode de tarification</label><select class="fi" id="ec-mk-tarification"></select></div>
+        <div class="fg"><label class="fl">Groupe</label><input class="fi" id="ec-mk-groupe"></div>
+        <div class="fg"><label class="fl">Origine</label><input class="fi" id="ec-mk-origine"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Commercial <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">Commercial Novam</label><select class="fi" id="ec-mk-manager"></select></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Administratives</div>
       <div class="fg"><textarea class="fi" id="ec-notes" rows="3" style="resize:vertical"></textarea></div>
@@ -3247,7 +3277,7 @@ async function showClient(id) {
   document.getElementById('pageTitle').textContent = currentClient.name;
   renderPage('client-detail');
   // Résoudre les noms des employés et modes de tarification Akuiteo
-  setTimeout(() => { resolveEmployeeNames(); resolvePricingMethodSpans(); }, 50);
+  setTimeout(() => resolveEmployeeNames(), 50);
   // Charger automatiquement les contacts depuis Supabase
   setTimeout(() => loadClientContacts(currentClient.id), 100);
 }
@@ -4557,31 +4587,75 @@ function linkAffaire(affaireId) {
   const label = a ? (a.ref || a.nom || affaireId) : affaireId;
   return `<a href="#" onclick="showAffaireDetail('${affaireId}');return false" style="color:var(--accent);font-size:12px" title="${a ? (a.nom||'') : ''}">${label}</a>`;
 }
-let _pricingMethodsCache = null;
-async function loadPricingMethods() {
-  if (_pricingMethodsCache) return _pricingMethodsCache;
-  try {
-    const data = await akuiteoFetch('POST', '/settings/pricing-methods/search?limit=100', {});
-    if (Array.isArray(data)) {
-      _pricingMethodsCache = {};
-      for (const pm of data) _pricingMethodsCache[pm.id] = pm.code + (pm.name ? ' — ' + pm.name : '');
-    }
-  } catch (e) { console.warn('[Akuiteo] pricing-methods:', e.message); }
-  return _pricingMethodsCache || {};
+// ═══ CACHE RÉFÉRENCES AKUITEO ═══
+const akRef = { categories: null, subCategories: null, proCats: null, sectors: null, linkTypes: null, pricingMethods: null, employees: null, _loading: null };
+async function loadAkuiteoRefs() {
+  if (akRef._loading) return akRef._loading;
+  if (akRef.categories) return akRef;
+  akRef._loading = (async () => {
+    try {
+      const [cats, subCats, proCats, sectors, linkTypes, pricingMethods, employees] = await Promise.all([
+        akuiteoFetch('POST', '/settings/categories/search?limit=200', { code: { operator: 'LIKE', value: '%' } }).catch(() => []),
+        akuiteoFetch('POST', '/settings/sub-categories/search?limit=500', { code: { operator: 'LIKE', value: '%' } }).catch(() => []),
+        akuiteoFetch('POST', '/settings/professional-categories/search?limit=100', {}).catch(() => []),
+        akuiteoFetch('POST', '/settings/sectors/search?limit=100', {}).catch(() => []),
+        akuiteoFetch('POST', '/settings/third-party-link-types/search?limit=100', {}).catch(() => []),
+        akuiteoFetch('POST', '/settings/pricing-methods/search?limit=100', {}).catch(() => []),
+        akuiteoFetch('POST', '/workforce/employees/search?limit=500&offset=0', { code: { operator: 'LIKE', value: '%' } }).catch(() => []),
+      ]);
+      akRef.categories = (cats || []).filter(c => c.type === 'CUSTOMER').map(c => ({ id: c.id, code: c.code, name: c.name }));
+      akRef.subCategories = (subCats || []).map(c => ({ id: c.id, code: c.code, name: c.name, categoryId: c.categoryId }));
+      akRef.proCats = (proCats || []).map(c => ({ id: c.id, code: c.code, name: c.name }));
+      akRef.sectors = (sectors || []).map(c => ({ id: c.id, code: c.code, name: c.name }));
+      akRef.linkTypes = (linkTypes || []).map(c => ({ id: String(c.id), code: c.code, name: c.name }));
+      akRef.pricingMethods = (pricingMethods || []).map(c => ({ id: c.id, code: c.code, name: c.name }));
+      akRef.employees = (employees || []).map(e => ({ id: e.id, code: e.code, name: ((e.firstName||'') + ' ' + (e.name||'')).trim() }));
+      console.log('[AkRef] Chargé:', akRef.categories.length, 'cats,', akRef.subCategories.length, 'subCats,', akRef.employees.length, 'employees');
+    } catch (e) { console.error('[AkRef] Erreur chargement:', e.message); }
+    akRef._loading = null;
+    return akRef;
+  })();
+  return akRef._loading;
 }
+function akRefFind(list, id) { return list ? list.find(x => String(x.id) === String(id)) : null; }
+function akRefLabel(list, id) { const r = akRefFind(list, id); return r ? (r.name || r.code) : null; }
+function akRefOptions(list, selectedId, placeholder) {
+  let html = '<option value="">' + (placeholder || '—') + '</option>';
+  if (!list) return html;
+  for (const r of list) {
+    const label = r.name || r.code;
+    const sel = String(r.id) === String(selectedId) ? ' selected' : '';
+    html += '<option value="' + r.id + '"' + sel + '>' + label + '</option>';
+  }
+  return html;
+}
+// Sous-catégories filtrées par catégorie
+function akRefSubCatOptions(selectedId, categoryId) {
+  const filtered = categoryId ? (akRef.subCategories || []).filter(s => s.categoryId === categoryId) : (akRef.subCategories || []);
+  return akRefOptions(filtered, selectedId, 'Sous-catégorie...');
+}
+
+function getAkuiteoFieldsFromModal(prefix) {
+  const val = id => { const el = document.getElementById(prefix + '-mk-' + id); return el ? el.value || null : null; };
+  const txt = id => { const el = document.getElementById(prefix + '-mk-' + id); return el && el.selectedIndex > 0 ? el.options[el.selectedIndex].text : null; };
+  return {
+    mk_categorie_id: val('categorie'), mk_categorie: txt('categorie'),
+    mk_sous_categorie_id: val('sous-categorie'), mk_sous_categorie: txt('sous-categorie'),
+    mk_categorie_pro_id: val('categorie-pro'), mk_categorie_pro: txt('categorie-pro'),
+    mk_secteur_id: val('secteur'), mk_secteur: txt('secteur'),
+    mk_type_id: val('type'), mk_type: txt('type'),
+    mode_tarification: val('tarification'), mode_tarification_name: txt('tarification'),
+    account_manager_id: val('manager'), account_manager_name: txt('manager'),
+    mk_groupe: document.getElementById(prefix + '-mk-groupe').value.trim() || null,
+    mk_origine: document.getElementById(prefix + '-mk-origine').value.trim() || null,
+  };
+}
+
 function resolvePricingMethod(id) {
   if (!id) return null;
-  if (_pricingMethodsCache && _pricingMethodsCache[id]) return _pricingMethodsCache[id];
-  return '<span class="pricing-resolve" data-id="' + id + '">' + id + '</span>';
-}
-async function resolvePricingMethodSpans() {
-  const spans = document.querySelectorAll('.pricing-resolve');
-  if (spans.length === 0) return;
-  const cache = await loadPricingMethods();
-  for (const span of spans) {
-    const id = span.dataset.id;
-    if (cache[id]) span.textContent = cache[id];
-  }
+  const r = akRefFind(akRef.pricingMethods, id);
+  if (r) return r.code + (r.name ? ' — ' + r.name : '');
+  return id;
 }
 
 const _employeeNameCache = {};
@@ -6798,7 +6872,25 @@ function openModal(id) {
     document.getElementById('ec-hab-tech').innerHTML = c.habitudes_techniques||'';
     document.getElementById('ec-hab-geo').innerHTML = c.habitudes_geotechniques||'';
     document.getElementById('ec-tva').value = c.tva_intracommunautaire || computeTVA(c.siren) || '';
+    // Remplir les dropdowns Akuiteo
+    fillAkuiteoDropdowns('ec', c);
   }
+  if (id === 'new-client') {
+    fillAkuiteoDropdowns('nc', null);
+  }
+}
+async function fillAkuiteoDropdowns(prefix, client) {
+  await loadAkuiteoRefs();
+  const c = client || {};
+  document.getElementById(prefix + '-mk-categorie').innerHTML = akRefOptions(akRef.categories, c.mk_categorie_id, 'Catégorie...');
+  document.getElementById(prefix + '-mk-sous-categorie').innerHTML = akRefSubCatOptions(c.mk_sous_categorie_id, c.mk_categorie_id);
+  document.getElementById(prefix + '-mk-categorie-pro').innerHTML = akRefOptions(akRef.proCats, c.mk_categorie_pro_id, 'Catégorie prof...');
+  document.getElementById(prefix + '-mk-secteur').innerHTML = akRefOptions(akRef.sectors, c.mk_secteur_id, 'Secteur...');
+  document.getElementById(prefix + '-mk-type').innerHTML = akRefOptions(akRef.linkTypes, c.mk_type_id, 'Type...');
+  document.getElementById(prefix + '-mk-tarification').innerHTML = akRefOptions(akRef.pricingMethods, c.mode_tarification, 'Mode de tarification...');
+  document.getElementById(prefix + '-mk-manager').innerHTML = akRefOptions(akRef.employees, c.account_manager_id, 'Commercial Novam...');
+  document.getElementById(prefix + '-mk-groupe').value = c.mk_groupe || '';
+  document.getElementById(prefix + '-mk-origine').value = c.mk_origine || '';
 }
 function closeModal(id) { const el=document.getElementById('modal-'+id); if(el) el.classList.remove('active'); }
 // ═══ SEND REPORT ═══
@@ -7106,6 +7198,7 @@ async function submitNewClient() {
     notes: document.getElementById('nc-notes').value.trim() || null,
     habitudes_techniques: document.getElementById('nc-hab-tech').innerHTML.trim() || null,
     habitudes_geotechniques: document.getElementById('nc-hab-geo').innerHTML.trim() || null,
+    ...getAkuiteoFieldsFromModal('nc'),
     ini, color: colors[Math.floor(Math.random()*colors.length)],
     status: 'objectif',
   });
@@ -7207,6 +7300,7 @@ async function submitEditClient() {
     notes: document.getElementById('ec-notes').value.trim() || null,
     habitudes_techniques: document.getElementById('ec-hab-tech').innerHTML.trim() || null,
     habitudes_geotechniques: document.getElementById('ec-hab-geo').innerHTML.trim() || null,
+    ...getAkuiteoFieldsFromModal('ec'),
   };
   // Tenter l'update complet, si 400 (colonne inexistante) retirer les champs problématiques
   let toSend = { ...fields };
@@ -8394,9 +8488,12 @@ async function pullClientFromAkuiteo(clientId) {
       reference_externe: ak.externalReference || null,
       statut_akuiteo: ak.status || null, langue: ak.languageCode || null,
       mots_cles: ak.keywords || null, code_societe: ak.companyCode || null,
-      mk_categorie: mkCategorie || null, mk_sous_categorie: mkSousCategorie || null,
-      mk_categorie_pro: mkCategoriePro || null, mk_secteur: mkSecteur || null,
-      mk_type: mkType || null, mk_groupe: ak.level1grouping || null, mk_origine: ak.level2grouping || null,
+      mk_categorie: mkCategorie || null, mk_categorie_id: ak.categoryId || null,
+      mk_sous_categorie: mkSousCategorie || null, mk_sous_categorie_id: ak.subCategoryId || null,
+      mk_categorie_pro: mkCategoriePro || null, mk_categorie_pro_id: ak.professionalCategoryId || null,
+      mk_secteur: mkSecteur || null, mk_secteur_id: ak.sectorId || null,
+      mk_type: mkType || null, mk_type_id: ak.thirdPartyLinkTypeId ? String(ak.thirdPartyLinkTypeId) : null,
+      mk_groupe: ak.level1grouping || null, mk_origine: ak.level2grouping || null,
     };
     if (customData) updates.custom_data = customData;
     const { error } = await sb.from('clients').update(updates).eq('id', clientId);
@@ -8447,6 +8544,16 @@ async function pushClientToAkuiteo(clientId) {
       if (full.capital) akData.equity = full.capital;
       if (full.effectif) akData.headcount = full.effectif;
       if (full.notes !== undefined) akData.notes = full.notes;
+      // Champs Akuiteo (IDs) — Infos Entreprise / Commercial / Tarification
+      if (full.mk_categorie_id) akData.categoryId = full.mk_categorie_id;
+      if (full.mk_sous_categorie_id) akData.subCategoryId = full.mk_sous_categorie_id;
+      if (full.mk_categorie_pro_id) akData.professionalCategoryId = full.mk_categorie_pro_id;
+      if (full.mk_secteur_id) akData.sectorId = full.mk_secteur_id;
+      if (full.mk_type_id) akData.thirdPartyLinkTypeId = full.mk_type_id;
+      if (full.mode_tarification) akData.firstPricingMethodId = full.mode_tarification;
+      if (full.account_manager_id) akData.accountManagerId = full.account_manager_id;
+      if (full.mk_groupe) akData.level1grouping = full.mk_groupe;
+      if (full.mk_origine) akData.level2grouping = full.mk_origine;
       // Adresse : merger sur l'adresse existante
       if (!akData.address) akData.address = {};
       if (full.adresse_ligne1) akData.address.line1 = full.adresse_ligne1;
