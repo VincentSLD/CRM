@@ -3290,6 +3290,7 @@ function renderClientDetail() {
         const title = !c.siret ? 'Compléter la fiche avec les données SIRENE' : hasSirene ? 'Données SIRENE complètes' : 'Rechercher dans l\'annuaire SIRENE';
         return '<button class="btn '+cls+'" onclick="openSireneModal(\''+c.id+'\',\''+((c.name||'').replace(/'/g,"\\'"))+'\')" title="'+title+'">'+label+'</button>';
       })()}
+      ${c.akuiteo_id ? '<button class="btn" onclick="pullClientFromAkuiteo(\''+c.id+'\')" title="Récupérer les mises à jour depuis Akuiteo">⬇ Maj Akuiteo</button>' : ''}
       <button class="btn ${c.akuiteo_id ? 'btn-synced' : 'btn-not-synced'}" onclick="pushClientToAkuiteo('${c.id}')" title="${c.akuiteo_id ? 'Synchronisé (ID: '+c.akuiteo_id+')' : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? '✔ Synchronisé' : '⬆ Sync Akuiteo'}</button>
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
       <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer cette société">Supprimer</button>
@@ -8286,6 +8287,61 @@ async function applySirene(index) {
 }
 
 // Pousser un client CRM vers Akuiteo
+async function pullClientFromAkuiteo(clientId) {
+  const client = await sb.from('clients').select('*').eq('id', clientId).maybeSingle().then(r => r.data);
+  if (!client) { toast('Société non trouvée en base', 'error'); return; }
+  if (!client.akuiteo_id) { toast('Pas d\'ID Akuiteo pour cette société', 'error'); return; }
+  toast('Récupération depuis Akuiteo...', 'info');
+  try {
+    const ak = await akuiteoFetch('GET', '/crm/customers/' + client.akuiteo_id);
+    if (!ak || !ak.id) { toast('Société non trouvée dans Akuiteo', 'error'); return; }
+    // Récupérer aussi les customData
+    let customData = null;
+    try {
+      const detail = await akuiteoFetch('POST', '/crm/customers/' + client.akuiteo_id + '/read', { options: ['CUSTOM_DATA'] });
+      if (detail?.customData && Object.keys(detail.customData).length > 0) customData = detail.customData;
+    } catch (e) { console.warn('[Akuiteo] customData:', e.message); }
+    const updates = {
+      name: ak.name || ak.legalName || client.name,
+      code: ak.code || client.code,
+      sector: ak.profession || ak.category || client.sector || '',
+      city: ak.address?.city || client.city || '',
+      contact: ak.accountManager || ak.salesman || client.contact || '',
+      email: ak.address?.email || ak.email || client.email || '',
+      phone: ak.address?.phone || ak.phone || client.phone || '',
+      account_manager_id: ak.accountManagerId || null,
+      adresse_ligne1: ak.address?.line1 || null, adresse_ligne2: ak.address?.line2 || null,
+      adresse_ligne3: ak.address?.line3 || null, code_postal: ak.address?.postalCode || null,
+      pays: ak.address?.countryName || ak.address?.country || null,
+      departement: ak.address?.geographicalDepartmentName || ak.address?.department || null,
+      region: ak.address?.regionName || ak.address?.region || null,
+      telephone2: ak.address?.phone2 || null, mobile: ak.address?.mobilePhone || null,
+      fax: ak.address?.fax || null, site_web: ak.address?.webSite || null,
+      raison_sociale: ak.legalName || null, raison_sociale2: ak.legalName2 || null,
+      siren: ak.SIREN || null, siret: ak.SIRET || null, ape: ak.APE || null,
+      tva_intracommunautaire: ak.vatIdentificationNumber || null,
+      forme_juridique: ak.legalForm || null, notes: ak.notes || null,
+      chiffre_affaires: ak.revenue || 0, capital: ak.equity || 0, effectif: ak.headcount || 0,
+      categorie: ak.category || null, profession: ak.profession || null,
+      secteur_activite: ak.sector || null, condition_paiement: ak.conditionOfPayment || null,
+      mode_paiement: ak.methodOfPayment || null, mode_tarification: ak.firstPricingMethod || null,
+      mode_tarification_2: ak.secondPricingMethod || null, reference_externe: ak.externalReference || null,
+      statut_akuiteo: ak.status || null, langue: ak.languageCode || null,
+      mots_cles: ak.keywords || null, code_societe: ak.companyCode || null,
+    };
+    if (customData) updates.custom_data = customData;
+    const { error } = await sb.from('clients').update(updates).eq('id', clientId);
+    if (error) { toast('Erreur mise à jour: ' + error.message, 'error'); return; }
+    toast('Société mise à jour depuis Akuiteo', 'success');
+    const { data: refreshed } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
+    if (refreshed) currentClient = refreshed;
+    await loadDB();
+    renderPage(currentPage);
+  } catch (e) {
+    toast('Erreur Akuiteo: ' + e.message, 'error');
+  }
+}
+
 async function pushClientToAkuiteo(clientId) {
   // Charger les données du client depuis Supabase (pas DB.clients qui est paginé)
   const { data: full } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
