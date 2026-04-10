@@ -1829,6 +1829,19 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Capital</label><input class="fi" id="nc-capital" type="number"></div>
         <div class="fg"><label class="fl">Effectif</label><input class="fi" id="nc-headcount" type="number"></div>
       </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Classification</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">Catégorie</label><input class="fi" id="nc-categorie" placeholder="Ex: PME"></div>
+        <div class="fg"><label class="fl">Profession</label><input class="fi" id="nc-profession" placeholder="Ex: BTP"></div>
+        <div class="fg"><label class="fl">Secteur d'activité</label><input class="fi" id="nc-secteur"></div>
+        <div class="fg"><label class="fl">Langue</label><input class="fi" id="nc-langue" value="fr"></div>
+        <div class="fg"><label class="fl">Mots-clés</label><input class="fi" id="nc-keywords" placeholder="mot1, mot2"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Paiement</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">Condition de paiement</label><input class="fi" id="nc-condpaiement"></div>
+        <div class="fg"><label class="fl">Mode de paiement</label><input class="fi" id="nc-modepaiement"></div>
+      </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Notes</div>
       <div class="fg"><textarea class="fi" id="nc-notes" rows="3" style="resize:vertical" placeholder="Notes internes..."></textarea></div>
     </div>
@@ -3168,6 +3181,21 @@ async function showClient(id) {
     if (!data) { toast('Société non trouvée','error'); return; }
     currentClient = mapClient(data);
   }
+  // Charger custom_data si pas en mémoire
+  if (currentClient.custom_data === undefined || currentClient.custom_data === null) {
+    const { data: cdData } = await sb.from('clients').select('custom_data').eq('id', id).maybeSingle();
+    if (cdData?.custom_data) currentClient.custom_data = cdData.custom_data;
+    // Si toujours pas de custom_data et akuiteo_id, tenter l'API
+    if (!currentClient.custom_data && currentClient.akuiteo_id) {
+      try {
+        const detail = await akuiteoFetch('POST', '/crm/customers/' + currentClient.akuiteo_id + '/read', { options: ['CUSTOM_DATA'] });
+        if (detail?.customData && Object.keys(detail.customData).length > 0) {
+          currentClient.custom_data = detail.customData;
+          await sb.from('clients').update({ custom_data: detail.customData }).eq('id', id);
+        }
+      } catch (e) { console.warn('[Akuiteo] Erreur customData client:', e.message); }
+    }
+  }
   currentPage = 'client-detail';
   document.getElementById('pageTitle').textContent = currentClient.name;
   renderPage('client-detail');
@@ -3215,61 +3243,62 @@ function renderClientDetail() {
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
     ${detailSection('Adresse', [
-      detailRow('Ligne 1', c.adresse_ligne1),
-      detailRow('Ligne 2', c.adresse_ligne2),
-      detailRow('Ligne 3', c.adresse_ligne3),
-      detailRow('Code postal', c.code_postal),
-      detailRow('Ville', c.city),
-      detailRow('Département', c.departement),
-      detailRow('Région', c.region),
-      detailRow('Pays', c.pays),
+      detailRow('Ligne 1', c.adresse_ligne1 || '—'),
+      detailRow('Ligne 2', c.adresse_ligne2 || '—'),
+      detailRow('Ligne 3', c.adresse_ligne3 || '—'),
+      detailRow('Code postal', c.code_postal || '—'),
+      detailRow('Ville', c.city || '—'),
+      detailRow('Département', c.departement || '—'),
+      detailRow('Région', c.region || '—'),
+      detailRow('Pays', c.pays || '—'),
     ])}
     ${c.lat && c.lng ? '<div style="margin-bottom:12px"><a href="https://www.google.com/maps/dir/?api=1&destination='+c.lat+','+c.lng+'" target="_blank" class="btn" style="text-decoration:none;width:100%;justify-content:center">Y aller (GPS)</a></div>' : ''}
     ${detailSection('Coordonnées', [
-      detailRow('Email', c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : null),
-      detailRow('Téléphone', c.phone ? '<a href="tel:'+c.phone+'" style="color:var(--accent)">'+c.phone+'</a>' : null),
-      detailRow('Téléphone 2', c.telephone2 ? '<a href="tel:'+c.telephone2+'" style="color:var(--accent)">'+c.telephone2+'</a>' : null),
-      detailRow('Mobile', c.mobile ? '<a href="tel:'+c.mobile+'" style="color:var(--accent)">'+c.mobile+'</a>' : null),
-      detailRow('Fax', c.fax),
-      detailRow('Site web', c.site_web ? '<a href="' + (c.site_web.startsWith('http') ? c.site_web : 'https://'+c.site_web) + '" target="_blank" style="color:var(--accent)">' + c.site_web + '</a>' : null),
+      detailRow('Email', c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : '—'),
+      detailRow('Téléphone', c.phone ? '<a href="tel:'+c.phone+'" style="color:var(--accent)">'+c.phone+'</a>' : '—'),
+      detailRow('Téléphone 2', c.telephone2 ? '<a href="tel:'+c.telephone2+'" style="color:var(--accent)">'+c.telephone2+'</a>' : '—'),
+      detailRow('Mobile', c.mobile ? '<a href="tel:'+c.mobile+'" style="color:var(--accent)">'+c.mobile+'</a>' : '—'),
+      detailRow('Fax', c.fax || '—'),
+      detailRow('Site web', c.site_web ? '<a href="' + (c.site_web.startsWith('http') ? c.site_web : 'https://'+c.site_web) + '" target="_blank" style="color:var(--accent)">' + c.site_web + '</a>' : '—'),
     ])}
     ${detailSection('Informations légales', [
-      detailRow('Raison sociale', c.raison_sociale),
-      detailRow('Raison sociale 2', c.raison_sociale2),
-      detailRow('SIREN', c.siren),
-      detailRow('SIRET', c.siret),
-      detailRow('Code APE', c.ape),
-      detailRow('Forme juridique', c.forme_juridique),
-      detailRow('Réf. externe', c.reference_externe),
+      detailRow('Raison sociale', c.raison_sociale || '—'),
+      detailRow('Raison sociale 2', c.raison_sociale2 || '—'),
+      detailRow('SIREN', c.siren || '—'),
+      detailRow('SIRET', c.siret || '—'),
+      detailRow('Code APE', c.ape || '—'),
+      detailRow('Forme juridique', c.forme_juridique || '—'),
+      detailRow('Réf. externe', c.reference_externe || '—'),
     ])}
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
     ${detailSection('Entreprise', [
-      detailRow('CA déclaré', c.chiffre_affaires ? fmt(c.chiffre_affaires) : null),
-      detailRow('Capital', c.capital ? fmt(c.capital) : null),
-      detailRow('Effectif', c.effectif || null),
-      detailRow('Catégorie', c.categorie),
-      detailRow('Profession', c.profession),
-      detailRow('Secteur', c.secteur_activite),
-      detailRow('Langue', c.langue),
+      detailRow('CA déclaré', c.chiffre_affaires ? fmt(c.chiffre_affaires) : '—'),
+      detailRow('Capital', c.capital ? fmt(c.capital) : '—'),
+      detailRow('Effectif', c.effectif || '—'),
+      detailRow('Catégorie', c.categorie || '—'),
+      detailRow('Profession', c.profession || '—'),
+      detailRow('Secteur', c.secteur_activite || '—'),
+      detailRow('Langue', c.langue || '—'),
     ])}
     ${detailSection('Commercial', [
-      detailRow('Contact commercial', c.contact),
+      detailRow('Contact commercial', c.contact || '—'),
       detailRow('Responsable', (() => {
-        if (!c.account_manager_id) return null;
+        if (!c.account_manager_id) return '—';
         const comm = DB.commerciaux.find(x => x.akuiteo_manager_id === c.account_manager_id);
         return comm ? '<strong>' + comm.nom + '</strong> <span style="color:var(--t3);font-size:11px">(' + c.account_manager_id + ')</span>' : c.account_manager_id;
       })()),
-      detailRow('Société', c.code_societe),
-      detailRow('Statut Akuiteo', c.statut_akuiteo),
-      detailRow('Mots-clés', c.mots_cles),
+      detailRow('Société Akuiteo', c.code_societe || '—'),
+      detailRow('Statut Akuiteo', c.statut_akuiteo || '—'),
+      detailRow('Mots-clés', c.mots_cles || '—'),
     ])}
     ${detailSection('Paiement', [
-      detailRow('Condition de paiement', c.condition_paiement),
-      detailRow('Mode de paiement', c.mode_paiement),
+      detailRow('Condition de paiement', c.condition_paiement || '—'),
+      detailRow('Mode de paiement', c.mode_paiement || '—'),
     ])}
   </div>
-  ${c.notes ? `<div class="card" style="margin-bottom:16px"><div class="card-header"><div class="card-title">Notes</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes}</div></div></div>` : ''}
+  <div class="card" style="margin-bottom:16px"><div class="card-header"><div class="card-title">Notes</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes || '—'}</div></div></div>
+  ${renderCustomData(c.custom_data)}
   <div class="grid-2 equal">
     <div class="card">
       <div class="card-header"><div class="card-title">Devis</div></div>
@@ -6966,6 +6995,13 @@ async function submitNewClient() {
     chiffre_affaires: Number(document.getElementById('nc-revenue').value) || 0,
     capital: Number(document.getElementById('nc-capital').value) || 0,
     effectif: Number(document.getElementById('nc-headcount').value) || 0,
+    categorie: document.getElementById('nc-categorie').value.trim() || null,
+    profession: document.getElementById('nc-profession').value.trim() || null,
+    secteur_activite: document.getElementById('nc-secteur').value.trim() || null,
+    langue: document.getElementById('nc-langue').value.trim() || null,
+    mots_cles: document.getElementById('nc-keywords').value.trim() || null,
+    condition_paiement: document.getElementById('nc-condpaiement').value.trim() || null,
+    mode_paiement: document.getElementById('nc-modepaiement').value.trim() || null,
     notes: document.getElementById('nc-notes').value.trim() || null,
     ini, color: colors[Math.floor(Math.random()*colors.length)],
     status: 'objectif',
@@ -7390,6 +7426,7 @@ async function syncAkuiteo() {
         mode_paiement: ak.methodOfPayment || null, reference_externe: ak.externalReference || null,
         statut_akuiteo: ak.status || null, langue: ak.languageCode || null,
         mots_cles: ak.keywords || null, code_societe: ak.companyCode || null,
+        custom_data: ak.customData && Object.keys(ak.customData).length > 0 ? ak.customData : null,
         ...(isNew ? { ini, color: colors[Math.floor(Math.random() * colors.length)], ca: 0, obj: 0, margin: 0, dso: 0, score: 50, status: 'objectif', sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15 } : {}),
       };
       if (isNew) created++; else updated++;
