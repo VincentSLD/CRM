@@ -3355,7 +3355,7 @@ function renderClientDetail() {
     ])}
     ${detailSection('Commercial', [
       detailRow('Commercial Novam', c.account_manager_name ? '<strong>' + c.account_manager_name + '</strong>' : resolveManagerName(c.account_manager_id) || '—'),
-      detailRow('Commercial GPH', c.salesman_name ? '<strong>' + c.salesman_name + '</strong>' : resolveManagerName(c.salesman_id) || '—'),
+      detailRow('Commerciaux associés', c.commerciaux_associes || '—'),
       detailRow('Société Akuiteo', c.code_societe || '—'),
     ])}
     ${detailSection('Paiement & Tarification', [
@@ -8337,27 +8337,24 @@ async function pullClientFromAkuiteo(clientId) {
   try {
     const ak = await akuiteoFetch('GET', '/crm/customers/' + client.akuiteo_id);
     if (!ak || !ak.id) { toast('Société non trouvée dans Akuiteo', 'error'); return; }
-    // Récupérer aussi les customData
-    // Récupérer customData, noms des employés et modes de tarification en parallèle
-    let customData = null;
-    let managerName = null, salesmanName = null;
+    // Récupérer customData + salesmen, nom du manager et modes de tarification en parallèle
+    let customData = null, salesmen = [];
+    let managerName = null;
     let pricingName = null, pricingName2 = null;
     const promises = [];
-    // customData
+    // customData + salesmen via POST /read
     promises.push(
-      akuiteoFetch('POST', '/crm/customers/' + client.akuiteo_id + '/read', { options: ['CUSTOM_DATA'] })
-        .then(d => { if (d?.customData && Object.keys(d.customData).length > 0) customData = d.customData; })
+      akuiteoFetch('POST', '/crm/customers/' + client.akuiteo_id + '/read', { options: ['CUSTOM_DATA', 'SALESMEN'] })
+        .then(d => {
+          if (d?.customData && Object.keys(d.customData).length > 0) customData = d.customData;
+          if (Array.isArray(d?.salesmen)) salesmen = d.salesmen;
+        })
         .catch(() => {})
     );
-    // Noms employés
+    // Nom du responsable (accountManager)
     if (ak.accountManagerId) promises.push(
       akuiteoFetch('GET', '/workforce/employees/' + ak.accountManagerId)
         .then(e => { if (e) managerName = ((e.firstName||'') + ' ' + (e.name||'')).trim(); })
-        .catch(() => {})
-    );
-    if (ak.salesmanId) promises.push(
-      akuiteoFetch('GET', '/workforce/employees/' + ak.salesmanId)
-        .then(e => { if (e) salesmanName = ((e.firstName||'') + ' ' + (e.name||'')).trim(); })
         .catch(() => {})
     );
     // Modes de tarification
@@ -8373,6 +8370,12 @@ async function pullClientFromAkuiteo(clientId) {
         .catch(() => {})
     );
     await Promise.all(promises);
+    // Construire la liste des commerciaux associés (salesmen)
+    const salesmenNames = salesmen.map(s => {
+      const e = s.employee;
+      const name = e ? ((e.firstName||'') + ' ' + (e.name||'')).trim() : s.employeeId;
+      return s.mainLinkedSalesman ? name + ' (principal)' : name;
+    });
     const updates = {
       name: ak.name || ak.legalName || client.name,
       code: ak.code || client.code,
@@ -8383,8 +8386,7 @@ async function pullClientFromAkuiteo(clientId) {
       phone: ak.address?.phone || ak.phone || client.phone || '',
       account_manager_id: ak.accountManagerId || null,
       account_manager_name: managerName || null,
-      salesman_id: ak.salesmanId || null,
-      salesman_name: salesmanName || null,
+      commerciaux_associes: salesmenNames.length > 0 ? salesmenNames.join(', ') : null,
       adresse_ligne1: ak.address?.line1 || null, adresse_ligne2: ak.address?.line2 || null,
       adresse_ligne3: ak.address?.line3 || null, code_postal: ak.address?.postalCode || null,
       pays: ak.address?.countryName || ak.address?.country || null,
