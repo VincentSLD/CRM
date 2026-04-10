@@ -7322,11 +7322,10 @@ async function submitEditClient() {
   }
   if (error) { toast(`Erreur: ${error.message}`, 'error'); return; }
   toast('Mis à jour avec succès', 'success');
-  await loadDB();
-  renderPage(currentPage);
   closeModal('edit-client');
   const { data: refreshed } = await sb.from('clients').select('*').eq('id', currentClient.id).maybeSingle();
   if (refreshed) currentClient = refreshed;
+  await loadDB();
   renderPage(currentPage);
   if (currentClient.akuiteo_id) {
     if (confirm('Voulez-vous mettre à jour la fiche dans Akuiteo ?')) {
