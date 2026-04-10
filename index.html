@@ -3358,7 +3358,7 @@ function renderClientDetail() {
       detailRow('Commercial GPH', c.commerciaux_associes || '—'),
       detailRow('Société Akuiteo', c.code_societe || '—'),
     ])}
-    ${detailSection('Paiement & Tarification', [
+    ${detailSection('Tarification', [
       detailRow('Mode de tarification', c.mode_tarification_name || resolvePricingMethod(c.mode_tarification) || '—'),
     ])}
   </div>
