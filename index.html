@@ -3354,11 +3354,9 @@ function renderClientDetail() {
       detailRow('Langue', c.langue || '—'),
     ])}
     ${detailSection('Commercial', [
-      detailRow('Contact commercial', c.contact || '—'),
       detailRow('Responsable', resolveManagerName(c.account_manager_id)),
       detailRow('Commercial', resolveManagerName(c.salesman_id)),
       detailRow('Société Akuiteo', c.code_societe || '—'),
-      detailRow('Statut Akuiteo', c.statut_akuiteo || '—'),
       detailRow('Mots-clés', c.mots_cles || '—'),
     ])}
     ${detailSection('Paiement & Tarification', [
