@@ -3293,7 +3293,7 @@ function renderClientDetail() {
         return '<button class="btn '+cls+'" onclick="openSireneModal(\''+c.id+'\',\''+((c.name||'').replace(/'/g,"\\'"))+'\')" title="'+title+'">'+label+'</button>';
       })()}
       ${c.akuiteo_id ? '<button class="btn" onclick="pullClientFromAkuiteo(\''+c.id+'\')" title="Récupérer les mises à jour depuis Akuiteo">⬇ Maj Akuiteo</button>' : ''}
-      <button class="btn ${c.akuiteo_id ? 'btn-synced' : 'btn-not-synced'}" onclick="pushClientToAkuiteo('${c.id}')" title="${c.akuiteo_id ? 'Synchronisé (ID: '+c.akuiteo_id+')' : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? '✔ Synchronisé' : '⬆ Sync Akuiteo'}</button>
+      <button class="btn ${c.akuiteo_id ? (c.akuiteo_dirty ? 'btn-not-synced' : 'btn-synced') : 'btn-not-synced'}" onclick="pushClientToAkuiteo('${c.id}')" title="${c.akuiteo_id ? (c.akuiteo_dirty ? 'Modifié localement — cliquez pour synchroniser' : 'Synchronisé (ID: '+c.akuiteo_id+')') : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? (c.akuiteo_dirty ? '⬆ Synchroniser' : '✔ Synchronisé') : '⬆ Sync Akuiteo'}</button>
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
       <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer cette société">Supprimer</button>
     </div>
@@ -7280,8 +7280,14 @@ async function submitEditClient() {
   const { data: refreshed } = await sb.from('clients').select('*').eq('id', currentClient.id).maybeSingle();
   if (refreshed) currentClient = refreshed;
   renderPage(currentPage);
-  if (currentClient.akuiteo_id && confirm('Voulez-vous mettre à jour la fiche dans Akuiteo ?')) {
-    await pushClientToAkuiteo(currentClient.id);
+  if (currentClient.akuiteo_id) {
+    if (confirm('Voulez-vous mettre à jour la fiche dans Akuiteo ?')) {
+      await pushClientToAkuiteo(currentClient.id);
+    } else {
+      await sb.from('clients').update({ akuiteo_dirty: true }).eq('id', currentClient.id);
+      currentClient.akuiteo_dirty = true;
+      renderPage(currentPage);
+    }
   }
 }
 
@@ -8540,6 +8546,8 @@ async function pushClientToAkuiteo(clientId) {
         }
       }
     }
+    // Marquer comme synchronisé
+    await sb.from('clients').update({ akuiteo_dirty: false }).eq('id', clientId);
     // Rafraîchir la fiche pour mettre à jour les boutons
     await loadDB();
     if (currentClient && currentClient.id === clientId) {
