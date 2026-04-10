@@ -1838,6 +1838,7 @@ tbody tr:last-child td { border-bottom: none; }
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Commercial <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
         <div class="fg"><label class="fl">Commercial Novam</label><select class="fi" id="nc-mk-manager"></select></div>
+        <div class="fg"><label class="fl">Commercial GPH</label><select class="fi" id="nc-mk-salesman"></select></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Administratives</div>
       <div class="fg"><textarea class="fi" id="nc-notes" rows="3" style="resize:vertical" placeholder="Habitudes administratives..."></textarea></div>
@@ -2045,6 +2046,7 @@ tbody tr:last-child td { border-bottom: none; }
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Commercial <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
         <div class="fg"><label class="fl">Commercial Novam</label><select class="fi" id="ec-mk-manager"></select></div>
+        <div class="fg"><label class="fl">Commercial GPH</label><select class="fi" id="ec-mk-salesman"></select></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Administratives</div>
       <div class="fg"><textarea class="fi" id="ec-notes" rows="3" style="resize:vertical"></textarea></div>
@@ -4646,6 +4648,7 @@ function getAkuiteoFieldsFromModal(prefix) {
     mk_type_id: val('type'), mk_type: txt('type'),
     mode_tarification: val('tarification'), mode_tarification_name: txt('tarification'),
     account_manager_id: val('manager'), account_manager_name: txt('manager'),
+    salesman_id: val('salesman'), salesman_name: txt('salesman'),
     mk_groupe: document.getElementById(prefix + '-mk-groupe').value.trim() || null,
     mk_origine: document.getElementById(prefix + '-mk-origine').value.trim() || null,
   };
@@ -6889,6 +6892,7 @@ async function fillAkuiteoDropdowns(prefix, client) {
   document.getElementById(prefix + '-mk-type').innerHTML = akRefOptions(akRef.linkTypes, c.mk_type_id, 'Type...');
   document.getElementById(prefix + '-mk-tarification').innerHTML = akRefOptions(akRef.pricingMethods, c.mode_tarification, 'Mode de tarification...');
   document.getElementById(prefix + '-mk-manager').innerHTML = akRefOptions(akRef.employees, c.account_manager_id, 'Commercial Novam...');
+  document.getElementById(prefix + '-mk-salesman').innerHTML = akRefOptions(akRef.employees, c.salesman_id, 'Commercial GPH...');
   document.getElementById(prefix + '-mk-groupe').value = c.mk_groupe || '';
   document.getElementById(prefix + '-mk-origine').value = c.mk_origine || '';
 }
@@ -8552,6 +8556,7 @@ async function pushClientToAkuiteo(clientId) {
       if (full.mk_type_id) akData.thirdPartyLinkTypeId = full.mk_type_id;
       if (full.mode_tarification) akData.firstPricingMethodId = full.mode_tarification;
       if (full.account_manager_id) akData.accountManagerId = full.account_manager_id;
+      if (full.salesman_id) akData.salesmanId = full.salesman_id;
       if (full.mk_groupe) akData.level1grouping = full.mk_groupe;
       if (full.mk_origine) akData.level2grouping = full.mk_origine;
       // Adresse : merger sur l'adresse existante
