@@ -3358,6 +3358,11 @@ function renderClientDetail() {
         const comm = DB.commerciaux.find(x => x.akuiteo_manager_id === c.account_manager_id);
         return comm ? '<strong>' + comm.nom + '</strong> <span style="color:var(--t3);font-size:11px">(' + c.account_manager_id + ')</span>' : c.account_manager_id;
       })()),
+      detailRow('Commercial', (() => {
+        if (!c.salesman_id) return '—';
+        const comm = DB.commerciaux.find(x => x.akuiteo_manager_id === c.salesman_id);
+        return comm ? '<strong>' + comm.nom + '</strong> <span style="color:var(--t3);font-size:11px">(' + c.salesman_id + ')</span>' : c.salesman_id;
+      })()),
       detailRow('Société Akuiteo', c.code_societe || '—'),
       detailRow('Statut Akuiteo', c.statut_akuiteo || '—'),
       detailRow('Mots-clés', c.mots_cles || '—'),
@@ -7538,6 +7543,7 @@ async function syncAkuiteo() {
         phone: ak.address?.phone || ak.phone || '',
         akuiteo_id: akId,
         account_manager_id: ak.accountManagerId || null,
+        salesman_id: ak.salesmanId || null,
         last_contact: new Date().toISOString().slice(0, 10),
         adresse_ligne1: ak.address?.line1 || null, adresse_ligne2: ak.address?.line2 || null,
         adresse_ligne3: ak.address?.line3 || null, code_postal: ak.address?.postalCode || null,
@@ -8310,6 +8316,7 @@ async function pullClientFromAkuiteo(clientId) {
       email: ak.address?.email || ak.email || client.email || '',
       phone: ak.address?.phone || ak.phone || client.phone || '',
       account_manager_id: ak.accountManagerId || null,
+      salesman_id: ak.salesmanId || null,
       adresse_ligne1: ak.address?.line1 || null, adresse_ligne2: ak.address?.line2 || null,
       adresse_ligne3: ak.address?.line3 || null, code_postal: ak.address?.postalCode || null,
       pays: ak.address?.countryName || ak.address?.country || null,
