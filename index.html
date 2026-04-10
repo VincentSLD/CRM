@@ -3358,6 +3358,15 @@ function renderClientDetail() {
       detailRow('Commercial GPH', c.commerciaux_associes || '—'),
       detailRow('Société Akuiteo', c.code_societe || '—'),
     ])}
+    ${detailSection('Marketing', [
+      detailRow('Catégorie', c.mk_categorie || '—'),
+      detailRow('Sous-Catégorie', c.mk_sous_categorie || '—'),
+      detailRow('Catégorie prof.', c.mk_categorie_pro || '—'),
+      detailRow('Secteur', c.mk_secteur || '—'),
+      detailRow('Type', c.mk_type || '—'),
+      detailRow('Groupe', c.mk_groupe || '—'),
+      detailRow('Origine', c.mk_origine || '—'),
+    ])}
     ${detailSection('Tarification', [
       detailRow('Mode de tarification', c.mode_tarification_name || resolvePricingMethod(c.mode_tarification) || '—'),
       detailRow('RFA applicable', c.custom_data?.['1-alpha04']?.value || '—'),
@@ -8376,6 +8385,33 @@ async function pullClientFromAkuiteo(clientId) {
         })
         .catch(() => {})
     );
+    // Données marketing : résoudre les IDs en noms
+    let mkCategorie = null, mkSousCategorie = null, mkCategoriePro = null, mkSecteur = null, mkType = null;
+    if (ak.categoryId) promises.push(
+      akuiteoFetch('POST', '/settings/categories/search?limit=100', { code: { operator: 'LIKE', value: '%' } })
+        .then(list => { if (Array.isArray(list)) { const m = list.find(x => x.id === ak.categoryId); if (m) mkCategorie = m.name || m.code; } })
+        .catch(() => {})
+    );
+    if (ak.subCategoryId) promises.push(
+      akuiteoFetch('POST', '/settings/sub-categories/search?limit=500', { code: { operator: 'LIKE', value: '%' } })
+        .then(list => { if (Array.isArray(list)) { const m = list.find(x => x.id === ak.subCategoryId); if (m) mkSousCategorie = m.name || m.code; } })
+        .catch(() => {})
+    );
+    if (ak.professionalCategoryId) promises.push(
+      akuiteoFetch('POST', '/settings/professional-categories/search?limit=100', {})
+        .then(list => { if (Array.isArray(list)) { const m = list.find(x => x.id === ak.professionalCategoryId); if (m) mkCategoriePro = m.name || m.code; } })
+        .catch(() => {})
+    );
+    if (ak.sectorId) promises.push(
+      akuiteoFetch('POST', '/settings/sectors/search?limit=100', {})
+        .then(list => { if (Array.isArray(list)) { const m = list.find(x => x.id === ak.sectorId); if (m) mkSecteur = m.name || m.code; } })
+        .catch(() => {})
+    );
+    if (ak.thirdPartyLinkTypeId) promises.push(
+      akuiteoFetch('POST', '/settings/third-party-link-types/search?limit=100', {})
+        .then(list => { if (Array.isArray(list)) { const m = list.find(x => String(x.id) === String(ak.thirdPartyLinkTypeId)); if (m) mkType = m.name || m.code; } })
+        .catch(() => {})
+    );
     await Promise.all(promises);
     // Construire la liste des commerciaux associés (salesmen)
     const salesmenNames = salesmen.map(s => {
@@ -8415,6 +8451,9 @@ async function pullClientFromAkuiteo(clientId) {
       reference_externe: ak.externalReference || null,
       statut_akuiteo: ak.status || null, langue: ak.languageCode || null,
       mots_cles: ak.keywords || null, code_societe: ak.companyCode || null,
+      mk_categorie: mkCategorie || null, mk_sous_categorie: mkSousCategorie || null,
+      mk_categorie_pro: mkCategoriePro || null, mk_secteur: mkSecteur || null,
+      mk_type: mkType || null, mk_groupe: ak.level1grouping || null, mk_origine: ak.level2grouping || null,
     };
     if (customData) updates.custom_data = customData;
     const { error } = await sb.from('clients').update(updates).eq('id', clientId);
