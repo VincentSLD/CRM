@@ -7533,7 +7533,7 @@ async function syncAdressesAffaires() {
 }
 
 async function syncAkuiteo() {
-  toast('Synchronisation Akuiteo en cours...','info');
+  showSyncLoading(true); setSyncText('Synchronisation Akuiteo en cours...');
   try {
     // --- ETAPE 1 : Sync clients par pages de 200 ---
     console.log('[Akuiteo] === ETAPE 1 : Appel API clients (paginé)...');
@@ -8160,6 +8160,8 @@ async function syncAkuiteo() {
   } catch (e) {
     console.error('Sync Akuiteo error:', e);
     toast('Erreur de synchronisation: ' + e.message, 'error');
+  } finally {
+    showSyncLoading(false);
   }
 }
 
@@ -8340,7 +8342,7 @@ async function pullClientFromAkuiteo(clientId) {
   const client = await sb.from('clients').select('*').eq('id', clientId).maybeSingle().then(r => r.data);
   if (!client) { toast('Société non trouvée en base', 'error'); return; }
   if (!client.akuiteo_id) { toast('Pas d\'ID Akuiteo pour cette société', 'error'); return; }
-  toast('Récupération depuis Akuiteo...', 'info');
+  showSyncLoading(true); setSyncText('Récupération depuis Akuiteo...');
   try {
     const ak = await akuiteoFetch('GET', '/crm/customers/' + client.akuiteo_id);
     if (!ak || !ak.id) { toast('Société non trouvée dans Akuiteo', 'error'); return; }
@@ -8456,6 +8458,8 @@ async function pullClientFromAkuiteo(clientId) {
     renderPage(currentPage);
   } catch (e) {
     toast('Erreur Akuiteo: ' + e.message, 'error');
+  } finally {
+    showSyncLoading(false);
   }
 }
 
@@ -8464,7 +8468,7 @@ async function pushClientToAkuiteo(clientId) {
   const { data: full } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
   if (!full) { toast('Société non trouvée en base', 'error'); return; }
 
-  toast('Envoi vers Akuiteo...', 'info');
+  showSyncLoading(true); setSyncText('Envoi vers Akuiteo...');
   let customerAkId = full.akuiteo_id;
   try {
     // Pour un update : lire d'abord la fiche Akuiteo existante et merger nos modifications
@@ -8614,6 +8618,8 @@ async function pushClientToAkuiteo(clientId) {
   } catch (e) {
     console.error('Push Akuiteo error:', e);
     toast('Erreur Akuiteo: ' + e.message, 'error');
+  } finally {
+    showSyncLoading(false);
   }
 }
 
@@ -8704,6 +8710,30 @@ window.addEventListener('online', () => {
 });
 
 // ═══ TOAST ═══
+function showSyncLoading(show) {
+  document.body.style.cursor = show ? 'wait' : '';
+  let overlay = document.getElementById('sync-overlay');
+  if (show && !overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'sync-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,0.15);display:flex;align-items:center;justify-content:center;pointer-events:all';
+    overlay.innerHTML = '<div style="background:var(--bg-1);padding:20px 32px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.2);display:flex;align-items:center;gap:12px;font-size:14px;color:var(--t1)"><span style="font-size:24px;animation:spin 1s linear infinite;display:inline-block">⏳</span><span id="sync-overlay-text">Synchronisation en cours...</span></div>';
+    document.body.appendChild(overlay);
+    if (!document.getElementById('spin-style')) {
+      const s = document.createElement('style');
+      s.id = 'spin-style';
+      s.textContent = '@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}';
+      document.head.appendChild(s);
+    }
+  } else if (!show && overlay) {
+    overlay.remove();
+  }
+}
+function setSyncText(text) {
+  const el = document.getElementById('sync-overlay-text');
+  if (el) el.textContent = text;
+}
+
 function toast(msg, type='info') {
   const c = document.getElementById('toasts');
   const t = document.createElement('div');
