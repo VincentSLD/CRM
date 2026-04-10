@@ -7490,7 +7490,7 @@ async function syncAkuiteo() {
     console.log('[Akuiteo] === ETAPE 1 : Appel API clients (paginé)...');
     let allAkCustomers = [];
     let page = 0;
-    const PAGE_SIZE = 200;
+    const PAGE_SIZE = 2000;
     while (true) {
       const batch = await akuiteoFetch('POST', `/crm/customers/search?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}&sort=id&order=DESC`, {
         code: { operator: 'LIKE', value: '%' }
@@ -7498,7 +7498,7 @@ async function syncAkuiteo() {
       if (!Array.isArray(batch) || batch.length === 0) break;
       allAkCustomers = allAkCustomers.concat(batch);
       console.log(`[Akuiteo] Page ${page}: ${batch.length} clients (total: ${allAkCustomers.length})`);
-      if (batch.length <= PAGE_SIZE) break; // dernière page ou API a tout renvoyé d'un coup
+      if (batch.length < PAGE_SIZE) break; // dernière page
       page++;
       // Sécurité : max 25000 clients
       if (allAkCustomers.length >= 25000) { console.warn('[Akuiteo] Limite 25000 clients atteinte'); break; }

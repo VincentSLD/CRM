@@ -1,3 +1,5 @@
+export const config = { maxDuration: 60 };
+
 export default async function handler(req, res) {
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -40,11 +42,15 @@ export default async function handler(req, res) {
   }
 
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 55000);
     const response = await fetch(url, {
       method: req.method,
       headers,
       body,
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     const contentType = response.headers.get('content-type') || '';
     const data = await response.text();
