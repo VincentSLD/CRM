@@ -3262,6 +3262,8 @@ async function showClient(id) {
   currentPage = 'client-detail';
   document.getElementById('pageTitle').textContent = currentClient.name;
   renderPage('client-detail');
+  // Résoudre les noms des employés Akuiteo non trouvés en local
+  setTimeout(() => resolveEmployeeNames(), 50);
   // Charger automatiquement les contacts depuis Supabase
   setTimeout(() => loadClientContacts(currentClient.id), 100);
 }
@@ -3353,16 +3355,8 @@ function renderClientDetail() {
     ])}
     ${detailSection('Commercial', [
       detailRow('Contact commercial', c.contact || '—'),
-      detailRow('Responsable', (() => {
-        if (!c.account_manager_id) return '—';
-        const comm = DB.commerciaux.find(x => x.akuiteo_manager_id === c.account_manager_id);
-        return comm ? '<strong>' + comm.nom + '</strong> <span style="color:var(--t3);font-size:11px">(' + c.account_manager_id + ')</span>' : c.account_manager_id;
-      })()),
-      detailRow('Commercial', (() => {
-        if (!c.salesman_id) return '—';
-        const comm = DB.commerciaux.find(x => x.akuiteo_manager_id === c.salesman_id);
-        return comm ? '<strong>' + comm.nom + '</strong> <span style="color:var(--t3);font-size:11px">(' + c.salesman_id + ')</span>' : c.salesman_id;
-      })()),
+      detailRow('Responsable', resolveManagerName(c.account_manager_id)),
+      detailRow('Commercial', resolveManagerName(c.salesman_id)),
       detailRow('Société Akuiteo', c.code_societe || '—'),
       detailRow('Statut Akuiteo', c.statut_akuiteo || '—'),
       detailRow('Mots-clés', c.mots_cles || '—'),
@@ -4582,10 +4576,28 @@ function linkAffaire(affaireId) {
   const label = a ? (a.ref || a.nom || affaireId) : affaireId;
   return `<a href="#" onclick="showAffaireDetail('${affaireId}');return false" style="color:var(--accent);font-size:12px" title="${a ? (a.nom||'') : ''}">${label}</a>`;
 }
+const _employeeNameCache = {};
 function resolveManagerName(akuiteoId) {
   if (!akuiteoId) return null;
   const comm = (DB.commerciaux || []).find(c => c.akuiteo_manager_id === akuiteoId);
-  return comm ? comm.nom + ' <span style="color:var(--t3);font-size:11px">(' + akuiteoId + ')</span>' : akuiteoId;
+  if (comm) return '<strong>' + comm.nom + '</strong> <span style="color:var(--t3);font-size:11px">(' + akuiteoId + ')</span>';
+  if (_employeeNameCache[akuiteoId]) return '<strong>' + _employeeNameCache[akuiteoId] + '</strong> <span style="color:var(--t3);font-size:11px">(' + akuiteoId + ')</span>';
+  return '<span id="emp-' + akuiteoId + '">' + akuiteoId + '</span>';
+}
+async function resolveEmployeeNames() {
+  const spans = document.querySelectorAll('span[id^="emp-"]');
+  for (const span of spans) {
+    const akId = span.id.replace('emp-', '');
+    if (_employeeNameCache[akId]) { span.innerHTML = '<strong>' + _employeeNameCache[akId] + '</strong> <span style="color:var(--t3);font-size:11px">(' + akId + ')</span>'; continue; }
+    try {
+      const emp = await akuiteoFetch('GET', '/workforce/employees/' + akId);
+      if (emp && (emp.name || emp.firstName)) {
+        const fullName = ((emp.firstName || '') + ' ' + (emp.name || '')).trim();
+        _employeeNameCache[akId] = fullName;
+        span.innerHTML = '<strong>' + fullName + '</strong> <span style="color:var(--t3);font-size:11px">(' + akId + ')</span>';
+      }
+    } catch (e) { console.warn('[Akuiteo] Employee resolve:', e.message); }
+  }
 }
 function detailRow(label, value) {
   if (value === null || value === undefined || value === '') return '';
