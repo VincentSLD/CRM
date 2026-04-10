@@ -1818,8 +1818,9 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Informations légales</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg"><label class="fl">SIREN</label><input class="fi" id="nc-siren"></div>
+        <div class="fg"><label class="fl">SIREN</label><input class="fi" id="nc-siren" oninput="const t=document.getElementById('nc-tva');if(t)t.value=computeTVA(this.value)||''"></div>
         <div class="fg"><label class="fl">SIRET</label><input class="fi" id="nc-siret"></div>
+        <div class="fg"><label class="fl">TVA intracommunautaire</label><input class="fi" id="nc-tva" readonly style="background:var(--bg-3)"></div>
         <div class="fg"><label class="fl">Code APE</label><input class="fi" id="nc-ape"></div>
         <div class="fg"><label class="fl">Réf. externe</label><input class="fi" id="nc-refext"></div>
       </div>
@@ -2000,8 +2001,9 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Informations légales</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg"><label class="fl">SIREN</label><input class="fi" id="ec-siren"></div>
+        <div class="fg"><label class="fl">SIREN</label><input class="fi" id="ec-siren" oninput="const t=document.getElementById('ec-tva');if(t)t.value=computeTVA(this.value)||''"></div>
         <div class="fg"><label class="fl">SIRET</label><input class="fi" id="ec-siret"></div>
+        <div class="fg"><label class="fl">TVA intracommunautaire</label><input class="fi" id="ec-tva" readonly style="background:var(--bg-3)"></div>
         <div class="fg"><label class="fl">Code APE</label><input class="fi" id="ec-ape"></div>
         <div class="fg"><label class="fl">Réf. externe</label><input class="fi" id="ec-refext"></div>
       </div>
@@ -2100,6 +2102,14 @@ function timeAgo(dateStr) {
   if (diff === 0) return "Aujourd'hui";
   if (diff === 1) return 'Hier';
   return `Il y a ${diff}j`;
+}
+
+function computeTVA(siren) {
+  if (!siren) return null;
+  const s = String(siren).replace(/\s/g, '');
+  if (!/^\d{9}$/.test(s)) return null;
+  const key = (12 + 3 * (parseInt(s, 10) % 97)) % 97;
+  return 'FR' + String(key).padStart(2, '0') + s;
 }
 
 function fmtDateFR(dateStr) {
@@ -3285,6 +3295,7 @@ function renderClientDetail() {
       detailRow('Raison sociale 2', c.raison_sociale2 || '—'),
       detailRow('SIREN', c.siren || '—'),
       detailRow('SIRET', c.siret || '—'),
+      detailRow('TVA intracommunautaire', c.tva_intracommunautaire || computeTVA(c.siren) || '—'),
       detailRow('Code APE', c.ape || '—'),
       detailRow('Forme juridique', c.forme_juridique || '—'),
       detailRow('Réf. externe', c.reference_externe || '—'),
@@ -6716,6 +6727,7 @@ function openModal(id) {
     document.getElementById('ec-codesociete').value = c.code_societe||'';
     document.getElementById('ec-condpaiement').value = c.condition_paiement||'';
     document.getElementById('ec-modepaiement').value = c.mode_paiement||'';
+    document.getElementById('ec-tva').value = c.tva_intracommunautaire || computeTVA(c.siren) || '';
   }
 }
 function closeModal(id) { const el=document.getElementById('modal-'+id); if(el) el.classList.remove('active'); }
@@ -7129,6 +7141,7 @@ async function submitEditClient() {
     siret: document.getElementById('ec-siret').value.trim() || null,
     ape: document.getElementById('ec-ape').value.trim() || null,
     reference_externe: document.getElementById('ec-refext').value.trim() || null,
+    tva_intracommunautaire: document.getElementById('ec-tva').value.trim() || null,
     chiffre_affaires: Number(document.getElementById('ec-revenue').value) || 0,
     capital: Number(document.getElementById('ec-capital').value) || 0,
     effectif: Number(document.getElementById('ec-headcount').value) || 0,
