@@ -8464,42 +8464,70 @@ async function pushClientToAkuiteo(clientId) {
   const { data: full } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
   if (!full) { toast('Société non trouvée en base', 'error'); return; }
 
-  // Ne construire que les champs non-null pour ne pas écraser les données Akuiteo
-  // name, SIREN et address sont obligatoires pour l'API Akuiteo
-  const akData = { name: full.name || full.raison_sociale || '' };
-  if (full.siren) akData.SIREN = full.siren;
-  if (full.raison_sociale) akData.legalName = full.raison_sociale;
-  if (full.raison_sociale2) akData.legalName2 = full.raison_sociale2;
-  if (full.siren) akData.SIREN = full.siren;
-  if (full.siret) akData.SIRET = full.siret;
-  if (full.ape) akData.APE = full.ape;
-  if (full.forme_juridique) akData.legalForm = full.forme_juridique;
-  if (full.reference_externe) akData.externalReference = full.reference_externe;
-  if (full.langue) akData.languageCode = full.langue;
-  if (full.chiffre_affaires) akData.revenue = full.chiffre_affaires;
-  if (full.capital) akData.equity = full.capital;
-  if (full.effectif) akData.headcount = full.effectif;
-  // Adresse : ne mettre que les champs renseignés
-  const addr = {};
-  if (full.adresse_ligne1) addr.line1 = full.adresse_ligne1;
-  if (full.adresse_ligne2) addr.line2 = full.adresse_ligne2;
-  if (full.adresse_ligne3) addr.line3 = full.adresse_ligne3;
-  if (full.code_postal) addr.postalCode = full.code_postal;
-  if (full.city) addr.city = full.city;
-  if (full.departement && /^\d{2,3}[AB]?$/i.test(full.departement.trim())) addr.department = full.departement.trim();
-  if (full.pays && /^[A-Z]{2}$/.test(full.pays.trim())) addr.country = full.pays.trim();
-  if (full.phone) addr.phone = full.phone;
-  if (full.telephone2) addr.phone2 = full.telephone2;
-  if (full.mobile) addr.mobilePhone = full.mobile;
-  if (full.fax) addr.fax = full.fax;
-  if (full.email) addr.email = full.email;
-  if (full.site_web) addr.webSite = full.site_web;
-  if (!addr.country) addr.country = 'FR';
-  akData.address = addr;
-
   toast('Envoi vers Akuiteo...', 'info');
   let customerAkId = full.akuiteo_id;
   try {
+    // Pour un update : lire d'abord la fiche Akuiteo existante et merger nos modifications
+    let akData;
+    if (full.akuiteo_id) {
+      const existing = await akuiteoFetch('GET', '/crm/customers/' + full.akuiteo_id);
+      if (!existing || !existing.id) { toast('Impossible de lire la fiche Akuiteo', 'error'); return; }
+      // Partir de la fiche existante et ne modifier que ce qu'on a dans Supabase
+      akData = { ...existing };
+      // Supprimer les champs en lecture seule / calculés qui font planter l'update
+      delete akData.changeTracking; delete akData.indicators; delete akData.closure;
+      delete akData.open; delete akData.lastTracking; delete akData.formConfig;
+      delete akData.bankingInformations; delete akData.exclusionCodes;
+      delete akData.accountingPeriod; delete akData.sites;
+      // Appliquer nos modifications
+      if (full.name) akData.name = full.name;
+      if (full.raison_sociale) akData.legalName = full.raison_sociale;
+      if (full.raison_sociale2 !== undefined) akData.legalName2 = full.raison_sociale2 || akData.legalName2;
+      if (full.siren) akData.SIREN = full.siren;
+      if (full.siret) akData.SIRET = full.siret;
+      if (full.ape) akData.APE = full.ape;
+      if (full.forme_juridique) akData.legalForm = full.forme_juridique;
+      if (full.reference_externe) akData.externalReference = full.reference_externe;
+      if (full.langue) akData.languageCode = full.langue;
+      if (full.chiffre_affaires) akData.revenue = full.chiffre_affaires;
+      if (full.capital) akData.equity = full.capital;
+      if (full.effectif) akData.headcount = full.effectif;
+      if (full.notes !== undefined) akData.notes = full.notes;
+      // Adresse : merger sur l'adresse existante
+      if (!akData.address) akData.address = {};
+      if (full.adresse_ligne1) akData.address.line1 = full.adresse_ligne1;
+      if (full.adresse_ligne2) akData.address.line2 = full.adresse_ligne2;
+      if (full.adresse_ligne3) akData.address.line3 = full.adresse_ligne3;
+      if (full.code_postal) akData.address.postalCode = full.code_postal;
+      if (full.city) akData.address.city = full.city;
+      if (full.phone) akData.address.phone = full.phone;
+      if (full.telephone2) akData.address.phone2 = full.telephone2;
+      if (full.mobile) akData.address.mobilePhone = full.mobile;
+      if (full.fax) akData.address.fax = full.fax;
+      if (full.email) akData.address.email = full.email;
+      if (full.site_web) akData.address.webSite = full.site_web;
+    } else {
+      // Création : construire de zéro
+      akData = {
+        name: full.name || full.raison_sociale || '',
+        legalName: full.raison_sociale || full.name || '',
+        SIREN: full.siren || null,
+        SIRET: full.siret || null,
+        APE: full.ape || null,
+        legalForm: full.forme_juridique || null,
+        languageCode: full.langue || null,
+        notes: full.notes || null,
+        address: {
+          line1: full.adresse_ligne1 || null,
+          postalCode: full.code_postal || null,
+          city: full.city || null,
+          country: (full.pays && /^[A-Z]{2}$/.test(full.pays.trim())) ? full.pays.trim() : 'FR',
+          phone: full.phone || null,
+          email: full.email || null,
+        },
+      };
+    }
+
     if (full.akuiteo_id) {
       // Update : id dans le body + Accept text/plain obligatoires
       akData.id = full.akuiteo_id;
