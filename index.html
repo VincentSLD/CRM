@@ -3360,6 +3360,10 @@ function renderClientDetail() {
     ])}
     ${detailSection('Tarification', [
       detailRow('Mode de tarification', c.mode_tarification_name || resolvePricingMethod(c.mode_tarification) || '—'),
+      detailRow('RFA applicable', c.custom_data?.['1-alpha04']?.value || '—'),
+      detailRow('Date de Remise de la convention', c.custom_data?.['1-date01']?.value ? fmtDateFR(c.custom_data['1-date01'].value) : '—'),
+      detailRow('Date de signature de la convention', c.custom_data?.['1-date02']?.value ? fmtDateFR(c.custom_data['1-date02'].value) : '—'),
+      detailRow('Commentaires', c.custom_data?.['1-alpha01']?.value || '—'),
     ])}
   </div>
   <div class="card" style="margin-bottom:16px"><div class="card-header"><div class="card-title">Habitudes Administratives</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes || '—'}</div></div></div>
@@ -4631,7 +4635,8 @@ const CUSTOM_DATA_HIDDEN = new Set([
   'Charpente bois','Charpente métallique / Bardage','Climatisation','Cloison/ Plafond/ Isolation/ Plâtrerie',
   'Couverture / Etanchéïté','Dallage','Démolition / Désamiantage','Electricité','Espace verts / Clôture',
   'Fondations spéciales','Gros-oeuvre','Menuiserie','Peinture','Piscine','Plomberie / Chauffage',
-  'Préfabricant','Ravalement / Enduit','Revêtements de sols','Serrurerie / Métallerie','VRD / Travaux publics','Immobilier'
+  'Préfabricant','Ravalement / Enduit','Revêtements de sols','Serrurerie / Métallerie','VRD / Travaux publics','Immobilier',
+  'Date de Remise de la convention','Date de signature de la convention','RFA applicable','Commentaires'
 ]);
 function renderCustomData(cd) {
   if (!cd || typeof cd !== 'object' || Object.keys(cd).length === 0) return '';
