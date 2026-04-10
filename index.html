@@ -3355,7 +3355,7 @@ function renderClientDetail() {
     ])}
     ${detailSection('Commercial', [
       detailRow('Commercial Novam', c.account_manager_name ? '<strong>' + c.account_manager_name + '</strong>' : resolveManagerName(c.account_manager_id) || '—'),
-      detailRow('Commerciaux associés', c.commerciaux_associes || '—'),
+      detailRow('Commercial GPH', c.commerciaux_associes || '—'),
       detailRow('Société Akuiteo', c.code_societe || '—'),
     ])}
     ${detailSection('Paiement & Tarification', [
