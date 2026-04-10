@@ -3281,7 +3281,6 @@ function renderClientDetail() {
       detailRow('Région', c.region || '—'),
       detailRow('Pays', c.pays || '—'),
     ])}
-    ${c.lat && c.lng ? '<div style="margin-bottom:12px"><a href="https://www.google.com/maps/dir/?api=1&destination='+c.lat+','+c.lng+'" target="_blank" class="btn" style="text-decoration:none;width:100%;justify-content:center">Y aller (GPS)</a></div>' : ''}
     ${detailSection('Coordonnées', [
       detailRow('Email', c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : '—'),
       detailRow('Téléphone', c.phone ? '<a href="tel:'+c.phone+'" style="color:var(--accent)">'+c.phone+'</a>' : '—'),
@@ -7116,7 +7115,7 @@ async function submitNewFacture() {
 
 async function submitEditClient() {
   if (!currentClient) return;
-  await dbUpdate('clients', currentClient.id, {
+  const fields = {
     name: document.getElementById('ec-name').value.trim(),
     code: document.getElementById('ec-code').value.trim(),
     raison_sociale: document.getElementById('ec-raison').value.trim() || null,
@@ -7156,7 +7155,25 @@ async function submitEditClient() {
     condition_paiement: document.getElementById('ec-condpaiement').value.trim() || null,
     mode_paiement: document.getElementById('ec-modepaiement').value.trim() || null,
     notes: document.getElementById('ec-notes').value.trim() || null,
-  });
+  };
+  // Tenter l'update complet, si 400 (colonne inexistante) retirer les champs problématiques
+  let toSend = { ...fields };
+  let { error } = await sb.from('clients').update(toSend).eq('id', currentClient.id);
+  if (error && error.code === 'PGRST204' || (error && error.message && error.message.includes('400'))) {
+    // Fallback : ne garder que les colonnes de base connues
+    const safeCols = ['name','code','sector','city','email','phone','raison_sociale','raison_sociale2','forme_juridique',
+      'adresse_ligne1','adresse_ligne2','adresse_ligne3','code_postal','departement','region','pays',
+      'telephone2','mobile','fax','site_web','siren','siret','ape','reference_externe',
+      'chiffre_affaires','capital','effectif','notes'];
+    toSend = {};
+    for (const k of safeCols) { if (k in fields) toSend[k] = fields[k]; }
+    const r2 = await sb.from('clients').update(toSend).eq('id', currentClient.id);
+    error = r2.error;
+  }
+  if (error) { toast(`Erreur: ${error.message}`, 'error'); return; }
+  toast('Mis à jour avec succès', 'success');
+  await loadDB();
+  renderPage(currentPage);
   closeModal('edit-client');
   const { data: refreshed } = await sb.from('clients').select('*').eq('id', currentClient.id).maybeSingle();
   if (refreshed) currentClient = refreshed;
@@ -7471,6 +7488,7 @@ async function syncAkuiteo() {
         fax: ak.address?.fax || null, site_web: ak.address?.webSite || null,
         raison_sociale: ak.legalName || null, raison_sociale2: ak.legalName2 || null,
         siren: ak.SIREN || null, siret: ak.SIRET || null, ape: ak.APE || null,
+        tva_intracommunautaire: ak.vatIdentificationNumber || null,
         forme_juridique: ak.legalForm || null, notes: ak.notes || null,
         chiffre_affaires: ak.revenue || 0, capital: ak.equity || 0, effectif: ak.headcount || 0,
         categorie: ak.category || null, profession: ak.profession || null,
