@@ -3361,9 +3361,11 @@ function renderClientDetail() {
       detailRow('Statut Akuiteo', c.statut_akuiteo || '—'),
       detailRow('Mots-clés', c.mots_cles || '—'),
     ])}
-    ${detailSection('Paiement', [
+    ${detailSection('Paiement & Tarification', [
       detailRow('Condition de paiement', c.condition_paiement || '—'),
       detailRow('Mode de paiement', c.mode_paiement || '—'),
+      detailRow('Mode de tarification', c.mode_tarification || '—'),
+      detailRow('Mode de tarification 2', c.mode_tarification_2 || '—'),
     ])}
   </div>
   <div class="card" style="margin-bottom:16px"><div class="card-header"><div class="card-title">Habitudes Administratives</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes || '—'}</div></div></div>
@@ -7550,7 +7552,8 @@ async function syncAkuiteo() {
         chiffre_affaires: ak.revenue || 0, capital: ak.equity || 0, effectif: ak.headcount || 0,
         categorie: ak.category || null, profession: ak.profession || null,
         secteur_activite: ak.sector || null, condition_paiement: ak.conditionOfPayment || null,
-        mode_paiement: ak.methodOfPayment || null, reference_externe: ak.externalReference || null,
+        mode_paiement: ak.methodOfPayment || null, mode_tarification: ak.firstPricingMethod || null,
+        mode_tarification_2: ak.secondPricingMethod || null, reference_externe: ak.externalReference || null,
         statut_akuiteo: ak.status || null, langue: ak.languageCode || null,
         mots_cles: ak.keywords || null, code_societe: ak.companyCode || null,
         custom_data: ak.customData && Object.keys(ak.customData).length > 0 ? ak.customData : null,
