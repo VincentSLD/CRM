@@ -17,3 +17,7 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS habitudes_geotechniques TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS mode_tarification TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS mode_tarification_2 TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS salesman_id TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS account_manager_name TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS salesman_name TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS mode_tarification_name TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS mode_tarification_2_name TEXT;

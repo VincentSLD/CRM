@@ -3354,15 +3354,15 @@ function renderClientDetail() {
       detailRow('Langue', c.langue || '—'),
     ])}
     ${detailSection('Commercial', [
-      detailRow('Commercial Novam', resolveManagerName(c.account_manager_id) || '—'),
-      detailRow('Commercial GPH', resolveManagerName(c.salesman_id) || '—'),
+      detailRow('Commercial Novam', c.account_manager_name ? '<strong>' + c.account_manager_name + '</strong>' : resolveManagerName(c.account_manager_id) || '—'),
+      detailRow('Commercial GPH', c.salesman_name ? '<strong>' + c.salesman_name + '</strong>' : resolveManagerName(c.salesman_id) || '—'),
       detailRow('Société Akuiteo', c.code_societe || '—'),
     ])}
     ${detailSection('Paiement & Tarification', [
       detailRow('Condition de paiement', c.condition_paiement || '—'),
       detailRow('Mode de paiement', c.mode_paiement || '—'),
-      detailRow('Mode de tarification', resolvePricingMethod(c.mode_tarification) || '—'),
-      detailRow('Mode de tarification 2', resolvePricingMethod(c.mode_tarification_2) || '—'),
+      detailRow('Mode de tarification', c.mode_tarification_name || resolvePricingMethod(c.mode_tarification) || '—'),
+      detailRow('Mode de tarification 2', c.mode_tarification_2_name || resolvePricingMethod(c.mode_tarification_2) || '—'),
     ])}
   </div>
   <div class="card" style="margin-bottom:16px"><div class="card-header"><div class="card-title">Habitudes Administratives</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes || '—'}</div></div></div>
@@ -8338,11 +8338,41 @@ async function pullClientFromAkuiteo(clientId) {
     const ak = await akuiteoFetch('GET', '/crm/customers/' + client.akuiteo_id);
     if (!ak || !ak.id) { toast('Société non trouvée dans Akuiteo', 'error'); return; }
     // Récupérer aussi les customData
+    // Récupérer customData, noms des employés et modes de tarification en parallèle
     let customData = null;
-    try {
-      const detail = await akuiteoFetch('POST', '/crm/customers/' + client.akuiteo_id + '/read', { options: ['CUSTOM_DATA'] });
-      if (detail?.customData && Object.keys(detail.customData).length > 0) customData = detail.customData;
-    } catch (e) { console.warn('[Akuiteo] customData:', e.message); }
+    let managerName = null, salesmanName = null;
+    let pricingName = null, pricingName2 = null;
+    const promises = [];
+    // customData
+    promises.push(
+      akuiteoFetch('POST', '/crm/customers/' + client.akuiteo_id + '/read', { options: ['CUSTOM_DATA'] })
+        .then(d => { if (d?.customData && Object.keys(d.customData).length > 0) customData = d.customData; })
+        .catch(() => {})
+    );
+    // Noms employés
+    if (ak.accountManagerId) promises.push(
+      akuiteoFetch('GET', '/workforce/employees/' + ak.accountManagerId)
+        .then(e => { if (e) managerName = ((e.firstName||'') + ' ' + (e.name||'')).trim(); })
+        .catch(() => {})
+    );
+    if (ak.salesmanId) promises.push(
+      akuiteoFetch('GET', '/workforce/employees/' + ak.salesmanId)
+        .then(e => { if (e) salesmanName = ((e.firstName||'') + ' ' + (e.name||'')).trim(); })
+        .catch(() => {})
+    );
+    // Modes de tarification
+    if (ak.firstPricingMethodId || ak.secondPricingMethodId) promises.push(
+      akuiteoFetch('POST', '/settings/pricing-methods/search?limit=100', {})
+        .then(list => {
+          if (!Array.isArray(list)) return;
+          for (const pm of list) {
+            if (pm.id === ak.firstPricingMethodId) pricingName = pm.code + (pm.name ? ' — ' + pm.name : '');
+            if (pm.id === ak.secondPricingMethodId) pricingName2 = pm.code + (pm.name ? ' — ' + pm.name : '');
+          }
+        })
+        .catch(() => {})
+    );
+    await Promise.all(promises);
     const updates = {
       name: ak.name || ak.legalName || client.name,
       code: ak.code || client.code,
@@ -8352,7 +8382,9 @@ async function pullClientFromAkuiteo(clientId) {
       email: ak.address?.email || ak.email || client.email || '',
       phone: ak.address?.phone || ak.phone || client.phone || '',
       account_manager_id: ak.accountManagerId || null,
+      account_manager_name: managerName || null,
       salesman_id: ak.salesmanId || null,
+      salesman_name: salesmanName || null,
       adresse_ligne1: ak.address?.line1 || null, adresse_ligne2: ak.address?.line2 || null,
       adresse_ligne3: ak.address?.line3 || null, code_postal: ak.address?.postalCode || null,
       pays: ak.address?.countryName || ak.address?.country || null,
@@ -8367,8 +8399,11 @@ async function pullClientFromAkuiteo(clientId) {
       chiffre_affaires: ak.revenue || 0, capital: ak.equity || 0, effectif: ak.headcount || 0,
       categorie: ak.category || null, profession: ak.profession || null,
       secteur_activite: ak.sector || null, condition_paiement: ak.conditionOfPayment || null,
-      mode_paiement: ak.methodOfPayment || null, mode_tarification: ak.firstPricingMethod || null,
-      mode_tarification_2: ak.secondPricingMethod || null, reference_externe: ak.externalReference || null,
+      mode_paiement: ak.methodOfPayment || null, mode_tarification: ak.firstPricingMethodId || null,
+      mode_tarification_name: pricingName || null,
+      mode_tarification_2: ak.secondPricingMethodId || null,
+      mode_tarification_2_name: pricingName2 || null,
+      reference_externe: ak.externalReference || null,
       statut_akuiteo: ak.status || null, langue: ak.languageCode || null,
       mots_cles: ak.keywords || null, code_societe: ak.companyCode || null,
     };
