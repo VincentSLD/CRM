@@ -1391,6 +1391,8 @@ tbody tr:last-child td { border-bottom: none; }
   .ai-box-text { font-size: 12px; }
   /* Contacts table mobile */
   .contacts-table th:nth-child(n+4), .contacts-table td:nth-child(n+4) { display: none; }
+  /* CR formulaire mobile */
+  .cr-fields-row { grid-template-columns: 1fr !important; }
 }
 
 @media (max-width: 480px) {
@@ -1417,6 +1419,8 @@ tbody tr:last-child td { border-bottom: none; }
   /* Topbar compact */
   .topbar-btn { width: 30px; height: 30px; font-size: 14px; }
   #pageTitle { font-size: 14px; }
+  /* CR formulaire ultra-compact */
+  .cr-fields-row { gap: 8px !important; padding: 8px 10px !important; }
   /* Masquer colonnes secondaires dans les listes */
   table th:nth-child(3), table td:nth-child(3),
   table th:nth-child(4), table td:nth-child(4) { display: none; }
@@ -5208,13 +5212,13 @@ function getCREditorHTML(r) {
   const today = new Date().toISOString().split('T')[0];
   const myId = currentCommercial?.id || '';
   return `
-    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:10px">
-      <div style="flex:2;min-width:200px">
+    <div class="cr-fields-row" style="padding:12px 16px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px">
+      <div>
         <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Titre <span style="color:var(--red)">*</span></label>
         <input type="text" id="crTitre" placeholder="Titre du compte-rendu..." value="${r ? (r.titre||'').replace(/"/g,'&quot;') : ''}"
           style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)">
       </div>
-      <div style="flex:1;min-width:130px">
+      <div>
         <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Type <span style="color:var(--red)">*</span></label>
         <select id="crType" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)">
           <option value="rdv_ext" ${r?.type_cr==='rdv_ext'?'selected':''}>RDV EXT.</option>
@@ -5225,20 +5229,20 @@ function getCREditorHTML(r) {
           <option value="autre" ${r?.type_cr==='autre'?'selected':''}>AUTRE</option>
         </select>
       </div>
-      <div style="flex:1;min-width:130px">
+      <div>
         <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Date RDV <span style="color:var(--red)">*</span></label>
         <input type="date" id="crDate" value="${r ? (r.date_raw||'').substring(0,10) : today}"
           style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
       </div>
-      <div style="flex:1;min-width:150px">
+      <div>
         <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Rédacteur <span style="color:var(--red)">*</span></label>
         <select id="crRedacteur" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
           ${(DB.commerciaux||[]).map(co => `<option value="${co.id}" ${(r ? r.redacteur_id == co.id : co.id == myId) ? 'selected' : ''}>${co.nom||co.email}</option>`).join('')}
         </select>
       </div>
     </div>
-    <div style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
-      <div style="flex:1;min-width:200px;position:relative">
+    <div class="cr-fields-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)">
+      <div style="position:relative">
         <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Société <span style="color:var(--red)">*</span></label>
         <input type="text" id="crClientSearch" placeholder="Rechercher une société..." autocomplete="off"
           style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)"
@@ -5246,7 +5250,7 @@ function getCREditorHTML(r) {
         <input type="hidden" id="crClientId" value="">
         <div id="crClientDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.2)"></div>
       </div>
-      <div style="flex:1;min-width:200px;position:relative">
+      <div style="position:relative">
         <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Contact</label>
         <input type="text" id="crContactSearch" placeholder="Choisir un contact..." autocomplete="off" disabled
           style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1);opacity:0.5"
