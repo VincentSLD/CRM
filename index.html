@@ -1349,37 +1349,81 @@ tbody tr:last-child td { border-bottom: none; }
   .sidebar.open { transform: translateX(0); }
   .main { margin-left: 0; }
   .hamburger { display: flex; }
-  .topbar { padding: 0 14px; }
-  .content { padding: 14px; }
-  .search-bar input { width: 140px; }
-  .search-bar input:focus { width: 160px; }
-  .client-hero { flex-direction: column; align-items: flex-start; }
-  .client-actions { margin-left: 0; width: 100%; }
-  .client-actions .btn { flex: 1; justify-content: center; }
+  .topbar { padding: 0 10px; }
+  .topbar-right { gap: 6px; }
+  .content { padding: 10px; }
+  .search-bar input { width: 120px; }
+  .search-bar input:focus { width: 150px; }
+  /* Fiche société mobile */
+  .client-hero { flex-direction: column; align-items: flex-start; padding: 16px; gap: 12px; }
+  .client-big-av { width: 44px; height: 44px; font-size: 16px; border-radius: 10px; }
+  .client-info h2 { font-size: 16px; }
+  .client-meta { gap: 8px; font-size: 11px; }
+  .client-actions { margin-left: 0; width: 100%; gap: 6px; }
+  .client-actions .btn { flex: 1; justify-content: center; font-size: 11px; padding: 6px 8px; min-width: 0; }
   .notif-panel { right: 8px; left: 8px; width: auto; }
+  /* Grilles 3 et 2 colonnes → 1 colonne */
+  [style*="grid-template-columns:1fr 1fr 1fr"] { grid-template-columns: 1fr !important; }
+  [style*="grid-template-columns:1fr 1fr"] { grid-template-columns: 1fr !important; }
+  /* Cards */
+  .card { margin-bottom: 12px; }
+  .card-header { padding: 10px 12px; }
+  .card-body { padding: 10px 12px; }
+  /* Tables responsive */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 500px; }
+  /* Modal mobile */
+  .modal { max-width: 98vw; max-height: 95vh; margin: 8px; }
+  .modal-body { padding: 12px; }
+  .modal-head { padding: 12px; }
+  .modal-foot { padding: 10px 12px; }
+  .modal-body [style*="grid-template-columns:1fr 1fr"] { grid-template-columns: 1fr !important; }
+  .modal-body [style*="grid-template-columns:1fr 1fr 1fr"] { grid-template-columns: 1fr !important; }
   /* CR mobile */
-  .editor-toolbar { gap: 2px; padding: 6px 8px; }
+  .editor-toolbar { gap: 2px; padding: 6px 8px; flex-wrap: wrap; }
   .tb { width: 28px; height: 28px; font-size: 12px; }
   .tb-ai { font-size: 10px; padding: 0 6px; }
   .tb-div { margin: 0 2px; }
   .editor-body { min-height: 140px; padding: 10px 12px; font-size: 13px; }
   .editor-foot { padding: 8px 10px; }
   .editor-foot .btn { font-size: 11px; padding: 5px 10px; }
-  .modal { max-width: 95vw; max-height: 90vh; }
   .ai-box { margin: 8px; }
   .ai-box-text { font-size: 12px; }
+  /* Contacts table mobile */
+  .contacts-table th:nth-child(n+4), .contacts-table td:nth-child(n+4) { display: none; }
 }
 
 @media (max-width: 480px) {
   .kpi-grid { grid-template-columns: 1fr; }
   .topbar-right .search-bar { display: none; }
-  .tabs { gap: 0; }
-  .tab { padding: 8px 10px; font-size: 11px; }
+  .content { padding: 8px; }
+  .tabs { gap: 0; overflow-x: auto; }
+  .tab { padding: 8px 10px; font-size: 11px; white-space: nowrap; }
+  /* Hero ultra-compact */
+  .client-hero { padding: 12px; }
+  .client-info h2 { font-size: 14px; }
+  .client-meta { font-size: 10px; gap: 6px; }
+  .client-actions .btn { font-size: 10px; padding: 5px 6px; }
+  /* Boutons d'action : 2 par ligne */
+  .client-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  /* Cards compact */
+  .card-header { padding: 8px 10px; }
+  .card-body { padding: 8px 10px; }
   /* CR ultra-petit */
   .tb-ai { font-size: 9px; padding: 0 4px; }
   .editor-body { min-height: 120px; padding: 8px 10px; font-size: 12px; }
   .editor-foot { flex-direction: column; align-items: stretch; }
   .editor-foot > div { justify-content: center; }
+  /* Topbar compact */
+  .topbar-btn { width: 30px; height: 30px; font-size: 14px; }
+  #pageTitle { font-size: 14px; }
+  /* Masquer colonnes secondaires dans les listes */
+  table th:nth-child(3), table td:nth-child(3),
+  table th:nth-child(4), table td:nth-child(4) { display: none; }
+  /* Recherche clients mobile */
+  #clientSearchInput { width: 140px !important; font-size: 12px !important; }
+  /* Alphabet compact */
+  [style*="gap:3px"] .btn { padding: 2px 5px !important; font-size: 10px !important; min-width: 22px !important; }
 }
 
 .sidebar-overlay {
