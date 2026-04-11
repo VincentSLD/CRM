@@ -6349,10 +6349,10 @@ async function editGroup(id) {
 }
 
 function getGroupFormHTML(title, nom, membres) {
-  // Collaborateurs Lucca liés à Akuiteo
-  const linkedLuccaIds = new Set((DB.commerciaux || []).filter(c => c.lucca_id).map(c => c.lucca_id));
+  // Collaborateurs Lucca liés à Akuiteo (via table collaborateurs qui ont un lucca_id)
+  const linkedLuccaIds = new Set((collaborateursData || []).filter(c => c.lucca_id).map(c => c.lucca_id));
   const collabs = collaborateursLuccaData
-    .filter(l => linkedLuccaIds.has(l.lucca_id) && l.email)
+    .filter(l => linkedLuccaIds.has(l.lucca_id))
     .sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
   const memberIds = new Set(membres.map(m => m.id));
   // Établissements et départements uniques pour les filtres
