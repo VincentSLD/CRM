@@ -6349,96 +6349,128 @@ async function editGroup(id) {
 }
 
 function getGroupFormHTML(title, nom, membres) {
+  // Collaborateurs Lucca liés à Akuiteo
+  const linkedLuccaIds = new Set((DB.commerciaux || []).filter(c => c.lucca_id).map(c => c.lucca_id));
+  const collabs = collaborateursLuccaData
+    .filter(l => linkedLuccaIds.has(l.lucca_id) && l.email)
+    .sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
+  const memberIds = new Set(membres.map(m => m.id));
+  // Établissements et départements uniques pour les filtres
+  const etabs = [...new Set(collabs.map(l => l.etablissement).filter(Boolean))].sort();
+  const depts = [...new Set(collabs.map(l => l.departement).filter(Boolean))].sort();
   return `<div style="padding:16px">
     <div style="font-weight:600;margin-bottom:12px">${title}</div>
     <div class="fg" style="margin-bottom:12px">
       <label class="fl">Nom du groupe</label>
       <input class="fi" id="groupNom" value="${(nom||'').replace(/"/g,'&quot;')}" placeholder="Ex: Direction, Commerciaux, Technique...">
     </div>
-    <div class="fg" style="margin-bottom:12px">
-      <label class="fl">Ajouter des membres</label>
-      <div style="position:relative">
-        <input class="fi" id="groupMemberSearch" placeholder="Rechercher un contact..." autocomplete="off"
-          oninput="searchGroupMember(this.value)" onfocus="searchGroupMember(this.value)">
-        <div id="groupMemberDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
-      </div>
-      <div class="chips" style="margin-top:8px" id="groupMemberChips">
-        ${membres.map((m,i) => `<div class="chip on" style="display:inline-flex;align-items:center;gap:4px">
-          ${m.name} ${m.email ? '<span style="font-size:11px;opacity:.7">'+m.email+'</span>' : ''}
-          <span style="cursor:pointer;opacity:0.5;font-size:14px" onclick="removeGroupMember(${i})">&times;</span>
-        </div>`).join('')}
-      </div>
+    <div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--t3)">Membres sélectionnés : <span id="groupSelCount">${membres.length}</span></div>
+    <div id="groupMemberChips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px;min-height:24px">
+      ${membres.map((m,i) => `<div class="chip on" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:3px 8px;border-radius:12px;background:var(--accent-bg);border:1px solid var(--accent)">
+        ${m.name} <span style="cursor:pointer;opacity:0.6;font-size:13px" onclick="removeGroupMember(${i})">&times;</span>
+      </div>`).join('')}
     </div>
-    <div style="display:flex;gap:8px">
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+      <input class="fi" id="groupFilterName" placeholder="Filtrer par nom..." oninput="filterGroupTable()" style="flex:1;min-width:150px;padding:5px 10px;font-size:12px">
+      <select class="fi" id="groupFilterEtab" onchange="filterGroupTable()" style="width:auto;padding:5px 10px;font-size:12px">
+        <option value="">Tous les établissements</option>
+        ${etabs.map(e => '<option value="'+e+'">'+e+'</option>').join('')}
+      </select>
+      <select class="fi" id="groupFilterDept" onchange="filterGroupTable()" style="width:auto;padding:5px 10px;font-size:12px">
+        <option value="">Tous les départements</option>
+        ${depts.map(d => '<option value="'+d+'">'+d+'</option>').join('')}
+      </select>
+      <button class="btn" onclick="toggleAllGroupMembers(true)" style="font-size:11px;padding:4px 10px">Tout cocher</button>
+      <button class="btn" onclick="toggleAllGroupMembers(false)" style="font-size:11px;padding:4px 10px">Tout décocher</button>
+    </div>
+    <div style="max-height:350px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+      <table style="width:100%;border-collapse:collapse;font-size:12px" id="groupCollabTable">
+        <thead style="position:sticky;top:0;background:var(--bg-2);z-index:1">
+          <tr>
+            <th style="padding:8px 10px;text-align:center;width:36px"><input type="checkbox" id="groupCheckAll" onchange="toggleAllGroupMembers(this.checked)"></th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--t3)">Nom</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--t3)">Email</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--t3)">Établissement</th>
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--t3)">Département</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${collabs.map(l => {
+            const fullName = [l.prenom, l.nom].filter(Boolean).join(' ');
+            const checked = memberIds.has(l.id) ? 'checked' : '';
+            return `<tr class="grp-row" data-id="${l.id}" data-name="${fullName.replace(/"/g,'&quot;')}" data-email="${l.email||''}" data-etab="${l.etablissement||''}" data-dept="${l.departement||''}" style="border-bottom:1px solid var(--border)">
+              <td style="padding:6px 10px;text-align:center"><input type="checkbox" class="grp-check" ${checked} onchange="onGroupCheckChange()"></td>
+              <td style="padding:6px 10px;font-weight:500">${fullName}</td>
+              <td style="padding:6px 10px;color:var(--accent);font-size:11px">${l.email||'—'}</td>
+              <td style="padding:6px 10px;color:var(--t3)">${l.etablissement||'—'}</td>
+              <td style="padding:6px 10px;color:var(--t3)">${l.departement||'—'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
       <button class="btn" onclick="renderAdminGroups()">Annuler</button>
       <button class="btn btn-primary" onclick="saveGroup()">Enregistrer</button>
     </div>
   </div>`;
 }
 
-let _groupSearchTimeout = null;
-function searchGroupMember(q) {
-  const dd = document.getElementById('groupMemberDropdown');
-  if (!q || q.length < 2) { dd.style.display='none'; return; }
-  clearTimeout(_groupSearchTimeout);
-  _groupSearchTimeout = setTimeout(async () => {
-    const ql = q.toLowerCase();
-    let html = '';
-    // 1. Collaborateurs Lucca liés à Akuiteo (prioritaires)
-    const linkedLuccaIds = new Set((DB.commerciaux || []).filter(c => c.lucca_id).map(c => c.lucca_id));
-    const luccaResults = collaborateursLuccaData
-      .filter(l => linkedLuccaIds.has(l.lucca_id))
-      .filter(l => (l.nom||'').toLowerCase().includes(ql) || (l.prenom||'').toLowerCase().includes(ql) || (l.email||'').toLowerCase().includes(ql))
-      .filter(l => !_groupMembres.find(m => m.id == l.id))
-      .slice(0, 10);
-    if (luccaResults.length) {
-      html += '<div style="padding:6px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;background:var(--bg-2)">Collaborateurs Lucca</div>';
-      html += luccaResults.map(l => {
-        const fullName = [l.prenom, l.nom].filter(Boolean).join(' ');
-        return `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
-          onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
-          onclick="addGroupMember('${l.id}','${fullName.replace(/'/g,"&#39;")}','${(l.email||'').replace(/'/g,"&#39;")}')">
-          <div>${fullName} ${l.email ? '<span style="color:var(--accent);font-size:11px">'+l.email+'</span>' : ''}</div>
-          <div style="font-size:11px;color:var(--t3)">${l.poste||l.departement||''}</div>
-        </div>`;
-      }).join('');
-    }
-    // 2. Contacts clients (Supabase)
-    const { data } = await sb.from('contacts').select('id,nom,prenom,email,fonction')
-      .or(`nom.ilike.%${q}%,prenom.ilike.%${q}%,email.ilike.%${q}%`)
-      .order('nom').limit(10);
-    const contacts = (data || []).filter(c => !_groupMembres.find(m => m.id == c.id));
-    if (contacts.length) {
-      html += '<div style="padding:6px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;background:var(--bg-2)">Contacts clients</div>';
-      html += contacts.map(c => {
-        const fullName = [c.prenom, c.nom].filter(Boolean).join(' ');
-        return `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
-          onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
-          onclick="addGroupMember('${c.id}','${fullName.replace(/'/g,"&#39;")}','${(c.email||'').replace(/'/g,"&#39;")}')">
-          <div>${fullName} ${c.email ? '<span style="color:var(--accent);font-size:11px">'+c.email+'</span>' : ''}</div>
-          <div style="font-size:11px;color:var(--t3)">${c.fonction||''}</div>
-        </div>`;
-      }).join('');
-    }
-    if (!html) {
-      html = '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucun résultat</div>';
-    }
-    dd.innerHTML = html;
-    dd.style.display='block';
-  }, 200);
+function filterGroupTable() {
+  const nameQ = (document.getElementById('groupFilterName')?.value || '').toLowerCase();
+  const etabQ = document.getElementById('groupFilterEtab')?.value || '';
+  const deptQ = document.getElementById('groupFilterDept')?.value || '';
+  document.querySelectorAll('#groupCollabTable .grp-row').forEach(row => {
+    const name = (row.dataset.name || '').toLowerCase();
+    const email = (row.dataset.email || '').toLowerCase();
+    const etab = row.dataset.etab || '';
+    const dept = row.dataset.dept || '';
+    const show = (!nameQ || name.includes(nameQ) || email.includes(nameQ))
+      && (!etabQ || etab === etabQ)
+      && (!deptQ || dept === deptQ);
+    row.style.display = show ? '' : 'none';
+  });
 }
 
-function addGroupMember(id, name, email) {
-  if (_groupMembres.find(m => m.id == id)) return;
-  _groupMembres.push({ id, name, email });
+function toggleAllGroupMembers(checked) {
+  document.querySelectorAll('#groupCollabTable .grp-row').forEach(row => {
+    if (row.style.display === 'none') return;
+    const cb = row.querySelector('.grp-check');
+    if (cb) cb.checked = checked;
+  });
+  onGroupCheckChange();
+}
+
+function onGroupCheckChange() {
+  _groupMembres = [];
+  document.querySelectorAll('#groupCollabTable .grp-row').forEach(row => {
+    const cb = row.querySelector('.grp-check');
+    if (cb && cb.checked) {
+      _groupMembres.push({ id: row.dataset.id, name: row.dataset.name, email: row.dataset.email });
+    }
+  });
   renderGroupChips();
-  const dd = document.getElementById('groupMemberDropdown'); if(dd) dd.style.display='none';
-  const input = document.getElementById('groupMemberSearch'); if(input) input.value='';
+  const countEl = document.getElementById('groupSelCount');
+  if (countEl) countEl.textContent = _groupMembres.length;
 }
 
 function removeGroupMember(idx) {
   _groupMembres.splice(idx, 1);
+  // Décocher dans le tableau
+  const rows = document.querySelectorAll('#groupCollabTable .grp-row');
+  if (rows.length) {
+    const removedId = null; // recalculer depuis les chips
+    onGroupCheckChange(); // re-sync
+  }
   renderGroupChips();
+  const countEl = document.getElementById('groupSelCount');
+  if (countEl) countEl.textContent = _groupMembres.length;
+  // Re-sync les checkboxes
+  const memberIds = new Set(_groupMembres.map(m => m.id));
+  document.querySelectorAll('#groupCollabTable .grp-row').forEach(row => {
+    const cb = row.querySelector('.grp-check');
+    if (cb) cb.checked = memberIds.has(row.dataset.id);
+  });
 }
 
 function renderGroupChips() {
