@@ -2809,8 +2809,13 @@ async function saveEditContact() {
   toast('Contact mis à jour', 'success');
   Object.assign(currentContact, update);
   renderPage('contact-detail');
-  if (currentContact.akuiteo_id && confirm('Voulez-vous mettre à jour la fiche dans Akuiteo ?')) {
-    await pushContactToAkuiteo(currentContact.id);
+  if (currentContact.client_id && currentClient && currentClient.akuiteo_id) {
+    if (confirm('Voulez-vous synchroniser ce contact vers Akuiteo ?')) {
+      await pushContactToAkuiteo(currentContact.id);
+    } else {
+      await sb.from('clients').update({ akuiteo_dirty: true }).eq('id', currentContact.client_id);
+      if (currentClient) currentClient.akuiteo_dirty = true;
+    }
   }
 }
 
@@ -3597,6 +3602,16 @@ async function saveNewContact(clientId) {
   });
   contactsLoaded = false;
   await loadClientContacts(clientId);
+  // Proposer la sync Akuiteo
+  if (currentClient && currentClient.akuiteo_id) {
+    if (confirm('Voulez-vous synchroniser ce contact vers Akuiteo ?')) {
+      await pushContactToAkuiteo(ctId);
+    } else {
+      await sb.from('clients').update({ akuiteo_dirty: true }).eq('id', clientId);
+      if (currentClient) currentClient.akuiteo_dirty = true;
+      renderPage(currentPage);
+    }
+  }
 }
 
 async function deleteContact(contactId, clientId) {
