@@ -6382,13 +6382,35 @@ function searchGroupMember(q) {
   if (!q || q.length < 2) { dd.style.display='none'; return; }
   clearTimeout(_groupSearchTimeout);
   _groupSearchTimeout = setTimeout(async () => {
+    const ql = q.toLowerCase();
+    let html = '';
+    // 1. Collaborateurs Lucca liés à Akuiteo (prioritaires)
+    const linkedLuccaIds = new Set((DB.commerciaux || []).filter(c => c.lucca_id).map(c => c.lucca_id));
+    const luccaResults = collaborateursLuccaData
+      .filter(l => linkedLuccaIds.has(l.lucca_id))
+      .filter(l => (l.nom||'').toLowerCase().includes(ql) || (l.prenom||'').toLowerCase().includes(ql) || (l.email||'').toLowerCase().includes(ql))
+      .filter(l => !_groupMembres.find(m => m.id == l.id))
+      .slice(0, 10);
+    if (luccaResults.length) {
+      html += '<div style="padding:6px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;background:var(--bg-2)">Collaborateurs Lucca</div>';
+      html += luccaResults.map(l => {
+        const fullName = [l.prenom, l.nom].filter(Boolean).join(' ');
+        return `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
+          onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
+          onclick="addGroupMember('${l.id}','${fullName.replace(/'/g,"&#39;")}','${(l.email||'').replace(/'/g,"&#39;")}')">
+          <div>${fullName} ${l.email ? '<span style="color:var(--accent);font-size:11px">'+l.email+'</span>' : ''}</div>
+          <div style="font-size:11px;color:var(--t3)">${l.poste||l.departement||''}</div>
+        </div>`;
+      }).join('');
+    }
+    // 2. Contacts clients (Supabase)
     const { data } = await sb.from('contacts').select('id,nom,prenom,email,fonction')
       .or(`nom.ilike.%${q}%,prenom.ilike.%${q}%,email.ilike.%${q}%`)
       .order('nom').limit(10);
-    if (!data || !data.length) {
-      dd.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucun contact trouvé</div>';
-    } else {
-      dd.innerHTML = data.filter(c => !_groupMembres.find(m => m.id == c.id)).map(c => {
+    const contacts = (data || []).filter(c => !_groupMembres.find(m => m.id == c.id));
+    if (contacts.length) {
+      html += '<div style="padding:6px 12px;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;background:var(--bg-2)">Contacts clients</div>';
+      html += contacts.map(c => {
         const fullName = [c.prenom, c.nom].filter(Boolean).join(' ');
         return `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
           onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
@@ -6398,6 +6420,10 @@ function searchGroupMember(q) {
         </div>`;
       }).join('');
     }
+    if (!html) {
+      html = '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucun résultat</div>';
+    }
+    dd.innerHTML = html;
     dd.style.display='block';
   }, 200);
 }
