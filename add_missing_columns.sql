@@ -1,5 +1,18 @@
--- Ajout des colonnes manquantes dans la table clients
+-- Ajout des colonnes manquantes + tables manquantes
 -- À exécuter dans Supabase SQL Editor
+
+-- Table groupes de diffusion
+CREATE TABLE IF NOT EXISTS groupes_diffusion (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  nom TEXT NOT NULL,
+  membres JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE groupes_diffusion ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "groupes_diffusion_all" ON groupes_diffusion FOR ALL USING (true) WITH CHECK (true);
+
+-- Colonnes manquantes table clients
 
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS categorie TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS profession TEXT;
