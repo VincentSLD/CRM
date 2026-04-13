@@ -2273,7 +2273,9 @@ function filterByCommercial(items) {
   if (!currentCommercial || !currentCommercial.akuiteo_manager_id) return items;
   if (currentCommercial.role === 'admin' && !viewMyData) return items;
   const myId = currentCommercial.akuiteo_manager_id;
-  return items.filter(d => d.responsable_id === myId || d.commercial_id === myId);
+  // Clients gérés par ce commercial
+  const myClientIds = new Set(DB.clients.filter(c => c.account_manager_id === myId).map(c => c.id));
+  return items.filter(d => d.responsable_id === myId || d.commercial_id === myId || (d.client_id && myClientIds.has(d.client_id)));
 }
 
 async function toggleViewMyData() {
