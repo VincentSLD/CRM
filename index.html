@@ -7809,7 +7809,7 @@ async function syncAkuiteoQuick() {
     setSyncText('Sync rapide — Documents...');
     const { data: allCl2 } = await sb.from('clients').select('id,akuiteo_id,name');
     const akCMap = {}; for (const c of (allCl2||[])) { if (c.akuiteo_id) akCMap[c.akuiteo_id] = c; }
-    const docSinceDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const docSinceDate = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
     const [rawQuot, rawOrd, rawInv] = await Promise.all([
       akuiteoFetch('POST', '/sales/quotations/search?limit=500', { date: { operator: 'GREATER_OR_EQUALS', value: docSinceDate } }).catch(() => []),
