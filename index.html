@@ -7854,7 +7854,7 @@ async function syncAkuiteoQuick() {
         return { id: 'akf_' + String(f.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(f.id||''), ref: String(f.number||f.id||''),
           client_name: c?.name || f.name || 'Inconnu', client_id: c?.id || null,
           montant: f.afterTaxAmount || 0, reste_a_payer: isPaid ? 0 : (f.afterTaxAmount || 0),
-          statut: isPaid ? 'payee' : f.state === 'SENT' ? 'envoyee' : 'en_cours',
+          statut: isPaid ? 'payee' : f.state === 'SENT' ? 'envoyee' : 'attente',
           date: f.date ? f.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
           echeance: f.dueDate ? f.dueDate.substring(0, 10) : null,
           projet: f.projectId || null, agence: f.entityCode || null, societe: f.companyCode || null,
