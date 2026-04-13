@@ -2501,8 +2501,8 @@ async function loadDB() {
       sb.from('reports').select('id,client_id,client_name,contact_name,date,titre,type_cr,statut_cr,redacteur_id,pieces_jointes,created_at').order('date', {ascending:false}).limit(500).then(r => r.data || []),
       sb.from('notifications').select('id,type,text,time_label,read,created_at').order('created_at', {ascending:false}).limit(100).then(r => r.data || []),
       sb.from('commerciaux').select('*').then(r => r.data || []),
-      fetchFast('marches', MARCHE_LITE, 'date_debut').catch(() => []),
-      fetchFast('affaires', AFFAIRE_LITE, 'date_debut').catch(() => []),
+      sb.from('marches').select(MARCHE_LITE).or(`date_debut.gte.${dateFilter},date_debut.is.null`).order('date_debut', {ascending: false}).then(r => r.data || []).catch(() => []),
+      sb.from('affaires').select(AFFAIRE_LITE).or(`date_debut.gte.${dateFilter},date_debut.is.null`).order('date_debut', {ascending: false}).then(r => r.data || []).catch(() => []),
     ]);
     console.log(`[loadDB] Fetch en ${Date.now()-t0}ms : ${dAll.length} devis, ${cmAll.length} cmd, ${fAll.length} fact, ${maAll.length} marchés, ${afAll.length} affaires`);
     console.log(`[loadDB] Marchés: ${maAll.length}, Affaires: ${afAll.length}`);
