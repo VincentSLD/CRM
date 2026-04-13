@@ -7911,13 +7911,17 @@ async function syncAkuiteoQuick() {
         });
       }
       const marcheRows = Object.values(marchesMap);
+      console.log('[QuickSync] Marchés à upsert:', JSON.stringify(marcheRows.slice(0,3)));
+      console.log('[QuickSync] Affaires à upsert:', JSON.stringify(affaireRows.slice(0,3)));
       if (marcheRows.length > 0) {
-        const { error: mErr } = await sb.from('marches').upsert(marcheRows, { onConflict: 'id' });
-        if (mErr) console.warn('[QuickSync] Marchés upsert err:', mErr.message);
+        const { error: mErr, data: mData } = await sb.from('marches').upsert(marcheRows, { onConflict: 'id' });
+        if (mErr) console.error('[QuickSync] Marchés upsert err:', mErr.message, mErr.details, mErr.hint);
+        else console.log('[QuickSync] Marchés upsert OK');
       }
       if (affaireRows.length > 0) {
         const { error: aErr } = await sb.from('affaires').upsert(affaireRows, { onConflict: 'id' });
-        if (aErr) console.warn('[QuickSync] Affaires upsert err:', aErr.message);
+        if (aErr) console.error('[QuickSync] Affaires upsert err:', aErr.message, aErr.details, aErr.hint);
+        else console.log('[QuickSync] Affaires upsert OK');
       }
       console.log(`[QuickSync] ${marcheRows.length} marchés, ${affaireRows.length} affaires`);
     }
