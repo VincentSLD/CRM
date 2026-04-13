@@ -7719,50 +7719,72 @@ async function syncAkuiteoQuick() {
   showSyncLoading(true);
   const LIMIT = 50;
   try {
-    // 1. Clients : 50 derniers de Supabase mis à jour depuis Akuiteo (GET individuel)
-    setSyncText('Sync rapide — Sociétés...');
-    const { data: recentClients } = await sb.from('clients').select('id,akuiteo_id').not('akuiteo_id', 'is', null).order('id', { ascending: false }).limit(LIMIT);
-    const clientsToSync = (recentClients || []).filter(c => c.akuiteo_id);
-    let syncedClients = 0;
+    // 1. Clients modifiés récemment dans Akuiteo (filtre modificationTime)
+    setSyncText('Sync rapide — Sociétés récentes...');
+    const sinceDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().replace('Z', '+0000');
+    let akCustomers = await akuiteoFetch('POST', '/crm/customers/search?limit=200', {
+      modificationTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate }
+    }).catch(() => []);
+    if (!Array.isArray(akCustomers)) akCustomers = [];
+    // Si trop de résultats, limiter aux 50 premiers
+    if (akCustomers.length > LIMIT) akCustomers = akCustomers.slice(0, LIMIT);
+    console.log(`[QuickSync] ${akCustomers.length} sociétés modifiées depuis ${sinceDate.substring(0,10)}`);
+
+    const { data: existingClients } = await sb.from('clients').select('id,akuiteo_id');
+    const existingMap = {};
+    for (const ec of (existingClients || [])) { if (ec.akuiteo_id) existingMap[ec.akuiteo_id] = ec.id; }
+    const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626'];
+
+    if (akCustomers.length > 0) {
+      const rows = akCustomers.map(ak => {
+        const akId = String(ak.id || ak.code);
+        const id = existingMap[akId] || ('ak_' + akId.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20));
+        const isNew = !existingMap[akId];
+        const ini = (ak.name || ak.legalName || '??').split(' ').map(w => (w||'')[0]).join('').substring(0, 2).toUpperCase();
+        return {
+          id, name: ak.name || ak.legalName || ak.code || 'Sans nom', code: ak.code || akId,
+          sector: ak.profession || ak.category || '', city: ak.address?.city || '',
+          contact: ak.accountManager || ak.salesman || '', email: ak.address?.email || ak.email || '',
+          phone: ak.address?.phone || ak.phone || '', akuiteo_id: akId,
+          account_manager_id: ak.accountManagerId || null, salesman_id: ak.salesmanId || null,
+          adresse_ligne1: ak.address?.line1 || null, code_postal: ak.address?.postalCode || null,
+          pays: ak.address?.countryName || null, departement: ak.address?.geographicalDepartmentName || null,
+          region: ak.address?.regionName || null, raison_sociale: ak.legalName || null,
+          siren: ak.SIREN || null, siret: ak.SIRET || null, ape: ak.APE || null,
+          forme_juridique: ak.legalForm || null,
+          ...(isNew ? { ini, color: colors[Math.floor(Math.random() * colors.length)], ca: 0, obj: 0, margin: 0, dso: 0, score: 50, status: 'objectif', sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15 } : {}),
+        };
+      });
+      await sb.from('clients').upsert(rows, { onConflict: 'id' });
+      console.log(`[QuickSync] ${rows.length} sociétés upsertées`);
+    }
+
+    // 2. Contacts des clients récupérés
+    setSyncText('Sync rapide — Contacts...');
     const contactRows = [];
-    for (let i = 0; i < clientsToSync.length; i += 10) {
-      setSyncText(`Sync rapide — Sociétés ${i}/${clientsToSync.length}...`);
-      const batch = clientsToSync.slice(i, i + 10);
-      await Promise.allSettled(batch.map(async (cl) => {
-        try {
-          const ak = await akuiteoFetch('GET', '/crm/customers/' + cl.akuiteo_id);
-          if (!ak || !ak.id) return;
-          const updates = {
-            name: ak.name || ak.legalName || null, code: ak.code || null,
-            sector: ak.profession || ak.category || '', city: ak.address?.city || '',
-            email: ak.address?.email || ak.email || '', phone: ak.address?.phone || ak.phone || '',
-            account_manager_id: ak.accountManagerId || null, salesman_id: ak.salesmanId || null,
-            adresse_ligne1: ak.address?.line1 || null, code_postal: ak.address?.postalCode || null,
-            raison_sociale: ak.legalName || null, siren: ak.SIREN || null, siret: ak.SIRET || null,
-            ape: ak.APE || null, forme_juridique: ak.legalForm || null,
-          };
-          await sb.from('clients').update(updates).eq('id', cl.id);
-          syncedClients++;
-          // Contacts de ce client
-          const contacts = await akuiteoFetch('GET', '/crm/customers/' + cl.akuiteo_id + '/contacts').catch(() => []);
-          if (Array.isArray(contacts)) {
-            for (const ct of contacts) {
-              contactRows.push({
-                id: 'ct_' + String(ct.id).replace(/[^a-zA-Z0-9]/g, '_') + '_' + cl.id.substring(0, 8),
-                client_id: cl.id, akuiteo_id: String(ct.id), akuiteo_customer_id: cl.akuiteo_id,
-                nom: ct.name || '', prenom: ct.firstName || '', titre: ct.title || '',
-                fonction: ct.functionTitle || ct.position || '', service: ct.service || '',
-                email: ct.email || '', telephone: ct.phone || '', mobile: ct.mobilePhone || '',
-              });
-            }
-          }
-        } catch (e) { console.warn(`[QuickSync] Client ${cl.akuiteo_id}:`, e.message); }
+    const clMap = {};
+    for (const ec of (existingClients || [])) { if (ec.akuiteo_id) clMap[ec.akuiteo_id] = ec; }
+    for (const ak of akCustomers) { const akId = String(ak.id); if (!clMap[akId]) clMap[akId] = { id: existingMap[akId] || ('ak_' + akId.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20)), akuiteo_id: akId }; }
+    for (let i = 0; i < akCustomers.length; i += 10) {
+      setSyncText(`Sync rapide — Contacts ${i}/${akCustomers.length}...`);
+      const batch = akCustomers.slice(i, i + 10);
+      await Promise.allSettled(batch.map(async ak => {
+        const akId = String(ak.id);
+        const crmClient = clMap[akId];
+        if (!crmClient) return;
+        const contacts = await akuiteoFetch('GET', '/crm/customers/' + akId + '/contacts').catch(() => []);
+        if (!Array.isArray(contacts)) return;
+        for (const ct of contacts) {
+          contactRows.push({
+            id: 'ct_' + String(ct.id).replace(/[^a-zA-Z0-9]/g, '_') + '_' + crmClient.id.substring(0, 8),
+            client_id: crmClient.id, akuiteo_id: String(ct.id), akuiteo_customer_id: akId,
+            nom: ct.name || '', prenom: ct.firstName || '', titre: ct.title || '',
+            fonction: ct.functionTitle || ct.position || '', service: ct.service || '',
+            email: ct.email || '', telephone: ct.phone || '', mobile: ct.mobilePhone || '',
+          });
+        }
       }));
     }
-    console.log(`[QuickSync] ${syncedClients} sociétés`);
-
-    // 2. Upsert contacts
-    setSyncText('Sync rapide — Contacts...');
     if (contactRows.length > 0) {
       for (let i = 0; i < contactRows.length; i += 100) {
         await sb.from('contacts').upsert(contactRows.slice(i, i + 100), { onConflict: 'id' });
