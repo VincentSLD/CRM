@@ -1746,9 +1746,24 @@ tbody tr:last-child td { border-bottom: none; }
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         <div class="notif-dot"></div>
       </button>
-      <button class="topbar-btn" onclick="syncAkuiteo()" title="Synchroniser">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-      </button>
+      <div style="position:relative;display:inline-block" id="syncDropdownWrap">
+        <button class="topbar-btn" onclick="document.getElementById('syncDropdownMenu').style.display=document.getElementById('syncDropdownMenu').style.display==='block'?'none':'block'" title="Synchroniser Akuiteo">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        </button>
+        <div id="syncDropdownMenu" style="display:none;position:absolute;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:220px;z-index:500;overflow:hidden">
+          <div style="padding:8px 12px;font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;border-bottom:1px solid var(--border)">Synchronisation Akuiteo</div>
+          <div style="padding:4px">
+            <button onclick="document.getElementById('syncDropdownMenu').style.display='none';syncAkuiteoQuick()" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:none;background:none;cursor:pointer;border-radius:8px;text-align:left;font-size:13px;color:var(--t1)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''">
+              <span style="font-size:18px">⚡</span>
+              <div><div style="font-weight:600">Sync rapide</div><div style="font-size:11px;color:var(--t3)">50 dernières modifications</div></div>
+            </button>
+            <button onclick="document.getElementById('syncDropdownMenu').style.display='none';syncAkuiteo()" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:none;background:none;cursor:pointer;border-radius:8px;text-align:left;font-size:13px;color:var(--t1)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''">
+              <span style="font-size:18px">🔄</span>
+              <div><div style="font-weight:600">Sync complète</div><div style="font-size:11px;color:var(--t3)">Toutes les données</div></div>
+            </button>
+          </div>
+        </div>
+      </div>
       <div class="view-toggle active" id="viewMyDataToggle" onclick="toggleViewMyData()" title="Basculer entre mes données et toutes les données">
         <span class="view-toggle-label" id="viewMyDataLabel">Mes données</span>
         <div class="view-toggle-track"><div class="view-toggle-thumb"></div></div>
@@ -7610,6 +7625,7 @@ async function doSearch(q) {
   dd.classList.add('show');
 }
 document.addEventListener('click', e => { if(!e.target.closest('.search-bar')) document.getElementById('searchDropdown').classList.remove('show'); });
+document.addEventListener('click', e => { if(!e.target.closest('#syncDropdownWrap')) { const m=document.getElementById('syncDropdownMenu'); if(m) m.style.display='none'; } });
 
 // ═══ SYNC AKUITEO ═══
 // En production (Vercel) → serverless function /api/akuiteo
@@ -7698,6 +7714,148 @@ async function syncAdressesAffaires() {
   toast(`${updated} adresses récupérées, ${noAddr} sans adresse, ${errors} erreurs. Documents mis à jour.`, 'success');
   console.log(`[Akuiteo] Adresses: ${updated} ok, ${noAddr} vides, ${errors} erreurs`);
   await loadDB();
+}
+
+async function syncAkuiteoQuick() {
+  showSyncLoading(true);
+  const LIMIT = 50;
+  try {
+    // 1. Clients (50 derniers modifiés)
+    setSyncText('Sync rapide — Sociétés...');
+    const akCustomers = await akuiteoFetch('POST', `/crm/customers/search?limit=${LIMIT}&offset=0&sort=id&order=DESC`, {
+      code: { operator: 'LIKE', value: '%' }
+    }).catch(() => []);
+    if (Array.isArray(akCustomers) && akCustomers.length > 0) {
+      const { data: existingClients } = await sb.from('clients').select('id,akuiteo_id');
+      const existingMap = {};
+      for (const ec of (existingClients || [])) { if (ec.akuiteo_id) existingMap[ec.akuiteo_id] = ec.id; }
+      const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626'];
+      const rows = akCustomers.map(ak => {
+        const akId = String(ak.id || ak.code);
+        const id = existingMap[akId] || ('ak_' + akId.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20));
+        const isNew = !existingMap[akId];
+        const ini = (ak.name || ak.legalName || '??').split(' ').map(w => (w||'')[0]).join('').substring(0, 2).toUpperCase();
+        return {
+          id, name: ak.name || ak.legalName || ak.code || 'Sans nom', code: ak.code || akId,
+          sector: ak.profession || ak.category || '', city: ak.address?.city || '',
+          contact: ak.accountManager || ak.salesman || '', email: ak.address?.email || ak.email || '',
+          phone: ak.address?.phone || ak.phone || '', akuiteo_id: akId,
+          account_manager_id: ak.accountManagerId || null, salesman_id: ak.salesmanId || null,
+          adresse_ligne1: ak.address?.line1 || null, code_postal: ak.address?.postalCode || null,
+          pays: ak.address?.countryName || null, departement: ak.address?.geographicalDepartmentName || null,
+          region: ak.address?.regionName || null, raison_sociale: ak.legalName || null,
+          siren: ak.SIREN || null, siret: ak.SIRET || null, ape: ak.APE || null,
+          forme_juridique: ak.legalForm || null,
+          ...(isNew ? { ini, color: colors[Math.floor(Math.random() * colors.length)], ca: 0, obj: 0, margin: 0, dso: 0, score: 50, status: 'objectif', sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15 } : {}),
+        };
+      });
+      await sb.from('clients').upsert(rows, { onConflict: 'id' });
+      console.log(`[QuickSync] ${rows.length} sociétés`);
+    }
+
+    // 2. Contacts des 50 derniers clients
+    setSyncText('Sync rapide — Contacts...');
+    if (Array.isArray(akCustomers)) {
+      const contactRows = [];
+      const { data: allCl } = await sb.from('clients').select('id,akuiteo_id');
+      const clMap = {}; for (const c of (allCl||[])) { if (c.akuiteo_id) clMap[c.akuiteo_id] = c; }
+      const batches = [];
+      for (let i = 0; i < Math.min(akCustomers.length, LIMIT); i += 10) {
+        const batch = akCustomers.slice(i, i + 10);
+        batches.push(Promise.allSettled(batch.map(async ak => {
+          const akId = String(ak.id);
+          const crmClient = clMap[akId];
+          if (!crmClient) return;
+          const contacts = await akuiteoFetch('GET', '/crm/customers/' + akId + '/contacts').catch(() => []);
+          if (!Array.isArray(contacts)) return;
+          for (const ct of contacts) {
+            contactRows.push({
+              id: 'ct_' + String(ct.id).replace(/[^a-zA-Z0-9]/g, '_') + '_' + crmClient.id.substring(0, 8),
+              client_id: crmClient.id, akuiteo_id: String(ct.id), akuiteo_customer_id: akId,
+              nom: ct.name || '', prenom: ct.firstName || '', titre: ct.title || '',
+              fonction: ct.functionTitle || ct.position || '', service: ct.service || '',
+              email: ct.email || '', telephone: ct.phone || '', mobile: ct.mobilePhone || '',
+            });
+          }
+        })));
+      }
+      for (const b of batches) await b;
+      if (contactRows.length > 0) {
+        for (let i = 0; i < contactRows.length; i += 100) {
+          await sb.from('contacts').upsert(contactRows.slice(i, i + 100), { onConflict: 'id' });
+        }
+      }
+      console.log(`[QuickSync] ${contactRows.length} contacts`);
+    }
+
+    // 3. Devis, commandes, factures (50 derniers chacun)
+    setSyncText('Sync rapide — Documents...');
+    const { data: allCl2 } = await sb.from('clients').select('id,akuiteo_id,name');
+    const akCMap = {}; for (const c of (allCl2||[])) { if (c.akuiteo_id) akCMap[c.akuiteo_id] = c; }
+
+    const [recentQuot, recentOrd, recentInv] = await Promise.all([
+      akuiteoFetch('POST', `/sales/quotations/search?limit=${LIMIT}&offset=0&sort=id&order=DESC`, { companyCode: { operator: 'IS_NOT_NULL' } }).catch(() => []),
+      akuiteoFetch('POST', `/sales/orders/search?limit=${LIMIT}&offset=0&sort=id&order=DESC`, { companyCode: { operator: 'IS_NOT_NULL' } }).catch(() => []),
+      akuiteoFetch('POST', `/sales/invoices/search?limit=${LIMIT}&offset=0&sort=id&order=DESC`, { companyCode: { operator: 'IS_NOT_NULL' } }).catch(() => []),
+    ]);
+
+    // Devis
+    if (Array.isArray(recentQuot) && recentQuot.length > 0) {
+      const rows = recentQuot.map(q => {
+        const c = akCMap[String(q.thirdPartyId || q.customerId || '')];
+        return { id: 'akd_' + String(q.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(q.id||''), ref: String(q.number||q.id||''),
+          client_name: c?.name || q.name || 'Inconnu', client_id: c?.id || null, sujet: q.name || 'Devis',
+          montant: q.preTaxAmount || 0, statut: q.state === 'SIGNED' ? 'accepted' : q.state === 'ARCHIVED' ? 'refused' : 'pending',
+          date: q.date ? q.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
+          projet: q.projectId || null, agence: q.entityCode || null, societe: q.companyCode || null,
+          responsable_id: q.managerId || null, commercial_id: q.salesManagerId || null };
+      });
+      await sb.from('devis').upsert(rows, { onConflict: 'id' });
+      console.log(`[QuickSync] ${rows.length} devis`);
+    }
+
+    // Commandes
+    if (Array.isArray(recentOrd) && recentOrd.length > 0) {
+      const rows = recentOrd.map(o => {
+        const c = akCMap[String(o.thirdPartyId || o.customerId || '')];
+        return { id: 'akc_' + String(o.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(o.id||''), ref: String(o.number||o.id||''),
+          client_name: c?.name || o.name || 'Inconnu', client_id: c?.id || null, nom: o.name || 'Commande',
+          montant: o.preTaxAmount || 0, statut: o.state === 'CLOSED' ? 'livree' : o.state === 'INVOICED' ? 'facturee' : 'en_cours',
+          date: o.date ? o.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
+          projet: o.projectId || null, agence: o.entityCode || null, societe: o.companyCode || null,
+          responsable_id: o.managerId || null, commercial_id: o.salesManagerId || null };
+      });
+      await sb.from('commandes').upsert(rows, { onConflict: 'id' });
+      console.log(`[QuickSync] ${rows.length} commandes`);
+    }
+
+    // Factures
+    if (Array.isArray(recentInv) && recentInv.length > 0) {
+      const rows = recentInv.map(f => {
+        const c = akCMap[String(f.thirdPartyId || f.customerId || '')];
+        const isPaid = f.state === 'PAID' || f.state === 'CLOSED';
+        return { id: 'akf_' + String(f.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(f.id||''), ref: String(f.number||f.id||''),
+          client_name: c?.name || f.name || 'Inconnu', client_id: c?.id || null,
+          montant: f.afterTaxAmount || 0, reste_a_payer: isPaid ? 0 : (f.afterTaxAmount || 0),
+          statut: isPaid ? 'payee' : f.state === 'SENT' ? 'envoyee' : 'en_cours',
+          date: f.date ? f.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
+          echeance: f.dueDate ? f.dueDate.substring(0, 10) : null,
+          projet: f.projectId || null, agence: f.entityCode || null, societe: f.companyCode || null,
+          responsable_id: f.managerId || null, type_facture: f.invoiceType || null };
+      });
+      await sb.from('factures').upsert(rows, { onConflict: 'id' });
+      console.log(`[QuickSync] ${rows.length} factures`);
+    }
+
+    toast('Sync rapide terminée', 'success');
+    await loadDB();
+    renderPage(currentPage);
+  } catch (e) {
+    console.error('QuickSync error:', e);
+    toast('Erreur sync rapide: ' + e.message, 'error');
+  } finally {
+    showSyncLoading(false);
+  }
 }
 
 async function syncAkuiteo() {
