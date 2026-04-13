@@ -7805,16 +7805,23 @@ async function syncAkuiteoQuick() {
     }
     console.log(`[QuickSync] ${contactRows.length} contacts`);
 
-    // 3. Devis, commandes, factures (50 derniers chacun)
+    // 3. Devis, commandes, factures récents (date >= 3 derniers mois)
     setSyncText('Sync rapide — Documents...');
     const { data: allCl2 } = await sb.from('clients').select('id,akuiteo_id,name');
     const akCMap = {}; for (const c of (allCl2||[])) { if (c.akuiteo_id) akCMap[c.akuiteo_id] = c; }
+    const docSinceDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const [recentQuot, recentOrd, recentInv] = await Promise.all([
-      akuiteoFetch('POST', `/sales/quotations/search?limit=${LIMIT}&offset=0&sort=id&order=DESC`, { companyCode: { operator: 'IS_NOT_NULL' } }).catch(() => []),
-      akuiteoFetch('POST', `/sales/orders/search?limit=${LIMIT}&offset=0&sort=id&order=DESC`, { companyCode: { operator: 'IS_NOT_NULL' } }).catch(() => []),
-      akuiteoFetch('POST', `/sales/invoices/search?limit=${LIMIT}&offset=0&sort=id&order=DESC`, { companyCode: { operator: 'IS_NOT_NULL' } }).catch(() => []),
+    const [rawQuot, rawOrd, rawInv] = await Promise.all([
+      akuiteoFetch('POST', '/sales/quotations/search?limit=500', { date: { operator: 'GREATER_OR_EQUALS', value: docSinceDate } }).catch(() => []),
+      akuiteoFetch('POST', '/sales/orders/search?limit=500', { date: { operator: 'GREATER_OR_EQUALS', value: docSinceDate } }).catch(() => []),
+      akuiteoFetch('POST', '/sales/invoices/search?limit=500', { date: { operator: 'GREATER_OR_EQUALS', value: docSinceDate } }).catch(() => []),
     ]);
+    // Trier par date décroissante et garder les 50 plus récents
+    const sortByDate = arr => (Array.isArray(arr) ? arr : []).sort((a,b) => ((b.date||'') > (a.date||'') ? 1 : -1)).slice(0, LIMIT);
+    const recentQuot = sortByDate(rawQuot);
+    const recentOrd = sortByDate(rawOrd);
+    const recentInv = sortByDate(rawInv);
+    console.log(`[QuickSync] Docs récents (3 mois) : ${(rawQuot||[]).length} devis, ${(rawOrd||[]).length} cmd, ${(rawInv||[]).length} fact → top ${LIMIT}`);
 
     // Devis
     if (Array.isArray(recentQuot) && recentQuot.length > 0) {
