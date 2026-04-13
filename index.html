@@ -7891,12 +7891,14 @@ async function syncAkuiteoQuick() {
         const marcheCode = codeParts.length >= 2 ? codeParts.slice(0, 2).join('.') : p.id;
         const marcheId = 'akm_' + marcheCode.replace(/[^a-zA-Z0-9.]/g, '_');
         // Marché
+        const pCreated = p.changeTracking?.createdTime ? p.changeTracking.createdTime.substring(0, 10) : new Date().toISOString().slice(0, 10);
         if (!marchesMap[marcheCode]) {
           marchesMap[marcheCode] = {
             id: marcheId, akuiteo_id: marcheCode, ref: marcheCode,
             nom: p.name || ('Marché ' + marcheCode),
             client_id: crmClient?.id || null, client_name: crmClient?.name || '',
             agence: p.companyCode || '', statut: 'en_cours', nb_affaires: 0,
+            date_debut: pCreated,
           };
         }
         marchesMap[marcheCode].nb_affaires++;
@@ -7907,7 +7909,7 @@ async function syncAkuiteoQuick() {
           marche_id: marcheId,
           client_id: crmClient?.id || null, client_name: crmClient?.name || '',
           agence: p.companyCode || '', statut: 'en_cours',
-          code_projet: p.id || null,
+          code_projet: p.id || null, date_debut: pCreated,
         });
       }
       const marcheRows = Object.values(marchesMap);
