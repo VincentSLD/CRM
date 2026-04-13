@@ -7719,14 +7719,27 @@ async function syncAkuiteoQuick() {
   showSyncLoading(true);
   const LIMIT = 50;
   try {
-    // 1. Clients modifiés récemment dans Akuiteo (filtre modificationTime)
+    // 1. Clients modifiés OU créés récemment dans Akuiteo
     setSyncText('Sync rapide — Sociétés récentes...');
     const sinceDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().replace('Z', '+0000');
-    let akCustomers = await akuiteoFetch('POST', '/crm/customers/search?limit=200', {
-      modificationTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate }
-    }).catch(() => []);
-    if (!Array.isArray(akCustomers)) akCustomers = [];
-    // Si trop de résultats, limiter aux 50 premiers
+    const [modifiedCustomers, createdCustomers] = await Promise.all([
+      akuiteoFetch('POST', '/crm/customers/search?limit=200', {
+        modificationTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate }
+      }).catch(() => []),
+      akuiteoFetch('POST', '/crm/customers/search?limit=200', {
+        createdTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate }
+      }).catch(() => []),
+    ]);
+    // Fusionner et dédupliquer par ID
+    const seen = new Set();
+    let akCustomers = [];
+    for (const list of [createdCustomers, modifiedCustomers]) {
+      if (!Array.isArray(list)) continue;
+      for (const c of list) {
+        const id = String(c.id || c.code);
+        if (!seen.has(id)) { seen.add(id); akCustomers.push(c); }
+      }
+    }
     if (akCustomers.length > LIMIT) akCustomers = akCustomers.slice(0, LIMIT);
     console.log(`[QuickSync] ${akCustomers.length} sociétés modifiées depuis ${sinceDate.substring(0,10)}`);
 
