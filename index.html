@@ -7882,31 +7882,31 @@ async function syncAkuiteoQuick() {
       // Trier par date de création décroissante, top 50
       akProjects.sort((a,b) => ((b.changeTracking?.createdTime||'') > (a.changeTracking?.createdTime||'') ? 1 : -1));
       akProjects = akProjects.slice(0, LIMIT);
-      // Construire marchés (partie avant le dernier .) et affaires
+      // Construire marchés (préfixe XX.XXXX) et affaires (XX.XXXX.XX) — même format que sync complète
       const marchesMap = {};
       const affaireRows = [];
       for (const p of akProjects) {
         const crmClient = akCMap[String(p.customerId || '')];
         const codeParts = (p.id || '').split('.');
         const marcheCode = codeParts.length >= 2 ? codeParts.slice(0, 2).join('.') : p.id;
+        const marcheId = 'akm_' + marcheCode.replace(/[^a-zA-Z0-9.]/g, '_');
         // Marché
         if (!marchesMap[marcheCode]) {
           marchesMap[marcheCode] = {
-            id: 'mk_' + marcheCode.replace(/[^a-zA-Z0-9.]/g, '_'),
-            nom: p.name || marcheCode,
-            client_id: crmClient?.id || null, client_name: crmClient?.name || p.customer || null,
-            agence: p.companyCode || null,
-            statut: p.projectState || 'en_cours',
+            id: marcheId, akuiteo_id: marcheCode, ref: marcheCode,
+            nom: p.name || ('Marché ' + marcheCode),
+            client_id: crmClient?.id || null, client_name: crmClient?.name || '',
+            agence: p.companyCode || '', statut: 'en_cours', nb_affaires: 0,
           };
         }
+        marchesMap[marcheCode].nb_affaires++;
         // Affaire
         affaireRows.push({
-          id: 'af_' + String(p.id).replace(/[^a-zA-Z0-9.]/g, '_'),
+          id: 'aka_' + String(p.id).replace(/[^a-zA-Z0-9.]/g, '_'),
           nom: p.name || p.id,
-          marche_id: 'mk_' + marcheCode.replace(/[^a-zA-Z0-9.]/g, '_'),
-          client_id: crmClient?.id || null, client_name: crmClient?.name || null,
-          agence: p.companyCode || null,
-          statut: p.projectState || 'en_cours',
+          marche_id: marcheId,
+          client_id: crmClient?.id || null, client_name: crmClient?.name || '',
+          agence: p.companyCode || '', statut: 'en_cours',
           code_projet: p.id || null,
         });
       }
