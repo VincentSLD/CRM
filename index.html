@@ -8456,51 +8456,23 @@ async function syncAkuiteo() {
         console.log(`[Akuiteo] Sites avec adresse: ${Object.keys(siteAddresses).length}`);
         let geoOk = 0, geoFail = 0;
 
-        // Mettre à jour les marchés
+        // Mettre à jour les adresses des marchés (sans géocodage GPS)
         for (const [prefix, info] of Object.entries(marcheDeliverySite)) {
           const addr = siteAddresses[info.deliverySiteId];
           if (!addr) continue;
           const mId = 'akm_' + prefix.replace(/[^a-zA-Z0-9.]/g, '_');
-          const update = { adresse: addr.line1, code_postal: addr.postalCode, ville: addr.city };
-          const fullAddr = [addr.line1, addr.postalCode, addr.city].filter(Boolean).join(', ');
-          if (fullAddr.length > 8) {
-            const coords = await geocodeAddress(fullAddr);
-            if (coords) { update.lat = coords.lat; update.lng = coords.lng; geoOk++; }
-            else { geoFail++; }
-          }
-          await sb.from('marches').update(update).eq('id', mId);
+          await sb.from('marches').update({ adresse: addr.line1, code_postal: addr.postalCode, ville: addr.city }).eq('id', mId);
         }
-        console.log(`[Akuiteo] Adresses marchés: ${geoOk} géocodées, ${geoFail} non trouvées`);
+        console.log(`[Akuiteo] Adresses marchés mises à jour: ${Object.keys(marcheDeliverySite).length}`);
 
-        // Mettre à jour les affaires via deliverySite (commandes)
-        let affGeoSite = 0;
+        // Mettre à jour les adresses des affaires via deliverySite (sans géocodage GPS)
         for (const [pid, info] of Object.entries(projectDeliverySite)) {
           const addr = siteAddresses[info.deliverySiteId];
           if (!addr) continue;
           const affId = 'aka_' + pid.replace(/[^a-zA-Z0-9.]/g, '_');
-          const update = { adresse: addr.line1, code_postal: addr.postalCode, ville: addr.city };
-          const fullAddr = [addr.line1, addr.postalCode, addr.city].filter(Boolean).join(', ');
-          if (fullAddr.length > 8) {
-            const coords = await geocodeAddress(fullAddr);
-            if (coords) { update.lat = coords.lat; update.lng = coords.lng; affGeoSite++; }
-          }
-          await sb.from('affaires').update(update).eq('id', affId);
+          await sb.from('affaires').update({ adresse: addr.line1, code_postal: addr.postalCode, ville: addr.city }).eq('id', affId);
         }
-        console.log(`[Akuiteo] Adresses affaires (via sites): ${affGeoSite} géocodées`);
-
-        // Géocoder les affaires qui ont une adresse (récupérée du projet) mais pas de lat/lng
-        const { data: affSansCoords } = await sb.from('affaires').select('id,adresse,ville,code_postal').not('adresse', 'is', null).is('lat', null);
-        let affGeoProj = 0;
-        for (const aff of (affSansCoords || [])) {
-          const fullAddr = [aff.adresse, aff.code_postal, aff.ville].filter(Boolean).join(', ');
-          if (fullAddr.length < 8) continue;
-          const coords = await geocodeAddress(fullAddr);
-          if (coords) {
-            await sb.from('affaires').update({ lat: coords.lat, lng: coords.lng }).eq('id', aff.id);
-            affGeoProj++;
-          }
-        }
-        console.log(`[Akuiteo] Adresses affaires (géocodage): ${affGeoProj} nouvelles coordonnées`);
+        console.log(`[Akuiteo] Adresses affaires mises à jour: ${Object.keys(projectDeliverySite).length}`);
       } catch (e) { console.warn('[Akuiteo] Erreur adresses marchés:', e.message); }
     })();
 
