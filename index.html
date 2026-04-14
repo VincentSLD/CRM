@@ -3380,7 +3380,7 @@ function renderClientDetail() {
         const title = !c.siret ? 'Compléter la fiche avec les données SIRENE' : hasSirene ? 'Données SIRENE complètes' : 'Rechercher dans l\'annuaire SIRENE';
         return '<button class="btn '+cls+'" onclick="openSireneModal(\''+c.id+'\',\''+((c.name||'').replace(/'/g,"\\'"))+'\')" title="'+title+'">'+label+'</button>';
       })()}
-      ${c.akuiteo_id ? '<button class="btn" onclick="pullClientFromAkuiteo(\''+c.id+'\')" title="Récupérer les mises à jour depuis Akuiteo">⬇ Maj Akuiteo</button>' : ''}
+      ${c.akuiteo_id ? '<button class="btn" onclick="pullClientFromAkuiteo(\''+c.id+'\')" title="Récupérer les mises à jour depuis Akuiteo">⬇ Recup Akuiteo</button>' : ''}
       <button class="btn ${c.akuiteo_id ? (c.akuiteo_dirty ? 'btn-not-synced' : 'btn-synced') : 'btn-not-synced'}" onclick="pushClientToAkuiteo('${c.id}')" title="${c.akuiteo_id ? (c.akuiteo_dirty ? 'Modifié localement — cliquez pour synchroniser' : 'Synchronisé (ID: '+c.akuiteo_id+')') : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? (c.akuiteo_dirty ? '⬆ Synchroniser' : '✔ Synchronisé') : '⬆ Sync Akuiteo'}</button>
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
       <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer cette société">Supprimer</button>
