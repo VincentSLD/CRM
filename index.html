@@ -1612,6 +1612,9 @@ tbody tr:last-child td { border-bottom: none; }
         </div>
       </div>
       <button class="btn-login" id="loginBtn" onclick="doAuth()">Se connecter</button>
+      <div id="forgotPasswordLink" style="text-align:center;margin-top:10px">
+        <a onclick="forgotPassword()" style="font-size:12px;color:var(--accent);cursor:pointer;text-decoration:underline">Mot de passe oublié ?</a>
+      </div>
       <div class="login-toggle">
         <span id="loginToggleText">Pas encore de compte ?</span>
         <a id="loginToggleLink" onclick="toggleAuthMode()">Créer un compte</a>
@@ -9174,6 +9177,83 @@ async function getAuthToken() {
   if (data.session?.access_token) return data.session.access_token;
   const { data: refreshed } = await sb.auth.refreshSession();
   return refreshed.session?.access_token || null;
+}
+
+async function forgotPassword() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const errEl = document.getElementById('loginError');
+  if (!email) {
+    errEl.textContent = 'Entrez votre email pour réinitialiser le mot de passe';
+    errEl.classList.add('show');
+    return;
+  }
+  try {
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    if (error) {
+      errEl.textContent = error.message;
+      errEl.classList.add('show');
+      return;
+    }
+    errEl.textContent = '';
+    errEl.classList.remove('show');
+    const msg = document.createElement('div');
+    msg.style.cssText = 'background:#e8f5e9;color:#2e7d32;padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:12px;text-align:center;line-height:1.5';
+    msg.textContent = 'Un email de réinitialisation a été envoyé à ' + email;
+    const formFields = document.getElementById('loginFormFields');
+    formFields.parentNode.insertBefore(msg, formFields);
+    setTimeout(() => msg.remove(), 10000);
+  } catch (e) {
+    errEl.textContent = 'Erreur: ' + e.message;
+    errEl.classList.add('show');
+  }
+}
+
+// Gérer le retour après réinitialisation (token dans l'URL)
+(async function handlePasswordReset() {
+  const hash = window.location.hash;
+  if (hash && hash.includes('type=recovery')) {
+    // Supabase a redirigé avec le token — afficher un formulaire de nouveau mot de passe
+    const loginScreen = document.querySelector('.login-screen');
+    if (loginScreen) loginScreen.classList.remove('hidden');
+    const formFields = document.getElementById('loginFormFields');
+    if (formFields) {
+      formFields.innerHTML = `
+        <div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:12px;text-align:center">Nouveau mot de passe</div>
+        <div class="fg">
+          <label class="fl">Nouveau mot de passe</label>
+          <input class="fi" id="newPassword" type="password" placeholder="Minimum 6 caractères" onkeydown="if(event.key==='Enter')submitNewPassword()">
+        </div>
+        <div class="fg">
+          <label class="fl">Confirmer le mot de passe</label>
+          <input class="fi" id="confirmPassword" type="password" placeholder="Retapez le mot de passe" onkeydown="if(event.key==='Enter')submitNewPassword()">
+        </div>
+      `;
+      const btn = document.getElementById('loginBtn');
+      if (btn) { btn.textContent = 'Changer le mot de passe'; btn.onclick = submitNewPassword; }
+      const forgotLink = document.getElementById('forgotPasswordLink');
+      if (forgotLink) forgotLink.style.display = 'none';
+      const toggleDiv = document.querySelector('.login-toggle');
+      if (toggleDiv) toggleDiv.style.display = 'none';
+    }
+  }
+})();
+
+async function submitNewPassword() {
+  const pw = document.getElementById('newPassword')?.value;
+  const pw2 = document.getElementById('confirmPassword')?.value;
+  const errEl = document.getElementById('loginError');
+  if (!pw || pw.length < 6) { errEl.textContent = 'Le mot de passe doit faire au moins 6 caractères'; errEl.classList.add('show'); return; }
+  if (pw !== pw2) { errEl.textContent = 'Les mots de passe ne correspondent pas'; errEl.classList.add('show'); return; }
+  try {
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if (error) { errEl.textContent = error.message; errEl.classList.add('show'); return; }
+    errEl.textContent = '';
+    errEl.classList.remove('show');
+    window.location.hash = '';
+    window.location.reload();
+  } catch (e) { errEl.textContent = 'Erreur: ' + e.message; errEl.classList.add('show'); }
 }
 
 function toggleAuthMode() {
