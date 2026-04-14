@@ -9288,6 +9288,18 @@ async function submitNewPassword() {
     }
     errEl.textContent = '';
     errEl.classList.remove('show');
+    _recoveryMode = false;
+    // S'assurer que l'utilisateur a l'accès CRM (il avait un compte avant)
+    const { data: { session: newSession } } = await sb.auth.getSession();
+    if (newSession?.user) {
+      const { data: accessRow } = await sb.from('crm_access').select('id,approved').eq('user_id', newSession.user.id).maybeSingle();
+      if (!accessRow) {
+        // Créer automatiquement l'accès (l'utilisateur avait un compte, il a juste reset son mdp)
+        await sb.from('crm_access').insert({ user_id: newSession.user.id, email: newSession.user.email, approved: true });
+      } else if (!accessRow.approved) {
+        await sb.from('crm_access').update({ approved: true }).eq('id', accessRow.id);
+      }
+    }
     const msg = document.createElement('div');
     msg.style.cssText = 'background:#e8f5e9;color:#2e7d32;padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:12px;text-align:center';
     msg.textContent = 'Mot de passe modifié avec succès ! Redirection...';
