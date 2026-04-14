@@ -9218,57 +9218,55 @@ async function forgotPassword() {
 }
 
 // Gérer le retour après réinitialisation (token dans l'URL)
-// Détection du retour de réinitialisation (hash OU query params selon version Supabase)
-(async function handlePasswordReset() {
+// Réinitialisation mot de passe — intercepter le token et garder la session
+let _recoveryMode = false;
+sb.auth.onAuthStateChange((event, session) => {
+  if (event === 'PASSWORD_RECOVERY') {
+    _recoveryMode = true;
+    console.log('[Auth] PASSWORD_RECOVERY event, session:', !!session);
+    showResetForm();
+  }
+});
+// Vérifier aussi l'URL au chargement
+(function() {
   const hash = window.location.hash || '';
   const params = new URLSearchParams(window.location.search);
-  const isRecovery = hash.includes('type=recovery') || params.get('type') === 'recovery';
-  if (!isRecovery) return;
-
-  // Attendre que Supabase traite le token automatiquement
-  await new Promise(r => setTimeout(r, 500));
-  // Vérifier si Supabase a une session (token traité)
-  const { data: { session } } = await sb.auth.getSession();
-
-  function showResetForm() {
-    const loginScreen = document.querySelector('.login-screen');
-    if (loginScreen) loginScreen.classList.remove('hidden');
-    // Masquer le contenu principal
-    const main = document.querySelector('.main');
-    if (main) main.style.display = 'none';
-    const formFields = document.getElementById('loginFormFields');
-    if (formFields) {
-      formFields.innerHTML = `
-        <div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:12px;text-align:center">Nouveau mot de passe</div>
-        <div class="fg">
-          <label class="fl">Nouveau mot de passe</label>
-          <input class="fi" id="newPassword" type="password" placeholder="Minimum 6 caractères" onkeydown="if(event.key==='Enter')submitNewPassword()">
-        </div>
-        <div class="fg">
-          <label class="fl">Confirmer le mot de passe</label>
-          <input class="fi" id="confirmPassword" type="password" placeholder="Retapez le mot de passe" onkeydown="if(event.key==='Enter')submitNewPassword()">
-        </div>
-      `;
-      const btn = document.getElementById('loginBtn');
-      if (btn) { btn.textContent = 'Changer le mot de passe'; btn.onclick = submitNewPassword; }
-      const forgotLink = document.getElementById('forgotPasswordLink');
-      if (forgotLink) forgotLink.style.display = 'none';
-      const toggleDiv = document.querySelector('.login-toggle');
-      if (toggleDiv) toggleDiv.style.display = 'none';
-    }
-  }
-
-  if (session) {
-    showResetForm();
-  } else {
-    // Écouter le changement d'auth (Supabase traite le token en background)
-    sb.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') showResetForm();
-    });
-    // Fallback : afficher le formulaire après 2s même sans session
-    setTimeout(showResetForm, 2000);
+  if (hash.includes('type=recovery') || params.get('type') === 'recovery') {
+    _recoveryMode = true;
+    // Le formulaire sera affiché par l'event PASSWORD_RECOVERY ci-dessus
+    // Fallback si l'event ne se déclenche pas
+    setTimeout(() => { if (_recoveryMode) showResetForm(); }, 3000);
   }
 })();
+
+function showResetForm() {
+  const loginScreen = document.querySelector('.login-screen');
+  if (loginScreen) loginScreen.classList.remove('hidden');
+  const main = document.querySelector('.main');
+  if (main) main.style.display = 'none';
+  const sidebar = document.querySelector('.sidebar');
+  if (sidebar) sidebar.style.display = 'none';
+  const formFields = document.getElementById('loginFormFields');
+  if (formFields) {
+    formFields.innerHTML = `
+      <div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:12px;text-align:center">Nouveau mot de passe</div>
+      <div class="fg">
+        <label class="fl">Nouveau mot de passe</label>
+        <input class="fi" id="newPassword" type="password" placeholder="Minimum 6 caractères" onkeydown="if(event.key==='Enter')submitNewPassword()">
+      </div>
+      <div class="fg">
+        <label class="fl">Confirmer le mot de passe</label>
+        <input class="fi" id="confirmPassword" type="password" placeholder="Retapez le mot de passe" onkeydown="if(event.key==='Enter')submitNewPassword()">
+      </div>
+    `;
+    const btn = document.getElementById('loginBtn');
+    if (btn) { btn.textContent = 'Changer le mot de passe'; btn.onclick = submitNewPassword; }
+    const forgotLink = document.getElementById('forgotPasswordLink');
+    if (forgotLink) forgotLink.style.display = 'none';
+    const toggleDiv = document.querySelector('.login-toggle');
+    if (toggleDiv) toggleDiv.style.display = 'none';
+  }
+}
 
 async function submitNewPassword() {
   const pw = document.getElementById('newPassword')?.value;
@@ -9277,36 +9275,27 @@ async function submitNewPassword() {
   if (!pw || pw.length < 6) { errEl.textContent = 'Le mot de passe doit faire au moins 6 caractères'; errEl.classList.add('show'); return; }
   if (pw !== pw2) { errEl.textContent = 'Les mots de passe ne correspondent pas'; errEl.classList.add('show'); return; }
   try {
-    // S'assurer qu'on a une session (vérifier le token si nécessaire)
-    let { data: { session } } = await sb.auth.getSession();
-    if (!session) {
-      // Tenter de récupérer le token depuis l'URL
-      const params = new URLSearchParams(window.location.search);
-      const tokenHash = params.get('token_hash') || params.get('token');
-      const hashParams = new URLSearchParams(window.location.hash.replace('#', ''));
-      const accessToken = hashParams.get('access_token');
-      const refreshToken = hashParams.get('refresh_token');
-      if (tokenHash) {
-        const { error: otpErr } = await sb.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' });
-        if (otpErr) console.warn('verifyOtp err:', otpErr.message);
-      } else if (accessToken && refreshToken) {
-        await sb.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if (error) {
+      // Si session missing, tenter de la recréer
+      if (error.message.includes('session')) {
+        errEl.textContent = 'Le lien a expiré. Veuillez refaire une demande de réinitialisation.';
+      } else {
+        errEl.textContent = error.message;
       }
-      const check = await sb.auth.getSession();
-      session = check.data?.session;
-    }
-    if (!session) {
-      errEl.textContent = 'Session expirée. Veuillez refaire une demande de réinitialisation.';
       errEl.classList.add('show');
       return;
     }
-    const { error } = await sb.auth.updateUser({ password: pw });
-    if (error) { errEl.textContent = error.message; errEl.classList.add('show'); return; }
     errEl.textContent = '';
     errEl.classList.remove('show');
-    // Nettoyer l'URL et recharger
-    window.history.replaceState({}, '', window.location.pathname);
-    window.location.reload();
+    const msg = document.createElement('div');
+    msg.style.cssText = 'background:#e8f5e9;color:#2e7d32;padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:12px;text-align:center';
+    msg.textContent = 'Mot de passe modifié avec succès ! Redirection...';
+    document.getElementById('loginFormFields').parentNode.insertBefore(msg, document.getElementById('loginFormFields'));
+    setTimeout(() => {
+      window.history.replaceState({}, '', window.location.pathname);
+      window.location.reload();
+    }, 2000);
   } catch (e) { errEl.textContent = 'Erreur: ' + e.message; errEl.classList.add('show'); }
 }
 
@@ -9522,6 +9511,9 @@ function initRealtime() {
 
 // ═══ INIT ═══
 (async function init() {
+  // En mode recovery (réinitialisation mot de passe), ne pas toucher à la session
+  if (_recoveryMode) return;
+
   // Vérifier si l'utilisateur a déjà une session active
   const { data: { session } } = await sb.auth.getSession();
   if (session && session.user) {
