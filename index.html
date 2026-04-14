@@ -8925,6 +8925,17 @@ async function pushClientToAkuiteo(clientId) {
           email: full.email || null,
         },
       };
+      // Champs Akuiteo (IDs) — Infos Entreprise / Commercial / Tarification
+      if (full.mk_categorie_id) akData.categoryId = full.mk_categorie_id;
+      if (full.mk_sous_categorie_id) akData.subCategoryId = full.mk_sous_categorie_id;
+      if (full.mk_categorie_pro_id) akData.professionalCategoryId = full.mk_categorie_pro_id;
+      if (full.mk_secteur_id) akData.sectorId = full.mk_secteur_id;
+      if (full.mk_type_id) akData.thirdPartyLinkTypeId = full.mk_type_id;
+      if (full.mode_tarification) akData.firstPricingMethodId = full.mode_tarification;
+      if (full.account_manager_id) akData.accountManagerId = full.account_manager_id;
+      if (full.salesman_id) akData.salesmanId = full.salesman_id;
+      if (full.mk_groupe) akData.level1grouping = full.mk_groupe;
+      if (full.mk_origine) akData.level2grouping = full.mk_origine;
     }
 
     if (full.akuiteo_id) {
