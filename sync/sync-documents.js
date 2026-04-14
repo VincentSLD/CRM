@@ -34,7 +34,7 @@ async function syncDocuments() {
   const dBatch = allQuotations.map(q => {
     const akCid = String(q.thirdPartyId || q.customerId || '');
     const crmClient = akClientMap[akCid];
-    return {
+    const row = {
       id: 'akd_' + String(q.id).replace(/[^a-zA-Z0-9.]/g, '_'),
       akuiteo_id: String(q.id || ''),
       ref: String(q.number || q.id || ''),
@@ -60,7 +60,11 @@ async function syncDocuments() {
       date_signature_reelle: q.actualSignatureDate ? q.actualSignatureDate.substring(0, 10) : null,
       nb_lignes: Array.isArray(q.lines) ? q.lines.length : 0,
       marche_id: null, affaire_id: null,
+      custom_data: (q.customData && Object.keys(q.customData).length > 0) ? q.customData : null,
     };
+    // Don't overwrite custom_data if null — preserve existing value in Supabase
+    if (!row.custom_data) delete row.custom_data;
+    return row;
   });
   for (let i = 0; i < dBatch.length; i += 100) {
     const { error } = await sb.from('devis').upsert(dBatch.slice(i, i + 100), { onConflict: 'id' });
@@ -73,7 +77,7 @@ async function syncDocuments() {
   const cBatch = allOrders.map(o => {
     const akCid = String(o.thirdPartyId || o.customerId || '');
     const crmClient = akClientMap[akCid];
-    return {
+    const row = {
       id: 'akc_' + String(o.id).replace(/[^a-zA-Z0-9.]/g, '_'),
       akuiteo_id: String(o.id || ''),
       ref: String(o.number || o.id || ''),
@@ -99,7 +103,11 @@ async function syncDocuments() {
       devise: o.currencyCode || 'EUR',
       nb_lignes: Array.isArray(o.lines) ? o.lines.length : 0,
       marche_id: null, affaire_id: null,
+      custom_data: (o.customData && Object.keys(o.customData).length > 0) ? o.customData : null,
     };
+    // Don't overwrite custom_data if null — preserve existing value in Supabase
+    if (!row.custom_data) delete row.custom_data;
+    return row;
   });
   for (let i = 0; i < cBatch.length; i += 100) {
     const { error } = await sb.from('commandes').upsert(cBatch.slice(i, i + 100), { onConflict: 'id' });
@@ -112,7 +120,7 @@ async function syncDocuments() {
   const fBatch = allInvoices.map(f => {
     const akCid = String(f.thirdPartyId || f.customerId || '');
     const crmClient = akClientMap[akCid];
-    return {
+    const row = {
       id: 'akf_' + String(f.id).replace(/[^a-zA-Z0-9.]/g, '_'),
       akuiteo_id: String(f.id || ''),
       ref: String(f.number || f.id || ''),
@@ -141,7 +149,11 @@ async function syncDocuments() {
       nb_lignes: Array.isArray(f.lines) ? f.lines.length : 0,
       reference1: f.reference1 || null,
       marche_id: null, affaire_id: null,
+      custom_data: (f.customData && Object.keys(f.customData).length > 0) ? f.customData : null,
     };
+    // Don't overwrite custom_data if null — preserve existing value in Supabase
+    if (!row.custom_data) delete row.custom_data;
+    return row;
   });
   for (let i = 0; i < fBatch.length; i += 100) {
     const { error } = await sb.from('factures').upsert(fBatch.slice(i, i + 100), { onConflict: 'id' });

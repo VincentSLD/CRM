@@ -8021,6 +8021,8 @@ async function syncAkuiteo() {
         custom_data: ak.customData && Object.keys(ak.customData).length > 0 ? ak.customData : null,
         ...(isNew ? { ini, color: colors[Math.floor(Math.random() * colors.length)], ca: 0, obj: 0, margin: 0, dso: 0, score: 50, status: 'objectif', sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15 } : {}),
       };
+      // Don't overwrite custom_data if null — preserve existing value in Supabase
+      if (!allClientsMap[crmId].custom_data) delete allClientsMap[crmId].custom_data;
       if (isNew) created++; else updated++;
     }
     const allClientsBatch = Object.values(allClientsMap);
@@ -8208,7 +8210,7 @@ async function syncAkuiteo() {
       const akCid = String(q.thirdPartyId || q.customerId || '');
       const crmClient = akClientMap[akCid];
       if (q.projectId) allFetchedDocs.push({ projectId: String(q.projectId), customerId: akCid, preTaxAmount: q.preTaxAmount, afterTaxAmount: q.afterTaxAmount, date: q.date, entityCode: q.entityCode });
-      return {
+      const row = {
         id: 'akd_' + String(q.id).replace(/[^a-zA-Z0-9.]/g, '_'),
         akuiteo_id: String(q.id || ''), ref: String(q.number || q.id || ''),
         client_name: crmClient?.name || q.name || 'Inconnu', client_id: crmClient?.id || null,
@@ -8227,6 +8229,9 @@ async function syncAkuiteo() {
         nb_lignes: Array.isArray(q.lines) ? q.lines.length : 0,
         custom_data: (q.customData && Object.keys(q.customData).length > 0) ? q.customData : null,
       };
+      // Don't overwrite custom_data if null — preserve existing value in Supabase
+      if (!row.custom_data) delete row.custom_data;
+      return row;
     });
     for (let i = 0; i < dBatchAll.length; i += 100) {
       const { error } = await sb.from('devis').upsert(dBatchAll.slice(i, i + 100), { onConflict: 'id' });
@@ -8243,7 +8248,7 @@ async function syncAkuiteo() {
         allFetchedDocs.push({ projectId: String(o.projectId), customerId: akCid, preTaxAmount: o.preTaxAmount, afterTaxAmount: o.afterTaxAmount, date: o.date, entityCode: o.entityCode });
         if (o.deliverySiteId) projectDeliverySite[String(o.projectId)] = { deliverySiteId: String(o.deliverySiteId), customerId: akCid };
       }
-      return {
+      const row = {
         id: 'akc_' + String(o.id).replace(/[^a-zA-Z0-9.]/g, '_'),
         akuiteo_id: String(o.id || ''), ref: String(o.number || o.id || ''),
         client_name: crmClient?.name || o.name || 'Inconnu', client_id: crmClient?.id || null,
@@ -8261,6 +8266,9 @@ async function syncAkuiteo() {
         devise: o.currencyCode || 'EUR', nb_lignes: Array.isArray(o.lines) ? o.lines.length : 0,
         custom_data: (o.customData && Object.keys(o.customData).length > 0) ? o.customData : null,
       };
+      // Don't overwrite custom_data if null — preserve existing value in Supabase
+      if (!row.custom_data) delete row.custom_data;
+      return row;
     });
     for (let i = 0; i < cBatchAll.length; i += 100) {
       const { error } = await sb.from('commandes').upsert(cBatchAll.slice(i, i + 100), { onConflict: 'id' });
@@ -8274,7 +8282,7 @@ async function syncAkuiteo() {
       const akCid = String(f.thirdPartyId || f.customerId || '');
       const crmClient = akClientMap[akCid];
       if (f.projectId) allFetchedDocs.push({ projectId: String(f.projectId), customerId: akCid, preTaxAmount: f.preTaxAmount, afterTaxAmount: f.afterTaxAmount, date: f.date, entityCode: f.entityCode });
-      return {
+      const row = {
         id: 'akf_' + String(f.id).replace(/[^a-zA-Z0-9.]/g, '_'),
         akuiteo_id: String(f.id || ''), ref: String(f.number || f.id || ''),
         client_name: crmClient?.name || 'Inconnu', client_id: crmClient?.id || null,
@@ -8295,6 +8303,9 @@ async function syncAkuiteo() {
         nb_lignes: Array.isArray(f.lines) ? f.lines.length : 0, reference1: f.reference1 || null,
         custom_data: (f.customData && Object.keys(f.customData).length > 0) ? f.customData : null,
       };
+      // Don't overwrite custom_data if null — preserve existing value in Supabase
+      if (!row.custom_data) delete row.custom_data;
+      return row;
     });
     for (let i = 0; i < fBatchAll.length; i += 100) {
       const { error } = await sb.from('factures').upsert(fBatchAll.slice(i, i + 100), { onConflict: 'id' });
