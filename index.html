@@ -8024,7 +8024,7 @@ async function syncAkuiteo() {
         ...(isNew ? { ini, color: colors[Math.floor(Math.random() * colors.length)], ca: 0, obj: 0, margin: 0, dso: 0, score: 50, status: 'objectif', sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15 } : {}),
       };
       // Don't overwrite custom_data if null — preserve existing value in Supabase
-      if (!allClientsMap[crmId].custom_data) delete allClientsMap[crmId].custom_data;
+      if (!allClientsMap[id].custom_data) delete allClientsMap[id].custom_data;
       if (isNew) created++; else updated++;
     }
     const allClientsBatch = Object.values(allClientsMap);
