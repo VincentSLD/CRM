@@ -9218,12 +9218,24 @@ async function forgotPassword() {
 }
 
 // Gérer le retour après réinitialisation (token dans l'URL)
+// Détection du retour de réinitialisation (hash OU query params selon version Supabase)
 (async function handlePasswordReset() {
-  const hash = window.location.hash;
-  if (hash && hash.includes('type=recovery')) {
-    // Supabase a redirigé avec le token — afficher un formulaire de nouveau mot de passe
+  const hash = window.location.hash || '';
+  const params = new URLSearchParams(window.location.search);
+  const isRecovery = hash.includes('type=recovery') || params.get('type') === 'recovery';
+  if (!isRecovery) return;
+
+  // Attendre que Supabase traite le token automatiquement
+  await new Promise(r => setTimeout(r, 500));
+  // Vérifier si Supabase a une session (token traité)
+  const { data: { session } } = await sb.auth.getSession();
+
+  function showResetForm() {
     const loginScreen = document.querySelector('.login-screen');
     if (loginScreen) loginScreen.classList.remove('hidden');
+    // Masquer le contenu principal
+    const main = document.querySelector('.main');
+    if (main) main.style.display = 'none';
     const formFields = document.getElementById('loginFormFields');
     if (formFields) {
       formFields.innerHTML = `
@@ -9244,6 +9256,17 @@ async function forgotPassword() {
       const toggleDiv = document.querySelector('.login-toggle');
       if (toggleDiv) toggleDiv.style.display = 'none';
     }
+  }
+
+  if (session) {
+    showResetForm();
+  } else {
+    // Écouter le changement d'auth (Supabase traite le token en background)
+    sb.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') showResetForm();
+    });
+    // Fallback : afficher le formulaire après 2s même sans session
+    setTimeout(showResetForm, 2000);
   }
 })();
 
