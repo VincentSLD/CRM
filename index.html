@@ -9277,11 +9277,35 @@ async function submitNewPassword() {
   if (!pw || pw.length < 6) { errEl.textContent = 'Le mot de passe doit faire au moins 6 caractères'; errEl.classList.add('show'); return; }
   if (pw !== pw2) { errEl.textContent = 'Les mots de passe ne correspondent pas'; errEl.classList.add('show'); return; }
   try {
+    // S'assurer qu'on a une session (vérifier le token si nécessaire)
+    let { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      // Tenter de récupérer le token depuis l'URL
+      const params = new URLSearchParams(window.location.search);
+      const tokenHash = params.get('token_hash') || params.get('token');
+      const hashParams = new URLSearchParams(window.location.hash.replace('#', ''));
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      if (tokenHash) {
+        const { error: otpErr } = await sb.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' });
+        if (otpErr) console.warn('verifyOtp err:', otpErr.message);
+      } else if (accessToken && refreshToken) {
+        await sb.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+      }
+      const check = await sb.auth.getSession();
+      session = check.data?.session;
+    }
+    if (!session) {
+      errEl.textContent = 'Session expirée. Veuillez refaire une demande de réinitialisation.';
+      errEl.classList.add('show');
+      return;
+    }
     const { error } = await sb.auth.updateUser({ password: pw });
     if (error) { errEl.textContent = error.message; errEl.classList.add('show'); return; }
     errEl.textContent = '';
     errEl.classList.remove('show');
-    window.location.hash = '';
+    // Nettoyer l'URL et recharger
+    window.history.replaceState({}, '', window.location.pathname);
     window.location.reload();
   } catch (e) { errEl.textContent = 'Erreur: ' + e.message; errEl.classList.add('show'); }
 }
