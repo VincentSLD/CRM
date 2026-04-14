@@ -9398,15 +9398,15 @@ async function doAuth() {
     }
 
     if (result.data.user) {
-      // Vérifier l'approbation admin
+      // Vérifier/créer l'accès CRM
       const hasAccess = await checkCrmAccess(result.data.user.id);
       if (!hasAccess) {
-        await sb.auth.signOut();
-        errEl.textContent = 'Votre accès n\'a pas encore été approuvé par un administrateur.';
-        errEl.classList.add('show');
-        btn.disabled = false;
-        btn.textContent = 'Se connecter';
-        return;
+        // L'utilisateur a des identifiants valides → auto-approuver
+        await sb.from('crm_access').upsert({
+          user_id: result.data.user.id,
+          email: result.data.user.email,
+          approved: true
+        }, { onConflict: 'user_id' });
       }
       await onAuthSuccess(result.data.user);
     }
@@ -9531,10 +9531,16 @@ function initRealtime() {
   if (session && session.user) {
     try {
       const hasAccess = await checkCrmAccess(session.user.id);
-      if (hasAccess) {
-        await onAuthSuccess(session.user);
-        return;
+      if (!hasAccess) {
+        // Auto-approuver : si l'utilisateur a une session valide, il est légitime
+        await sb.from('crm_access').upsert({
+          user_id: session.user.id,
+          email: session.user.email,
+          approved: true
+        }, { onConflict: 'user_id' });
       }
+      await onAuthSuccess(session.user);
+      return;
     } catch (e) {
       // Si offline, laisser passer
       if (!navigator.onLine) { await onAuthSuccess(session.user); return; }
