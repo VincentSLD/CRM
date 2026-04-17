@@ -7754,6 +7754,8 @@ async function syncAkuiteoQuick() {
     const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626'];
 
     if (akCustomers.length > 0) {
+      // Charger les refs Akuiteo pour résoudre les noms (catégories, secteurs, etc.)
+      await loadAkuiteoRefs();
       const rows = akCustomers.map(ak => {
         const akId = String(ak.id || ak.code);
         const id = existingMap[akId] || ('ak_' + akId.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20));
@@ -7770,11 +7772,25 @@ async function syncAkuiteoQuick() {
           region: ak.address?.regionName || null, raison_sociale: ak.legalName || null,
           siren: ak.SIREN || null, siret: ak.SIRET || null, ape: ak.APE || null,
           forme_juridique: ak.legalForm || null,
+          // Infos Entreprise (Marketing) — IDs + noms résolus depuis les refs Akuiteo
+          mk_categorie_id: ak.categoryId || null,
+          mk_categorie: ak.categoryId ? akRefLabel(akRef.categories, ak.categoryId) : null,
+          mk_sous_categorie_id: ak.subCategoryId || null,
+          mk_sous_categorie: ak.subCategoryId ? akRefLabel(akRef.subCategories, ak.subCategoryId) : null,
+          mk_categorie_pro_id: ak.professionalCategoryId || null,
+          mk_categorie_pro: ak.professionalCategoryId ? akRefLabel(akRef.proCats, ak.professionalCategoryId) : null,
+          mk_secteur_id: ak.sectorId || null,
+          mk_secteur: ak.sectorId ? akRefLabel(akRef.sectors, ak.sectorId) : null,
+          mk_type_id: ak.thirdPartyLinkTypeId ? String(ak.thirdPartyLinkTypeId) : null,
+          mk_type: ak.thirdPartyLinkTypeId ? akRefLabel(akRef.linkTypes, String(ak.thirdPartyLinkTypeId)) : null,
+          mk_groupe: ak.level1grouping || null, mk_origine: ak.level2grouping || null,
+          mode_tarification: ak.firstPricingMethodId || null,
+          mode_tarification_name: ak.firstPricingMethodId ? akRefLabel(akRef.pricingMethods, ak.firstPricingMethodId) : null,
           ...(isNew ? { ini, color: colors[Math.floor(Math.random() * colors.length)], ca: 0, obj: 0, margin: 0, dso: 0, score: 50, status: 'objectif', sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15 } : {}),
         };
       });
       await sb.from('clients').upsert(rows, { onConflict: 'id' });
-      console.log(`[QuickSync] ${rows.length} sociétés upsertées`);
+      console.log(`[QuickSync] ${rows.length} sociétés upsertées avec infos marketing`);
     }
 
     // 2. Contacts des clients récupérés
