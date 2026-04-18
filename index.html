@@ -2467,7 +2467,7 @@ async function loadDB() {
 
     // Colonnes minimales pour agrégation + affichage liste
     const DEVIS_LITE = 'id,ref,client_id,client_name,sujet,montant,date,statut,projet,agence,societe,responsable_id,commercial_id,probabilite,marche_id,affaire_id,akuiteo_id,adresse,ville,code_postal';
-    const CMD_LITE = 'id,ref,client_id,client_name,nom,montant,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id,marche_id,affaire_id,akuiteo_id,adresse,ville,code_postal';
+    const CMD_LITE = 'id,ref,client_id,client_name,nom,montant,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id,marche_id,affaire_id,akuiteo_id,adresse,ville,code_postal,surface_facturee';
     const FACT_LITE = 'id,ref,client_id,client_name,montant,date,echeance,statut,jours_retard,projet,agence,societe,responsable_id,type_facture,reste_a_payer,date_paiement,marche_id,affaire_id,akuiteo_id,adresse,ville,code_postal';
     const MARCHE_LITE = 'id,nom,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,adresse,code_postal,ville,lat,lng,nb_affaires,responsable_id';
     const AFFAIRE_LITE = 'id,nom,marche_id,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,code_projet,apporteur_affaire,responsable,adresse,ville,code_postal,departement,region';
@@ -4931,6 +4931,7 @@ async function showCommandeDetail(id) {
         detailRow('Responsable', resolveManagerName(c.responsable_id)),
         detailRow('Commercial', resolveManagerName(c.commercial_id)),
         detailRow('Nombre de lignes', c.nb_lignes),
+        detailRow('Surface facturée', c.surface_facturee != null ? c.surface_facturee + ' m²' : '—'),
       ])}
       ${(() => { const addr = c.adresse || c.ville || c.code_postal ? c : (c.affaire_id ? DB.affaires.find(x=>x.id===c.affaire_id) : null); return addr && (addr.adresse || addr.ville || addr.code_postal) ? detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region)]) : ''; })()}
       ${(() => {
@@ -7881,17 +7882,32 @@ async function syncAkuiteoQuick() {
 
     // Commandes
     if (Array.isArray(recentOrd) && recentOrd.length > 0) {
+      // Récupérer les lignes (quantity) de chaque commande via GET individuel
+      setSyncText('Sync rapide — Commandes (lignes)...');
+      const ordersWithLines = [];
+      for (let i = 0; i < recentOrd.length; i += 10) {
+        const batch = recentOrd.slice(i, i + 10);
+        await Promise.allSettled(batch.map(async o => {
+          try {
+            const full = await akuiteoFetch('GET', '/sales/orders/' + o.id);
+            if (full) o.lines = full.lines || [];
+          } catch (e) { o.lines = []; }
+          ordersWithLines.push(o);
+        }));
+      }
       const rows = recentOrd.map(o => {
         const c = akCMap[String(o.thirdPartyId || o.customerId || '')];
+        const surface = Array.isArray(o.lines) ? o.lines.reduce((s, l) => s + Number(l.quantity || 0), 0) : null;
         return { id: 'akc_' + String(o.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(o.id||''), ref: String(o.number||o.id||''),
           client_name: c?.name || o.name || 'Inconnu', client_id: c?.id || null, nom: o.name || 'Commande',
           montant: o.preTaxAmount || 0, statut: o.state === 'CLOSED' ? 'livree' : o.state === 'INVOICED' ? 'facturee' : 'en_cours',
           date: o.date ? o.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
           projet: o.projectId || null, agence: o.entityCode || null, societe: o.companyCode || null,
-          responsable_id: o.managerId || null, commercial_id: o.salesManagerId || null };
+          responsable_id: o.managerId || null, commercial_id: o.salesManagerId || null,
+          surface_facturee: surface };
       });
       await sb.from('commandes').upsert(rows, { onConflict: 'id' });
-      console.log(`[QuickSync] ${rows.length} commandes`);
+      console.log(`[QuickSync] ${rows.length} commandes avec surface facturée`);
     }
 
     // Factures
@@ -8302,6 +8318,7 @@ async function syncAkuiteo() {
         date_client: o.customerDate ? o.customerDate.substring(0, 10) : null,
         date_validation: o.validationDate ? o.validationDate.substring(0, 10) : null,
         devise: o.currencyCode || 'EUR', nb_lignes: Array.isArray(o.lines) ? o.lines.length : 0,
+        surface_facturee: Array.isArray(o.lines) ? o.lines.reduce((s, l) => s + Number(l.quantity || 0), 0) : null,
         custom_data: (o.customData && Object.keys(o.customData).length > 0) ? o.customData : null,
       };
       // Don't overwrite custom_data if null — preserve existing value in Supabase

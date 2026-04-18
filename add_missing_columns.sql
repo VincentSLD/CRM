@@ -48,3 +48,6 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS mk_type TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS mk_type_id TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS mk_groupe TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS mk_origine TEXT;
+
+-- Surface facturée sur les commandes (somme des quantity des lignes)
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS surface_facturee NUMERIC;
