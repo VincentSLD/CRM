@@ -9175,8 +9175,9 @@ async function pushContactToAkuiteo(contactId) {
     title: ct.titre || null,
     position: ct.fonction || null,
     service: ct.service || null,
+    // Email envoyé dans les 2 champs Akuiteo (pro + perso)
     email: ct.email || null,
-    email2: ct.email2 || null,
+    email2: ct.email || ct.email2 || null,
     phone: ct.telephone || null,
     mobilePhone: ct.mobile || null,
     comment: ct.commentaire || null,
