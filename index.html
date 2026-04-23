@@ -3622,47 +3622,61 @@ function toggleNewContactForm() {
   form.style.display = form.style.display === 'none' ? 'block' : 'none';
 }
 
+let _savingContact = false;
 async function saveNewContact(clientId) {
+  if (_savingContact) return; // Anti double-clic
   const nom = document.getElementById('nc-ct-nom')?.value.trim();
   if (!nom) { toast('Le nom est obligatoire', 'error'); return; }
-  const prenom = document.getElementById('nc-ct-prenom')?.value.trim() || '';
-  const ctId = 'ct_manual_' + Date.now();
-  const contactData = {
-    id: ctId,
-    client_id: clientId,
-    titre: document.getElementById('nc-ct-titre')?.value || null,
-    email2: document.getElementById('nc-ct-email2')?.value.trim() || null,
-    adresse: document.getElementById('nc-ct-adresse')?.value.trim() || null,
-    code_postal: document.getElementById('nc-ct-cp')?.value.trim() || null,
-    commentaire: document.getElementById('nc-ct-commentaire')?.value.trim() || null,
-    nom: nom,
-    prenom: prenom,
-    fonction: document.getElementById('nc-ct-fonction')?.value.trim() || '',
-    service: document.getElementById('nc-ct-service')?.value.trim() || '',
-    email: document.getElementById('nc-ct-email')?.value.trim() || '',
-    telephone: document.getElementById('nc-ct-tel')?.value.trim() || '',
-    mobile: document.getElementById('nc-ct-mobile')?.value.trim() || '',
-    ville: document.getElementById('nc-ct-ville')?.value.trim() || '',
-  };
-  const { error } = await sb.from('contacts').insert(contactData);
-  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
-  toast('Contact ajouté', 'success');
-  toggleNewContactForm();
-  // Vider le formulaire
-  ['nc-ct-nom','nc-ct-prenom','nc-ct-fonction','nc-ct-service','nc-ct-email','nc-ct-tel','nc-ct-mobile','nc-ct-ville'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.value = '';
-  });
-  contactsLoaded = false;
-  await loadClientContacts(clientId);
-  // Proposer la sync Akuiteo
-  if (currentClient && currentClient.akuiteo_id) {
-    if (confirm('Voulez-vous synchroniser ce contact vers Akuiteo ?')) {
-      await pushContactToAkuiteo(ctId);
-    } else {
-      await sb.from('clients').update({ akuiteo_dirty: true }).eq('id', clientId);
-      if (currentClient) currentClient.akuiteo_dirty = true;
-      renderPage(currentPage);
+  _savingContact = true;
+  const saveBtn = document.querySelector('#new-contact-form .btn-primary');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Enregistrement...'; }
+  try {
+    const prenom = document.getElementById('nc-ct-prenom')?.value.trim() || '';
+    const ctId = 'ct_manual_' + Date.now();
+    const contactData = {
+      id: ctId,
+      client_id: clientId,
+      titre: document.getElementById('nc-ct-titre')?.value || null,
+      email2: document.getElementById('nc-ct-email2')?.value.trim() || null,
+      adresse: document.getElementById('nc-ct-adresse')?.value.trim() || null,
+      code_postal: document.getElementById('nc-ct-cp')?.value.trim() || null,
+      commentaire: document.getElementById('nc-ct-commentaire')?.value.trim() || null,
+      nom: nom,
+      prenom: prenom,
+      fonction: document.getElementById('nc-ct-fonction')?.value.trim() || '',
+      service: document.getElementById('nc-ct-service')?.value.trim() || '',
+      email: document.getElementById('nc-ct-email')?.value.trim() || '',
+      telephone: document.getElementById('nc-ct-tel')?.value.trim() || '',
+      mobile: document.getElementById('nc-ct-mobile')?.value.trim() || '',
+      ville: document.getElementById('nc-ct-ville')?.value.trim() || '',
+    };
+    const { error } = await sb.from('contacts').insert(contactData);
+    if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+    toast('Contact ajouté', 'success');
+    // Fermer et vider le formulaire
+    const form = document.getElementById('new-contact-form');
+    if (form) form.style.display = 'none';
+    ['nc-ct-titre','nc-ct-nom','nc-ct-prenom','nc-ct-fonction','nc-ct-service','nc-ct-email','nc-ct-email2','nc-ct-tel','nc-ct-mobile','nc-ct-adresse','nc-ct-cp','nc-ct-ville','nc-ct-commentaire'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    // Proposer la sync Akuiteo AVANT de recharger les contacts pour éviter le doublon
+    if (currentClient && currentClient.akuiteo_id) {
+      if (confirm('Voulez-vous synchroniser ce contact vers Akuiteo ?')) {
+        await pushContactToAkuiteo(ctId);
+        // Sync OK : le client n'est plus dirty
+        await sb.from('clients').update({ akuiteo_dirty: false }).eq('id', clientId);
+        if (currentClient) currentClient.akuiteo_dirty = false;
+      } else {
+        await sb.from('clients').update({ akuiteo_dirty: true }).eq('id', clientId);
+        if (currentClient) currentClient.akuiteo_dirty = true;
+      }
     }
+    contactsLoaded = false;
+    await loadClientContacts(clientId);
+    renderPage(currentPage);
+  } finally {
+    _savingContact = false;
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Enregistrer'; }
   }
 }
 
