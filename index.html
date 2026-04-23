@@ -7926,7 +7926,7 @@ async function syncAkuiteoQuick() {
     // 4. Nouveaux Marchés / Affaires (projets récents non présents en base)
     setSyncText('Sync rapide — Nouveaux Marchés & Affaires...');
     const currentYear = new Date().getFullYear().toString().slice(-2);
-    let akProjects = await akuiteoFetch('POST', '/projectmanagement/projects/search?limit=1000', {
+    let akProjects = await akuiteoFetch('POST', '/projectmanagement/projects/search?limit=50000', {
       code: { operator: 'LIKE', value: currentYear + '.%' }
     }).catch(() => []);
     if (Array.isArray(akProjects) && akProjects.length > 0) {
@@ -8189,13 +8189,14 @@ async function syncAkuiteo() {
     for (const ep of projectEndpoints) {
       try {
         let allProj = [], pOff = 0;
-        const P_SIZE = 500;
+        const P_SIZE = 50000;
         while (true) {
           const res = await akuiteoFetch('POST', ep + `?limit=${P_SIZE}&offset=${pOff}`, { code: { operator: 'LIKE', value: '%' } });
           if (!Array.isArray(res) || res.length === 0) break;
           allProj = allProj.concat(res);
           console.log(`[Akuiteo] Projets via ${ep}: page ${pOff/P_SIZE} → ${res.length} (total: ${allProj.length})`);
           if (res.length < P_SIZE) break;
+          if (res.length > P_SIZE) break; // API ignore pagination
           pOff += P_SIZE;
         }
         if (allProj.length > 0) {
