@@ -3490,23 +3490,47 @@ function renderClientDetail() {
       </div>
     </div>
     <div id="new-contact-form" style="display:none;padding:16px;border-bottom:1px solid var(--border);background:var(--bg-1)">
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;margin-bottom:8px">Identité</div>
+      <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;margin-bottom:12px">
+        <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Civilité</label>
+          <select id="nc-ct-titre" class="fi" style="padding:6px 8px;font-size:12px">
+            <option value="">—</option><option value="M.">M.</option><option value="Mme">Mme</option><option value="Mlle">Mlle</option><option value="Dr">Dr</option><option value="Me">Me</option>
+          </select></div>
         <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Prénom</label>
           <input type="text" id="nc-ct-prenom" class="fi" style="padding:6px 8px;font-size:12px"></div>
         <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Nom *</label>
           <input type="text" id="nc-ct-nom" class="fi" style="padding:6px 8px;font-size:12px"></div>
-        <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Fonction</label>
-          <input type="text" id="nc-ct-fonction" class="fi" style="padding:6px 8px;font-size:12px"></div>
+      </div>
+      <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;margin-bottom:8px">Fonction</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Poste</label>
+          <input type="text" id="nc-ct-fonction" class="fi" style="padding:6px 8px;font-size:12px" placeholder="Ex: Directeur Commercial"></div>
         <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Service</label>
           <input type="text" id="nc-ct-service" class="fi" style="padding:6px 8px;font-size:12px"></div>
-        <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Email</label>
+      </div>
+      <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;margin-bottom:8px">Coordonnées</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Email pro</label>
           <input type="email" id="nc-ct-email" class="fi" style="padding:6px 8px;font-size:12px"></div>
-        <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Téléphone</label>
+        <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Email perso</label>
+          <input type="email" id="nc-ct-email2" class="fi" style="padding:6px 8px;font-size:12px"></div>
+        <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Téléphone fixe</label>
           <input type="text" id="nc-ct-tel" class="fi" style="padding:6px 8px;font-size:12px"></div>
         <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Mobile</label>
           <input type="text" id="nc-ct-mobile" class="fi" style="padding:6px 8px;font-size:12px"></div>
+      </div>
+      <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;margin-bottom:8px">Adresse</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Adresse</label>
+          <input type="text" id="nc-ct-adresse" class="fi" style="padding:6px 8px;font-size:12px"></div>
+        <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Code postal</label>
+          <input type="text" id="nc-ct-cp" class="fi" style="padding:6px 8px;font-size:12px"></div>
         <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Ville</label>
           <input type="text" id="nc-ct-ville" class="fi" style="padding:6px 8px;font-size:12px"></div>
+      </div>
+      <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;margin-bottom:8px">Notes</div>
+      <div style="margin-bottom:12px">
+        <textarea id="nc-ct-commentaire" class="fi" rows="2" style="padding:6px 8px;font-size:12px;width:100%;resize:vertical" placeholder="Commentaire interne..."></textarea>
       </div>
       <div style="display:flex;gap:6px;justify-content:flex-end">
         <button class="btn" onclick="toggleNewContactForm()" style="font-size:12px">Annuler</button>
@@ -3545,7 +3569,7 @@ async function loadAkuiteoContacts(akuiteoId, clientId) {
         nom: ct.name || '',
         prenom: ct.firstName || '',
         titre: ct.title || '',
-        fonction: ct.functionTitle || ct.position || '',
+        fonction: ct.position || ct.functionTitle || '',
         service: ct.service || '',
         email: ct.email || '',
         email2: ct.email2 || '',
@@ -3606,6 +3630,11 @@ async function saveNewContact(clientId) {
   const contactData = {
     id: ctId,
     client_id: clientId,
+    titre: document.getElementById('nc-ct-titre')?.value || null,
+    email2: document.getElementById('nc-ct-email2')?.value.trim() || null,
+    adresse: document.getElementById('nc-ct-adresse')?.value.trim() || null,
+    code_postal: document.getElementById('nc-ct-cp')?.value.trim() || null,
+    commentaire: document.getElementById('nc-ct-commentaire')?.value.trim() || null,
     nom: nom,
     prenom: prenom,
     fonction: document.getElementById('nc-ct-fonction')?.value.trim() || '',
@@ -7804,7 +7833,7 @@ async function syncAkuiteoQuick() {
               id: 'ct_' + String(ct.id).replace(/[^a-zA-Z0-9]/g, '_') + '_' + crmClient.id.substring(0, 8),
               client_id: crmClient.id, akuiteo_id: String(ct.id), akuiteo_customer_id: akId,
               nom: ct.name || '', prenom: ct.firstName || '', titre: ct.title || '',
-              fonction: ct.functionTitle || ct.position || '', service: ct.service || '',
+              fonction: ct.position || ct.functionTitle || '', service: ct.service || '',
               email: ct.email || '', telephone: ct.phone || '', mobile: ct.mobilePhone || '',
             });
           }
@@ -8142,7 +8171,7 @@ async function syncAkuiteo() {
           id: 'ct_' + String(ct.id).replace(/[^a-zA-Z0-9]/g, '_') + '_' + crmClient.id.substring(0, 8),
           client_id: crmClient.id, akuiteo_id: String(ct.id), akuiteo_customer_id: akCid,
           code: ct.code || '', nom: ct.name || '', prenom: ct.firstName || '', titre: ct.title || '',
-          fonction: ct.functionTitle || ct.position || '', service: ct.service || '',
+          fonction: ct.position || ct.functionTitle || '', service: ct.service || '',
           email: ct.email || '', email2: ct.email2 || '', telephone: ct.phone || '', mobile: ct.mobilePhone || '',
           adresse: ct.address?.line1 || '', code_postal: ct.address?.postalCode || '', ville: ct.address?.city || '',
           commentaire: ct.comment || '',

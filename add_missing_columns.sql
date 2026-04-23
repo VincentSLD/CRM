@@ -51,3 +51,10 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS mk_origine TEXT;
 
 -- Surface facturée sur les commandes (somme des quantity des lignes)
 ALTER TABLE commandes ADD COLUMN IF NOT EXISTS surface_facturee NUMERIC;
+
+-- Champs contacts complets (alignés sur Akuiteo)
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS titre TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS email2 TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS adresse TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS code_postal TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS commentaire TEXT;
