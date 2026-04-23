@@ -3657,8 +3657,9 @@ async function saveNewContact(clientId) {
       }
     }
     contactsLoaded = false;
-    await loadClientContacts(clientId);
     renderPage(currentPage);
+    // Recharger les contacts APRÈS le rendu (sinon le tableau est écrasé par "Chargement...")
+    setTimeout(() => loadClientContacts(clientId), 50);
   } finally {
     _savingContact = false;
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Enregistrer'; }
@@ -3671,6 +3672,7 @@ async function deleteContact(contactId, clientId) {
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
   toast('Contact supprimé', 'success');
   contactsLoaded = false;
+  // Recharger directement le tableau sans re-render complet
   await loadClientContacts(clientId);
 }
 
