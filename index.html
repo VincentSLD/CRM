@@ -7725,29 +7725,14 @@ async function syncAkuiteoQuick() {
   showSyncLoading(true);
   const LIMIT = 50;
   try {
-    // 1. Clients modifiés OU créés récemment dans Akuiteo
-    setSyncText('Sync rapide — Sociétés récentes...');
-    const sinceDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().replace('Z', '+0000');
-    const [modifiedCustomers, createdCustomers] = await Promise.all([
-      akuiteoFetch('POST', '/crm/customers/search?limit=200', {
-        modificationTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate }
-      }).catch(() => []),
-      akuiteoFetch('POST', '/crm/customers/search?limit=200', {
-        createdTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate }
-      }).catch(() => []),
-    ]);
-    // Fusionner et dédupliquer par ID
-    const seen = new Set();
-    let akCustomers = [];
-    for (const list of [createdCustomers, modifiedCustomers]) {
-      if (!Array.isArray(list)) continue;
-      for (const c of list) {
-        const id = String(c.id || c.code);
-        if (!seen.has(id)) { seen.add(id); akCustomers.push(c); }
-      }
-    }
-    if (akCustomers.length > LIMIT) akCustomers = akCustomers.slice(0, LIMIT);
-    console.log(`[QuickSync] ${akCustomers.length} sociétés modifiées depuis ${sinceDate.substring(0,10)}`);
+    // 1. Nouveaux clients créés récemment dans Akuiteo (createdTime uniquement)
+    setSyncText('Sync rapide — Nouvelles sociétés...');
+    const sinceDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().replace('Z', '+0000');
+    let akCustomers = await akuiteoFetch('POST', '/crm/customers/search?limit=200', {
+      createdTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate }
+    }).catch(() => []);
+    if (!Array.isArray(akCustomers)) akCustomers = [];
+    console.log(`[QuickSync] ${akCustomers.length} nouvelles sociétés créées depuis ${sinceDate.substring(0,10)}`);
 
     const { data: existingClients } = await sb.from('clients').select('id,akuiteo_id');
     const existingMap = {};
@@ -7847,23 +7832,32 @@ async function syncAkuiteoQuick() {
     }
     console.log(`[QuickSync] ${contactRows.length} contacts`);
 
-    // 3. Devis, commandes, factures récents (date >= 3 derniers mois)
-    setSyncText('Sync rapide — Documents...');
+    // 3. Nouveaux devis, commandes, factures (uniquement ceux qui ne sont pas en base)
+    setSyncText('Sync rapide — Nouveaux documents...');
     const { data: allCl2 } = await sb.from('clients').select('id,akuiteo_id,name');
     const akCMap = {}; for (const c of (allCl2||[])) { if (c.akuiteo_id) akCMap[c.akuiteo_id] = c; }
-    const docSinceDate = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const docSinceDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    // Charger les IDs existants en base pour ne sync que les nouveaux
+    const [{ data: existingDevis }, { data: existingCmd }, { data: existingFact }] = await Promise.all([
+      sb.from('devis').select('akuiteo_id').not('akuiteo_id', 'is', null),
+      sb.from('commandes').select('akuiteo_id').not('akuiteo_id', 'is', null),
+      sb.from('factures').select('akuiteo_id').not('akuiteo_id', 'is', null),
+    ]);
+    const existingDevisIds = new Set((existingDevis||[]).map(d => d.akuiteo_id));
+    const existingCmdIds = new Set((existingCmd||[]).map(d => d.akuiteo_id));
+    const existingFactIds = new Set((existingFact||[]).map(d => d.akuiteo_id));
 
     const [rawQuot, rawOrd, rawInv] = await Promise.all([
       akuiteoFetch('POST', '/sales/quotations/search?limit=500', { date: { operator: 'GREATER_OR_EQUALS', value: docSinceDate } }).catch(() => []),
       akuiteoFetch('POST', '/sales/orders/search?limit=500', { date: { operator: 'GREATER_OR_EQUALS', value: docSinceDate } }).catch(() => []),
       akuiteoFetch('POST', '/sales/invoices/search?limit=500', { date: { operator: 'GREATER_OR_EQUALS', value: docSinceDate } }).catch(() => []),
     ]);
-    // Trier par date décroissante et garder les 50 plus récents
-    const sortByDate = arr => (Array.isArray(arr) ? arr : []).sort((a,b) => ((b.date||'') > (a.date||'') ? 1 : -1)).slice(0, LIMIT);
-    const recentQuot = sortByDate(rawQuot);
-    const recentOrd = sortByDate(rawOrd);
-    const recentInv = sortByDate(rawInv);
-    console.log(`[QuickSync] Docs récents (3 mois) : ${(rawQuot||[]).length} devis, ${(rawOrd||[]).length} cmd, ${(rawInv||[]).length} fact → top ${LIMIT}`);
+    // Filtrer : ne garder que les nouveaux (pas en base)
+    const recentQuot = (Array.isArray(rawQuot) ? rawQuot : []).filter(q => !existingDevisIds.has(String(q.id||'')));
+    const recentOrd = (Array.isArray(rawOrd) ? rawOrd : []).filter(o => !existingCmdIds.has(String(o.id||'')));
+    const recentInv = (Array.isArray(rawInv) ? rawInv : []).filter(f => !existingFactIds.has(String(f.id||'')));
+    console.log(`[QuickSync] Nouveaux docs (1 mois) : ${recentQuot.length} devis, ${recentOrd.length} cmd, ${recentInv.length} fact (sur ${(rawQuot||[]).length}/${(rawOrd||[]).length}/${(rawInv||[]).length})`);
 
     // Devis
     if (Array.isArray(recentQuot) && recentQuot.length > 0) {
@@ -7929,16 +7923,21 @@ async function syncAkuiteoQuick() {
       console.log(`[QuickSync] ${rows.length} factures`);
     }
 
-    // 4. Marchés / Affaires (projets récents)
-    setSyncText('Sync rapide — Marchés & Affaires...');
+    // 4. Nouveaux Marchés / Affaires (projets récents non présents en base)
+    setSyncText('Sync rapide — Nouveaux Marchés & Affaires...');
     const currentYear = new Date().getFullYear().toString().slice(-2);
     let akProjects = await akuiteoFetch('POST', '/projectmanagement/projects/search?limit=1000', {
       code: { operator: 'LIKE', value: currentYear + '.%' }
     }).catch(() => []);
     if (Array.isArray(akProjects) && akProjects.length > 0) {
-      // Trier par date de création décroissante, top 50
+      // Charger les IDs d'affaires existantes
+      const { data: existingAff } = await sb.from('affaires').select('code_projet').not('code_projet', 'is', null);
+      const existingProjectIds = new Set((existingAff||[]).map(a => a.code_projet));
+      // Filtrer : ne garder que les projets nouveaux
+      akProjects = akProjects.filter(p => !existingProjectIds.has(p.id));
+      // Trier par date de création décroissante
       akProjects.sort((a,b) => ((b.changeTracking?.createdTime||'') > (a.changeTracking?.createdTime||'') ? 1 : -1));
-      akProjects = akProjects.slice(0, LIMIT);
+      console.log(`[QuickSync] ${akProjects.length} nouveaux projets`);
       // Construire marchés (préfixe XX.XXXX) et affaires (XX.XXXX.XX) — même format que sync complète
       const marchesMap = {};
       const affaireRows = [];
