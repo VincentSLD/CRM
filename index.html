@@ -3509,24 +3509,13 @@ function renderClientDetail() {
           <input type="text" id="nc-ct-service" class="fi" style="padding:6px 8px;font-size:12px"></div>
       </div>
       <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;margin-bottom:8px">Coordonnées</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
         <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Email pro</label>
           <input type="email" id="nc-ct-email" class="fi" style="padding:6px 8px;font-size:12px"></div>
-        <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Email perso</label>
-          <input type="email" id="nc-ct-email2" class="fi" style="padding:6px 8px;font-size:12px"></div>
         <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Téléphone fixe</label>
           <input type="text" id="nc-ct-tel" class="fi" style="padding:6px 8px;font-size:12px"></div>
         <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Mobile</label>
           <input type="text" id="nc-ct-mobile" class="fi" style="padding:6px 8px;font-size:12px"></div>
-      </div>
-      <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;margin-bottom:8px">Adresse</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-        <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Adresse</label>
-          <input type="text" id="nc-ct-adresse" class="fi" style="padding:6px 8px;font-size:12px"></div>
-        <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Code postal</label>
-          <input type="text" id="nc-ct-cp" class="fi" style="padding:6px 8px;font-size:12px"></div>
-        <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Ville</label>
-          <input type="text" id="nc-ct-ville" class="fi" style="padding:6px 8px;font-size:12px"></div>
       </div>
       <div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;margin-bottom:8px">Notes</div>
       <div style="margin-bottom:12px">
@@ -3637,9 +3626,6 @@ async function saveNewContact(clientId) {
       id: ctId,
       client_id: clientId,
       titre: document.getElementById('nc-ct-titre')?.value || null,
-      email2: document.getElementById('nc-ct-email2')?.value.trim() || null,
-      adresse: document.getElementById('nc-ct-adresse')?.value.trim() || null,
-      code_postal: document.getElementById('nc-ct-cp')?.value.trim() || null,
       commentaire: document.getElementById('nc-ct-commentaire')?.value.trim() || null,
       nom: nom,
       prenom: prenom,
@@ -3648,7 +3634,6 @@ async function saveNewContact(clientId) {
       email: document.getElementById('nc-ct-email')?.value.trim() || '',
       telephone: document.getElementById('nc-ct-tel')?.value.trim() || '',
       mobile: document.getElementById('nc-ct-mobile')?.value.trim() || '',
-      ville: document.getElementById('nc-ct-ville')?.value.trim() || '',
     };
     const { error } = await sb.from('contacts').insert(contactData);
     if (error) { toast('Erreur: ' + error.message, 'error'); return; }
@@ -3656,7 +3641,7 @@ async function saveNewContact(clientId) {
     // Fermer et vider le formulaire
     const form = document.getElementById('new-contact-form');
     if (form) form.style.display = 'none';
-    ['nc-ct-titre','nc-ct-nom','nc-ct-prenom','nc-ct-fonction','nc-ct-service','nc-ct-email','nc-ct-email2','nc-ct-tel','nc-ct-mobile','nc-ct-adresse','nc-ct-cp','nc-ct-ville','nc-ct-commentaire'].forEach(id => {
+    ['nc-ct-titre','nc-ct-nom','nc-ct-prenom','nc-ct-fonction','nc-ct-service','nc-ct-email','nc-ct-tel','nc-ct-mobile','nc-ct-commentaire'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
     // Proposer la sync Akuiteo AVANT de recharger les contacts pour éviter le doublon
