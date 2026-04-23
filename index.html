@@ -9179,6 +9179,12 @@ async function pushContactToAkuiteo(contactId) {
     phone: ct.telephone || null,
     mobilePhone: ct.mobile || null,
     comment: ct.commentaire || null,
+    // Marquer comme contact professionnel (apparaît dans Coordonnées générales)
+    recipientOfSalesOrder: true,
+    recipientOfQuotation: true,
+    recipientOfSalesInvoice: true,
+    recipientOfDeliveryNote: true,
+    recipientOfDunning: true,
     address: {
       line1: ct.adresse || null,
       postalCode: ct.code_postal || null,
