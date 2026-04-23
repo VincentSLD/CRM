@@ -3589,7 +3589,7 @@ async function loadClientContacts(clientId) {
     el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3)">Aucun contact enregistré</div>';
     return;
   }
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Fonction</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th>Ville</th><th></th></tr></thead><tbody>'
+  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Fonction</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th></th></tr></thead><tbody>'
     + data.map(ct => {
       const fullName = [ct.titre, ct.prenom, ct.nom].filter(Boolean).join(' ');
       return `<tr style="cursor:pointer" onclick="showContact('${ct.id}')">
@@ -3598,7 +3598,6 @@ async function loadClientContacts(clientId) {
         <td style="font-size:12px">${ct.email ? '<a href="mailto:'+ct.email+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+ct.email+'</a>' : '—'}</td>
         <td class="mono" style="font-size:12px">${ct.telephone ? '<a href="tel:'+ct.telephone+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+ct.telephone+'</a>' : '—'}</td>
         <td class="mono" style="font-size:12px">${ct.mobile ? '<a href="tel:'+ct.mobile+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+ct.mobile+'</a>' : '—'}</td>
-        <td style="font-size:12px">${ct.ville || '—'}</td>
         <td><button class="btn" style="font-size:10px;padding:2px 6px;color:var(--red)" onclick="event.stopPropagation();deleteContact('${ct.id}','${clientId}')">×</button></td>
       </tr>`;
     }).join('')
