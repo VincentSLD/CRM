@@ -4195,9 +4195,10 @@ function renderAffaireDetail() {
   const totalFactHT = fact.reduce((s, f) => s + Number(f.montant || 0), 0);
 
   return `
-  <div style="display:flex;gap:8px;margin-bottom:16px">
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
     ${marche ? '<button class="btn" onclick="showMarcheDetail(&#39;'+marche.id+'&#39;)">&#8592; Marché '+( marche.ref || marche.nom)+'</button>' : ''}
     <button class="btn" onclick="go('affaires')">&#8592; Toutes les affaires</button>
+    ${a.code_projet ? '<button class="btn btn-primary" onclick="pullAffaireFromAkuiteo(&#39;'+a.id+'&#39;)" title="Récupérer l\\'affaire et ses documents depuis Akuiteo">⬇ Recup Akuiteo</button>' : ''}
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px">
     <div class="card"><div class="card-body" style="text-align:center;padding:12px">
@@ -8890,6 +8891,127 @@ async function applySirene(index) {
 }
 
 // Pousser un client CRM vers Akuiteo
+async function pullAffaireFromAkuiteo(affaireId) {
+  const a = DB.affaires.find(x => x.id === affaireId);
+  if (!a || !a.code_projet) { toast('Affaire sans code projet', 'error'); return; }
+  const codeProjet = a.code_projet;
+  showSyncLoading(true); setSyncText('Récupération affaire ' + codeProjet + '...');
+  try {
+    // 1. Charger la map client Akuiteo
+    const { data: allCl } = await sb.from('clients').select('id,akuiteo_id,name');
+    const akCMap = {}; for (const c of (allCl||[])) { if (c.akuiteo_id) akCMap[c.akuiteo_id] = c; }
+
+    // 2. Récupérer le projet Akuiteo
+    setSyncText('Récupération projet Akuiteo...');
+    let akProject = null;
+    try { akProject = await akuiteoFetch('GET', '/projectmanagement/projects/' + encodeURIComponent(codeProjet)); } catch (e) {}
+    if (!akProject || !akProject.id) {
+      // Fallback : search
+      const list = await akuiteoFetch('POST', '/projectmanagement/projects/search?limit=10', { code: { operator: 'EQUALS', value: codeProjet } }).catch(() => []);
+      akProject = Array.isArray(list) ? list.find(p => p.id === codeProjet) : null;
+    }
+    if (!akProject) { toast('Projet non trouvé dans Akuiteo', 'error'); return; }
+
+    // 3. Mettre à jour l'affaire et le marché
+    const crmClient = akCMap[String(akProject.customerId || '')];
+    const codeParts = (akProject.id || '').split('.');
+    const marcheCode = codeParts.length >= 2 ? codeParts.slice(0, 2).join('.') : akProject.id;
+    const marcheId = 'akm_' + marcheCode.replace(/[^a-zA-Z0-9.]/g, '_');
+    const affId = 'aka_' + String(akProject.id).replace(/[^a-zA-Z0-9.]/g, '_');
+    const pCreated = akProject.changeTracking?.createdTime ? akProject.changeTracking.createdTime.substring(0, 10) : new Date().toISOString().slice(0, 10);
+
+    await sb.from('marches').upsert([{
+      id: marcheId, akuiteo_id: marcheCode, ref: marcheCode,
+      nom: akProject.name || ('Marché ' + marcheCode),
+      client_id: crmClient?.id || null, client_name: crmClient?.name || '',
+      agence: akProject.companyCode || '', statut: 'en_cours', date_debut: pCreated,
+    }], { onConflict: 'id' });
+
+    await sb.from('affaires').upsert([{
+      id: affId, nom: akProject.name || akProject.id, marche_id: marcheId,
+      client_id: crmClient?.id || null, client_name: crmClient?.name || '',
+      agence: akProject.companyCode || '', statut: 'en_cours',
+      code_projet: akProject.id, date_debut: pCreated,
+    }], { onConflict: 'id' });
+
+    // 4. Récupérer les devis, commandes, factures de ce projet en parallèle
+    setSyncText('Récupération devis, commandes, factures...');
+    const [quotList, ordList, invList] = await Promise.all([
+      akuiteoFetch('POST', '/sales/quotations/search?limit=500', { projectId: { operator: 'EQUALS', value: codeProjet } }).catch(() => []),
+      akuiteoFetch('POST', '/sales/orders/search?limit=500', { projectId: { operator: 'EQUALS', value: codeProjet } }).catch(() => []),
+      akuiteoFetch('POST', '/sales/invoices/search?limit=500', { projectId: { operator: 'EQUALS', value: codeProjet } }).catch(() => []),
+    ]);
+    const quotations = (Array.isArray(quotList) ? quotList : []).filter(q => q.projectId === codeProjet);
+    const orders = (Array.isArray(ordList) ? ordList : []).filter(o => o.projectId === codeProjet);
+    const invoices = (Array.isArray(invList) ? invList : []).filter(f => f.projectId === codeProjet);
+    console.log(`[PullAffaire] ${codeProjet}: ${quotations.length} devis, ${orders.length} cmd, ${invoices.length} fact`);
+
+    // Devis
+    if (quotations.length > 0) {
+      const rows = quotations.map(q => {
+        const c = akCMap[String(q.thirdPartyId || q.customerId || '')];
+        return { id: 'akd_' + String(q.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(q.id||''), ref: String(q.number||q.id||''),
+          client_name: c?.name || q.name || 'Inconnu', client_id: c?.id || null, sujet: q.name || 'Devis',
+          montant: q.preTaxAmount || 0, statut: q.state === 'SIGNED' ? 'accepted' : q.state === 'ARCHIVED' ? 'refused' : 'pending',
+          date: q.date ? q.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
+          projet: q.projectId || null, agence: q.entityCode || null, societe: q.companyCode || null,
+          responsable_id: q.managerId || null, commercial_id: q.salesManagerId || null,
+          affaire_id: affId, marche_id: marcheId };
+      });
+      await sb.from('devis').upsert(rows, { onConflict: 'id' });
+    }
+    // Commandes (avec surface facturée via GET individuel)
+    if (orders.length > 0) {
+      setSyncText('Récupération lignes commandes...');
+      for (let i = 0; i < orders.length; i += 10) {
+        const batch = orders.slice(i, i + 10);
+        await Promise.allSettled(batch.map(async o => {
+          try { const full = await akuiteoFetch('GET', '/sales/orders/' + o.id); if (full) o.lines = full.lines || []; } catch (e) { o.lines = []; }
+        }));
+      }
+      const rows = orders.map(o => {
+        const c = akCMap[String(o.thirdPartyId || o.customerId || '')];
+        const surface = Array.isArray(o.lines) ? o.lines.reduce((s, l) => s + Number(l.quantity || 0), 0) : null;
+        return { id: 'akc_' + String(o.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(o.id||''), ref: String(o.number||o.id||''),
+          client_name: c?.name || o.name || 'Inconnu', client_id: c?.id || null, nom: o.name || 'Commande',
+          montant: o.preTaxAmount || 0, statut: o.state === 'CLOSED' ? 'livree' : o.state === 'INVOICED' ? 'facturee' : 'en_cours',
+          date: o.date ? o.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
+          projet: o.projectId || null, agence: o.entityCode || null, societe: o.companyCode || null,
+          responsable_id: o.managerId || null, commercial_id: o.salesManagerId || null,
+          surface_facturee: surface, affaire_id: affId, marche_id: marcheId };
+      });
+      await sb.from('commandes').upsert(rows, { onConflict: 'id' });
+    }
+    // Factures
+    if (invoices.length > 0) {
+      const rows = invoices.map(f => {
+        const c = akCMap[String(f.thirdPartyId || f.customerId || '')];
+        const isPaid = f.state === 'PAID' || f.state === 'CLOSED';
+        return { id: 'akf_' + String(f.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(f.id||''), ref: String(f.number||f.id||''),
+          client_name: c?.name || f.name || 'Inconnu', client_id: c?.id || null,
+          montant: f.afterTaxAmount || 0, reste_a_payer: isPaid ? 0 : (f.afterTaxAmount || 0),
+          statut: isPaid ? 'payee' : f.state === 'SENT' ? 'envoyee' : 'attente',
+          date: f.date ? f.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
+          echeance: f.dueDate ? f.dueDate.substring(0, 10) : null,
+          projet: f.projectId || null, agence: f.entityCode || null, societe: f.companyCode || null,
+          responsable_id: f.managerId || null, type_facture: f.invoiceType || null,
+          affaire_id: affId, marche_id: marcheId };
+      });
+      const { error: fErr } = await sb.from('factures').upsert(rows, { onConflict: 'id' });
+      if (fErr) console.warn('[PullAffaire] Factures err:', fErr.message);
+    }
+
+    toast(`Affaire ${codeProjet} mise à jour (${quotations.length}D, ${orders.length}C, ${invoices.length}F)`, 'success');
+    await loadDB();
+    renderPage(currentPage);
+  } catch (e) {
+    console.error('PullAffaire error:', e);
+    toast('Erreur: ' + e.message, 'error');
+  } finally {
+    showSyncLoading(false);
+  }
+}
+
 async function pullClientFromAkuiteo(clientId) {
   const client = await sb.from('clients').select('*').eq('id', clientId).maybeSingle().then(r => r.data);
   if (!client) { toast('Société non trouvée en base', 'error'); return; }
