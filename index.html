@@ -4946,8 +4946,12 @@ async function showCommandeDetail(id) {
   }
   currentPage = 'commande-detail';
   document.getElementById('pageTitle').textContent = 'Commande ' + (c.ref || c.id);
+  const aff = c.affaire_id ? DB.affaires.find(a => a.id === c.affaire_id) : null;
   document.getElementById('contentArea').innerHTML = `<div class="page active">
-    <button class="btn" onclick="go('commandes')" style="margin-bottom:16px">← Retour aux commandes</button>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn" onclick="go('commandes')">← Retour aux commandes</button>
+      ${aff ? '<button class="btn" onclick="showAffaireDetail(&#39;'+aff.id+'&#39;)">← Retour à l\'affaire '+(aff.ref||aff.nom||aff.code_projet||'')+'</button>' : ''}
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       ${detailSection('Informations générales', [
         detailRow('Référence', c.ref),
