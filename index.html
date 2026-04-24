@@ -7091,7 +7091,6 @@ async function askAIChat(presetQuestion) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         question,
-        context: buildCRMContext(),
         history: _aiChatHistory
       })
     });
