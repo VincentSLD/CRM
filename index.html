@@ -1757,7 +1757,7 @@ tbody tr:last-child td { border-bottom: none; }
           <div style="padding:4px">
             <button onclick="document.getElementById('syncDropdownMenu').style.display='none';syncAkuiteoQuick()" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:none;background:none;cursor:pointer;border-radius:8px;text-align:left;font-size:13px;color:var(--t1)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''">
               <span style="font-size:18px">⚡</span>
-              <div><div style="font-weight:600">Sync rapide</div><div style="font-size:11px;color:var(--t3)">50 dernières modifications</div></div>
+              <div><div style="font-weight:600">Sync incrémentale</div><div style="font-size:11px;color:var(--t3)">Depuis la dernière sync</div></div>
             </button>
             <button onclick="document.getElementById('syncDropdownMenu').style.display='none';syncAkuiteo()" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:none;background:none;cursor:pointer;border-radius:8px;text-align:left;font-size:13px;color:var(--t1)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''">
               <span style="font-size:18px">🔄</span>
@@ -7771,16 +7771,35 @@ async function syncAdressesAffaires() {
 
 async function syncAkuiteoQuick() {
   showSyncLoading(true);
-  const LIMIT = 50;
   try {
-    // 1. Nouveaux clients créés récemment dans Akuiteo (createdTime uniquement)
-    setSyncText('Sync rapide — Nouvelles sociétés...');
-    const sinceDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().replace('Z', '+0000');
-    let akCustomers = await akuiteoFetch('POST', '/crm/customers/search?limit=200', {
-      createdTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate }
-    }).catch(() => []);
-    if (!Array.isArray(akCustomers)) akCustomers = [];
-    console.log(`[QuickSync] ${akCustomers.length} nouvelles sociétés créées depuis ${sinceDate.substring(0,10)}`);
+    // Récupérer la date de dernière sync depuis crm_config (ou 30 jours par défaut)
+    const { data: cfgRow } = await sb.from('crm_config').select('value').eq('key', 'last_sync_timestamp').maybeSingle();
+    const lastSync = cfgRow?.value || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const syncStartedAt = new Date().toISOString();
+    const sinceDate = lastSync.substring(0,19) + '.000+0000';
+    const sinceDay = lastSync.substring(0,10);
+    console.log(`[IncSync] Dernière sync: ${lastSync}`);
+
+    // 1. Clients modifiés OU créés depuis la dernière sync
+    setSyncText('Sync incrémentale — Sociétés...');
+    const [modified, created] = await Promise.all([
+      akuiteoFetch('POST', '/crm/customers/search?limit=500', {
+        modificationTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate }
+      }).catch(() => []),
+      akuiteoFetch('POST', '/crm/customers/search?limit=500', {
+        createdTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate }
+      }).catch(() => []),
+    ]);
+    const seen = new Set();
+    let akCustomers = [];
+    for (const list of [created, modified]) {
+      if (!Array.isArray(list)) continue;
+      for (const c of list) {
+        const id = String(c.id || c.code);
+        if (!seen.has(id)) { seen.add(id); akCustomers.push(c); }
+      }
+    }
+    console.log(`[IncSync] ${akCustomers.length} sociétés modifiées/créées depuis ${sinceDay}`);
 
     const { data: existingClients } = await sb.from('clients').select('id,akuiteo_id');
     const existingMap = {};
@@ -7881,10 +7900,10 @@ async function syncAkuiteoQuick() {
     console.log(`[QuickSync] ${contactRows.length} contacts`);
 
     // 3. Nouveaux devis, commandes, factures (uniquement ceux qui ne sont pas en base)
-    setSyncText('Sync rapide — Nouveaux documents...');
+    setSyncText('Sync incrémentale — Documents...');
     const { data: allCl2 } = await sb.from('clients').select('id,akuiteo_id,name');
     const akCMap = {}; for (const c of (allCl2||[])) { if (c.akuiteo_id) akCMap[c.akuiteo_id] = c; }
-    const docSinceDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const docSinceDate = sinceDay;
 
     // Charger les IDs existants en base pour ne sync que les nouveaux
     const [{ data: existingDevis }, { data: existingCmd }, { data: existingFact }] = await Promise.all([
@@ -7972,20 +7991,21 @@ async function syncAkuiteoQuick() {
     }
 
     // 4. Nouveaux Marchés / Affaires (projets récents non présents en base)
-    setSyncText('Sync rapide — Nouveaux Marchés & Affaires...');
+    setSyncText('Sync incrémentale — Marchés & Affaires...');
     const currentYear = new Date().getFullYear().toString().slice(-2);
     let akProjects = await akuiteoFetch('POST', '/projectmanagement/projects/search?limit=50000', {
       code: { operator: 'LIKE', value: currentYear + '.%' }
     }).catch(() => []);
     if (Array.isArray(akProjects) && akProjects.length > 0) {
-      // Charger les IDs d'affaires existantes
-      const { data: existingAff } = await sb.from('affaires').select('code_projet').not('code_projet', 'is', null);
-      const existingProjectIds = new Set((existingAff||[]).map(a => a.code_projet));
-      // Filtrer : ne garder que les projets nouveaux
-      akProjects = akProjects.filter(p => !existingProjectIds.has(p.id));
+      // Filtrer : ne garder que les projets créés/modifiés depuis la dernière sync
+      akProjects = akProjects.filter(p => {
+        const ct = p.changeTracking?.createdTime || '';
+        const mt = p.changeTracking?.modificationTime || '';
+        return ct >= sinceDate || mt >= sinceDate;
+      });
       // Trier par date de création décroissante
       akProjects.sort((a,b) => ((b.changeTracking?.createdTime||'') > (a.changeTracking?.createdTime||'') ? 1 : -1));
-      console.log(`[QuickSync] ${akProjects.length} nouveaux projets`);
+      console.log(`[IncSync] ${akProjects.length} projets nouveaux/modifiés depuis ${sinceDay}`);
       // Construire marchés (préfixe XX.XXXX) et affaires (XX.XXXX.XX) — même format que sync complète
       const marchesMap = {};
       const affaireRows = [];
@@ -8032,12 +8052,16 @@ async function syncAkuiteoQuick() {
       console.log(`[QuickSync] ${marcheRows.length} marchés, ${affaireRows.length} affaires`);
     }
 
-    toast('Sync rapide terminée', 'success');
+    // Mettre à jour le timestamp de dernière sync (date de démarrage)
+    await sb.from('crm_config').upsert({ key: 'last_sync_timestamp', value: syncStartedAt }, { onConflict: 'key' });
+    console.log(`[IncSync] Timestamp mis à jour: ${syncStartedAt}`);
+
+    toast('Sync incrémentale terminée', 'success');
     await loadDB();
     renderPage(currentPage);
   } catch (e) {
-    console.error('QuickSync error:', e);
-    toast('Erreur sync rapide: ' + e.message, 'error');
+    console.error('IncSync error:', e);
+    toast('Erreur sync incrémentale: ' + e.message, 'error');
   } finally {
     showSyncLoading(false);
   }
