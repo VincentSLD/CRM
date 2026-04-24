@@ -3137,23 +3137,132 @@ function renderDashboard() {
       <div class="kpi-label">Panier moyen</div>
     </div>
   </div>
-  <div class="grid-2">
+  <div class="grid-2 equal" style="margin-bottom:16px">
     <div class="card">
-      <div class="card-header"><div class="card-title">Activité récente</div></div>
-      <div class="card-body" style="max-height:330px;overflow-y:auto">
-        ${renderActivity()}
-      </div>
+      <div class="card-header"><div class="card-title">CA facturé — 12 derniers mois</div></div>
+      <div class="card-body">${renderDashChartCA(myFactures)}</div>
     </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">CA facturé par agence</div></div>
+      <div class="card-body">${renderDashChartAgence(myFactures)}</div>
+    </div>
+  </div>
   <div class="grid-2 equal">
     <div class="card">
-      <div class="card-header"><div class="card-title">Top sociétés — Score & CA</div><button class="btn" onclick="go('clients')">Voir tout</button></div>
-      <div class="card-body" style="padding:0"><div class="table-wrap">${renderTopClients()}</div></div>
+      <div class="card-header"><div class="card-title">Devis par statut</div></div>
+      <div class="card-body">${renderDashDonutDevis(myDevis)}</div>
     </div>
     <div class="card">
-      <div class="card-header"><div class="card-title">Santé du portefeuille</div></div>
-      <div class="card-body">${renderPortfolioHealth()}</div>
+      <div class="card-header"><div class="card-title">Factures par statut</div></div>
+      <div class="card-body">${renderDashDonutFactures(myFactures)}</div>
     </div>
   </div>`;
+}
+
+function renderDashChartCA(factures) {
+  const now = new Date();
+  const months = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ y: d.getFullYear(), m: d.getMonth(), label: ['J','F','M','A','M','J','J','A','S','O','N','D'][d.getMonth()] + (d.getMonth() === 0 ? "'" + String(d.getFullYear()).slice(-2) : '') });
+  }
+  const data = months.map(({y, m}) => {
+    return factures.filter(f => { const d = new Date(f.date_raw || f.date); return !isNaN(d) && d.getFullYear() === y && d.getMonth() === m; })
+      .reduce((a, f) => a + Number(f.montant || 0), 0);
+  });
+  const max = Math.max(...data, 1);
+  const W = 100, H = 60, padT = 4, padB = 12;
+  const barW = W / months.length * 0.7;
+  const gap = W / months.length;
+  let bars = '';
+  data.forEach((v, i) => {
+    const h = (v / max) * (H - padT - padB);
+    const x = i * gap + (gap - barW) / 2;
+    const y = H - padB - h;
+    bars += `<rect x="${x}" y="${y}" width="${barW}" height="${h}" fill="var(--accent)" rx="1"><title>${months[i].label}: ${fmt(v)}</title></rect>`;
+    bars += `<text x="${x + barW/2}" y="${H - 2}" text-anchor="middle" font-size="3" fill="var(--t3)">${months[i].label}</text>`;
+  });
+  const totalCA = data.reduce((a,v) => a+v, 0);
+  return `<div style="font-size:13px;color:var(--t2);margin-bottom:8px">Total période : <strong>${fmt(totalCA)}</strong></div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:220px">${bars}</svg>`;
+}
+
+function renderDashChartAgence(factures) {
+  const byAg = {};
+  for (const f of factures) {
+    const ag = f.societe || f.agence || '—';
+    byAg[ag] = (byAg[ag] || 0) + Number(f.montant || 0);
+  }
+  const entries = Object.entries(byAg).filter(([, v]) => v > 0).sort((a,b) => b[1] - a[1]);
+  if (entries.length === 0) return '<div style="text-align:center;color:var(--t3);padding:40px">Aucune donnée</div>';
+  const max = entries[0][1];
+  const total = entries.reduce((a, [, v]) => a + v, 0);
+  const palette = ['#4f8ff7','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1','#14b8a6','#d946ef','#a855f7','#22d3ee'];
+  return '<div style="display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto">' +
+    entries.map(([ag, v], i) => {
+      const pct = Math.round(v / total * 100);
+      const wPct = Math.round(v / max * 100);
+      const color = palette[i % palette.length];
+      return `<div style="display:flex;align-items:center;gap:8px;font-size:12px">
+        <span style="width:70px;flex-shrink:0;font-weight:600">${ag}</span>
+        <div style="flex:1;height:18px;background:var(--bg-3);border-radius:4px;position:relative;overflow:hidden">
+          <div style="width:${wPct}%;height:100%;background:${color};border-radius:4px"></div>
+          <div style="position:absolute;top:0;left:6px;line-height:18px;font-size:10px;color:var(--t1);font-weight:600">${fmt(v)}</div>
+        </div>
+        <span style="width:36px;text-align:right;color:var(--t3);font-size:11px">${pct}%</span>
+      </div>`;
+    }).join('') + '</div>';
+}
+
+function renderDashDonut(data, colors) {
+  const total = data.reduce((a, d) => a + d.value, 0);
+  if (total === 0) return '<div style="text-align:center;color:var(--t3);padding:40px">Aucune donnée</div>';
+  let cumul = 0;
+  const R = 40, CX = 50, CY = 50;
+  let slices = '';
+  data.forEach((d, i) => {
+    if (d.value === 0) return;
+    const pct = d.value / total;
+    const startAngle = cumul * 2 * Math.PI;
+    const endAngle = (cumul + pct) * 2 * Math.PI;
+    cumul += pct;
+    const x1 = CX + R * Math.sin(startAngle);
+    const y1 = CY - R * Math.cos(startAngle);
+    const x2 = CX + R * Math.sin(endAngle);
+    const y2 = CY - R * Math.cos(endAngle);
+    const large = pct > 0.5 ? 1 : 0;
+    slices += `<path d="M ${CX} ${CY} L ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} Z" fill="${colors[i]}"><title>${d.label}: ${fmt(d.value)} (${Math.round(pct*100)}%)</title></path>`;
+  });
+  const legend = data.map((d, i) => {
+    const pct = total ? Math.round(d.value / total * 100) : 0;
+    return `<div style="display:flex;align-items:center;gap:6px;font-size:12px">
+      <span style="width:10px;height:10px;background:${colors[i]};border-radius:2px;flex-shrink:0"></span>
+      <span style="flex:1">${d.label}</span>
+      <span style="color:var(--t3)">${fmt(d.value)} (${pct}%)</span>
+    </div>`;
+  }).join('');
+  return `<div style="display:flex;gap:14px;align-items:center">
+    <svg viewBox="0 0 100 100" style="width:140px;height:140px;flex-shrink:0">${slices}<circle cx="50" cy="50" r="22" fill="var(--card)"/><text x="50" y="50" text-anchor="middle" font-size="6" fill="var(--t3)">Total</text><text x="50" y="58" text-anchor="middle" font-size="7" font-weight="700" fill="var(--t1)">${fmt(total)}</text></svg>
+    <div style="flex:1;display:flex;flex-direction:column;gap:6px">${legend}</div>
+  </div>`;
+}
+
+function renderDashDonutDevis(devis) {
+  const data = [
+    { label: 'Acceptés', value: devis.filter(d => d.statut==='accepted' || d.statut==='signed').reduce((a,d)=>a+Number(d.montant||0),0) },
+    { label: 'En attente', value: devis.filter(d => d.statut==='pending' || d.statut==='sent').reduce((a,d)=>a+Number(d.montant||0),0) },
+    { label: 'Refusés', value: devis.filter(d => d.statut==='refused').reduce((a,d)=>a+Number(d.montant||0),0) },
+  ];
+  return renderDashDonut(data, ['#10b981','#f59e0b','#ef4444']);
+}
+
+function renderDashDonutFactures(factures) {
+  const data = [
+    { label: 'Payées', value: factures.filter(f => f.statut==='payee').reduce((a,f)=>a+Number(f.montant||0),0) },
+    { label: 'En attente', value: factures.filter(f => f.statut==='attente' || f.statut==='envoyee').reduce((a,f)=>a+Number(f.montant||0),0) },
+    { label: 'En retard', value: factures.filter(f => f.statut==='retard').reduce((a,f)=>a+Number(f.montant||0),0) },
+  ];
+  return renderDashDonut(data, ['#10b981','#f59e0b','#ef4444']);
 }
 
 function renderChart() {
