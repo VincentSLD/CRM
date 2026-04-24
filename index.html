@@ -9038,6 +9038,15 @@ async function pullAffaireFromAkuiteo(affaireId) {
 
     toast(`Affaire ${codeProjet} mise à jour (${quotations.length}D, ${orders.length}C, ${invoices.length}F)`, 'success');
     await loadDB();
+    // Invalider les custom_data en cache pour forcer le rechargement depuis Supabase
+    const touchedIds = new Set([
+      ...quotations.map(q => 'akd_' + String(q.id).replace(/[^a-zA-Z0-9.]/g, '_')),
+      ...orders.map(o => 'akc_' + String(o.id).replace(/[^a-zA-Z0-9.]/g, '_')),
+      ...invoices.map(f => 'akf_' + String(f.id).replace(/[^a-zA-Z0-9.]/g, '_')),
+    ]);
+    for (const d of DB.devis) if (touchedIds.has(d.id)) delete d.custom_data;
+    for (const c of DB.commandes) if (touchedIds.has(c.id)) delete c.custom_data;
+    for (const f of DB.factures) if (touchedIds.has(f.id)) delete f.custom_data;
     renderPage(currentPage);
   } catch (e) {
     console.error('PullAffaire error:', e);
