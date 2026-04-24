@@ -3038,8 +3038,8 @@ function renderDashboardRefresh() {
   document.getElementById('contentArea').innerHTML = '<div class="page active">' + renderDashboard() + '</div>';
 }
 function renderDashboard() {
-  const myDevis = filterByDateRange(filterByCommercial(DB.devis), dashDateFrom, dashDateTo);
-  const myFactures = filterByDateRange(filterByCommercial(DB.factures), dashDateFrom, dashDateTo);
+  const myDevis = filterBySociete(filterByDateRange(filterByCommercial(DB.devis), dashDateFrom, dashDateTo));
+  const myFactures = filterBySociete(filterByDateRange(filterByCommercial(DB.factures), dashDateFrom, dashDateTo));
   const totalCA = DB.clients.reduce((a,c)=>a+c.ca,0);
   const totalObj = DB.clients.reduce((a,c)=>a+c.obj,0);
   const devisEnCours = myDevis.filter(d=>d.statut==='pending'||d.statut==='sent').reduce((a,d)=>a+d.montant,0);
@@ -3111,6 +3111,7 @@ function renderDashboard() {
     <input type="date" value="${dashDateFrom}" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--t1)" onchange="dashDateFrom=this.value;renderDashboardRefresh()">
     <label style="font-size:12px;color:var(--t3)">au</label>
     <input type="date" value="${dashDateTo}" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--t1)" onchange="dashDateTo=this.value;renderDashboardRefresh()">
+    ${renderSocieteFilter(() => renderDashboardRefresh())}
     <span style="font-size:11px;color:var(--t3);margin-left:6px">${myDevis.length} devis, ${myFactures.length} factures sur la période</span>
   </div>
   ${alertsHTML}
