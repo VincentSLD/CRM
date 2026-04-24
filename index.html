@@ -7956,7 +7956,7 @@ async function syncAkuiteoQuick() {
         await Promise.allSettled(batch.map(async o => {
           try {
             const full = await akuiteoFetch('GET', '/sales/orders/' + o.id);
-            if (full) o.lines = full.lines || [];
+            if (full) { o.lines = full.lines || []; o.description = full.description || null; }
           } catch (e) { o.lines = []; }
           ordersWithLines.push(o);
         }));
@@ -7970,7 +7970,7 @@ async function syncAkuiteoQuick() {
           date: o.date ? o.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
           projet: o.projectId || null, agence: o.entityCode || null, societe: o.companyCode || null,
           responsable_id: o.managerId || null, commercial_id: o.salesManagerId || null,
-          surface_facturee: surface };
+          surface_facturee: surface, description: o.description || null };
       });
       await sb.from('commandes').upsert(rows, { onConflict: 'id' });
       console.log(`[QuickSync] ${rows.length} commandes avec surface facturée`);
@@ -8987,7 +8987,7 @@ async function pullAffaireFromAkuiteo(affaireId) {
           try {
             // GET pour les lignes (quantity)
             const full = await akuiteoFetch('GET', '/sales/orders/' + o.id);
-            if (full) o.lines = full.lines || [];
+            if (full) { o.lines = full.lines || []; o.description = full.description || null; }
             // POST /read avec option CUSTOM_DATA pour les données personnalisées
             const detail = await akuiteoFetch('POST', '/sales/orders/' + o.id + '/read', { options: ['CUSTOM_DATA'] });
             if (detail?.customData && Object.keys(detail.customData).length > 0) o.customData = detail.customData;
@@ -9003,7 +9003,8 @@ async function pullAffaireFromAkuiteo(affaireId) {
           date: o.date ? o.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
           projet: o.projectId || null, agence: o.entityCode || null, societe: o.companyCode || null,
           responsable_id: o.managerId || null, commercial_id: o.salesManagerId || null,
-          surface_facturee: surface, affaire_id: affId, marche_id: marcheId };
+          surface_facturee: surface, affaire_id: affId, marche_id: marcheId,
+          description: o.description || null };
         if (o.customData) row.custom_data = o.customData;
         return row;
       });
