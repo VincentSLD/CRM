@@ -4587,6 +4587,7 @@ function renderCommandes(filter='all') {
       <col class="col-montant"><col class="col-date">
       <col class="col-date"><col><col><col><col class="col-statut">
     </colgroup><thead><tr>
+      <th style="font-size:11px">Code affaire</th>
       ${sortTh('commandes','ref','Réf','filterCmd')}
       ${sortTh('commandes','client','Client','filterCmd')}
       ${sortTh('commandes','nom','Nom','filterCmd')}
@@ -4595,10 +4596,10 @@ function renderCommandes(filter='all') {
       ${sortTh('commandes','livraison','Livraison','filterCmd')}
       ${sortTh('commandes','societe','Société','filterCmd')}
       <th style="font-size:11px">Marché</th>
-      <th style="font-size:11px">Affaire</th>
       ${sortTh('commandes','statut','Statut','filterCmd')}
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--t3)">Aucune commande trouvée</td></tr>' : filtered.slice(cmdPage*TBL_PAGE_SIZE, (cmdPage+1)*TBL_PAGE_SIZE).map(c => `<tr onclick="showCommandeDetail('${c.id}')" style="cursor:pointer">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--t3)">Aucune commande trouvée</td></tr>' : filtered.slice(cmdPage*TBL_PAGE_SIZE, (cmdPage+1)*TBL_PAGE_SIZE).map(c => { const aff = c.affaire_id ? DB.affaires.find(a => a.id === c.affaire_id) : null; return `<tr onclick="showCommandeDetail('${c.id}')" style="cursor:pointer">
+      <td class="mono"><strong>${aff?.code_projet || '—'}</strong></td>
       <td class="mono">${c.ref}</td>
       <td>${c.client}</td>
       <td>${c.nom||''}</td>
@@ -4607,9 +4608,8 @@ function renderCommandes(filter='all') {
       <td>${c.livraison}</td>
       <td>${c.societe||''}</td>
       <td>${linkMarche(c.marche_id)}</td>
-      <td>${linkAffaire(c.affaire_id)}</td>
       <td>${cmdStatusLabel(c.statut)}</td>
-    </tr>`).join('')}</tbody></table>
+    </tr>`; }).join('')}</tbody></table>
   ${renderTablePagination(filtered.length, cmdPage, 'goCmdPage')}
   </div></div></div>`;
 }
