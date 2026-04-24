@@ -8939,9 +8939,9 @@ async function pullAffaireFromAkuiteo(affaireId) {
     setSyncText('Récupération devis, commandes, factures...');
     const docSince = new Date(Date.now() - 3 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const [quotList, ordList, invList] = await Promise.all([
-      akuiteoFetch('POST', '/sales/quotations/search?limit=5000', { date: { operator: 'GREATER_OR_EQUALS', value: docSince } }).catch(() => []),
-      akuiteoFetch('POST', '/sales/orders/search?limit=5000', { date: { operator: 'GREATER_OR_EQUALS', value: docSince } }).catch(() => []),
-      akuiteoFetch('POST', '/sales/invoices/search?limit=5000', { date: { operator: 'GREATER_OR_EQUALS', value: docSince } }).catch(() => []),
+      akuiteoFetch('POST', '/sales/quotations/search?limit=50000', { date: { operator: 'GREATER_OR_EQUALS', value: docSince } }).catch(() => []),
+      akuiteoFetch('POST', '/sales/orders/search?limit=50000', { date: { operator: 'GREATER_OR_EQUALS', value: docSince } }).catch(() => []),
+      akuiteoFetch('POST', '/sales/invoices/search?limit=50000', { date: { operator: 'GREATER_OR_EQUALS', value: docSince } }).catch(() => []),
     ]);
     const quotations = (Array.isArray(quotList) ? quotList : []).filter(q => String(q.projectId || '') === codeProjet);
     const orders = (Array.isArray(ordList) ? ordList : []).filter(o => String(o.projectId || '') === codeProjet);
