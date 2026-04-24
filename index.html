@@ -8948,48 +8948,79 @@ async function pullAffaireFromAkuiteo(affaireId) {
     const invoices = (Array.isArray(invList) ? invList : []).filter(f => String(f.projectId || '') === codeProjet);
     console.log(`[PullAffaire] ${codeProjet}: ${quotations.length} devis, ${orders.length} cmd, ${invoices.length} fact`);
 
-    // Devis
+    // Devis (avec customData via POST /read)
     if (quotations.length > 0) {
+      setSyncText('Récupération détails devis...');
+      for (let i = 0; i < quotations.length; i += 10) {
+        const batch = quotations.slice(i, i + 10);
+        await Promise.allSettled(batch.map(async q => {
+          try {
+            const detail = await akuiteoFetch('POST', '/sales/quotations/' + q.id + '/read', { options: ['CUSTOM_DATA'] });
+            if (detail?.customData && Object.keys(detail.customData).length > 0) q.customData = detail.customData;
+          } catch (e) {}
+        }));
+      }
       const rows = quotations.map(q => {
         const c = akCMap[String(q.thirdPartyId || q.customerId || '')];
-        return { id: 'akd_' + String(q.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(q.id||''), ref: String(q.number||q.id||''),
+        const row = { id: 'akd_' + String(q.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(q.id||''), ref: String(q.number||q.id||''),
           client_name: c?.name || q.name || 'Inconnu', client_id: c?.id || null, sujet: q.name || 'Devis',
           montant: q.preTaxAmount || 0, statut: q.state === 'SIGNED' ? 'accepted' : q.state === 'ARCHIVED' ? 'refused' : 'pending',
           date: q.date ? q.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
           projet: q.projectId || null, agence: q.entityCode || null, societe: q.companyCode || null,
           responsable_id: q.managerId || null, commercial_id: q.salesManagerId || null,
           affaire_id: affId, marche_id: marcheId };
+        if (q.customData) row.custom_data = q.customData;
+        return row;
       });
       await sb.from('devis').upsert(rows, { onConflict: 'id' });
     }
-    // Commandes (avec surface facturée via GET individuel)
+    // Commandes (avec surface facturée + customData via POST /read)
     if (orders.length > 0) {
-      setSyncText('Récupération lignes commandes...');
+      setSyncText('Récupération détails commandes...');
       for (let i = 0; i < orders.length; i += 10) {
         const batch = orders.slice(i, i + 10);
         await Promise.allSettled(batch.map(async o => {
-          try { const full = await akuiteoFetch('GET', '/sales/orders/' + o.id); if (full) o.lines = full.lines || []; } catch (e) { o.lines = []; }
+          try {
+            // GET pour les lignes (quantity)
+            const full = await akuiteoFetch('GET', '/sales/orders/' + o.id);
+            if (full) o.lines = full.lines || [];
+            // POST /read avec option CUSTOM_DATA pour les données personnalisées
+            const detail = await akuiteoFetch('POST', '/sales/orders/' + o.id + '/read', { options: ['CUSTOM_DATA'] });
+            if (detail?.customData && Object.keys(detail.customData).length > 0) o.customData = detail.customData;
+          } catch (e) { o.lines = o.lines || []; }
         }));
       }
       const rows = orders.map(o => {
         const c = akCMap[String(o.thirdPartyId || o.customerId || '')];
         const surface = Array.isArray(o.lines) ? o.lines.reduce((s, l) => s + Number(l.quantity || 0), 0) : null;
-        return { id: 'akc_' + String(o.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(o.id||''), ref: String(o.number||o.id||''),
+        const row = { id: 'akc_' + String(o.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(o.id||''), ref: String(o.number||o.id||''),
           client_name: c?.name || o.name || 'Inconnu', client_id: c?.id || null, nom: o.name || 'Commande',
           montant: o.preTaxAmount || 0, statut: o.state === 'CLOSED' ? 'livree' : o.state === 'INVOICED' ? 'facturee' : 'en_cours',
           date: o.date ? o.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
           projet: o.projectId || null, agence: o.entityCode || null, societe: o.companyCode || null,
           responsable_id: o.managerId || null, commercial_id: o.salesManagerId || null,
           surface_facturee: surface, affaire_id: affId, marche_id: marcheId };
+        if (o.customData) row.custom_data = o.customData;
+        return row;
       });
       await sb.from('commandes').upsert(rows, { onConflict: 'id' });
     }
-    // Factures
+    // Factures (avec customData via POST /read)
     if (invoices.length > 0) {
+      setSyncText('Récupération détails factures...');
+      for (let i = 0; i < invoices.length; i += 10) {
+        const batch = invoices.slice(i, i + 10);
+        await Promise.allSettled(batch.map(async f => {
+          try {
+            const detail = await akuiteoFetch('POST', '/sales/invoices/' + f.id + '/read', { options: ['CUSTOM_DATA'] });
+            if (detail?.customData && Object.keys(detail.customData).length > 0) f.customData = detail.customData;
+          } catch (e) {}
+        }));
+      }
       const rows = invoices.map(f => {
         const c = akCMap[String(f.thirdPartyId || f.customerId || '')];
         const isPaid = f.state === 'PAID' || f.state === 'CLOSED';
-        return { id: 'akf_' + String(f.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(f.id||''), ref: String(f.number||f.id||''),
+        const row = { id: 'akf_' + String(f.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(f.id||''), ref: String(f.number||f.id||''),
           client_name: c?.name || f.name || 'Inconnu', client_id: c?.id || null,
           montant: f.afterTaxAmount || 0, reste_a_payer: isPaid ? 0 : (f.afterTaxAmount || 0),
           statut: isPaid ? 'payee' : f.state === 'SENT' ? 'envoyee' : 'attente',
@@ -8998,6 +9029,8 @@ async function pullAffaireFromAkuiteo(affaireId) {
           projet: f.projectId || null, agence: f.entityCode || null, societe: f.companyCode || null,
           responsable_id: f.managerId || null, type_facture: f.invoiceType || null,
           affaire_id: affId, marche_id: marcheId };
+        if (f.customData) row.custom_data = f.customData;
+        return row;
       });
       const { error: fErr } = await sb.from('factures').upsert(rows, { onConflict: 'id' });
       if (fErr) console.warn('[PullAffaire] Factures err:', fErr.message);
