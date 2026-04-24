@@ -4198,7 +4198,7 @@ function renderAffaireDetail() {
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
     ${marche ? '<button class="btn" onclick="showMarcheDetail(&#39;'+marche.id+'&#39;)">&#8592; Marché '+( marche.ref || marche.nom)+'</button>' : ''}
     <button class="btn" onclick="go('affaires')">&#8592; Toutes les affaires</button>
-    ${a.code_projet ? '<button class="btn btn-primary" onclick="pullAffaireFromAkuiteo(&#39;'+a.id+'&#39;)" title="Récupérer l\\'affaire et ses documents depuis Akuiteo">⬇ Recup Akuiteo</button>' : ''}
+    ${a.code_projet ? '<button class="btn btn-primary" onclick="pullAffaireFromAkuiteo(&#39;'+a.id+'&#39;)" title="Récupérer l\'affaire et ses documents depuis Akuiteo">⬇ Recup Akuiteo</button>' : ''}
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px">
     <div class="card"><div class="card-body" style="text-align:center;padding:12px">
