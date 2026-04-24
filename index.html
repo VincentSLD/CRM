@@ -4937,7 +4937,7 @@ async function showDevisDetail(id) {
 async function showCommandeDetail(id) {
   const c = DB.commandes.find(x => x.id === id);
   if (!c) return;
-  if (c.custom_data === undefined) {
+  if (c.custom_data === undefined || c.description === undefined) {
     const { data } = await sb.from('commandes').select('custom_data,description').eq('id', id).maybeSingle();
     if (data) { c.custom_data = data.custom_data; c.description = data.description; }
   }
@@ -4958,7 +4958,7 @@ async function showCommandeDetail(id) {
         detailRow('ID Akuiteo', c.akuiteo_id),
         detailRow('Société', c.client),
         detailRow('Nom', c.nom),
-        detailRow('Description', c.description),
+        detailRow('Texte sur la commande', c.description || '—'),
         detailRow('Référence complémentaire', c.reference1),
         detailRow('Statut', cmdStatusLabel(c.statut)),
         detailRow('Devis d&#39;origine', c.devis_origine),
