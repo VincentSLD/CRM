@@ -4147,8 +4147,9 @@ function renderAffaires() {
       <th style="font-size:11px">Cmd</th>
       <th style="font-size:11px">Factures</th>
       ${sortTh('affaires','statut','Statut','filterAffaires')}
+      ${sortTh('affaires','agence','Agence','filterAffaires')}
     </tr></thead>
-    <tbody>${affaires.length === 0 ? '<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--t3)">Aucune affaire trouvée</td></tr>' : affaires.slice(affairesPage*TBL_PAGE_SIZE, (affairesPage+1)*TBL_PAGE_SIZE).map(a => {
+    <tbody>${affaires.length === 0 ? '<tr><td colspan="12" style="text-align:center;padding:20px;color:var(--t3)">Aucune affaire trouvée</td></tr>' : affaires.slice(affairesPage*TBL_PAGE_SIZE, (affairesPage+1)*TBL_PAGE_SIZE).map(a => {
       const marche = DB.marches.find(m => m.id === a.marche_id);
       const nbDevis = DB.devis.filter(d => d.affaire_id === a.id).length;
       const nbCmd = DB.commandes.filter(c => c.affaire_id === a.id).length;
@@ -4165,6 +4166,7 @@ function renderAffaires() {
         <td style="text-align:center">${nbCmd}</td>
         <td style="text-align:center">${nbFact}</td>
         <td>${marcheStatutBadge(a.statut)}</td>
+        <td class="mono" style="font-size:11px">${a.agence || '—'}</td>
       </tr>`;
     }).join('')}</tbody>
     </table>
