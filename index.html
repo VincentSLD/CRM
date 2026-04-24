@@ -2377,7 +2377,8 @@ document.addEventListener('click', e => {
 
 function filterByDateRange(items, from, to) {
   return items.filter(item => {
-    const d = (item.date_raw || '').substring(0, 10);
+    const raw = item.date_raw || item.date_debut || item.date;
+    const d = raw ? String(raw).substring(0, 10) : '';
     if (!d) return true;
     if (from && d < from) return false;
     if (to && d > to) return false;
