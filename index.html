@@ -6616,55 +6616,102 @@ async function setMissionMetier(typeMission, metier) {
 }
 
 // ═══ OBJECTIFS PAR AGENCE ═══
+const AGENCES_DISPO = ['GPH64','GPH85'];
+const METIERS_DISPO = ['SOL','EXE'];
+
 async function renderObjectifsAgences() {
   const el = document.getElementById('objectifsAgencesList');
   if (!el) return;
   const { data } = await sb.from('objectifs_agences').select('*').order('annee', { ascending: false }).order('agence').order('metier');
-  if (!data || data.length === 0) {
-    el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--t3)">Aucun objectif défini. Cliquez "+ Ajouter" pour en créer.</div>';
-    return;
-  }
-  el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
-    '<thead><tr style="background:var(--bg-2);border-bottom:2px solid var(--border)">' +
-    '<th style="padding:8px 10px;text-align:left">Année</th>' +
-    '<th style="padding:8px 10px;text-align:left">Agence</th>' +
-    '<th style="padding:8px 10px;text-align:left">Métier</th>' +
-    '<th style="padding:8px 10px;text-align:right">Objectif HT</th>' +
-    '<th style="padding:8px 10px;text-align:right">Action</th>' +
-    '</tr></thead><tbody>' +
-    data.map(o => `<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:6px 10px">${o.annee}</td>
-      <td style="padding:6px 10px;font-weight:500">${o.agence}</td>
-      <td style="padding:6px 10px"><span style="padding:2px 8px;border-radius:4px;background:${o.metier==='SOL'?'rgba(245,158,11,.2)':'rgba(99,102,241,.2)'};color:${o.metier==='SOL'?'#f59e0b':'#6366f1'};font-size:11px;font-weight:600">${o.metier}</span></td>
-      <td style="padding:6px 10px;text-align:right;font-family:monospace;font-weight:600">${fmt(o.objectif_ht)}</td>
-      <td style="padding:6px 10px;text-align:right">
-        <button class="btn" onclick="editObjectifAgence('${o.id}', ${o.annee}, '${o.agence}', '${o.metier}', ${o.objectif_ht})" style="font-size:11px">Modifier</button>
-        <button class="btn" onclick="deleteObjectifAgence('${o.id}')" style="font-size:11px;color:var(--red)">Supprimer</button>
-      </td>
-    </tr>`).join('') + '</tbody></table>';
+  const rows = data || [];
+  el.innerHTML = (rows.length === 0
+    ? '<div style="text-align:center;padding:14px;color:var(--t3)">Aucun objectif défini. Cliquez "+ Ajouter" pour en créer.</div>'
+    : '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+      '<thead><tr style="background:var(--bg-2);border-bottom:2px solid var(--border)">' +
+      '<th style="padding:8px 10px;text-align:left">Agence</th>' +
+      '<th style="padding:8px 10px;text-align:left">Métier</th>' +
+      '<th style="padding:8px 10px;text-align:left">Période</th>' +
+      '<th style="padding:8px 10px;text-align:right">Objectif HT</th>' +
+      '<th style="padding:8px 10px;text-align:right">Actions</th>' +
+      '</tr></thead><tbody>' +
+      rows.map(o => `<tr id="obj-row-${o.id}" style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px 10px;font-weight:500">${o.agence}</td>
+        <td style="padding:6px 10px"><span style="padding:2px 8px;border-radius:4px;background:${o.metier==='SOL'?'rgba(245,158,11,.2)':'rgba(99,102,241,.2)'};color:${o.metier==='SOL'?'#f59e0b':'#6366f1'};font-size:11px;font-weight:600">${o.metier}</span></td>
+        <td style="padding:6px 10px;font-size:12px">01/01/${o.annee} → 31/12/${o.annee}</td>
+        <td style="padding:6px 10px;text-align:right;font-family:monospace;font-weight:600">${fmt(o.objectif_ht)}</td>
+        <td style="padding:6px 10px;text-align:right;white-space:nowrap">
+          <button class="btn" onclick="editObjectifAgence('${o.id}')" style="font-size:11px">Modifier</button>
+          <button class="btn" onclick="deleteObjectifAgence('${o.id}')" style="font-size:11px;color:var(--red)">Supprimer</button>
+        </td>
+      </tr>`).join('') + '</tbody></table>'
+  );
 }
-async function addObjectifAgence() {
-  const annee = parseInt(prompt('Année (ex: 2026) ?', new Date().getFullYear()));
-  if (!annee || isNaN(annee)) return;
-  const agence = prompt('Agence (GPH64 ou GPH85) ?');
-  if (!agence) return;
-  const metier = prompt('Métier (SOL ou EXE) ?');
-  if (!metier || !['SOL','EXE'].includes(metier.toUpperCase())) { toast('Métier doit être SOL ou EXE', 'error'); return; }
-  const obj = parseFloat(prompt('Objectif HT en € ?'));
-  if (!obj || isNaN(obj)) return;
-  const { error } = await sb.from('objectifs_agences').upsert({ agence, metier: metier.toUpperCase(), annee, objectif_ht: obj }, { onConflict: 'agence,metier,annee' });
+
+function objectifFormHTML(prefix, values) {
+  const v = values || {};
+  const startDefault = v.date_debut || (v.annee ? v.annee + '-01-01' : new Date().getFullYear() + '-01-01');
+  const endDefault = v.date_fin || (v.annee ? v.annee + '-12-31' : new Date().getFullYear() + '-12-31');
+  return `<div id="${prefix}Form" style="padding:14px;background:var(--bg-2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:10px">
+      <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Agence *</label>
+        <select id="${prefix}-agence" class="fi" style="padding:6px 8px;font-size:12px;width:100%">
+          ${AGENCES_DISPO.map(a => '<option value="'+a+'"'+(v.agence===a?' selected':'')+'>'+a+'</option>').join('')}
+        </select></div>
+      <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Métier *</label>
+        <select id="${prefix}-metier" class="fi" style="padding:6px 8px;font-size:12px;width:100%">
+          ${METIERS_DISPO.map(m => '<option value="'+m+'"'+(v.metier===m?' selected':'')+'>'+m+'</option>').join('')}
+        </select></div>
+      <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Date début</label>
+        <input type="date" id="${prefix}-debut" value="${startDefault}" class="fi" style="padding:6px 8px;font-size:12px;width:100%"></div>
+      <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Date fin</label>
+        <input type="date" id="${prefix}-fin" value="${endDefault}" class="fi" style="padding:6px 8px;font-size:12px;width:100%"></div>
+      <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Objectif HT (€) *</label>
+        <input type="number" id="${prefix}-obj" value="${v.objectif_ht || ''}" placeholder="Ex: 1500000" class="fi" style="padding:6px 8px;font-size:12px;width:100%"></div>
+    </div>
+    <div style="display:flex;gap:6px;justify-content:flex-end">
+      <button class="btn" onclick="document.getElementById('${prefix}Form').remove()" style="font-size:12px">Annuler</button>
+      <button class="btn btn-primary" onclick="saveObjectifAgence('${v.id || ''}','${prefix}')" style="font-size:12px">Enregistrer</button>
+    </div>
+  </div>`;
+}
+
+function addObjectifAgence() {
+  const list = document.getElementById('objectifsAgencesList');
+  if (!list) return;
+  // Éviter d'ajouter plusieurs formulaires
+  if (document.getElementById('newObjForm')) return;
+  list.insertAdjacentHTML('afterbegin', objectifFormHTML('newObj', null));
+}
+
+async function editObjectifAgence(id) {
+  const { data } = await sb.from('objectifs_agences').select('*').eq('id', id).maybeSingle();
+  if (!data) return;
+  const row = document.getElementById('obj-row-' + id);
+  if (!row || document.getElementById('editObjForm')) return;
+  // Insérer le formulaire avant la ligne
+  row.insertAdjacentHTML('beforebegin', '<tr><td colspan="5" style="padding:0">' + objectifFormHTML('editObj', data) + '</td></tr>');
+}
+
+async function saveObjectifAgence(id, prefix) {
+  const agence = document.getElementById(prefix + '-agence').value;
+  const metier = document.getElementById(prefix + '-metier').value;
+  const debut = document.getElementById(prefix + '-debut').value;
+  const fin = document.getElementById(prefix + '-fin').value;
+  const obj = parseFloat(document.getElementById(prefix + '-obj').value);
+  if (!agence || !metier || !obj || isNaN(obj)) { toast('Champs incomplets', 'error'); return; }
+  const annee = parseInt((debut || fin || new Date().toISOString()).substring(0, 4));
+  const payload = { agence, metier, annee, objectif_ht: obj };
+  let error;
+  if (id) {
+    ({ error } = await sb.from('objectifs_agences').update(payload).eq('id', id));
+  } else {
+    ({ error } = await sb.from('objectifs_agences').upsert(payload, { onConflict: 'agence,metier,annee' }));
+  }
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
   toast('Objectif enregistré', 'success');
   renderObjectifsAgences();
 }
-async function editObjectifAgence(id, annee, agence, metier, currentObj) {
-  const obj = parseFloat(prompt(`Nouvel objectif HT pour ${agence} ${metier} ${annee} ?`, currentObj));
-  if (!obj || isNaN(obj)) return;
-  const { error } = await sb.from('objectifs_agences').update({ objectif_ht: obj }).eq('id', id);
-  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
-  toast('Mis à jour', 'success');
-  renderObjectifsAgences();
-}
+
 async function deleteObjectifAgence(id) {
   if (!confirm('Supprimer cet objectif ?')) return;
   await sb.from('objectifs_agences').delete().eq('id', id);
