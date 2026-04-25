@@ -1643,7 +1643,7 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
       <div class="nav-item" data-page="clients" onclick="go('clients')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        Sociétés
+        Clients/Prospects
         <span class="nav-badge" id="navBadgeClients"></span>
       </div>
       <div class="nav-item" data-page="contacts" onclick="go('contacts')">
@@ -1838,7 +1838,7 @@ tbody tr:last-child td { border-bottom: none; }
 <div class="modal-overlay" id="modal-new-client">
   <div class="modal" style="max-width:750px;max-height:90vh;overflow-y:auto">
     <div class="modal-head">
-      <h3>Nouvelle société</h3>
+      <h3>Nouveau client/prospect</h3>
       <button class="modal-close" onclick="closeModal('new-client')">×</button>
     </div>
     <div class="modal-body">
@@ -1938,7 +1938,7 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('new-client')">Annuler</button>
-      <button class="btn btn-primary" onclick="submitNewClient()">Créer la société</button>
+      <button class="btn btn-primary" onclick="submitNewClient()">Créer le client/prospect</button>
     </div>
   </div>
 </div>
@@ -2056,7 +2056,7 @@ tbody tr:last-child td { border-bottom: none; }
 <div class="modal-overlay" id="modal-edit-client">
   <div class="modal" style="max-width:750px;max-height:90vh;overflow-y:auto">
     <div class="modal-head">
-      <h3>Modifier la société</h3>
+      <h3>Modifier le client/prospect</h3>
       <button class="modal-close" onclick="closeModal('edit-client')">×</button>
     </div>
     <div class="modal-body">
@@ -2993,9 +2993,9 @@ function go(page) {
   if (page === 'cr') { crViewMode = 'list'; currentReport = null; }
   const navPage = page === 'client-detail' ? 'clients' : page === 'contact-detail' ? 'contacts' : page === 'marche-detail' ? 'marches' : page === 'affaire-detail' ? 'marches' : page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
-  const titles = {dashboard:'Tableau de bord',clients:'Sociétés',contacts:'Contacts',pipeline:'Pipeline commercial',carte:'Carte sociétés',
+  const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures',objectifs:'Objectifs',
-    cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche société','contact-detail':'Fiche contact',
+    cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA'};
   document.getElementById('pageTitle').textContent = titles[page]||page;
   renderPage(page);
@@ -3446,12 +3446,12 @@ function renderClients(filter='all') {
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-      <span style="font-size:13px;color:var(--t2)">${clientsTotalCount} sociétés</span>
-      <button class="btn btn-primary" onclick="openModal('new-client')">+ Nouvelle société</button>
+      <span style="font-size:13px;color:var(--t2)">${clientsTotalCount} clients/prospects</span>
+      <button class="btn btn-primary" onclick="openModal('new-client')">+ Nouveau client/prospect</button>
       <button class="btn" onclick="exportCSV('clients')">⤓ Export CSV</button>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
-      <input type="text" id="clientSearchInput" placeholder="Rechercher une société..." value="${clientsSearch}"
+      <input type="text" id="clientSearchInput" placeholder="Rechercher un client/prospect..." value="${clientsSearch}"
         style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:220px;background:var(--card);color:var(--t1)"
         onkeydown="if(event.key==='Enter'){loadClientsPage(0, '', this.value)}">
       <button class="btn" onclick="loadClientsPage(0, '', document.getElementById('clientSearchInput').value)">Rechercher</button>
@@ -3464,7 +3464,7 @@ function renderClients(filter='all') {
   </div>
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
     <table><thead><tr><th>Société</th><th>Ville</th><th>Secteur</th><th>Statut</th></tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">Aucune société trouvée</td></tr>' : filtered.map(c => {
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">Aucun client/prospect trouvé</td></tr>' : filtered.map(c => {
       const s = statusMap[c.status] || {cls:'',label:c.status};
       return `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
         <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div><div><div class="cell-name">${c.name} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'};margin-left:4px;vertical-align:middle" title="${c.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span></div><div class="cell-code">${c.code}</div></div></div></td>
@@ -3526,7 +3526,7 @@ function renderClientDetail() {
   const s = statusMap[c.status] || statusMap['objectif'];
 
   return `
-  <button class="btn" onclick="go('clients')" style="margin-bottom:14px">← Retour aux sociétés</button>
+  <button class="btn" onclick="go('clients')" style="margin-bottom:14px">← Retour aux clients/prospects</button>
   <div class="client-hero">
     <div class="client-big-av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div>
     <div class="client-info">
@@ -3547,7 +3547,7 @@ function renderClientDetail() {
       ${c.akuiteo_id ? '<button class="btn" onclick="pullClientFromAkuiteo(\''+c.id+'\')" title="Récupérer les mises à jour depuis Akuiteo">⬇ Recup Akuiteo</button>' : ''}
       <button class="btn ${c.akuiteo_id ? (c.akuiteo_dirty ? 'btn-not-synced' : 'btn-synced') : 'btn-not-synced'}" onclick="pushClientToAkuiteo('${c.id}')" title="${c.akuiteo_id ? (c.akuiteo_dirty ? 'Modifié localement — cliquez pour synchroniser' : 'Synchronisé (ID: '+c.akuiteo_id+')') : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? (c.akuiteo_dirty ? '⬆ Synchroniser' : '✔ Synchronisé') : '⬆ Sync Akuiteo'}</button>
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
-      <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer cette société">Supprimer</button>
+      <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer ce client/prospect">Supprimer</button>
     </div>
   </div>
   <div class="card" style="margin-bottom:16px">
