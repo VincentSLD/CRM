@@ -2669,13 +2669,21 @@ async function loadContactsPage(page, letter, search) {
     query = query.ilike('nom', letter + '%');
   }
   if (search) {
-    query = query.or(`nom.ilike.%${search}%,prenom.ilike.%${search}%,email.ilike.%${search}%,fonction.ilike.%${search}%,ville.ilike.%${search}%`);
+    query = query.or(`nom.ilike.%${search}%,prenom.ilike.%${search}%,email.ilike.%${search}%,fonction.ilike.%${search}%`);
   }
   query = query.order('nom', { ascending: true }).range(from, to);
 
   const { data, count } = await query;
   contactsTotalCount = count || 0;
   contactsList = data || [];
+  // Charger les noms des clients liés (pour afficher la société du contact)
+  const clientIds = [...new Set(contactsList.map(c => c.client_id).filter(Boolean))];
+  if (clientIds.length > 0) {
+    const { data: cls } = await sb.from('clients').select('id,name').in('id', clientIds);
+    const nameMap = {};
+    for (const cl of (cls||[])) nameMap[cl.id] = cl.name;
+    for (const ct of contactsList) ct._clientName = nameMap[ct.client_id] || null;
+  }
   contactsLoaded = true;
   renderPage('contacts');
 }
@@ -2726,7 +2734,7 @@ function renderContacts() {
     ${letters.map(l => `<button class="btn ${contactsLetter===l?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadContactsPage(0,'${l}','')">${l}</button>`).join('')}
   </div>
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Nom</th><th>Fonction</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th>Ville</th></tr></thead>
+    <table><thead><tr><th>Nom Prénom</th><th>Fonction</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th>Société</th></tr></thead>
     <tbody>${contactsList.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--t3)">Aucun contact trouvé</td></tr>' : contactsList.map(c => {
       const fullName = [c.titre, c.prenom, c.nom].filter(Boolean).join(' ');
       return `<tr onclick="showContact('${c.id}')" style="cursor:pointer">
@@ -2735,7 +2743,7 @@ function renderContacts() {
         <td style="font-size:12px">${c.email ? '<a href="mailto:'+c.email+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+c.email+'</a>' : '—'}</td>
         <td style="font-size:12px;font-family:monospace">${c.telephone ? '<a href="tel:'+c.telephone+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+c.telephone+'</a>' : '—'}</td>
         <td style="font-size:12px;font-family:monospace">${c.mobile ? '<a href="tel:'+c.mobile+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+c.mobile+'</a>' : '—'}</td>
-        <td style="font-size:12px">${c.ville||'—'}</td>
+        <td style="font-size:12px">${c._clientName ? '<a href="#" onclick="event.stopPropagation();showClient(&#39;'+c.client_id+'&#39;);return false" style="color:var(--accent)">'+c._clientName+'</a>' : '—'}</td>
       </tr>`;
     }).join('')}</tbody></table>
   </div></div></div>
