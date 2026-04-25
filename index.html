@@ -3518,6 +3518,8 @@ async function showClient(id) {
   setTimeout(() => resolveEmployeeNames(), 50);
   // Charger automatiquement les contacts depuis Supabase
   setTimeout(() => loadClientContacts(currentClient.id), 100);
+  // Charger les objectifs annuels et le réalisé
+  setTimeout(() => renderClientObjectifs(currentClient.id), 120);
 }
 
 function renderClientDetail() {
@@ -3617,6 +3619,15 @@ function renderClientDetail() {
       detailRow('Date de signature de la convention', c.custom_data?.['1-date02']?.value ? fmtDateFR(c.custom_data['1-date02'].value) : '—'),
       detailRow('Commentaires', c.custom_data?.['1-alpha01']?.value || '—'),
     ])}
+  </div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <div class="card-title">Objectifs annuels</div>
+      <button class="btn btn-primary" onclick="addObjectifClient('${c.id}')" style="font-size:12px">+ Nouvel objectif</button>
+    </div>
+    <div class="card-body" style="padding:0">
+      <div id="clientObjectifsList" style="padding:14px;color:var(--t3);font-size:13px">Chargement...</div>
+    </div>
   </div>
   <div class="card" style="margin-bottom:16px"><div class="card-header"><div class="card-title">Habitudes Administratives</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes || '—'}</div></div></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
@@ -6687,7 +6698,7 @@ function objectifFormHTML(prefix, values, agences) {
     </div>
     <div style="display:flex;gap:6px;justify-content:flex-end">
       <button class="btn" onclick="closeObjectifForm('${prefix}')" style="font-size:12px">Annuler</button>
-      <button class="btn btn-primary" onclick="saveObjectifAgence('${v.id || ''}','${prefix}')" style="font-size:12px">Enregistrer</button>
+      <button class="btn btn-primary" onclick="${prefix.startsWith('newCObj')||prefix.startsWith('editCObj') ? 'saveObjectifClient(\\''+prefix+'\\')' : 'saveObjectifAgence(\\''+(v.id || '')+'\\',\\''+prefix+'\\')'}" style="font-size:12px">Enregistrer</button>
     </div>
   </div>`;
 }
@@ -6755,6 +6766,130 @@ async function deleteObjectifAgence(id) {
   await sb.from('objectifs_agences').delete().eq('id', id);
   toast('Supprimé', 'success');
   renderObjectifsAgences();
+}
+
+// ═══ OBJECTIFS PAR CLIENT ═══
+async function renderClientObjectifs(clientId) {
+  const el = document.getElementById('clientObjectifsList');
+  if (!el) return;
+  // Charger objectifs + mapping mission→métier
+  const [{ data: objs }, _] = await Promise.all([
+    sb.from('objectifs_clients').select('*').eq('client_id', clientId).order('annee', { ascending: false }).order('agence').order('metier'),
+    loadMissionMapping()
+  ]);
+  if (!objs || objs.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--t3)">Aucun objectif défini pour ce client. Cliquez "+ Nouvel objectif" pour en créer.</div>';
+    return;
+  }
+  // Calculer le CA réalisé pour chaque objectif (à partir des commandes du client)
+  const cmds = (DB.commandes || []).filter(c => c.client_id === clientId);
+  const rows = objs.map(o => {
+    const yearStart = o.annee + '-01-01';
+    const yearEnd = (o.annee + 1) + '-01-01';
+    let ca = 0;
+    for (const cmd of cmds) {
+      if ((cmd.societe || cmd.agence) !== o.agence) continue;
+      const date = (cmd.date_raw || cmd.date || '').substring(0, 10);
+      if (date < yearStart || date >= yearEnd) continue;
+      // Si métier GLOBAL : toutes les commandes de l'agence
+      if (o.metier === 'GLOBAL') {
+        ca += Number(cmd.montant || 0);
+      } else {
+        // Filtrer par type de mission mappé
+        const tm = cmd.custom_data?.['1-alpha06']?.value;
+        if (tm && _missionMapping[tm] === o.metier) ca += Number(cmd.montant || 0);
+      }
+    }
+    return { ...o, ca };
+  });
+  el.innerHTML = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">' +
+    '<thead><tr style="background:var(--bg-2);border-bottom:2px solid var(--border)">' +
+    '<th style="padding:8px 10px;text-align:left">Année</th>' +
+    '<th style="padding:8px 10px;text-align:left">Agence</th>' +
+    '<th style="padding:8px 10px;text-align:left">Métier</th>' +
+    '<th style="padding:8px 10px;text-align:right">Objectif HT</th>' +
+    '<th style="padding:8px 10px;text-align:right">Réalisé HT</th>' +
+    '<th style="padding:8px 10px;text-align:left;min-width:160px">Avancement</th>' +
+    '<th style="padding:8px 10px;text-align:right">Actions</th>' +
+    '</tr></thead><tbody>' +
+    rows.map(o => {
+      const pctVal = o.objectif_ht > 0 ? Math.round(o.ca / o.objectif_ht * 100) : 0;
+      const onTrack = pctVal >= 100;
+      const ahead = pctVal >= 90 && pctVal < 100;
+      const color = onTrack ? '#22c55e' : ahead ? '#3b82f6' : pctVal >= 60 ? '#f59e0b' : '#ef4444';
+      const label = onTrack ? 'Atteint' : ahead ? 'En avance' : pctVal >= 60 ? 'En cours' : 'En retard';
+      return `<tr id="cobj-row-${o.id}" style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px 10px">${o.annee}</td>
+        <td style="padding:6px 10px;font-weight:500">${o.agence}</td>
+        <td style="padding:6px 10px"><span style="padding:2px 8px;border-radius:4px;background:${o.metier==='SOL'?'rgba(245,158,11,.2)':o.metier==='EXE'?'rgba(99,102,241,.2)':'rgba(107,114,128,.2)'};color:${o.metier==='SOL'?'#f59e0b':o.metier==='EXE'?'#6366f1':'#6b7280'};font-size:11px;font-weight:600">${o.metier}</span></td>
+        <td style="padding:6px 10px;text-align:right;font-family:monospace">${fmt(o.objectif_ht)}</td>
+        <td style="padding:6px 10px;text-align:right;font-family:monospace;font-weight:600">${fmt(o.ca)}</td>
+        <td style="padding:6px 10px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;height:8px;background:var(--bg-3);border-radius:4px;overflow:hidden;min-width:80px">
+              <div style="width:${Math.min(pctVal,100)}%;height:100%;background:${color}"></div>
+            </div>
+            <span style="font-size:11px;font-weight:600;color:${color};min-width:60px;text-align:right">${pctVal}% — ${label}</span>
+          </div>
+        </td>
+        <td style="padding:6px 10px;text-align:right;white-space:nowrap">
+          <button class="btn" onclick="editObjectifClient('${o.id}','${o.client_id}')" style="font-size:11px">Modifier</button>
+          <button class="btn" onclick="deleteObjectifClient('${o.id}','${o.client_id}')" style="font-size:11px;color:var(--red)">Supprimer</button>
+        </td>
+      </tr>`;
+    }).join('') + '</tbody></table></div>';
+}
+
+async function addObjectifClient(clientId) {
+  const el = document.getElementById('clientObjectifsList');
+  if (!el || document.getElementById('newCObjForm')) return;
+  const agences = await getAgencesDispo();
+  el.insertAdjacentHTML('afterbegin', objectifFormHTML('newCObj', null, agences));
+  updateMetierOptions('newCObj');
+  // Stocker le clientId pour le save
+  document.getElementById('newCObjForm').dataset.clientId = clientId;
+}
+
+async function editObjectifClient(id, clientId) {
+  const { data } = await sb.from('objectifs_clients').select('*').eq('id', id).maybeSingle();
+  if (!data) return;
+  const row = document.getElementById('cobj-row-' + id);
+  if (!row || document.getElementById('editCObjForm')) return;
+  const agences = await getAgencesDispo();
+  row.insertAdjacentHTML('beforebegin', '<tr><td colspan="7" style="padding:0">' + objectifFormHTML('editCObj', data, agences) + '</td></tr>');
+  updateMetierOptions('editCObj', data.metier);
+  document.getElementById('editCObjForm').dataset.clientId = clientId;
+  document.getElementById('editCObjForm').dataset.objId = id;
+}
+
+async function saveObjectifClient(prefix) {
+  const form = document.getElementById(prefix + 'Form');
+  const clientId = form?.dataset?.clientId;
+  const objId = form?.dataset?.objId || '';
+  if (!clientId) { toast('client_id manquant', 'error'); return; }
+  const agence = document.getElementById(prefix + '-agence').value;
+  const metier = document.getElementById(prefix + '-metier').value;
+  const debut = document.getElementById(prefix + '-debut').value;
+  const obj = parseFloat(document.getElementById(prefix + '-obj').value);
+  if (!agence || !metier || !obj || isNaN(obj)) { toast('Champs incomplets', 'error'); return; }
+  const annee = parseInt((debut || new Date().toISOString()).substring(0, 4));
+  const payload = { client_id: clientId, agence, metier, annee, objectif_ht: obj };
+  let error;
+  if (objId) {
+    ({ error } = await sb.from('objectifs_clients').update(payload).eq('id', objId));
+  } else {
+    ({ error } = await sb.from('objectifs_clients').upsert(payload, { onConflict: 'client_id,agence,metier,annee' }));
+  }
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  toast('Objectif client enregistré', 'success');
+  renderClientObjectifs(clientId);
+}
+
+async function deleteObjectifClient(id, clientId) {
+  if (!confirm('Supprimer cet objectif ?')) return;
+  await sb.from('objectifs_clients').delete().eq('id', id);
+  toast('Supprimé', 'success');
+  renderClientObjectifs(clientId);
 }
 
 async function loadDiffusionGroups() {
