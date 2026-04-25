@@ -6616,8 +6616,26 @@ async function setMissionMetier(typeMission, metier) {
 }
 
 // ═══ OBJECTIFS PAR AGENCE ═══
-const AGENCES_DISPO = ['GPH64','GPH85'];
-const METIERS_DISPO = ['SOL','EXE'];
+// Agences avec split SOL/EXE (paramétrable). Les autres = objectif global (métier='GLOBAL')
+const AGENCES_AVEC_METIERS = ['GPH64','GPH85'];
+const METIERS_DISPO = ['SOL','EXE','GLOBAL'];
+
+// Agences disponibles : on les charge dynamiquement depuis les commandes
+let _agencesDispo = null;
+async function getAgencesDispo() {
+  if (_agencesDispo) return _agencesDispo;
+  const set = new Set();
+  // Depuis les commandes en mémoire
+  for (const c of (DB.commandes || [])) if (c.societe) set.add(c.societe);
+  for (const f of (DB.factures || [])) if (f.societe) set.add(f.societe);
+  // Si rien en mémoire, charger un échantillon depuis Supabase
+  if (set.size === 0) {
+    const { data } = await sb.from('commandes').select('societe').not('societe','is',null).limit(1000);
+    for (const r of (data||[])) if (r.societe) set.add(r.societe);
+  }
+  _agencesDispo = [...set].sort();
+  return _agencesDispo;
+}
 
 async function renderObjectifsAgences() {
   const el = document.getElementById('objectifsAgencesList');
@@ -6647,20 +6665,19 @@ async function renderObjectifsAgences() {
   );
 }
 
-function objectifFormHTML(prefix, values) {
+function objectifFormHTML(prefix, values, agences) {
   const v = values || {};
   const startDefault = v.date_debut || (v.annee ? v.annee + '-01-01' : new Date().getFullYear() + '-01-01');
   const endDefault = v.date_fin || (v.annee ? v.annee + '-12-31' : new Date().getFullYear() + '-12-31');
+  const agencesList = agences && agences.length ? agences : ['GPH-R','GPH64','GPH85'];
   return `<div id="${prefix}Form" style="padding:14px;background:var(--bg-2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:10px">
       <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Agence *</label>
-        <select id="${prefix}-agence" class="fi" style="padding:6px 8px;font-size:12px;width:100%">
-          ${AGENCES_DISPO.map(a => '<option value="'+a+'"'+(v.agence===a?' selected':'')+'>'+a+'</option>').join('')}
+        <select id="${prefix}-agence" class="fi" style="padding:6px 8px;font-size:12px;width:100%" onchange="updateMetierOptions('${prefix}')">
+          ${agencesList.map(a => '<option value="'+a+'"'+(v.agence===a?' selected':'')+'>'+a+'</option>').join('')}
         </select></div>
       <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Métier *</label>
-        <select id="${prefix}-metier" class="fi" style="padding:6px 8px;font-size:12px;width:100%">
-          ${METIERS_DISPO.map(m => '<option value="'+m+'"'+(v.metier===m?' selected':'')+'>'+m+'</option>').join('')}
-        </select></div>
+        <select id="${prefix}-metier" class="fi" style="padding:6px 8px;font-size:12px;width:100%"></select></div>
       <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Date début</label>
         <input type="date" id="${prefix}-debut" value="${startDefault}" class="fi" style="padding:6px 8px;font-size:12px;width:100%"></div>
       <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Date fin</label>
@@ -6669,18 +6686,38 @@ function objectifFormHTML(prefix, values) {
         <input type="number" id="${prefix}-obj" value="${v.objectif_ht || ''}" placeholder="Ex: 1500000" class="fi" style="padding:6px 8px;font-size:12px;width:100%"></div>
     </div>
     <div style="display:flex;gap:6px;justify-content:flex-end">
-      <button class="btn" onclick="document.getElementById('${prefix}Form').remove()" style="font-size:12px">Annuler</button>
+      <button class="btn" onclick="closeObjectifForm('${prefix}')" style="font-size:12px">Annuler</button>
       <button class="btn btn-primary" onclick="saveObjectifAgence('${v.id || ''}','${prefix}')" style="font-size:12px">Enregistrer</button>
     </div>
   </div>`;
 }
 
-function addObjectifAgence() {
+function updateMetierOptions(prefix, selectedMetier) {
+  const agSel = document.getElementById(prefix + '-agence');
+  const mSel = document.getElementById(prefix + '-metier');
+  if (!agSel || !mSel) return;
+  const agence = agSel.value;
+  const hasMetiers = AGENCES_AVEC_METIERS.includes(agence);
+  const options = hasMetiers ? ['SOL','EXE'] : ['GLOBAL'];
+  const sel = selectedMetier || mSel.value;
+  mSel.innerHTML = options.map(m => `<option value="${m}"${sel===m?' selected':''}>${m === 'GLOBAL' ? 'Global (sans split)' : m}</option>`).join('');
+}
+
+function closeObjectifForm(prefix) {
+  const form = document.getElementById(prefix + 'Form');
+  if (!form) return;
+  // Si dans un <tr>, supprimer le tr parent
+  const tr = form.closest('tr');
+  if (tr) tr.remove(); else form.remove();
+}
+
+async function addObjectifAgence() {
   const list = document.getElementById('objectifsAgencesList');
   if (!list) return;
-  // Éviter d'ajouter plusieurs formulaires
   if (document.getElementById('newObjForm')) return;
-  list.insertAdjacentHTML('afterbegin', objectifFormHTML('newObj', null));
+  const agences = await getAgencesDispo();
+  list.insertAdjacentHTML('afterbegin', objectifFormHTML('newObj', null, agences));
+  updateMetierOptions('newObj');
 }
 
 async function editObjectifAgence(id) {
@@ -6688,8 +6725,9 @@ async function editObjectifAgence(id) {
   if (!data) return;
   const row = document.getElementById('obj-row-' + id);
   if (!row || document.getElementById('editObjForm')) return;
-  // Insérer le formulaire avant la ligne
-  row.insertAdjacentHTML('beforebegin', '<tr><td colspan="5" style="padding:0">' + objectifFormHTML('editObj', data) + '</td></tr>');
+  const agences = await getAgencesDispo();
+  row.insertAdjacentHTML('beforebegin', '<tr><td colspan="5" style="padding:0">' + objectifFormHTML('editObj', data, agences) + '</td></tr>');
+  updateMetierOptions('editObj', data.metier);
 }
 
 async function saveObjectifAgence(id, prefix) {
