@@ -3047,7 +3047,7 @@ function renderPage(page) {
   // Post-render hooks
   if (page === 'cr') initEditor();
   if (page === 'carte') setTimeout(initCarteMap, 50);
-  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); }, 50);
+  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
   if (page === 'collaborateurs-lucca') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); renderCollaborateursLuccaRefresh(); }, 50);
   if (page === 'cr' && crViewMode === 'send') setTimeout(loadSendGroups, 50);
@@ -6514,11 +6514,163 @@ function renderAdmin() {
       <button class="btn btn-primary" onclick="loadAkuiteoManagerIds()" style="font-size:13px">Charger les IDs depuis Akuiteo</button>
       <div id="akManagerList" style="margin-top:16px"></div>
     </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <div class="card-title">Mapping Type de Mission → Métier (SOL / EXE)</div>
+      <button class="btn" onclick="loadMissionTypes()" style="font-size:12px">Charger les types depuis les commandes</button>
+    </div>
+    <div class="card-body">
+      <p style="font-size:12px;color:var(--t2);margin-bottom:10px">Associez chaque "Type de Mission" Akuiteo à un métier (SOL ou EXE). Ces mappings sont utilisés pour calculer le CA réalisé par métier dans le suivi des objectifs.</p>
+      <div id="missionMetierList" style="font-size:13px;color:var(--t3)">Cliquez sur "Charger" pour afficher les types de mission existants.</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <div class="card-title">Objectifs annuels par agence</div>
+      <button class="btn btn-primary" onclick="addObjectifAgence()" style="font-size:12px">+ Ajouter</button>
+    </div>
+    <div class="card-body" style="padding:0">
+      <div id="objectifsAgencesList" style="padding:14px;font-size:13px;color:var(--t3)">Chargement...</div>
+    </div>
   </div>`;
 }
 
 // ═══ GROUPES DE DIFFUSION ═══
 let diffusionGroups = [];
+
+// ═══ MAPPING TYPE DE MISSION → MÉTIER ═══
+let _missionMapping = {};
+async function loadMissionMapping() {
+  const { data } = await sb.from('mission_metier_mapping').select('*');
+  _missionMapping = {};
+  for (const r of (data||[])) _missionMapping[r.type_mission] = r.metier;
+}
+async function loadMissionTypes() {
+  const el = document.getElementById('missionMetierList');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t3)">Chargement des types de mission...</div>';
+  await loadMissionMapping();
+  // Charger toutes les commandes (custom_data + societe + montant)
+  let all = [], off = 0;
+  while (true) {
+    const { data } = await sb.from('commandes').select('id,societe,custom_data,montant').not('custom_data', 'is', null).range(off, off + 999);
+    if (!data || data.length === 0) break;
+    all = all.concat(data);
+    if (data.length < 1000) break;
+    off += 1000;
+  }
+  // Extraire les types de mission distincts par agence
+  const stats = {}; // type → { agences: Set, count: number, ca: number }
+  for (const cmd of all) {
+    const tm = cmd.custom_data?.['1-alpha06']?.value;
+    if (!tm) continue;
+    if (!stats[tm]) stats[tm] = { agences: new Set(), count: 0, ca: 0 };
+    if (cmd.societe) stats[tm].agences.add(cmd.societe);
+    stats[tm].count++;
+    stats[tm].ca += Number(cmd.montant || 0);
+  }
+  const list = Object.entries(stats).sort((a,b) => b[1].count - a[1].count);
+  if (list.length === 0) {
+    el.innerHTML = '<div style="padding:14px;text-align:center;color:var(--t3)">Aucun "Type de Mission" trouvé dans les commandes. Faites une sync Akuiteo d\'abord.</div>';
+    return;
+  }
+  el.innerHTML = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">' +
+    '<thead><tr style="background:var(--bg-2);border-bottom:2px solid var(--border)">' +
+    '<th style="padding:8px 10px;text-align:left">Type de Mission</th>' +
+    '<th style="padding:8px 10px;text-align:left">Agences</th>' +
+    '<th style="padding:8px 10px;text-align:right">Nb cmd</th>' +
+    '<th style="padding:8px 10px;text-align:right">CA total</th>' +
+    '<th style="padding:8px 10px;text-align:center">Métier</th>' +
+    '</tr></thead><tbody>' +
+    list.map(([tm, s]) => {
+      const current = _missionMapping[tm] || '';
+      const tmEsc = tm.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px 10px;font-weight:500">${tmEsc}</td>
+        <td style="padding:6px 10px;color:var(--t3);font-size:11px">${[...s.agences].join(', ')}</td>
+        <td style="padding:6px 10px;text-align:right;color:var(--t3)">${s.count}</td>
+        <td style="padding:6px 10px;text-align:right;color:var(--t3);font-family:monospace">${fmt(s.ca)}</td>
+        <td style="padding:6px 10px;text-align:center">
+          <select onchange="setMissionMetier('${tmEsc}', this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px">
+            <option value="" ${!current?'selected':''}>—</option>
+            <option value="SOL" ${current==='SOL'?'selected':''}>SOL</option>
+            <option value="EXE" ${current==='EXE'?'selected':''}>EXE</option>
+          </select>
+        </td>
+      </tr>`;
+    }).join('') + '</tbody></table></div>';
+}
+async function setMissionMetier(typeMission, metier) {
+  if (!metier) {
+    await sb.from('mission_metier_mapping').delete().eq('type_mission', typeMission);
+    delete _missionMapping[typeMission];
+    toast('Mapping supprimé', 'success');
+  } else {
+    await sb.from('mission_metier_mapping').upsert({ type_mission: typeMission, metier }, { onConflict: 'type_mission' });
+    _missionMapping[typeMission] = metier;
+    toast('Mapping enregistré', 'success');
+  }
+}
+
+// ═══ OBJECTIFS PAR AGENCE ═══
+async function renderObjectifsAgences() {
+  const el = document.getElementById('objectifsAgencesList');
+  if (!el) return;
+  const { data } = await sb.from('objectifs_agences').select('*').order('annee', { ascending: false }).order('agence').order('metier');
+  if (!data || data.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--t3)">Aucun objectif défini. Cliquez "+ Ajouter" pour en créer.</div>';
+    return;
+  }
+  el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+    '<thead><tr style="background:var(--bg-2);border-bottom:2px solid var(--border)">' +
+    '<th style="padding:8px 10px;text-align:left">Année</th>' +
+    '<th style="padding:8px 10px;text-align:left">Agence</th>' +
+    '<th style="padding:8px 10px;text-align:left">Métier</th>' +
+    '<th style="padding:8px 10px;text-align:right">Objectif HT</th>' +
+    '<th style="padding:8px 10px;text-align:right">Action</th>' +
+    '</tr></thead><tbody>' +
+    data.map(o => `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 10px">${o.annee}</td>
+      <td style="padding:6px 10px;font-weight:500">${o.agence}</td>
+      <td style="padding:6px 10px"><span style="padding:2px 8px;border-radius:4px;background:${o.metier==='SOL'?'rgba(245,158,11,.2)':'rgba(99,102,241,.2)'};color:${o.metier==='SOL'?'#f59e0b':'#6366f1'};font-size:11px;font-weight:600">${o.metier}</span></td>
+      <td style="padding:6px 10px;text-align:right;font-family:monospace;font-weight:600">${fmt(o.objectif_ht)}</td>
+      <td style="padding:6px 10px;text-align:right">
+        <button class="btn" onclick="editObjectifAgence('${o.id}', ${o.annee}, '${o.agence}', '${o.metier}', ${o.objectif_ht})" style="font-size:11px">Modifier</button>
+        <button class="btn" onclick="deleteObjectifAgence('${o.id}')" style="font-size:11px;color:var(--red)">Supprimer</button>
+      </td>
+    </tr>`).join('') + '</tbody></table>';
+}
+async function addObjectifAgence() {
+  const annee = parseInt(prompt('Année (ex: 2026) ?', new Date().getFullYear()));
+  if (!annee || isNaN(annee)) return;
+  const agence = prompt('Agence (GPH64 ou GPH85) ?');
+  if (!agence) return;
+  const metier = prompt('Métier (SOL ou EXE) ?');
+  if (!metier || !['SOL','EXE'].includes(metier.toUpperCase())) { toast('Métier doit être SOL ou EXE', 'error'); return; }
+  const obj = parseFloat(prompt('Objectif HT en € ?'));
+  if (!obj || isNaN(obj)) return;
+  const { error } = await sb.from('objectifs_agences').upsert({ agence, metier: metier.toUpperCase(), annee, objectif_ht: obj }, { onConflict: 'agence,metier,annee' });
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  toast('Objectif enregistré', 'success');
+  renderObjectifsAgences();
+}
+async function editObjectifAgence(id, annee, agence, metier, currentObj) {
+  const obj = parseFloat(prompt(`Nouvel objectif HT pour ${agence} ${metier} ${annee} ?`, currentObj));
+  if (!obj || isNaN(obj)) return;
+  const { error } = await sb.from('objectifs_agences').update({ objectif_ht: obj }).eq('id', id);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  toast('Mis à jour', 'success');
+  renderObjectifsAgences();
+}
+async function deleteObjectifAgence(id) {
+  if (!confirm('Supprimer cet objectif ?')) return;
+  await sb.from('objectifs_agences').delete().eq('id', id);
+  toast('Supprimé', 'success');
+  renderObjectifsAgences();
+}
 
 async function loadDiffusionGroups() {
   const { data } = await sb.from('groupes_diffusion').select('*').order('nom');
@@ -6883,7 +7035,7 @@ async function autoLinkCommerciaux() {
   if (linkedAk > 0) msgs.push(`${linkedAk} ID Akuiteo rempli(s)`);
   toast(msgs.length > 0 ? msgs.join(', ') : 'Aucune nouvelle liaison trouvée', msgs.length > 0 ? 'success' : 'info');
   renderPage('admin');
-  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); }, 50);
+  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
 }
 
 let linkCommercialLuccaForId = null;
@@ -6899,7 +7051,7 @@ function openManualLinkCommercialLucca(commId, commName) {
     closeModal('link-lucca');
     toast('Liaison effectuée', 'success');
     renderPage('admin');
-    setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); }, 50);
+    setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
   };
   renderLinkLuccaList();
   openModal('link-lucca');
@@ -6912,7 +7064,7 @@ async function unlinkCommercialLucca(commId) {
   if (comm) comm.lucca_id = null;
   toast('Liaison supprimée', 'success');
   renderPage('admin');
-  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); }, 50);
+  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
 }
 
 async function updateCommercialRole(commercialId, role) {

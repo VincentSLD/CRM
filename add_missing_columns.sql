@@ -58,3 +58,41 @@ ALTER TABLE contacts ADD COLUMN IF NOT EXISTS email2 TEXT;
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS adresse TEXT;
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS code_postal TEXT;
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS commentaire TEXT;
+
+-- ═══ Objectifs et mapping métier ═══
+
+-- Mapping Type de Mission → Métier (SOL / EXE)
+CREATE TABLE IF NOT EXISTS mission_metier_mapping (
+  type_mission TEXT PRIMARY KEY,
+  metier TEXT NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE mission_metier_mapping ENABLE ROW LEVEL SECURITY;
+CREATE POLICY IF NOT EXISTS "mission_metier_all" ON mission_metier_mapping FOR ALL USING (true) WITH CHECK (true);
+
+-- Objectifs annuels par agence + métier
+CREATE TABLE IF NOT EXISTS objectifs_agences (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  agence TEXT NOT NULL,
+  metier TEXT NOT NULL,
+  annee INT NOT NULL,
+  objectif_ht NUMERIC NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(agence, metier, annee)
+);
+ALTER TABLE objectifs_agences ENABLE ROW LEVEL SECURITY;
+CREATE POLICY IF NOT EXISTS "objectifs_agences_all" ON objectifs_agences FOR ALL USING (true) WITH CHECK (true);
+
+-- Objectifs annuels par client + agence + métier
+CREATE TABLE IF NOT EXISTS objectifs_clients (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  agence TEXT NOT NULL,
+  metier TEXT NOT NULL,
+  annee INT NOT NULL,
+  objectif_ht NUMERIC NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(client_id, agence, metier, annee)
+);
+ALTER TABLE objectifs_clients ENABLE ROW LEVEL SECURITY;
+CREATE POLICY IF NOT EXISTS "objectifs_clients_all" ON objectifs_clients FOR ALL USING (true) WITH CHECK (true);
