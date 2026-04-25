@@ -2793,10 +2793,8 @@ function renderContactDetail() {
       </div>
     </div>
     <div class="card">
-      <div class="card-header"><div class="card-title">Adresse</div></div>
+      <div class="card-header"><div class="card-title">Localisation</div></div>
       <div class="card-body">
-        ${detailRow('Adresse', c.adresse)}
-        ${detailRow('Code postal', c.code_postal)}
         ${detailRow('Ville', c.ville)}
       </div>
     </div>
@@ -2837,10 +2835,6 @@ function renderContactDetail() {
             <input type="tel" id="ec-tel" value="${(c.telephone||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
           <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Mobile</label>
             <input type="tel" id="ec-mobile" value="${(c.mobile||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
-          <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Adresse</label>
-            <input type="text" id="ec-adresse" value="${(c.adresse||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
-          <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Code postal</label>
-            <input type="text" id="ec-cp" value="${(c.code_postal||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
           <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Ville</label>
             <input type="text" id="ec-ville" value="${(c.ville||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
         </div>
@@ -2873,8 +2867,6 @@ async function saveEditContact() {
     email2: document.getElementById('ec-email2')?.value.trim() || null,
     telephone: document.getElementById('ec-tel')?.value.trim() || null,
     mobile: document.getElementById('ec-mobile')?.value.trim() || null,
-    adresse: document.getElementById('ec-adresse')?.value.trim() || null,
-    code_postal: document.getElementById('ec-cp')?.value.trim() || null,
     ville: document.getElementById('ec-ville')?.value.trim() || null,
     commentaire: document.getElementById('ec-commentaire')?.value.trim() || null,
   };
