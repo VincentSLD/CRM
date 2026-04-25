@@ -3048,6 +3048,7 @@ function renderPage(page) {
   if (page === 'cr') initEditor();
   if (page === 'carte') setTimeout(initCarteMap, 50);
   if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
+  if (page === 'dashboard') setTimeout(() => renderDashObjectifsAgences(), 50);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
   if (page === 'collaborateurs-lucca') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); renderCollaborateursLuccaRefresh(); }, 50);
   if (page === 'cr' && crViewMode === 'send') setTimeout(loadSendGroups, 50);
@@ -3058,6 +3059,8 @@ function renderPage(page) {
 // ═══════════════════════════════════════════════════════════
 function renderDashboardRefresh() {
   document.getElementById('contentArea').innerHTML = '<div class="page active">' + renderDashboard() + '</div>';
+  // Charger les objectifs par agence en async (a besoin de Supabase)
+  setTimeout(() => renderDashObjectifsAgences(), 50);
 }
 function renderDashboard() {
   const myDevis = filterBySociete(filterByDateRange(filterByCommercial(DB.devis), dashDateFrom, dashDateTo));
@@ -3159,6 +3162,10 @@ function renderDashboard() {
       <div class="kpi-label">Panier moyen</div>
     </div>
   </div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><div class="card-title">Avancement des objectifs par agence</div></div>
+    <div class="card-body" id="dashObjectifsAgences" style="font-size:13px;color:var(--t3)">Chargement...</div>
+  </div>
   <div class="grid-2 equal" style="margin-bottom:16px">
     <div class="card">
       <div class="card-header"><div class="card-title">CA facturé — 12 derniers mois</div></div>
@@ -3179,6 +3186,92 @@ function renderDashboard() {
       <div class="card-body">${renderDashDonutFactures(myFactures)}</div>
     </div>
   </div>`;
+}
+
+async function renderDashObjectifsAgences() {
+  const el = document.getElementById('dashObjectifsAgences');
+  if (!el) return;
+  // Charger objectifs et mapping
+  const [{ data: objs }, _m] = await Promise.all([
+    sb.from('objectifs_agences').select('*').order('annee', {ascending: false}).order('agence').order('metier'),
+    loadMissionMapping()
+  ]);
+  if (!objs || objs.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:14px">Aucun objectif d\'agence défini. Configurez-les dans Paramétrage.</div>';
+    return;
+  }
+  // Filtrer par les sociétés sélectionnées (si filtre actif)
+  const filtered = objs.filter(o => selectedSocietes.size === 0 || selectedSocietes.has(o.agence));
+  if (filtered.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:14px">Aucun objectif pour les agences sélectionnées.</div>';
+    return;
+  }
+  // Charger toutes les commandes pour calcul du CA réalisé
+  let allCmds = [], off = 0;
+  while (true) {
+    const { data } = await sb.from('commandes').select('societe,date,montant,custom_data').range(off, off+999);
+    if (!data || data.length === 0) break;
+    allCmds = allCmds.concat(data);
+    if (data.length < 1000) break;
+    off += 1000;
+  }
+  const rows = filtered.map(o => {
+    const yearStart = o.annee + '-01-01';
+    const yearEnd = (o.annee + 1) + '-01-01';
+    let ca = 0;
+    for (const cmd of allCmds) {
+      if ((cmd.societe || '') !== o.agence) continue;
+      const date = (cmd.date || '').substring(0, 10);
+      if (date < yearStart || date >= yearEnd) continue;
+      if (o.metier === 'GLOBAL') {
+        ca += Number(cmd.montant || 0);
+      } else {
+        const tm = cmd.custom_data?.['1-alpha06']?.value;
+        if (tm && _missionMapping[tm] === o.metier) ca += Number(cmd.montant || 0);
+      }
+    }
+    return { ...o, ca };
+  });
+  // Grouper par agence
+  const byAg = {};
+  for (const r of rows) {
+    if (!byAg[r.agence]) byAg[r.agence] = [];
+    byAg[r.agence].push(r);
+  }
+  el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px">' +
+    Object.entries(byAg).map(([ag, items]) => {
+      const totalObj = items.reduce((a,x) => a + Number(x.objectif_ht || 0), 0);
+      const totalCa = items.reduce((a,x) => a + x.ca, 0);
+      const totalPct = totalObj > 0 ? Math.round(totalCa / totalObj * 100) : 0;
+      return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--bg-2)">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+          <div style="font-size:14px;font-weight:700">${ag}</div>
+          <div style="font-size:11px;color:var(--t3)">${items[0].annee}</div>
+        </div>
+        ${items.map(o => {
+          const pctVal = o.objectif_ht > 0 ? Math.round(o.ca / o.objectif_ht * 100) : 0;
+          const onTrack = pctVal >= 100;
+          const ahead = pctVal >= 90 && pctVal < 100;
+          const color = onTrack ? '#22c55e' : ahead ? '#3b82f6' : pctVal >= 60 ? '#f59e0b' : '#ef4444';
+          const label = o.metier === 'GLOBAL' ? 'Global' : o.metier;
+          const badgeBg = o.metier==='SOL'?'rgba(245,158,11,.2)':o.metier==='EXE'?'rgba(99,102,241,.2)':'rgba(107,114,128,.2)';
+          const badgeColor = o.metier==='SOL'?'#f59e0b':o.metier==='EXE'?'#6366f1':'#6b7280';
+          return `<div style="margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:3px">
+              <span style="display:inline-flex;align-items:center;gap:6px"><span style="padding:1px 6px;border-radius:3px;background:${badgeBg};color:${badgeColor};font-size:10px;font-weight:700">${label}</span><span style="color:var(--t3)">${fmt(o.ca)} / ${fmt(o.objectif_ht)}</span></span>
+              <span style="font-weight:700;color:${color}">${pctVal}%</span>
+            </div>
+            <div style="height:6px;background:var(--bg-3);border-radius:3px;overflow:hidden">
+              <div style="width:${Math.min(pctVal,100)}%;height:100%;background:${color}"></div>
+            </div>
+          </div>`;
+        }).join('')}
+        ${items.length > 1 ? `<div style="border-top:1px dashed var(--border);padding-top:6px;margin-top:6px;display:flex;justify-content:space-between;align-items:center;font-size:12px">
+          <span style="font-weight:700">Total ${ag}</span>
+          <span style="color:var(--t3)">${fmt(totalCa)} / ${fmt(totalObj)} — <strong style="color:${totalPct>=100?'#22c55e':totalPct>=60?'#f59e0b':'#ef4444'}">${totalPct}%</strong></span>
+        </div>` : ''}
+      </div>`;
+    }).join('') + '</div>';
 }
 
 function renderDashChartCA(factures) {
