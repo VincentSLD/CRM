@@ -6698,7 +6698,7 @@ function objectifFormHTML(prefix, values, agences) {
     </div>
     <div style="display:flex;gap:6px;justify-content:flex-end">
       <button class="btn" onclick="closeObjectifForm('${prefix}')" style="font-size:12px">Annuler</button>
-      <button class="btn btn-primary" onclick="${prefix.startsWith('newCObj')||prefix.startsWith('editCObj') ? 'saveObjectifClient(\\''+prefix+'\\')' : 'saveObjectifAgence(\\''+(v.id || '')+'\\',\\''+prefix+'\\')'}" style="font-size:12px">Enregistrer</button>
+      <button class="btn btn-primary" onclick="saveObjectifForm('${v.id || ''}','${prefix}')" style="font-size:12px">Enregistrer</button>
     </div>
   </div>`;
 }
@@ -6860,6 +6860,11 @@ async function editObjectifClient(id, clientId) {
   updateMetierOptions('editCObj', data.metier);
   document.getElementById('editCObjForm').dataset.clientId = clientId;
   document.getElementById('editCObjForm').dataset.objId = id;
+}
+
+function saveObjectifForm(id, prefix) {
+  if (prefix === 'newCObj' || prefix === 'editCObj') return saveObjectifClient(prefix);
+  return saveObjectifAgence(id, prefix);
 }
 
 async function saveObjectifClient(prefix) {
