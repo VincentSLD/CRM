@@ -854,6 +854,8 @@ tbody tr:last-child td { border-bottom: none; }
   line-height: 1.7;
   outline: none;
 }
+.editor-body img { max-width: 100%; height: auto; border-radius: 6px; margin: 6px 0; cursor: pointer; }
+.card-body img { max-width: 100%; height: auto; border-radius: 6px; margin: 6px 0; }
 
 .editor-body:empty::before {
   content: 'Rédigez votre compte-rendu ici ou utilisez la dictée vocale...';
@@ -1917,6 +1919,8 @@ tbody tr:last-child td { border-bottom: none; }
               <button class="tb" title="Souligné" onclick="fmtRTE('nc-hab-tech','underline')"><u>U</u></button>
               <div class="tb-div"></div>
               <button class="tb" title="Liste" onclick="fmtRTE('nc-hab-tech','insertUnorderedList')">☰</button>
+              <div class="tb-div"></div>
+              <button class="tb" title="Insérer une image" onclick="insertImageRTE('nc-hab-tech')">🖼</button>
             </div>
             <div class="editor-body" contenteditable="true" id="nc-hab-tech" style="min-height:100px;max-height:250px;overflow-y:auto"></div>
           </div>
@@ -1930,6 +1934,8 @@ tbody tr:last-child td { border-bottom: none; }
               <button class="tb" title="Souligné" onclick="fmtRTE('nc-hab-geo','underline')"><u>U</u></button>
               <div class="tb-div"></div>
               <button class="tb" title="Liste" onclick="fmtRTE('nc-hab-geo','insertUnorderedList')">☰</button>
+              <div class="tb-div"></div>
+              <button class="tb" title="Insérer une image" onclick="insertImageRTE('nc-hab-geo')">🖼</button>
             </div>
             <div class="editor-body" contenteditable="true" id="nc-hab-geo" style="min-height:100px;max-height:250px;overflow-y:auto"></div>
           </div>
@@ -2125,6 +2131,8 @@ tbody tr:last-child td { border-bottom: none; }
               <button class="tb" title="Souligné" onclick="fmtRTE('ec-hab-tech','underline')"><u>U</u></button>
               <div class="tb-div"></div>
               <button class="tb" title="Liste" onclick="fmtRTE('ec-hab-tech','insertUnorderedList')">☰</button>
+              <div class="tb-div"></div>
+              <button class="tb" title="Insérer une image" onclick="insertImageRTE('ec-hab-tech')">🖼</button>
             </div>
             <div class="editor-body" contenteditable="true" id="ec-hab-tech" style="min-height:100px;max-height:250px;overflow-y:auto"></div>
           </div>
@@ -2138,6 +2146,8 @@ tbody tr:last-child td { border-bottom: none; }
               <button class="tb" title="Souligné" onclick="fmtRTE('ec-hab-geo','underline')"><u>U</u></button>
               <div class="tb-div"></div>
               <button class="tb" title="Liste" onclick="fmtRTE('ec-hab-geo','insertUnorderedList')">☰</button>
+              <div class="tb-div"></div>
+              <button class="tb" title="Insérer une image" onclick="insertImageRTE('ec-hab-geo')">🖼</button>
             </div>
             <div class="editor-body" contenteditable="true" id="ec-hab-geo" style="min-height:100px;max-height:250px;overflow-y:auto"></div>
           </div>
@@ -2240,6 +2250,68 @@ function fmtRTE(editorId, command) {
   if (el) el.focus();
   document.execCommand(command);
 }
+
+// Compresse une image (data URL) à max 800px de large + qualité jpeg 0.8
+async function compressImage(dataUrl, maxWidth = 800, quality = 0.8) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const ratio = img.width > maxWidth ? maxWidth / img.width : 1;
+      const w = Math.round(img.width * ratio);
+      const h = Math.round(img.height * ratio);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+function insertImageRTE(editorId) {
+  const el = document.getElementById(editorId);
+  if (!el) return;
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { toast('Image trop lourde (max 10 Mo)', 'error'); return; }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const compressed = await compressImage(reader.result);
+      el.focus();
+      document.execCommand('insertImage', false, compressed);
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+// Permettre le coller d'images (paste) dans tout contenteditable
+document.addEventListener('paste', async (e) => {
+  const target = e.target;
+  if (!target?.closest?.('[contenteditable="true"]')) return;
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const compressed = await compressImage(reader.result);
+        document.execCommand('insertImage', false, compressed);
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+  }
+});
 
 function computeTVA(siren) {
   if (!siren) return null;
