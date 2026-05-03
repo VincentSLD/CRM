@@ -318,6 +318,7 @@ footer{padding:1rem;font-size:.6rem}
           <option value="croiss">Croissance démographique (%)</option>
           <option value="pop">Population (M hab.)</option>
           <option value="ratio">Ratio logts / 1000 hab.</option>
+          <option value="densite">Densité de population (hab/km²)</option>
         </select>
       </div>
       <div id="mapLeaflet"></div>
@@ -505,6 +506,26 @@ const DEPT_DATA = {
 '92':{n:'Hauts-de-Seine',r:'Île-de-France',p:1.62,a:8500,i:200},'93':{n:'Seine-Saint-Denis',r:'Île-de-France',p:1.64,a:9000,i:300},'94':{n:'Val-de-Marne',r:'Île-de-France',p:1.41,a:6500,i:400},'95':{n:'Val-d\'Oise',r:'Île-de-France',p:1.25,a:6000,i:1300},
 '2A':{n:'Corse-du-Sud',r:'Corse',p:0.16,a:1800,i:600},'2B':{n:'Haute-Corse',r:'Corse',p:0.18,a:1700,i:600}
 };
+
+// Surface des départements (km²) — source INSEE — utilisée pour le calcul de densité hab/km²
+const DEPT_SURFACE = {
+'01':5762,'02':7369,'03':7340,'04':6925,'05':5549,'06':4299,'07':5529,'08':5229,'09':4890,'10':6004,
+'11':6139,'12':8735,'13':5087,'14':5548,'15':5726,'16':5956,'17':6864,'18':7235,'19':5857,'21':8763,
+'22':6878,'23':5565,'24':9060,'25':5234,'26':6530,'27':6040,'28':5880,'29':6733,'2A':4014,'2B':4666,
+'30':5853,'31':6309,'32':6257,'33':10000,'34':6101,'35':6775,'36':6791,'37':6127,'38':7431,'39':4999,
+'40':9243,'41':6343,'42':4781,'43':4977,'44':6815,'45':6775,'46':5217,'47':5361,'48':5167,'49':7166,
+'50':5938,'51':8162,'52':6211,'53':5175,'54':5246,'55':6211,'56':6823,'57':6216,'58':6817,'59':5743,
+'60':5860,'61':6103,'62':6671,'63':7970,'64':7645,'65':4464,'66':4116,'67':4755,'68':3525,'69':3249,
+'70':5360,'71':8575,'72':6206,'73':6028,'74':4388,'75':105,'76':6278,'77':5915,'78':2284,'79':5999,
+'80':6170,'81':5758,'82':3717,'83':5973,'84':3567,'85':6720,'86':6990,'87':5520,'88':5874,'89':7427,
+'90':609,'91':1804,'92':176,'93':236,'94':245,'95':1246
+};
+
+function getDeptDensity(code) {
+  const d = DEPT_DATA[code]; const s = DEPT_SURFACE[code];
+  if (!d || !s) return 0;
+  return Math.round((d.p * 1_000_000) / s);
+}
 
 function getDeptCroiss(dept) {
   const reg = FALLBACK.regions.find(r => r.nom === dept.r);
@@ -1104,6 +1125,7 @@ function getDeptMetricValue(code, metric) {
     case 'croiss': return getDeptCroiss(d);
     case 'pop': return d.p;
     case 'ratio': return Math.round(d.a / d.p / 1000 * 1000);
+    case 'densite': return getDeptDensity(code);
     default: return d.a;
   }
 }
@@ -1114,12 +1136,13 @@ function formatMapValue(val, metric) {
     case 'croiss': return (val >= 0 ? '+' : '') + val.toFixed(2) + ' %';
     case 'pop': return val.toFixed(2) + ' M';
     case 'ratio': return val + ' / 1000 hab.';
+    case 'densite': return val.toLocaleString('fr-FR') + ' hab/km²';
     default: return val.toString();
   }
 }
 
 function metricLabel(metric) {
-  const labels = { autoris: 'Autorisations (12m)', indiv: 'Individuel pur (12m)', croiss: 'Croissance démo.', pop: 'Population', ratio: 'Logts / 1000 hab.' };
+  const labels = { autoris: 'Autorisations (12m)', indiv: 'Individuel pur (12m)', croiss: 'Croissance démo.', pop: 'Population', ratio: 'Logts / 1000 hab.', densite: 'Densité (hab/km²)' };
   return labels[metric] || metric;
 }
 
@@ -1128,10 +1151,12 @@ function buildDeptPopup(code) {
   if (!d) return '';
   const croiss = getDeptCroiss(d);
   const ratio = Math.round(d.a / d.p / 1000 * 1000);
+  const densite = getDeptDensity(code);
   return `<div class="map-popup">
     <h4>${code} — ${d.n}</h4>
     <div class="map-popup-region">${d.r}</div>
     <div class="map-popup-row"><span class="map-popup-label">Population</span><span class="map-popup-val">${d.p.toFixed(2)} M</span></div>
+    <div class="map-popup-row"><span class="map-popup-label">Densité</span><span class="map-popup-val">${densite.toLocaleString('fr-FR')} hab/km²</span></div>
     <div class="map-popup-row"><span class="map-popup-label">Autorisations (12m)</span><span class="map-popup-val">${d.a.toLocaleString('fr-FR')}</span></div>
     <div class="map-popup-row"><span class="map-popup-label">Individuel pur</span><span class="map-popup-val">${d.i.toLocaleString('fr-FR')}</span></div>
     <div class="map-popup-row"><span class="map-popup-label">Ratio logts/1000 hab.</span><span class="map-popup-val">${ratio}</span></div>
@@ -1145,10 +1170,13 @@ function showDeptInfo(code) {
   const croiss = getDeptCroiss(d);
   const ratio = Math.round(d.a / d.p / 1000 * 1000);
   const infoEl = document.getElementById('mapInfo');
+  const surface = DEPT_SURFACE[code]; const densite = getDeptDensity(code);
   infoEl.innerHTML = `
     <h3>${code} — ${d.n}</h3>
     <div class="map-info-row"><span class="map-info-label">Région</span><span class="map-info-val">${d.r}</span></div>
     <div class="map-info-row"><span class="map-info-label">Population</span><span class="map-info-val">${d.p.toFixed(2)} M hab.</span></div>
+    <div class="map-info-row"><span class="map-info-label">Surface</span><span class="map-info-val">${surface ? surface.toLocaleString('fr-FR') + ' km²' : '—'}</span></div>
+    <div class="map-info-row"><span class="map-info-label">Densité</span><span class="map-info-val">${densite ? densite.toLocaleString('fr-FR') + ' hab/km²' : '—'}</span></div>
     <div class="map-info-row"><span class="map-info-label">Croissance démo.</span><span class="map-info-val" style="color:${croiss >= 0 ? 'var(--accent3)' : 'var(--accent4)'}">${croiss >= 0 ? '+' : ''}${croiss.toFixed(2)} %</span></div>
     <div class="map-info-row"><span class="map-info-label">Autorisations (12m)</span><span class="map-info-val">${d.a.toLocaleString('fr-FR')}</span></div>
     <div class="map-info-row"><span class="map-info-label">Individuel pur</span><span class="map-info-val">${d.i.toLocaleString('fr-FR')}</span></div>
