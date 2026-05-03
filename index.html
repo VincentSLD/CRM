@@ -1851,11 +1851,13 @@ tbody tr:last-child td { border-bottom: none; }
             <input class="fi" id="nc-sirene-search" placeholder="Nom ou 14 chiffres SIRET" style="font-size:12px"
               onkeydown="if(event.key==='Enter'){event.preventDefault();searchSirene()}"></div>
           <div class="fg" style="margin:0"><label class="fl" style="font-size:10px">Département</label>
-            <select class="fi" id="nc-sirene-dept" style="font-size:12px">
+            <select class="fi" id="nc-sirene-dept" style="font-size:12px" onchange="loadCommunesForDept('nc-sirene-dept','nc-sirene-ville')">
               <option value="">— Tous —</option>
             </select></div>
-          <div class="fg" style="margin:0"><label class="fl" style="font-size:10px">Code postal</label>
-            <input class="fi" id="nc-sirene-cp" placeholder="Ex: 85000" style="font-size:12px"></div>
+          <div class="fg" style="margin:0"><label class="fl" style="font-size:10px">Ville</label>
+            <select class="fi" id="nc-sirene-ville" style="font-size:12px" disabled>
+              <option value="">— Choisir un département —</option>
+            </select></div>
           <div class="fg" style="margin:0;position:relative"><label class="fl" style="font-size:10px">Codes APE (multi)</label>
             <button type="button" class="fi" id="nc-sirene-ape-btn" onclick="toggleNcApeDropdown()" style="font-size:12px;text-align:left;cursor:pointer;background:var(--card);width:100%">— Tous —</button>
             <input type="hidden" id="nc-sirene-ape">
@@ -2225,11 +2227,13 @@ tbody tr:last-child td { border-bottom: none; }
           <div class="fg"><label class="fl">Mot-clé / Nom</label>
             <input class="fi" id="pt-q" placeholder="Ex: bâtiment, archi..." style="font-size:12px"></div>
           <div class="fg"><label class="fl">Département</label>
-            <select class="fi" id="pt-dept" style="font-size:12px">
+            <select class="fi" id="pt-dept" style="font-size:12px" onchange="loadCommunesForDept('pt-dept','pt-ville')">
               <option value="">— Tous —</option>
             </select></div>
-          <div class="fg"><label class="fl">Code postal</label>
-            <input class="fi" id="pt-cp" placeholder="Ex: 85000" style="font-size:12px"></div>
+          <div class="fg"><label class="fl">Ville</label>
+            <select class="fi" id="pt-ville" style="font-size:12px" disabled>
+              <option value="">— Choisir un département —</option>
+            </select></div>
           <div class="fg" style="position:relative"><label class="fl">Codes APE / NAF (multi)</label>
             <button type="button" class="fi" id="pt-ape-btn" onclick="togglePtDropdown('pt-ape-dd')" style="font-size:12px;text-align:left;cursor:pointer;background:var(--card)">— Tous —</button>
             <input type="hidden" id="pt-ape">
@@ -8338,7 +8342,8 @@ function updateNcEffButton() {
 function resetSireneNcFilters() {
   document.getElementById('nc-sirene-search').value = '';
   document.getElementById('nc-sirene-dept').value = '';
-  document.getElementById('nc-sirene-cp').value = '';
+  const ville = document.getElementById('nc-sirene-ville');
+  if (ville) { ville.innerHTML = '<option value="">— Choisir un département —</option>'; ville.disabled = true; }
   document.getElementById('nc-sirene-cat').value = '';
   document.getElementById('nc-sirene-etat').value = 'A';
   _ncSelectedApe.clear(); _ncSelectedEff.clear();
@@ -8361,7 +8366,7 @@ document.addEventListener('click', e => {
 async function searchSirene() {
   const q = document.getElementById('nc-sirene-search').value.trim();
   const dept = document.getElementById('nc-sirene-dept').value;
-  const cp = document.getElementById('nc-sirene-cp').value.trim();
+  const cp = document.getElementById('nc-sirene-ville').value.trim();
   const ape = document.getElementById('nc-sirene-ape').value.trim();
   const eff = document.getElementById('nc-sirene-eff').value.trim();
   const cat = document.getElementById('nc-sirene-cat').value;
@@ -10276,8 +10281,10 @@ document.addEventListener('click', e => {
 });
 
 function resetProspectFilters() {
-  ['pt-q','pt-cp'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  ['pt-q'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
   ['pt-dept','pt-cat'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  const ville = document.getElementById('pt-ville');
+  if (ville) { ville.innerHTML = '<option value="">— Choisir un département —</option>'; ville.disabled = true; }
   document.getElementById('pt-ape').value = '';
   document.getElementById('pt-eff-min').value = '';
   _selectedApe.clear(); _selectedEff.clear();
@@ -10295,7 +10302,7 @@ function resetProspectFilters() {
 function buildProspectQuery() {
   const q = document.getElementById('pt-q').value.trim();
   const dept = document.getElementById('pt-dept').value;
-  const cp = document.getElementById('pt-cp').value.trim();
+  const cp = document.getElementById('pt-ville').value.trim();
   const ape = document.getElementById('pt-ape').value.trim();
   const eff = document.getElementById('pt-eff-min').value.trim();
   const cat = document.getElementById('pt-cat').value;
@@ -10448,6 +10455,40 @@ async function searchProspects(page) {
   } catch (e) {
     status.textContent = '';
     resEl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--red)">Erreur: ' + e.message + '</div>';
+  }
+}
+
+// Cache des communes par département
+const _communesCache = {};
+async function loadCommunesForDept(deptSelectId, villeSelectId) {
+  const deptSel = document.getElementById(deptSelectId);
+  const villeSel = document.getElementById(villeSelectId);
+  if (!deptSel || !villeSel) return;
+  const code = deptSel.value;
+  if (!code) {
+    villeSel.innerHTML = '<option value="">— Choisir un département —</option>';
+    villeSel.disabled = true;
+    return;
+  }
+  villeSel.disabled = true;
+  villeSel.innerHTML = '<option value="">Chargement...</option>';
+  try {
+    let communes = _communesCache[code];
+    if (!communes) {
+      const r = await fetch('https://geo.api.gouv.fr/communes?codeDepartement=' + encodeURIComponent(code) + '&fields=nom,code,codesPostaux&format=json');
+      communes = await r.json();
+      _communesCache[code] = communes;
+    }
+    communes.sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
+    villeSel.innerHTML = '<option value="">— Toutes les villes —</option>' +
+      communes.map(c => {
+        const cp = (c.codesPostaux && c.codesPostaux[0]) || '';
+        return `<option value="${cp}">${c.nom}${cp ? ' (' + cp + ')' : ''}</option>`;
+      }).join('');
+    villeSel.disabled = false;
+  } catch (e) {
+    villeSel.innerHTML = '<option value="">Erreur de chargement</option>';
+    villeSel.disabled = true;
   }
 }
 
