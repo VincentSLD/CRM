@@ -68,7 +68,8 @@ CREATE TABLE IF NOT EXISTS mission_metier_mapping (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 ALTER TABLE mission_metier_mapping ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "mission_metier_all" ON mission_metier_mapping FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "mission_metier_all" ON mission_metier_mapping;
+CREATE POLICY "mission_metier_all" ON mission_metier_mapping FOR ALL USING (true) WITH CHECK (true);
 
 -- Objectifs annuels par agence + métier
 CREATE TABLE IF NOT EXISTS objectifs_agences (
@@ -81,7 +82,8 @@ CREATE TABLE IF NOT EXISTS objectifs_agences (
   UNIQUE(agence, metier, annee)
 );
 ALTER TABLE objectifs_agences ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "objectifs_agences_all" ON objectifs_agences FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "objectifs_agences_all" ON objectifs_agences;
+CREATE POLICY "objectifs_agences_all" ON objectifs_agences FOR ALL USING (true) WITH CHECK (true);
 
 -- Objectifs annuels par client + agence + métier
 CREATE TABLE IF NOT EXISTS objectifs_clients (
@@ -95,7 +97,8 @@ CREATE TABLE IF NOT EXISTS objectifs_clients (
   UNIQUE(client_id, agence, metier, annee)
 );
 ALTER TABLE objectifs_clients ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "objectifs_clients_all" ON objectifs_clients FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "objectifs_clients_all" ON objectifs_clients;
+CREATE POLICY "objectifs_clients_all" ON objectifs_clients FOR ALL USING (true) WITH CHECK (true);
 
 -- ═══ Concurrence ═══
 CREATE TABLE IF NOT EXISTS concurrents (
@@ -117,7 +120,8 @@ CREATE TABLE IF NOT EXISTS concurrents (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 ALTER TABLE concurrents ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "concurrents_all" ON concurrents FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "concurrents_all" ON concurrents;
+CREATE POLICY "concurrents_all" ON concurrents FOR ALL USING (true) WITH CHECK (true);
 CREATE INDEX IF NOT EXISTS idx_concurrents_nom ON concurrents(nom);
 CREATE INDEX IF NOT EXISTS idx_concurrents_siren ON concurrents(siren);
 
@@ -131,6 +135,7 @@ CREATE TABLE IF NOT EXISTS client_concurrents (
   UNIQUE(client_id, concurrent_id)
 );
 ALTER TABLE client_concurrents ENABLE ROW LEVEL SECURITY;
-CREATE POLICY IF NOT EXISTS "client_concurrents_all" ON client_concurrents FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "client_concurrents_all" ON client_concurrents;
+CREATE POLICY "client_concurrents_all" ON client_concurrents FOR ALL USING (true) WITH CHECK (true);
 CREATE INDEX IF NOT EXISTS idx_client_concurrents_client ON client_concurrents(client_id);
 CREATE INDEX IF NOT EXISTS idx_client_concurrents_concurrent ON client_concurrents(concurrent_id);
