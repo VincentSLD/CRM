@@ -2102,11 +2102,11 @@ tbody tr:last-child td { border-bottom: none; }
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
         <div style="font-size:12px;color:var(--t3)" id="cn-status">Renseignez vos filtres et cliquez "Rechercher"</div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          <span style="font-size:11px;color:var(--t3)">Métiers à appliquer :</span>
+          <span style="font-size:11px;color:var(--t3)">Agences à appliquer :</span>
           <div style="position:relative">
-            <button type="button" class="btn" id="cn-metier-btn" onclick="toggleCnDropdown('cn-metier-dd')" style="font-size:11px">— Aucun —</button>
-            <div id="cn-metier-dd" style="display:none;position:absolute;top:100%;right:0;z-index:200;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25);margin-top:2px;min-width:180px">
-              <div id="cn-metier-list" style="padding:4px 0;background:#fff"></div>
+            <button type="button" class="btn" id="cn-agence-btn" onclick="toggleCnDropdown('cn-agence-dd')" style="font-size:11px">— Aucune —</button>
+            <div id="cn-agence-dd" style="display:none;position:absolute;top:100%;right:0;z-index:200;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25);margin-top:2px;min-width:180px">
+              <div id="cn-agence-list" style="padding:4px 0;background:#fff"></div>
             </div>
           </div>
           <button class="btn" onclick="cnToggleAll(true)" style="font-size:11px">Tout cocher</button>
@@ -2141,17 +2141,8 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Région</label><input class="fi" id="cf-region"></div>
       </div>
       <div class="fg" style="margin-top:10px">
-        <label class="fl">Métiers concernés</label>
-        <div style="display:flex;flex-wrap:wrap;gap:10px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--card)">
-          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="cf-metier" value="SOL"> SOL</label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="cf-metier" value="EXE"> EXE</label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="cf-metier" value="GO"> GO</label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="cf-metier" value="ARCHI"> ARCHI</label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="cf-metier" value="TOPO"> TOPO</label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="cf-metier" value="GEOTECH"> GEOTECH</label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="cf-metier" value="BET"> BET</label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="cf-metier" value="AUTRE"> AUTRE</label>
-        </div>
+        <label class="fl">Agences concernées</label>
+        <div id="cf-agences" style="display:flex;flex-wrap:wrap;gap:10px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--card);min-height:38px;font-size:12px;color:var(--t3)">Chargement des agences...</div>
       </div>
       <div class="fg" style="margin-top:10px"><label class="fl">Notes</label><textarea class="fi" id="cf-notes" rows="3" style="resize:vertical"></textarea></div>
     </div>
@@ -3945,7 +3936,7 @@ let _cnSearch = '';
 let _cnDept = '';
 let _cnVille = '';
 let _cnSelectedApe = new Set();
-let _cnSelectedMetiers = new Set();
+let _cnSelectedAgences = new Set();
 
 async function loadConcurrents() {
   const [{ data: list }, { data: liens }] = await Promise.all([
@@ -3993,7 +3984,7 @@ function openConcurrentTarget() {
   setTimeout(() => initConcurrentFilters(), 30);
 }
 
-function initConcurrentFilters() {
+async function initConcurrentFilters() {
   const sel = document.getElementById('cn-dept');
   if (sel && sel.options.length <= 1 && typeof DEPT_NAMES !== 'undefined') {
     const opts = Object.entries(DEPT_NAMES).sort((a,b) => a[0].localeCompare(b[0]));
@@ -4026,21 +4017,23 @@ function initConcurrentFilters() {
     `).join('');
     effList.dataset.built = '1';
   }
-  const metList = document.getElementById('cn-metier-list');
-  if (metList && !metList.dataset.built) {
-    metList.innerHTML = METIERS_CONCURRENT.map(m => `
+  const agList = document.getElementById('cn-agence-list');
+  if (agList && !agList.dataset.built) {
+    const dispo = await getAgencesDispo();
+    const list = (dispo && dispo.length) ? dispo : ['GPH-R','GPH64','GPH85'];
+    agList.innerHTML = list.map(a => `
       <label style="display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #eee;background:#fff;color:#1a1a1a" onmouseover="this.style.background='#f5f7fa'" onmouseout="this.style.background='#fff'">
-        <input type="checkbox" value="${m}" onchange="toggleCnMetier('${m}', this.checked)">
-        <span style="font-weight:600">${m}</span>
+        <input type="checkbox" value="${a}" onchange="toggleCnAgence('${a}', this.checked)">
+        <span style="font-weight:600">${a}</span>
       </label>
     `).join('');
-    metList.dataset.built = '1';
+    agList.dataset.built = '1';
   }
   // Restaurer cochages
   document.querySelectorAll('#cn-ape-list input[type=checkbox]').forEach(cb => cb.checked = _cnSelectedApe.has(cb.value));
   document.querySelectorAll('#cn-eff-list input[type=checkbox]').forEach(cb => cb.checked = _cnSelectedEff.has(cb.value));
-  document.querySelectorAll('#cn-metier-list input[type=checkbox]').forEach(cb => cb.checked = _cnSelectedMetiers.has(cb.value));
-  updateCnApeButton(); updateCnEffButton(); updateCnMetierButton();
+  document.querySelectorAll('#cn-agence-list input[type=checkbox]').forEach(cb => cb.checked = _cnSelectedAgences.has(cb.value));
+  updateCnApeButton(); updateCnEffButton(); updateCnAgenceButton();
   // Liste locale
   renderCnLocalList();
   // Si une recherche a déjà été faite, ré-afficher les résultats
@@ -4179,8 +4172,8 @@ function cnToggleAll(checked) {
 async function addSelectedConcurrents() {
   const checks = [...document.querySelectorAll('.cn-check:checked:not(:disabled)')];
   if (checks.length === 0) { toast('Aucune entreprise sélectionnée', 'warn'); return; }
-  const metiers = [..._cnSelectedMetiers];
-  if (!confirm('Ajouter ' + checks.length + ' concurrent(s)' + (metiers.length ? ' avec les métiers : ' + metiers.join(', ') : '') + ' ?')) return;
+  const agences = [..._cnSelectedAgences];
+  if (!confirm('Ajouter ' + checks.length + ' concurrent(s)' + (agences.length ? ' pour les agences : ' + agences.join(', ') : '') + ' ?')) return;
   showSyncLoading(true); setSyncText('Ajout de ' + checks.length + ' concurrent(s)...');
   let added = 0;
   try {
@@ -4199,7 +4192,7 @@ async function addSelectedConcurrents() {
         code_postal: s.code_postal || null,
         departement: (typeof deptName === 'function' ? deptName(dept) : dept) || null,
         region: (typeof regionFromDept === 'function' ? regionFromDept(dept) : null) || null,
-        metiers: metiers.length ? metiers : null,
+        agences: agences.length ? agences : null,
       };
       const { error } = await sb.from('concurrents').insert(row);
       if (!error) added++;
@@ -4235,13 +4228,13 @@ function renderCnLocalList() {
   el.innerHTML = header + '<div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">' +
     '<table><thead><tr>' +
       '<th>Nom</th><th>Raison sociale</th><th>SIREN</th><th>APE</th><th>Ville</th><th>Dpt</th>' +
-      '<th>Métiers</th><th style="text-align:center">Clients liés</th><th style="text-align:right">Actions</th>' +
+      '<th>Agences</th><th style="text-align:center">Clients liés</th><th style="text-align:right">Actions</th>' +
     '</tr></thead><tbody>' +
     (list.length === 0
       ? '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--t3)">Aucun concurrent enregistré.</td></tr>'
       : list.map(c => {
           const nbClients = concurrentsClientCount[c.id] || 0;
-          const metiersHTML = Array.isArray(c.metiers) && c.metiers.length ? c.metiers.map(m => '<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:rgba(99,102,241,.15);color:#6366f1;font-size:10px;font-weight:600;margin-right:3px">'+m+'</span>').join('') : '—';
+          const agencesHTML = Array.isArray(c.agences) && c.agences.length ? c.agences.map(a => '<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:rgba(99,102,241,.15);color:#6366f1;font-size:10px;font-weight:600;margin-right:3px">'+a+'</span>').join('') : '—';
           return '<tr>' +
             '<td><strong>'+(c.nom||'')+'</strong></td>' +
             '<td style="font-size:12px;color:var(--t2)">'+(c.raison_sociale || '—')+'</td>' +
@@ -4249,7 +4242,7 @@ function renderCnLocalList() {
             '<td class="mono" style="font-size:12px">'+(c.ape || '—')+'</td>' +
             '<td style="font-size:12px">'+(c.ville || '—')+'</td>' +
             '<td style="font-size:12px">'+(c.departement || '—')+'</td>' +
-            '<td>'+metiersHTML+'</td>' +
+            '<td>'+agencesHTML+'</td>' +
             '<td style="text-align:center"><span style="display:inline-block;padding:2px 8px;border-radius:10px;background:'+(nbClients>0?'rgba(34,197,94,.15)':'rgba(107,114,128,.15)')+';color:'+(nbClients>0?'#22c55e':'#6b7280')+';font-size:11px;font-weight:600">'+nbClients+'</span></td>' +
             '<td style="text-align:right;white-space:nowrap">' +
               ((c.siren||c.siret) ? '<a href="https://www.pappers.fr/entreprise/'+(c.siren||c.siret)+'" target="_blank" rel="noopener" class="btn" style="font-size:11px;text-decoration:none;color:#3b82f6" title="Pappers">📋</a>' : '') +
@@ -4262,7 +4255,7 @@ function renderCnLocalList() {
 }
 
 function toggleCnDropdown(id) {
-  ['cn-ape-dd','cn-eff-dd','cn-metier-dd'].forEach(d => { if (d !== id) { const e = document.getElementById(d); if (e) e.style.display = 'none'; } });
+  ['cn-ape-dd','cn-eff-dd','cn-agence-dd'].forEach(d => { if (d !== id) { const e = document.getElementById(d); if (e) e.style.display = 'none'; } });
   const el = document.getElementById(id); if (!el) return;
   el.style.display = el.style.display === 'block' ? 'none' : 'block';
 }
@@ -4286,9 +4279,9 @@ function toggleCnEff(code, checked) {
   if (checked) _cnSelectedEff.add(code); else _cnSelectedEff.delete(code);
   updateCnEffButton();
 }
-function toggleCnMetier(code, checked) {
-  if (checked) _cnSelectedMetiers.add(code); else _cnSelectedMetiers.delete(code);
-  updateCnMetierButton();
+function toggleCnAgence(code, checked) {
+  if (checked) _cnSelectedAgences.add(code); else _cnSelectedAgences.delete(code);
+  updateCnAgenceButton();
 }
 function toggleAllCnApe(checked) {
   document.querySelectorAll('#cn-ape-list .cn-ape-item').forEach(item => {
@@ -4320,9 +4313,9 @@ function updateCnEffButton() {
   btn.textContent = _cnSelectedEff.size === 0 ? '— Tous —' : _cnSelectedEff.size + ' tranche(s) sélectionnée(s)';
   if (hidden) hidden.value = [..._cnSelectedEff].join(',');
 }
-function updateCnMetierButton() {
-  const btn = document.getElementById('cn-metier-btn'); if (!btn) return;
-  btn.textContent = _cnSelectedMetiers.size === 0 ? '— Aucun —' : [..._cnSelectedMetiers].join(', ');
+function updateCnAgenceButton() {
+  const btn = document.getElementById('cn-agence-btn'); if (!btn) return;
+  btn.textContent = _cnSelectedAgences.size === 0 ? '— Aucune —' : [..._cnSelectedAgences].join(', ');
 }
 
 function resetCnFilters() {
@@ -4355,7 +4348,7 @@ async function editConcurrent(id) {
   fillConcurrentForm(c);
 }
 
-function fillConcurrentForm(c) {
+async function fillConcurrentForm(c) {
   c = c || {};
   document.getElementById('cf-nom').value = c.nom || '';
   document.getElementById('cf-raison').value = c.raison_sociale || '';
@@ -4368,16 +4361,25 @@ function fillConcurrentForm(c) {
   document.getElementById('cf-region').value = c.region || '';
   document.getElementById('cf-web').value = c.site_web || '';
   document.getElementById('cf-notes').value = c.notes || '';
-  // Métiers checkboxes
-  const metiers = Array.isArray(c.metiers) ? c.metiers : [];
-  document.querySelectorAll('input[name="cf-metier"]').forEach(cb => cb.checked = metiers.includes(cb.value));
+  // Agences checkboxes (chargées dynamiquement)
+  const agences = Array.isArray(c.agences) ? c.agences : [];
+  const container = document.getElementById('cf-agences');
+  if (container) {
+    const dispo = await getAgencesDispo();
+    const list = (dispo && dispo.length) ? dispo : ['GPH-R','GPH64','GPH85'];
+    container.innerHTML = list.map(a =>
+      '<label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer">' +
+      '<input type="checkbox" name="cf-agence" value="'+a+'"'+(agences.includes(a)?' checked':'')+'> '+a+
+      '</label>'
+    ).join('');
+  }
   document.getElementById('cf-title').textContent = c.id ? 'Modifier le concurrent' : 'Nouveau concurrent';
 }
 
 async function saveConcurrent() {
   const nom = document.getElementById('cf-nom').value.trim();
   if (!nom) { toast('Le nom est obligatoire', 'error'); return; }
-  const metiers = [...document.querySelectorAll('input[name="cf-metier"]:checked')].map(cb => cb.value);
+  const agences = [...document.querySelectorAll('input[name="cf-agence"]:checked')].map(cb => cb.value);
   const data = {
     nom,
     raison_sociale: document.getElementById('cf-raison').value.trim() || null,
@@ -4390,7 +4392,7 @@ async function saveConcurrent() {
     region: document.getElementById('cf-region').value.trim() || null,
     site_web: document.getElementById('cf-web').value.trim() || null,
     notes: document.getElementById('cf-notes').value.trim() || null,
-    metiers: metiers.length > 0 ? metiers : null,
+    agences: agences.length > 0 ? agences : null,
     updated_at: new Date().toISOString(),
   };
   let error;
@@ -11096,8 +11098,8 @@ document.addEventListener('click', e => {
   if (!e.target.closest('#cn-ape-dd') && !e.target.closest('#cn-ape-btn')) {
     const d = document.getElementById('cn-ape-dd'); if (d) d.style.display = 'none';
   }
-  if (!e.target.closest('#cn-metier-dd') && !e.target.closest('#cn-metier-btn')) {
-    const d = document.getElementById('cn-metier-dd'); if (d) d.style.display = 'none';
+  if (!e.target.closest('#cn-agence-dd') && !e.target.closest('#cn-agence-btn')) {
+    const d = document.getElementById('cn-agence-dd'); if (d) d.style.display = 'none';
   }
 });
 

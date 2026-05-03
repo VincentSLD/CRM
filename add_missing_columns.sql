@@ -120,6 +120,7 @@ CREATE TABLE IF NOT EXISTS concurrents (
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+ALTER TABLE concurrents ADD COLUMN IF NOT EXISTS agences TEXT[];
 ALTER TABLE concurrents ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "concurrents_all" ON concurrents;
 CREATE POLICY "concurrents_all" ON concurrents FOR ALL USING (true) WITH CHECK (true);
