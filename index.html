@@ -2162,6 +2162,77 @@ tbody tr:last-child td { border-bottom: none; }
 </div>
 
 <!-- ═══ MODAL: LIER MANUELLEMENT LUCCA ═══ -->
+<!-- ═══ MODAL: CIBLAGE PROSPECTS via API SIRENE ═══ -->
+<div class="modal-overlay" id="modal-prospect-target" onclick="if(event.target===this)closeModal('prospect-target')">
+  <div class="modal" style="max-width:1000px;max-height:92vh;overflow-y:auto">
+    <div class="modal-head">
+      <h3>🎯 Ciblage de prospects (API SIRENE)</h3>
+      <button class="modal-close" onclick="closeModal('prospect-target')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+        <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:10px">Filtres de recherche</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:10px">
+          <div class="fg"><label class="fl">Mot-clé / Nom</label>
+            <input class="fi" id="pt-q" placeholder="Ex: bâtiment, archi..." style="font-size:12px"></div>
+          <div class="fg"><label class="fl">Département</label>
+            <select class="fi" id="pt-dept" style="font-size:12px">
+              <option value="">— Tous —</option>
+            </select></div>
+          <div class="fg"><label class="fl">Code postal</label>
+            <input class="fi" id="pt-cp" placeholder="Ex: 85000" style="font-size:12px"></div>
+          <div class="fg"><label class="fl">Code APE / NAF</label>
+            <input class="fi" id="pt-ape" placeholder="Ex: 41.20B, 71.12B" style="font-size:12px"></div>
+          <div class="fg"><label class="fl">Effectif min</label>
+            <select class="fi" id="pt-eff-min" style="font-size:12px">
+              <option value="">— Indifférent —</option>
+              <option value="00">0 salarié</option>
+              <option value="01">1-2 salariés</option>
+              <option value="02">3-5 salariés</option>
+              <option value="03">6-9 salariés</option>
+              <option value="11">10-19 salariés</option>
+              <option value="12">20-49 salariés</option>
+              <option value="21">50-99 salariés</option>
+              <option value="22">100-199 salariés</option>
+              <option value="31">200-249 salariés</option>
+              <option value="32">250-499 salariés</option>
+              <option value="41">500-999 salariés</option>
+              <option value="42">1000-1999 salariés</option>
+              <option value="51">2000-4999 salariés</option>
+            </select></div>
+          <div class="fg"><label class="fl">Catégorie</label>
+            <select class="fi" id="pt-cat" style="font-size:12px">
+              <option value="">— Toutes —</option>
+              <option value="PME">PME</option>
+              <option value="ETI">ETI (entreprise de taille intermédiaire)</option>
+              <option value="GE">Grande entreprise</option>
+            </select></div>
+          <div class="fg"><label class="fl">État</label>
+            <select class="fi" id="pt-etat" style="font-size:12px">
+              <option value="A">Active uniquement</option>
+              <option value="">Toutes</option>
+              <option value="C">Cessée</option>
+            </select></div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center">
+          <span id="pt-result-count" style="font-size:11px;color:var(--t3);margin-right:auto"></span>
+          <button class="btn" onclick="resetProspectFilters()" style="font-size:12px">Réinitialiser</button>
+          <button class="btn btn-primary" onclick="searchProspects()" style="font-size:12px">🔍 Rechercher</button>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+        <div style="font-size:12px;color:var(--t3)" id="pt-status">Renseignez vos filtres et cliquez "Rechercher"</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn" onclick="ptToggleAll(true)" style="font-size:11px">Tout cocher</button>
+          <button class="btn" onclick="ptToggleAll(false)" style="font-size:11px">Tout décocher</button>
+          <button class="btn btn-primary" onclick="addSelectedProspects()" style="font-size:12px">Ajouter en prospects</button>
+        </div>
+      </div>
+      <div id="pt-results" style="max-height:50vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-link-lucca" onclick="if(event.target===this)closeModal('link-lucca')">
   <div class="modal" style="max-width:600px;max-height:80vh;overflow-y:auto">
     <div class="modal-head">
@@ -3637,6 +3708,7 @@ function renderClients(filter='all') {
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <span style="font-size:13px;color:var(--t2)">${clientsTotalCount} clients/prospects</span>
       <button class="btn btn-primary" onclick="openModal('new-client')">+ Nouveau client/prospect</button>
+      <button class="btn" onclick="openModal('prospect-target')" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;border:none">🎯 Cibler prospects</button>
       <button class="btn" onclick="exportCSV('clients')">⤓ Export CSV</button>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
@@ -7861,6 +7933,7 @@ function openModal(id) {
   if(id==='new-devis') document.getElementById('nd-client').innerHTML=clientOpts;
   if(id==='new-commande') document.getElementById('ncm-client').innerHTML=clientOpts;
   if(id==='new-facture') document.getElementById('nf-client').innerHTML=clientOpts;
+  if(id==='prospect-target') initProspectFilters();
   if(id==='edit-client' && currentClient) {
     const c = currentClient;
     document.getElementById('ec-name').value = c.name||'';
@@ -9676,6 +9749,163 @@ async function doSearchSirene() {
     }).join('');
   } catch (err) {
     el.innerHTML = '<div style="color:var(--red);text-align:center;padding:20px">Erreur: ' + err.message + '</div>';
+  }
+}
+
+// ═══ CIBLAGE DE PROSPECTS via API SIRENE ═══
+let _prospectResults = [];
+
+function initProspectFilters() {
+  const sel = document.getElementById('pt-dept');
+  if (sel && sel.options.length <= 1) {
+    const opts = Object.entries(DEPT_NAMES).sort((a,b) => a[0].localeCompare(b[0]));
+    sel.innerHTML = '<option value="">— Tous —</option>' + opts.map(([code, name]) => `<option value="${code}">${code} — ${name}</option>`).join('');
+  }
+}
+
+function resetProspectFilters() {
+  ['pt-q','pt-cp','pt-ape'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  ['pt-dept','pt-eff-min','pt-cat'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  const etat = document.getElementById('pt-etat'); if (etat) etat.value = 'A';
+  document.getElementById('pt-results').innerHTML = '';
+  document.getElementById('pt-status').textContent = 'Renseignez vos filtres et cliquez "Rechercher"';
+  document.getElementById('pt-result-count').textContent = '';
+}
+
+async function searchProspects() {
+  const q = document.getElementById('pt-q').value.trim();
+  const dept = document.getElementById('pt-dept').value;
+  const cp = document.getElementById('pt-cp').value.trim();
+  const ape = document.getElementById('pt-ape').value.trim();
+  const eff = document.getElementById('pt-eff-min').value;
+  const cat = document.getElementById('pt-cat').value;
+  const etat = document.getElementById('pt-etat').value;
+
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (dept) params.set('departement', dept);
+  if (cp) params.set('code_postal', cp);
+  if (ape) params.set('activite_principale', ape);
+  if (eff) params.set('tranche_effectif_salarie', eff);
+  if (cat) params.set('categorie_entreprise', cat);
+  if (etat) params.set('etat_administratif', etat);
+  params.set('per_page', '25');
+
+  if (params.toString() === 'per_page=25' || (q.length === 0 && !dept && !cp && !ape && !eff && !cat)) {
+    toast('Renseignez au moins un filtre', 'warn');
+    return;
+  }
+
+  const status = document.getElementById('pt-status');
+  const resEl = document.getElementById('pt-results');
+  const countEl = document.getElementById('pt-result-count');
+  status.textContent = '🔍 Recherche en cours...';
+  resEl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--t3)">Chargement...</div>';
+
+  try {
+    const url = 'https://recherche-entreprises.api.gouv.fr/search?' + params.toString() + '&mtm_campaign=crm-novam';
+    const r = await fetch(url);
+    const data = await r.json();
+    _prospectResults = data.results || [];
+    countEl.textContent = (data.total_results || 0) + ' résultats au total (25 affichés)';
+    if (_prospectResults.length === 0) {
+      status.textContent = '';
+      resEl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--t3)">Aucune entreprise trouvée avec ces filtres</div>';
+      return;
+    }
+    // Charger les SIRET déjà en base pour griser les déjà existants
+    const sirets = _prospectResults.map(r => r.siege?.siret).filter(Boolean);
+    const { data: existingClients } = await sb.from('clients').select('siret').in('siret', sirets);
+    const existingSirets = new Set((existingClients || []).map(c => c.siret));
+
+    status.textContent = '';
+    resEl.innerHTML = _prospectResults.map((e, i) => {
+      const s = e.siege || {};
+      const exists = existingSirets.has(s.siret);
+      const fullName = e.nom_complet || e.nom_raison_sociale || '';
+      const apeFmt = s.activite_principale || e.activite_principale || '—';
+      const effFmt = e.tranche_effectif_salarie ? `${e.tranche_effectif_salarie}` : '?';
+      const ville = s.libelle_commune || '';
+      const cp2 = s.code_postal || '';
+      const dept2 = s.departement || '';
+      const dateCreation = e.date_creation ? new Date(e.date_creation).toLocaleDateString('fr-FR') : '—';
+      const cat2 = e.categorie_entreprise || '—';
+      const etatLabel = e.etat_administratif === 'A' ? '<span style="color:var(--green)">●</span> Active' : '<span style="color:var(--red)">●</span> Cessée';
+      return `<div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start;${exists?'opacity:0.5':''}">
+        <input type="checkbox" class="pt-check" data-idx="${i}" ${exists?'disabled':''} style="margin-top:6px">
+        <div style="flex:1;font-size:12px">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline">
+            <div style="font-weight:700;color:var(--t1);font-size:13px">${fullName}${exists?' <span style="color:var(--t3);font-weight:400;font-size:11px">— déjà en base</span>':''}</div>
+            <div style="white-space:nowrap;font-size:11px">${etatLabel}</div>
+          </div>
+          <div style="color:var(--t3);margin-top:3px;font-size:11px">
+            SIRET: <span class="mono">${s.siret || '—'}</span> · APE: ${apeFmt} · Effectif: ${effFmt} · Catégorie: ${cat2} · Créée: ${dateCreation}
+          </div>
+          <div style="color:var(--t3);font-size:11px">
+            📍 ${(s.adresse || [s.numero_voie, s.type_voie, s.libelle_voie].filter(Boolean).join(' '))} ${cp2} ${ville} (${dept2})
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    status.textContent = '';
+    resEl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--red)">Erreur: ' + e.message + '</div>';
+  }
+}
+
+function ptToggleAll(checked) {
+  document.querySelectorAll('.pt-check:not(:disabled)').forEach(cb => cb.checked = checked);
+}
+
+async function addSelectedProspects() {
+  const checks = [...document.querySelectorAll('.pt-check:checked:not(:disabled)')];
+  if (checks.length === 0) { toast('Aucun prospect sélectionné', 'warn'); return; }
+  if (!confirm(`Ajouter ${checks.length} prospect(s) dans le CRM ?`)) return;
+  showSyncLoading(true); setSyncText(`Ajout de ${checks.length} prospect(s)...`);
+  const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
+  let added = 0;
+  try {
+    for (const cb of checks) {
+      const e = _prospectResults[parseInt(cb.dataset.idx)];
+      if (!e) continue;
+      const s = e.siege || {};
+      const name = e.nom_complet || e.nom_raison_sociale || 'Sans nom';
+      const id = name.toLowerCase().replace(/[^a-z0-9]/g,'_').substring(0,18) + '_' + (s.siret||'').slice(-6);
+      const ini = name.split(' ').map(w => (w||'')[0]).join('').substring(0, 2).toUpperCase();
+      const dept = s.departement || '';
+      const row = {
+        id, name,
+        code: 'PROSPECT-' + (s.siret||'').slice(-6),
+        raison_sociale: e.nom_raison_sociale || name,
+        siret: s.siret || null, siren: e.siren || null,
+        ape: s.activite_principale || e.activite_principale || null,
+        forme_juridique: e.nature_juridique || null,
+        adresse_ligne1: [s.numero_voie, s.type_voie, s.libelle_voie].filter(Boolean).join(' ') || null,
+        code_postal: s.code_postal || null,
+        city: s.libelle_commune || '',
+        departement: deptName(dept),
+        region: regionFromDept(dept),
+        pays: 'FR',
+        sector: '', email: '', phone: '',
+        effectif: 0,
+        ini, color: colors[Math.floor(Math.random() * colors.length)],
+        ca: 0, obj: 0, margin: 0, dso: 0, score: 50,
+        status: 'objectif',
+        sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15,
+        last_contact: new Date().toISOString().slice(0, 10),
+      };
+      const { error } = await sb.from('clients').insert(row);
+      if (!error) added++;
+      else console.warn('Insert prospect err:', name, error.message);
+    }
+    toast(`${added} prospect(s) ajouté(s)`, 'success');
+    closeModal('prospect-target');
+    await loadDB();
+    renderPage('clients');
+  } catch (e) {
+    toast('Erreur: ' + e.message, 'error');
+  } finally {
+    showSyncLoading(false);
   }
 }
 
