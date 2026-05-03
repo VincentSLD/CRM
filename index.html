@@ -2033,6 +2033,93 @@ tbody tr:last-child td { border-bottom: none; }
   </div>
 </div>
 
+<!-- ═══ MODAL: CIBLAGE CONCURRENTS via API SIRENE ═══ -->
+<div class="modal-overlay" id="modal-concurrent-target" style="left:264px;background:rgba(0,0,0,0);padding:0;align-items:stretch;justify-content:stretch">
+  <div class="modal" style="max-width:none;width:100%;max-height:100vh;height:100vh;border-radius:0;overflow-y:auto;margin:0">
+    <div class="modal-head">
+      <h3>🎯 Ciblage de concurrents (API SIRENE)</h3>
+      <button class="modal-close" onclick="closeModal('concurrent-target')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+        <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:10px">Filtres de recherche</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:10px">
+          <div class="fg"><label class="fl">Mot-clé / Nom</label>
+            <input class="fi" id="cn-q" placeholder="Ex: bâtiment, archi..." style="font-size:12px"></div>
+          <div class="fg"><label class="fl">Département</label>
+            <select class="fi" id="cn-dept" style="font-size:12px" onchange="loadCommunesForDept('cn-dept','cn-ville')">
+              <option value="">— Tous —</option>
+            </select></div>
+          <div class="fg"><label class="fl">Ville</label>
+            <select class="fi" id="cn-ville" style="font-size:12px" disabled>
+              <option value="">— Choisir un département —</option>
+            </select></div>
+          <div class="fg" style="position:relative"><label class="fl">Codes APE / NAF (multi)</label>
+            <button type="button" class="fi" id="cn-ape-btn" onclick="toggleCnDropdown('cn-ape-dd')" style="font-size:12px;text-align:left;cursor:pointer;background:var(--card)">— Tous —</button>
+            <input type="hidden" id="cn-ape">
+            <div id="cn-ape-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25);margin-top:2px">
+              <div style="padding:6px 8px;border-bottom:1px solid var(--border);background:#f5f5f5;position:sticky;top:0;z-index:1">
+                <input type="text" id="cn-ape-search" placeholder="Rechercher..." style="width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:#fff;color:#1a1a1a" oninput="filterCnApeList(this.value)">
+                <div style="display:flex;gap:4px;margin-top:4px">
+                  <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllCnApe(true)">Tout cocher</button>
+                  <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllCnApe(false)">Tout décocher (Tous)</button>
+                </div>
+              </div>
+              <div id="cn-ape-list" style="padding:4px 0;background:#fff"></div>
+            </div>
+          </div>
+          <div class="fg" style="position:relative"><label class="fl">Effectifs (multi)</label>
+            <button type="button" class="fi" id="cn-eff-btn" onclick="toggleCnDropdown('cn-eff-dd')" style="font-size:12px;text-align:left;cursor:pointer;background:var(--card)">— Tous —</button>
+            <input type="hidden" id="cn-eff-min">
+            <div id="cn-eff-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25);margin-top:2px">
+              <div style="padding:6px 8px;border-bottom:1px solid var(--border);background:#f5f5f5;position:sticky;top:0;z-index:1;display:flex;gap:4px">
+                <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllCnEff(true)">Tout cocher</button>
+                <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllCnEff(false)">Tout décocher (Tous)</button>
+              </div>
+              <div id="cn-eff-list" style="padding:4px 0;background:#fff"></div>
+            </div>
+          </div>
+          <div class="fg"><label class="fl">Catégorie</label>
+            <select class="fi" id="cn-cat" style="font-size:12px">
+              <option value="">— Toutes —</option>
+              <option value="PME">PME</option>
+              <option value="ETI">ETI (entreprise de taille intermédiaire)</option>
+              <option value="GE">Grande entreprise</option>
+            </select></div>
+          <div class="fg"><label class="fl">État</label>
+            <select class="fi" id="cn-etat" style="font-size:12px">
+              <option value="A">Active uniquement</option>
+              <option value="">Toutes</option>
+              <option value="C">Cessée</option>
+            </select></div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center">
+          <span id="cn-result-count" style="font-size:11px;color:var(--t3);margin-right:auto"></span>
+          <button class="btn" onclick="resetCnFilters()" style="font-size:12px">Réinitialiser</button>
+          <button class="btn btn-primary" onclick="searchConcurrents()" style="font-size:12px">🔍 Rechercher</button>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+        <div style="font-size:12px;color:var(--t3)" id="cn-status">Renseignez vos filtres et cliquez "Rechercher"</div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:11px;color:var(--t3)">Métiers à appliquer :</span>
+          <div style="position:relative">
+            <button type="button" class="btn" id="cn-metier-btn" onclick="toggleCnDropdown('cn-metier-dd')" style="font-size:11px">— Aucun —</button>
+            <div id="cn-metier-dd" style="display:none;position:absolute;top:100%;right:0;z-index:200;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25);margin-top:2px;min-width:180px">
+              <div id="cn-metier-list" style="padding:4px 0;background:#fff"></div>
+            </div>
+          </div>
+          <button class="btn" onclick="cnToggleAll(true)" style="font-size:11px">Tout cocher</button>
+          <button class="btn" onclick="cnToggleAll(false)" style="font-size:11px">Tout décocher</button>
+          <button class="btn btn-primary" onclick="addSelectedConcurrents()" style="font-size:12px">+ Ajouter aux concurrents</button>
+        </div>
+      </div>
+      <div id="cn-results" style="max-height:calc(100vh - 380px);overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
+      <div id="cn-pagination" style="display:none;justify-content:center;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ MODAL: CONCURRENT FORM ═══ -->
 <div class="modal-overlay" id="modal-concurrent-form">
   <div class="modal" style="max-width:680px">
@@ -3873,74 +3960,45 @@ async function loadConcurrents() {
   concurrentsLoaded = true;
 }
 
+// Filtres SIRENE concurrence
+let _cnSelectedEff = new Set();
+let _cnPage = 0;
+let _cnResults = [];
+let _cnTotal = 0;
+let _cnLocalFilter = '';
+const CN_PER_PAGE = 100;
+
 function renderConcurrence() {
   if (!concurrentsLoaded) {
     loadConcurrents().then(() => renderPage('concurrence'));
     return '<div style="text-align:center;padding:40px;color:var(--t3)">Chargement...</div>';
   }
-  setTimeout(() => initConcurrentFilters(), 30);
+  setTimeout(() => renderCnLocalList(), 20);
+  const total = concurrentsCache.length;
+  const totalLies = Object.values(concurrentsClientCount).reduce((a,n)=>a+n,0);
   return `
-  <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-      <div style="font-size:12px;font-weight:600;color:var(--t1)">Filtres de recherche</div>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-primary" onclick="addConcurrent()" style="font-size:12px">+ Nouveau concurrent</button>
-        <button class="btn" onclick="addConcurrentFromSirene()" style="font-size:12px">🔍 Ajouter depuis SIRENE</button>
-      </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:13px;color:var(--t2)"><strong>${total}</strong> concurrent(s) — <strong>${totalLies}</strong> liaison(s) avec des clients</span>
+      <button class="btn btn-primary" onclick="addConcurrent()">+ Nouveau concurrent</button>
+      <button class="btn" onclick="openConcurrentTarget()" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;border:none">🎯 Cibler concurrents</button>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:10px">
-      <div class="fg"><label class="fl">Mot-clé / Nom</label>
-        <input class="fi" id="cn-q" oninput="_cnSearch=this.value;applyCnFilters()" style="font-size:12px" placeholder="Nom, SIREN, raison sociale..."></div>
-      <div class="fg"><label class="fl">Département</label>
-        <select class="fi" id="cn-dept" style="font-size:12px" onchange="_cnDept=this.value;_cnVille='';loadCommunesForDept('cn-dept','cn-ville');applyCnFilters()">
-          <option value="">— Tous —</option>
-        </select></div>
-      <div class="fg"><label class="fl">Ville</label>
-        <select class="fi" id="cn-ville" style="font-size:12px" disabled onchange="_cnVille=this.value;applyCnFilters()">
-          <option value="">— Choisir un département —</option>
-        </select></div>
-      <div class="fg" style="position:relative"><label class="fl">Codes APE / NAF (multi)</label>
-        <button type="button" class="fi" id="cn-ape-btn" onclick="toggleCnDropdown('cn-ape-dd')" style="font-size:12px;text-align:left;cursor:pointer;background:var(--card)">— Tous —</button>
-        <div id="cn-ape-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25);margin-top:2px">
-          <div style="padding:6px 8px;border-bottom:1px solid var(--border);background:#f5f5f5;position:sticky;top:0;z-index:1">
-            <input type="text" id="cn-ape-search" placeholder="Rechercher..." style="width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:#fff;color:#1a1a1a" oninput="filterCnApeList(this.value)">
-            <div style="display:flex;gap:4px;margin-top:4px">
-              <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllCnApe(true)">Tout cocher</button>
-              <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllCnApe(false)">Tout décocher (Tous)</button>
-            </div>
-          </div>
-          <div id="cn-ape-list" style="padding:4px 0;background:#fff"></div>
-        </div>
-      </div>
-      <div class="fg" style="position:relative"><label class="fl">Métiers (multi)</label>
-        <button type="button" class="fi" id="cn-metier-btn" onclick="toggleCnDropdown('cn-metier-dd')" style="font-size:12px;text-align:left;cursor:pointer;background:var(--card)">— Tous —</button>
-        <div id="cn-metier-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25);margin-top:2px">
-          <div style="padding:6px 8px;border-bottom:1px solid var(--border);background:#f5f5f5;position:sticky;top:0;z-index:1;display:flex;gap:4px">
-            <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllCnMetier(true)">Tout cocher</button>
-            <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllCnMetier(false)">Tout décocher (Tous)</button>
-          </div>
-          <div id="cn-metier-list" style="padding:4px 0;background:#fff"></div>
-        </div>
-      </div>
-    </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center">
-      <span id="cn-result-count" style="font-size:11px;color:var(--t3);margin-right:auto"></span>
-      <button class="btn" onclick="resetCnFilters()" style="font-size:12px">Réinitialiser</button>
-      <button class="btn btn-primary" onclick="applyCnFilters()" style="font-size:12px">🔍 Rechercher</button>
-    </div>
+    <input type="text" id="cn-local-q" placeholder="Rechercher (nom, SIREN, ville...)" value="${_cnLocalFilter || ''}" oninput="_cnLocalFilter=this.value;renderCnLocalList()" style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:240px;background:var(--card);color:var(--t1)">
   </div>
-  <div id="cnTableArea"></div>`;
+  <div id="cn-local-list"></div>`;
+}
+
+function openConcurrentTarget() {
+  openModal('concurrent-target');
+  setTimeout(() => initConcurrentFilters(), 30);
 }
 
 function initConcurrentFilters() {
-  // Département
   const sel = document.getElementById('cn-dept');
   if (sel && sel.options.length <= 1 && typeof DEPT_NAMES !== 'undefined') {
     const opts = Object.entries(DEPT_NAMES).sort((a,b) => a[0].localeCompare(b[0]));
     sel.innerHTML = '<option value="">— Tous —</option>' + opts.map(([code, name]) => `<option value="${code}">${code} — ${name}</option>`).join('');
   }
-  if (sel) sel.value = _cnDept || '';
-  // APE list
   const apeList = document.getElementById('cn-ape-list');
   if (apeList && !apeList.dataset.built && typeof APE_LIST !== 'undefined') {
     apeList.innerHTML = APE_LIST.map(g => `
@@ -3957,8 +4015,17 @@ function initConcurrentFilters() {
     `).join('');
     apeList.dataset.built = '1';
   }
-  document.querySelectorAll('#cn-ape-list input[type=checkbox]').forEach(cb => cb.checked = _cnSelectedApe.has(cb.value));
-  // Métiers list
+  const effList = document.getElementById('cn-eff-list');
+  if (effList && !effList.dataset.built && typeof EFFECTIF_LIST !== 'undefined') {
+    effList.innerHTML = EFFECTIF_LIST.map(([code, lib]) => `
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #eee;background:#fff;color:#1a1a1a" onmouseover="this.style.background='#f5f7fa'" onmouseout="this.style.background='#fff'">
+        <input type="checkbox" value="${code}" onchange="toggleCnEff('${code}', this.checked)">
+        <span class="mono" style="font-weight:600;min-width:32px">${code}</span>
+        <span>${lib}</span>
+      </label>
+    `).join('');
+    effList.dataset.built = '1';
+  }
   const metList = document.getElementById('cn-metier-list');
   if (metList && !metList.dataset.built) {
     metList.innerHTML = METIERS_CONCURRENT.map(m => `
@@ -3969,65 +4036,210 @@ function initConcurrentFilters() {
     `).join('');
     metList.dataset.built = '1';
   }
+  // Restaurer cochages
+  document.querySelectorAll('#cn-ape-list input[type=checkbox]').forEach(cb => cb.checked = _cnSelectedApe.has(cb.value));
+  document.querySelectorAll('#cn-eff-list input[type=checkbox]').forEach(cb => cb.checked = _cnSelectedEff.has(cb.value));
   document.querySelectorAll('#cn-metier-list input[type=checkbox]').forEach(cb => cb.checked = _cnSelectedMetiers.has(cb.value));
-  // Recherche libre
-  const q = document.getElementById('cn-q'); if (q) q.value = _cnSearch || '';
-  // Si dept déjà sélectionné, charger les villes
-  if (_cnDept) {
-    Promise.resolve(loadCommunesForDept('cn-dept','cn-ville')).then(() => {
-      const v = document.getElementById('cn-ville'); if (v && _cnVille) v.value = _cnVille;
-    });
-  }
-  updateCnApeButton(); updateCnMetierButton();
-  applyCnFilters();
+  updateCnApeButton(); updateCnEffButton(); updateCnMetierButton();
+  // Liste locale
+  renderCnLocalList();
+  // Si une recherche a déjà été faite, ré-afficher les résultats
+  if (_cnResults.length) renderCnSearchResults();
 }
 
-function applyCnFilters() {
-  const area = document.getElementById('cnTableArea');
-  if (!area) return;
-  let filtered = concurrentsCache;
-  if (_cnSearch) {
-    const q = _cnSearch.toLowerCase();
-    filtered = filtered.filter(c =>
-      (c.nom||'').toLowerCase().includes(q) ||
-      (c.raison_sociale||'').toLowerCase().includes(q) ||
-      (c.ville||'').toLowerCase().includes(q) ||
-      (c.siren||'').includes(q) ||
-      (c.siret||'').includes(q)
-    );
+function buildCnQuery() {
+  const q = (document.getElementById('cn-q')?.value || '').trim();
+  const dept = document.getElementById('cn-dept')?.value || '';
+  const cp = document.getElementById('cn-ville')?.value || '';
+  const ape = document.getElementById('cn-ape')?.value || '';
+  const eff = document.getElementById('cn-eff-min')?.value || '';
+  const cat = document.getElementById('cn-cat')?.value || '';
+  const etat = document.getElementById('cn-etat')?.value || '';
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (dept) params.set('departement', dept);
+  if (cp) params.set('code_postal', cp);
+  if (ape) params.set('activite_principale', ape);
+  if (eff) params.set('tranche_effectif_salarie', eff);
+  if (cat) params.set('categorie_entreprise', cat);
+  if (etat) params.set('etat_administratif', etat);
+  if ([...params.keys()].filter(k => k !== 'etat_administratif').length === 0) return null;
+  return params;
+}
+
+async function searchConcurrents(page) {
+  const params = buildCnQuery();
+  if (!params) { toast('Renseignez au moins un filtre', 'warn'); return; }
+  _cnPage = typeof page === 'number' ? page : 0;
+  const status = document.getElementById('cn-status');
+  const resEl = document.getElementById('cn-results');
+  const countEl = document.getElementById('cn-result-count');
+  const pagEl = document.getElementById('cn-pagination');
+  status.textContent = '🔍 Recherche en cours...';
+  resEl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--t3)">Chargement page ' + (_cnPage + 1) + '...</div>';
+  pagEl.style.display = 'none';
+  try {
+    const apiPageStart = _cnPage * 4 + 1;
+    const fetches = [];
+    for (let i = 0; i < 4; i++) {
+      const p = new URLSearchParams(params);
+      p.set('per_page', '25');
+      p.set('page', String(apiPageStart + i));
+      p.set('mtm_campaign', 'crm-novam');
+      fetches.push(fetch('https://recherche-entreprises.api.gouv.fr/search?' + p.toString()).then(r => r.json()).catch(() => null));
+    }
+    const responses = await Promise.all(fetches);
+    let merged = [];
+    let total = 0;
+    for (const r of responses) {
+      if (!r) continue;
+      total = r.total_results || total;
+      if (Array.isArray(r.results)) merged = merged.concat(r.results);
+    }
+    _cnResults = merged;
+    _cnTotal = total;
+    countEl.textContent = total + ' résultats au total — page ' + (_cnPage + 1) + ' / ' + Math.max(1, Math.ceil(total / CN_PER_PAGE)) + ' (' + merged.length + ' affichés)';
+    if (merged.length === 0) {
+      status.textContent = '';
+      resEl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--t3)">Aucune entreprise trouvée avec ces filtres</div>';
+      return;
+    }
+    await renderCnSearchResults();
+    // Pagination
+    const totalPages = Math.ceil(total / CN_PER_PAGE);
+    if (totalPages > 1) {
+      pagEl.style.display = 'flex';
+      const cur = _cnPage;
+      const buttons = [];
+      buttons.push(`<button class="btn" ${cur===0?'disabled':''} onclick="searchConcurrents(${cur-1})" style="font-size:11px">← Précédent</button>`);
+      const maxBtns = 7;
+      let start = Math.max(0, cur - 3);
+      let end = Math.min(totalPages, start + maxBtns);
+      if (end - start < maxBtns) start = Math.max(0, end - maxBtns);
+      if (start > 0) buttons.push(`<button class="btn" onclick="searchConcurrents(0)" style="font-size:11px">1</button>`);
+      if (start > 1) buttons.push('<span style="font-size:11px;color:var(--t3)">…</span>');
+      for (let p = start; p < end; p++) {
+        buttons.push(`<button class="btn ${p===cur?'btn-primary':''}" onclick="searchConcurrents(${p})" style="font-size:11px">${p+1}</button>`);
+      }
+      if (end < totalPages - 1) buttons.push('<span style="font-size:11px;color:var(--t3)">…</span>');
+      if (end < totalPages) buttons.push(`<button class="btn" onclick="searchConcurrents(${totalPages-1})" style="font-size:11px">${totalPages}</button>`);
+      buttons.push(`<button class="btn" ${cur>=totalPages-1?'disabled':''} onclick="searchConcurrents(${cur+1})" style="font-size:11px">Suivant →</button>`);
+      pagEl.innerHTML = buttons.join('');
+    }
+  } catch (e) {
+    status.textContent = '';
+    resEl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--red)">Erreur: ' + e.message + '</div>';
   }
-  if (_cnDept) {
-    const wantedName = (typeof DEPT_NAMES !== 'undefined' ? (DEPT_NAMES[_cnDept]||'') : '').toLowerCase();
-    filtered = filtered.filter(c => {
-      const d = (c.departement||'').toLowerCase();
-      const cp = c.code_postal || '';
-      return d === _cnDept.toLowerCase() || (wantedName && (d === wantedName || d.includes(wantedName))) || cp.startsWith(_cnDept);
-    });
+}
+
+async function renderCnSearchResults() {
+  const status = document.getElementById('cn-status');
+  const resEl = document.getElementById('cn-results');
+  const merged = _cnResults;
+  if (!resEl || !merged.length) return;
+  // Identifier ceux déjà concurrents (par siren)
+  const alreadySirens = new Set(concurrentsCache.map(c => c.siren).filter(Boolean));
+  status.textContent = '';
+  resEl.innerHTML = merged.map((e, i) => {
+    const s = e.siege || {};
+    const exists = e.siren && alreadySirens.has(e.siren);
+    const fullName = e.nom_complet || e.nom_raison_sociale || '';
+    const apeFmt = s.activite_principale || e.activite_principale || '—';
+    const effFmt = e.tranche_effectif_salarie ? `${e.tranche_effectif_salarie}` : '?';
+    const ville = s.libelle_commune || '';
+    const cp2 = s.code_postal || '';
+    const dept2 = s.departement || '';
+    const dateCreation = e.date_creation ? new Date(e.date_creation).toLocaleDateString('fr-FR') : '—';
+    const cat2 = e.categorie_entreprise || '—';
+    const etatLabel = e.etat_administratif === 'A' ? '<span style="color:var(--green)">●</span> Active' : '<span style="color:var(--red)">●</span> Cessée';
+    const existingBadge = exists ? '<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;margin-left:6px">⚠ Déjà concurrent</span>' : '';
+    return `<div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start;${exists?'opacity:0.6':''}">
+      <input type="checkbox" class="cn-check" data-idx="${i}" ${exists?'disabled':''} style="margin-top:6px">
+      <div style="flex:1;font-size:12px">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline">
+          <div style="font-weight:700;color:var(--t1);font-size:13px">${fullName}${existingBadge}</div>
+          <div style="white-space:nowrap;font-size:11px">${etatLabel}</div>
+        </div>
+        <div style="color:var(--t3);margin-top:3px;font-size:11px">
+          SIREN: <span class="mono">${e.siren || '—'}</span> · SIRET: <span class="mono">${s.siret || '—'}</span> · APE: ${apeFmt} · Effectif: ${effFmt} · Catégorie: ${cat2} · Créée: ${dateCreation}
+        </div>
+        <div style="color:var(--t3);font-size:11px">
+          📍 ${(s.adresse || [s.numero_voie, s.type_voie, s.libelle_voie].filter(Boolean).join(' '))} ${cp2} ${ville} (${dept2})
+          ${e.siren ? ' · <a href="https://www.pappers.fr/entreprise/'+e.siren+'" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:none">📋 Pappers</a>' : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function cnToggleAll(checked) {
+  document.querySelectorAll('.cn-check:not(:disabled)').forEach(cb => cb.checked = checked);
+}
+
+async function addSelectedConcurrents() {
+  const checks = [...document.querySelectorAll('.cn-check:checked:not(:disabled)')];
+  if (checks.length === 0) { toast('Aucune entreprise sélectionnée', 'warn'); return; }
+  const metiers = [..._cnSelectedMetiers];
+  if (!confirm('Ajouter ' + checks.length + ' concurrent(s)' + (metiers.length ? ' avec les métiers : ' + metiers.join(', ') : '') + ' ?')) return;
+  showSyncLoading(true); setSyncText('Ajout de ' + checks.length + ' concurrent(s)...');
+  let added = 0;
+  try {
+    for (const cb of checks) {
+      const e = _cnResults[parseInt(cb.dataset.idx)];
+      if (!e) continue;
+      const s = e.siege || {};
+      const dept = s.departement || '';
+      const row = {
+        nom: e.nom_complet || e.nom_raison_sociale || 'Sans nom',
+        raison_sociale: e.nom_raison_sociale || null,
+        siren: e.siren || null,
+        siret: s.siret || null,
+        ape: s.activite_principale || e.activite_principale || null,
+        ville: s.libelle_commune || null,
+        code_postal: s.code_postal || null,
+        departement: (typeof deptName === 'function' ? deptName(dept) : dept) || null,
+        region: (typeof regionFromDept === 'function' ? regionFromDept(dept) : null) || null,
+        metiers: metiers.length ? metiers : null,
+      };
+      const { error } = await sb.from('concurrents').insert(row);
+      if (!error) added++;
+      else console.warn('Insert concurrent err:', row.nom, error.message);
+    }
+    toast(added + ' concurrent(s) ajouté(s)', 'success');
+    concurrentsLoaded = false;
+    await loadConcurrents();
+    await renderCnSearchResults();
+    closeModal('concurrent-target');
+    renderPage('concurrence');
+  } catch (e) {
+    toast('Erreur: ' + e.message, 'error');
+  } finally {
+    showSyncLoading(false);
   }
-  if (_cnVille) {
-    filtered = filtered.filter(c => (c.code_postal||'') === _cnVille);
-  }
-  if (_cnSelectedApe.size) {
-    filtered = filtered.filter(c => c.ape && _cnSelectedApe.has(c.ape));
-  }
-  if (_cnSelectedMetiers.size) {
-    filtered = filtered.filter(c => Array.isArray(c.metiers) && [..._cnSelectedMetiers].some(m => c.metiers.includes(m)));
-  }
+}
+
+function renderCnLocalList() {
+  const el = document.getElementById('cn-local-list');
+  if (!el) return;
+  const q = (_cnLocalFilter || '').toLowerCase();
+  let list = concurrentsCache;
+  if (q) list = list.filter(c =>
+    (c.nom||'').toLowerCase().includes(q) ||
+    (c.raison_sociale||'').toLowerCase().includes(q) ||
+    (c.ville||'').toLowerCase().includes(q) ||
+    (c.siren||'').includes(q) ||
+    (c.siret||'').includes(q)
+  );
   const totalLies = Object.values(concurrentsClientCount).reduce((a,n)=>a+n,0);
-  const count = document.getElementById('cn-result-count');
-  if (count) count.textContent = filtered.length + ' sur ' + concurrentsCache.length + ' concurrent(s) — ' + totalLies + ' liaison(s) avec des clients';
-  area.innerHTML = renderCnTable(filtered);
-}
-
-function renderCnTable(filtered) {
-  return '<div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">' +
+  const header = '<div style="padding:6px 0;font-size:11px;color:var(--t3)">' + list.length + ' / ' + concurrentsCache.length + ' concurrent(s) — ' + totalLies + ' liaison(s) avec des clients</div>';
+  el.innerHTML = header + '<div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">' +
     '<table><thead><tr>' +
       '<th>Nom</th><th>Raison sociale</th><th>SIREN</th><th>APE</th><th>Ville</th><th>Dpt</th>' +
       '<th>Métiers</th><th style="text-align:center">Clients liés</th><th style="text-align:right">Actions</th>' +
     '</tr></thead><tbody>' +
-    (filtered.length === 0
-      ? '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--t3)">Aucun concurrent trouvé.</td></tr>'
-      : filtered.map(c => {
+    (list.length === 0
+      ? '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--t3)">Aucun concurrent enregistré.</td></tr>'
+      : list.map(c => {
           const nbClients = concurrentsClientCount[c.id] || 0;
           const metiersHTML = Array.isArray(c.metiers) && c.metiers.length ? c.metiers.map(m => '<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:rgba(99,102,241,.15);color:#6366f1;font-size:10px;font-weight:600;margin-right:3px">'+m+'</span>').join('') : '—';
           return '<tr>' +
@@ -4050,7 +4262,7 @@ function renderCnTable(filtered) {
 }
 
 function toggleCnDropdown(id) {
-  ['cn-ape-dd','cn-metier-dd'].forEach(d => { if (d !== id) { const e = document.getElementById(d); if (e) e.style.display = 'none'; } });
+  ['cn-ape-dd','cn-eff-dd','cn-metier-dd'].forEach(d => { if (d !== id) { const e = document.getElementById(d); if (e) e.style.display = 'none'; } });
   const el = document.getElementById(id); if (!el) return;
   el.style.display = el.style.display === 'block' ? 'none' : 'block';
 }
@@ -4068,11 +4280,15 @@ function filterCnApeList(q) {
 
 function toggleCnApe(code, checked) {
   if (checked) _cnSelectedApe.add(code); else _cnSelectedApe.delete(code);
-  updateCnApeButton(); applyCnFilters();
+  updateCnApeButton();
+}
+function toggleCnEff(code, checked) {
+  if (checked) _cnSelectedEff.add(code); else _cnSelectedEff.delete(code);
+  updateCnEffButton();
 }
 function toggleCnMetier(code, checked) {
   if (checked) _cnSelectedMetiers.add(code); else _cnSelectedMetiers.delete(code);
-  updateCnMetierButton(); applyCnFilters();
+  updateCnMetierButton();
 }
 function toggleAllCnApe(checked) {
   document.querySelectorAll('#cn-ape-list .cn-ape-item').forEach(item => {
@@ -4081,34 +4297,50 @@ function toggleAllCnApe(checked) {
     cb.checked = checked;
     if (checked) _cnSelectedApe.add(cb.value); else _cnSelectedApe.delete(cb.value);
   });
-  updateCnApeButton(); applyCnFilters();
+  updateCnApeButton();
 }
-function toggleAllCnMetier(checked) {
-  document.querySelectorAll('#cn-metier-list input[type=checkbox]').forEach(cb => {
+function toggleAllCnEff(checked) {
+  document.querySelectorAll('#cn-eff-list input[type=checkbox]').forEach(cb => {
     cb.checked = checked;
-    if (checked) _cnSelectedMetiers.add(cb.value); else _cnSelectedMetiers.delete(cb.value);
+    if (checked) _cnSelectedEff.add(cb.value); else _cnSelectedEff.delete(cb.value);
   });
-  updateCnMetierButton(); applyCnFilters();
+  updateCnEffButton();
 }
 function updateCnApeButton() {
-  const btn = document.getElementById('cn-ape-btn'); if (!btn) return;
+  const btn = document.getElementById('cn-ape-btn');
+  const hidden = document.getElementById('cn-ape');
+  if (!btn) return;
   btn.textContent = _cnSelectedApe.size === 0 ? '— Tous —' : _cnSelectedApe.size + ' code(s) sélectionné(s)';
+  if (hidden) hidden.value = [..._cnSelectedApe].join(',');
+}
+function updateCnEffButton() {
+  const btn = document.getElementById('cn-eff-btn');
+  const hidden = document.getElementById('cn-eff-min');
+  if (!btn) return;
+  btn.textContent = _cnSelectedEff.size === 0 ? '— Tous —' : _cnSelectedEff.size + ' tranche(s) sélectionnée(s)';
+  if (hidden) hidden.value = [..._cnSelectedEff].join(',');
 }
 function updateCnMetierButton() {
   const btn = document.getElementById('cn-metier-btn'); if (!btn) return;
-  btn.textContent = _cnSelectedMetiers.size === 0 ? '— Tous —' : _cnSelectedMetiers.size + ' métier(s) sélectionné(s)';
+  btn.textContent = _cnSelectedMetiers.size === 0 ? '— Aucun —' : [..._cnSelectedMetiers].join(', ');
 }
 
 function resetCnFilters() {
-  _cnSearch = ''; _cnDept = ''; _cnVille = '';
-  _cnSelectedApe.clear(); _cnSelectedMetiers.clear();
-  const q = document.getElementById('cn-q'); if (q) q.value = '';
-  const d = document.getElementById('cn-dept'); if (d) d.value = '';
-  const v = document.getElementById('cn-ville'); if (v) { v.innerHTML = '<option value="">— Choisir un département —</option>'; v.disabled = true; }
+  ['cn-q','cn-dept','cn-cat'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  const ville = document.getElementById('cn-ville');
+  if (ville) { ville.innerHTML = '<option value="">— Choisir un département —</option>'; ville.disabled = true; }
+  const ape = document.getElementById('cn-ape'); if (ape) ape.value = '';
+  const eff = document.getElementById('cn-eff-min'); if (eff) eff.value = '';
+  _cnSelectedApe.clear(); _cnSelectedEff.clear();
+  updateCnApeButton(); updateCnEffButton();
   document.querySelectorAll('#cn-ape-list input[type=checkbox]').forEach(cb => cb.checked = false);
-  document.querySelectorAll('#cn-metier-list input[type=checkbox]').forEach(cb => cb.checked = false);
-  updateCnApeButton(); updateCnMetierButton();
-  applyCnFilters();
+  document.querySelectorAll('#cn-eff-list input[type=checkbox]').forEach(cb => cb.checked = false);
+  const etat = document.getElementById('cn-etat'); if (etat) etat.value = 'A';
+  const res = document.getElementById('cn-results'); if (res) res.innerHTML = '';
+  const status = document.getElementById('cn-status'); if (status) status.textContent = 'Renseignez vos filtres et cliquez "Rechercher"';
+  const count = document.getElementById('cn-result-count'); if (count) count.textContent = '';
+  const pag = document.getElementById('cn-pagination'); if (pag) pag.style.display = 'none';
+  _cnPage = 0; _cnTotal = 0; _cnResults = [];
 }
 
 let _editingConcurrentId = null;
