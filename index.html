@@ -1845,14 +1845,63 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
     <div class="modal-body">
       <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px">
-        <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:8px">Rechercher une entreprise (SIRET, SIREN ou nom)</div>
-        <div style="display:flex;gap:8px">
-          <input class="fi" id="nc-sirene-search" placeholder="Ex: 44306184100066 ou NOVAM INGENIERIE" style="flex:1"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();searchSirene()}">
-          <button class="btn btn-primary" onclick="searchSirene()" style="white-space:nowrap">Rechercher</button>
-          <button class="btn" onclick="clearNewClientForm()" style="white-space:nowrap;color:var(--t3)">Effacer tout</button>
+        <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:8px">Rechercher une entreprise (SIRENE) — filtres avancés</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-bottom:8px">
+          <div class="fg" style="margin:0"><label class="fl" style="font-size:10px">Nom / SIRET / SIREN</label>
+            <input class="fi" id="nc-sirene-search" placeholder="Nom ou 14 chiffres SIRET" style="font-size:12px"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();searchSirene()}"></div>
+          <div class="fg" style="margin:0"><label class="fl" style="font-size:10px">Département</label>
+            <select class="fi" id="nc-sirene-dept" style="font-size:12px">
+              <option value="">— Tous —</option>
+            </select></div>
+          <div class="fg" style="margin:0"><label class="fl" style="font-size:10px">Code postal</label>
+            <input class="fi" id="nc-sirene-cp" placeholder="Ex: 85000" style="font-size:12px"></div>
+          <div class="fg" style="margin:0;position:relative"><label class="fl" style="font-size:10px">Codes APE (multi)</label>
+            <button type="button" class="fi" id="nc-sirene-ape-btn" onclick="toggleNcApeDropdown()" style="font-size:12px;text-align:left;cursor:pointer;background:var(--card);width:100%">— Tous —</button>
+            <input type="hidden" id="nc-sirene-ape">
+            <div id="nc-sirene-ape-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:300px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25);margin-top:2px;min-width:280px">
+              <div style="padding:6px 8px;border-bottom:1px solid var(--border);background:#f5f5f5;position:sticky;top:0;z-index:1">
+                <input type="text" id="nc-sirene-ape-search" placeholder="Rechercher..." style="width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:#fff;color:#1a1a1a" oninput="filterNcApeList(this.value)">
+                <div style="display:flex;gap:4px;margin-top:4px">
+                  <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllNcApe(true)">Tout cocher</button>
+                  <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllNcApe(false)">Tout décocher (Tous)</button>
+                </div>
+              </div>
+              <div id="nc-sirene-ape-list" style="padding:4px 0;background:#fff"></div>
+            </div>
+          </div>
+          <div class="fg" style="margin:0;position:relative"><label class="fl" style="font-size:10px">Effectifs (multi)</label>
+            <button type="button" class="fi" id="nc-sirene-eff-btn" onclick="toggleNcEffDropdown()" style="font-size:12px;text-align:left;cursor:pointer;background:var(--card);width:100%">— Tous —</button>
+            <input type="hidden" id="nc-sirene-eff">
+            <div id="nc-sirene-eff-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25);margin-top:2px">
+              <div style="padding:6px 8px;border-bottom:1px solid var(--border);background:#f5f5f5;position:sticky;top:0;z-index:1;display:flex;gap:4px">
+                <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllNcEff(true)">Tout cocher</button>
+                <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllNcEff(false)">Tout décocher (Tous)</button>
+              </div>
+              <div id="nc-sirene-eff-list" style="padding:4px 0;background:#fff"></div>
+            </div>
+          </div>
+          <div class="fg" style="margin:0"><label class="fl" style="font-size:10px">Catégorie</label>
+            <select class="fi" id="nc-sirene-cat" style="font-size:12px">
+              <option value="">— Toutes —</option>
+              <option value="PME">PME</option>
+              <option value="ETI">ETI</option>
+              <option value="GE">Grande entreprise</option>
+            </select></div>
+          <div class="fg" style="margin:0"><label class="fl" style="font-size:10px">État</label>
+            <select class="fi" id="nc-sirene-etat" style="font-size:12px">
+              <option value="A">Active uniquement</option>
+              <option value="">Toutes</option>
+              <option value="C">Cessée</option>
+            </select></div>
         </div>
-        <div id="nc-sirene-results" style="display:none;margin-top:10px;max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
+        <div style="display:flex;gap:6px;justify-content:flex-end;align-items:center">
+          <span id="nc-sirene-count" style="font-size:11px;color:var(--t3);margin-right:auto"></span>
+          <button class="btn" onclick="resetSireneNcFilters()" style="font-size:12px">Réinitialiser</button>
+          <button class="btn" onclick="clearNewClientForm()" style="font-size:12px;color:var(--t3)">Effacer formulaire</button>
+          <button class="btn btn-primary" onclick="searchSirene()" style="font-size:12px;white-space:nowrap">🔍 Rechercher</button>
+        </div>
+        <div id="nc-sirene-results" style="display:none;margin-top:10px;max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Identité</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
@@ -7976,6 +8025,7 @@ function openModal(id) {
   }
   if (id === 'new-client') {
     fillAkuiteoDropdowns('nc', null);
+    initNcSireneFilters();
   }
 }
 async function fillAkuiteoDropdowns(prefix, client) {
@@ -8161,31 +8211,178 @@ function clearNewClientForm() {
   if (results) { results.style.display = 'none'; results.innerHTML = ''; }
 }
 
+// ═══ SIRENE search dans Nouveau client (avec filtres avancés) ═══
+let _ncSelectedApe = new Set();
+let _ncSelectedEff = new Set();
+
+function initNcSireneFilters() {
+  // Dropdown départements
+  const sel = document.getElementById('nc-sirene-dept');
+  if (sel && sel.options.length <= 1) {
+    const opts = Object.entries(DEPT_NAMES).sort((a,b) => a[0].localeCompare(b[0]));
+    sel.innerHTML = '<option value="">— Tous —</option>' + opts.map(([code, name]) => `<option value="${code}">${code} — ${name}</option>`).join('');
+  }
+  // Liste APE
+  const apeList = document.getElementById('nc-sirene-ape-list');
+  if (apeList && !apeList.dataset.built) {
+    apeList.innerHTML = APE_LIST.map(g => `
+      <div class="nc-ape-grp" data-group="${g.group.toLowerCase()}">
+        <div style="padding:6px 10px;font-size:10px;font-weight:700;color:#666;text-transform:uppercase;background:#eef0f3;border-bottom:1px solid var(--border)">${g.group}</div>
+        ${g.codes.map(([code, lib]) => `
+          <label class="nc-ape-item" data-search="${(code+' '+lib).toLowerCase()}" style="display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #eee;background:#fff;color:#1a1a1a" onmouseover="this.style.background='#f5f7fa'" onmouseout="this.style.background='#fff'">
+            <input type="checkbox" value="${code}" onchange="toggleNcApe('${code}', this.checked)">
+            <span class="mono" style="font-weight:600;min-width:54px">${code}</span>
+            <span style="color:#444">${lib}</span>
+          </label>
+        `).join('')}
+      </div>
+    `).join('');
+    apeList.dataset.built = '1';
+  }
+  // Liste effectifs
+  const effList = document.getElementById('nc-sirene-eff-list');
+  if (effList && !effList.dataset.built) {
+    effList.innerHTML = EFFECTIF_LIST.map(([code, lib]) => `
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #eee;background:#fff;color:#1a1a1a" onmouseover="this.style.background='#f5f7fa'" onmouseout="this.style.background='#fff'">
+        <input type="checkbox" value="${code}" onchange="toggleNcEff('${code}', this.checked)">
+        <span class="mono" style="font-weight:600;min-width:32px">${code}</span>
+        <span>${lib}</span>
+      </label>
+    `).join('');
+    effList.dataset.built = '1';
+  }
+  _ncSelectedApe.clear(); _ncSelectedEff.clear();
+  updateNcApeButton(); updateNcEffButton();
+}
+
+function toggleNcApeDropdown() {
+  const e = document.getElementById('nc-sirene-eff-dd'); if (e) e.style.display = 'none';
+  const el = document.getElementById('nc-sirene-ape-dd');
+  if (!el) return;
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+}
+function toggleNcEffDropdown() {
+  const e = document.getElementById('nc-sirene-ape-dd'); if (e) e.style.display = 'none';
+  const el = document.getElementById('nc-sirene-eff-dd');
+  if (!el) return;
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+}
+function filterNcApeList(q) {
+  q = (q || '').toLowerCase().trim();
+  document.querySelectorAll('#nc-sirene-ape-list .nc-ape-item').forEach(el => {
+    el.style.display = !q || el.dataset.search.includes(q) ? 'flex' : 'none';
+  });
+  document.querySelectorAll('#nc-sirene-ape-list .nc-ape-grp').forEach(g => {
+    const visible = [...g.querySelectorAll('.nc-ape-item')].some(it => it.style.display !== 'none');
+    g.style.display = visible ? 'block' : 'none';
+  });
+}
+function toggleNcApe(code, checked) {
+  if (checked) _ncSelectedApe.add(code); else _ncSelectedApe.delete(code);
+  updateNcApeButton();
+}
+function toggleNcEff(code, checked) {
+  if (checked) _ncSelectedEff.add(code); else _ncSelectedEff.delete(code);
+  updateNcEffButton();
+}
+function toggleAllNcApe(checked) {
+  document.querySelectorAll('#nc-sirene-ape-list .nc-ape-item').forEach(item => {
+    if (item.style.display === 'none') return;
+    const cb = item.querySelector('input[type=checkbox]');
+    if (!cb) return;
+    cb.checked = checked;
+    if (checked) _ncSelectedApe.add(cb.value); else _ncSelectedApe.delete(cb.value);
+  });
+  updateNcApeButton();
+}
+function toggleAllNcEff(checked) {
+  document.querySelectorAll('#nc-sirene-eff-list input[type=checkbox]').forEach(cb => {
+    cb.checked = checked;
+    if (checked) _ncSelectedEff.add(cb.value); else _ncSelectedEff.delete(cb.value);
+  });
+  updateNcEffButton();
+}
+function updateNcApeButton() {
+  const btn = document.getElementById('nc-sirene-ape-btn');
+  const hidden = document.getElementById('nc-sirene-ape');
+  if (!btn || !hidden) return;
+  if (_ncSelectedApe.size === 0) btn.textContent = '— Tous —';
+  else btn.textContent = _ncSelectedApe.size + ' code(s)';
+  hidden.value = [..._ncSelectedApe].join(',');
+}
+function updateNcEffButton() {
+  const btn = document.getElementById('nc-sirene-eff-btn');
+  const hidden = document.getElementById('nc-sirene-eff');
+  if (!btn || !hidden) return;
+  if (_ncSelectedEff.size === 0) btn.textContent = '— Tous —';
+  else btn.textContent = _ncSelectedEff.size + ' tranche(s)';
+  hidden.value = [..._ncSelectedEff].join(',');
+}
+function resetSireneNcFilters() {
+  document.getElementById('nc-sirene-search').value = '';
+  document.getElementById('nc-sirene-dept').value = '';
+  document.getElementById('nc-sirene-cp').value = '';
+  document.getElementById('nc-sirene-cat').value = '';
+  document.getElementById('nc-sirene-etat').value = 'A';
+  _ncSelectedApe.clear(); _ncSelectedEff.clear();
+  document.querySelectorAll('#nc-sirene-ape-list input[type=checkbox]').forEach(cb => cb.checked = false);
+  document.querySelectorAll('#nc-sirene-eff-list input[type=checkbox]').forEach(cb => cb.checked = false);
+  updateNcApeButton(); updateNcEffButton();
+  document.getElementById('nc-sirene-results').style.display = 'none';
+  document.getElementById('nc-sirene-count').textContent = '';
+}
+// Fermer dropdowns au clic extérieur
+document.addEventListener('click', e => {
+  if (!e.target.closest('#nc-sirene-ape-dd') && !e.target.closest('#nc-sirene-ape-btn')) {
+    const d = document.getElementById('nc-sirene-ape-dd'); if (d) d.style.display = 'none';
+  }
+  if (!e.target.closest('#nc-sirene-eff-dd') && !e.target.closest('#nc-sirene-eff-btn')) {
+    const d = document.getElementById('nc-sirene-eff-dd'); if (d) d.style.display = 'none';
+  }
+});
+
 async function searchSirene() {
   const q = document.getElementById('nc-sirene-search').value.trim();
-  if (!q) return;
+  const dept = document.getElementById('nc-sirene-dept').value;
+  const cp = document.getElementById('nc-sirene-cp').value.trim();
+  const ape = document.getElementById('nc-sirene-ape').value.trim();
+  const eff = document.getElementById('nc-sirene-eff').value.trim();
+  const cat = document.getElementById('nc-sirene-cat').value;
+  const etat = document.getElementById('nc-sirene-etat').value;
+
   const resultsDiv = document.getElementById('nc-sirene-results');
+  const countEl = document.getElementById('nc-sirene-count');
   resultsDiv.style.display = 'block';
   resultsDiv.innerHTML = '<div style="padding:12px;text-align:center;color:var(--t3);font-size:12px">Recherche en cours...</div>';
 
   try {
-    const isNum = /^\d+$/.test(q.replace(/\s/g, ''));
+    const params = new URLSearchParams();
+    // SIRET ou SIREN exact
     const cleanQ = q.replace(/\s/g, '');
-    let url;
-    if (isNum && cleanQ.length === 14) {
-      // SIRET exact
-      url = `https://recherche-entreprises.api.gouv.fr/search?q=${cleanQ}&mtm_campaign=crm-novam`;
-    } else if (isNum && cleanQ.length === 9) {
-      // SIREN exact
-      url = `https://recherche-entreprises.api.gouv.fr/search?q=${cleanQ}&mtm_campaign=crm-novam`;
-    } else {
-      // Recherche par nom
-      url = `https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(q)}&mtm_campaign=crm-novam&per_page=10`;
+    const isNum = /^\d+$/.test(cleanQ);
+    if (isNum && (cleanQ.length === 9 || cleanQ.length === 14)) {
+      params.set('q', cleanQ);
+    } else if (q) {
+      params.set('q', q);
+    }
+    if (dept) params.set('departement', dept);
+    if (cp) params.set('code_postal', cp);
+    if (ape) params.set('activite_principale', ape);
+    if (eff) params.set('tranche_effectif_salarie', eff);
+    if (cat) params.set('categorie_entreprise', cat);
+    if (etat) params.set('etat_administratif', etat);
+    params.set('per_page', '25');
+    params.set('mtm_campaign', 'crm-novam');
+
+    if ([...params.keys()].filter(k => !['per_page','mtm_campaign','etat_administratif'].includes(k)).length === 0) {
+      resultsDiv.innerHTML = '<div style="padding:12px;text-align:center;color:var(--t3);font-size:12px">Renseignez au moins un filtre.</div>';
+      return;
     }
 
-    const resp = await fetch(url);
+    const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + params.toString());
     const data = await resp.json();
     const results = data.results || [];
+    countEl.textContent = (data.total_results || 0) + ' résultats au total (' + results.length + ' affichés)';
 
     if (results.length === 0) {
       resultsDiv.innerHTML = '<div style="padding:12px;text-align:center;color:var(--t3);font-size:12px">Aucun résultat trouvé</div>';
@@ -8197,21 +8394,25 @@ async function searchSirene() {
       const nom = r.nom_complet || r.nom_raison_sociale || '';
       const siret = siege.siret || '';
       const ville = siege.libelle_commune || '';
-      const cp = siege.code_postal || '';
+      const cp2 = siege.code_postal || '';
+      const dept2 = siege.departement || '';
       const activite = siege.activite_principale || r.activite_principale || '';
+      const effFmt = r.tranche_effectif_salarie || '?';
+      const cat2 = r.categorie_entreprise || '—';
+      const etatLabel = r.etat_administratif === 'A' ? '<span style="color:var(--green)">●</span> Active' : '<span style="color:var(--red)">●</span> Cessée';
       return `<div style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px"
         onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
         onclick="fillFromSirene(${i})">
-        <div style="font-weight:600;color:var(--t1)">${nom}</div>
-        <div style="color:var(--t3);margin-top:2px">SIRET: ${siret} | ${cp} ${ville} | APE: ${activite}</div>
+        <div style="display:flex;justify-content:space-between;gap:8px"><div style="font-weight:600;color:var(--t1)">${nom}</div><div style="font-size:11px">${etatLabel}</div></div>
+        <div style="color:var(--t3);margin-top:2px;font-size:11px">SIRET: ${siret} | APE: ${activite} | Effectif: ${effFmt} | Cat: ${cat2}</div>
+        <div style="color:var(--t3);font-size:11px">📍 ${cp2} ${ville} (${dept2})</div>
       </div>`;
     }).join('');
 
-    // Stocker les résultats pour fillFromSirene
     window._sireneResults = results;
   } catch (e) {
     console.error('Sirene search error:', e);
-    resultsDiv.innerHTML = '<div style="padding:12px;text-align:center;color:var(--red);font-size:12px">Erreur lors de la recherche</div>';
+    resultsDiv.innerHTML = '<div style="padding:12px;text-align:center;color:var(--red);font-size:12px">Erreur lors de la recherche: ' + e.message + '</div>';
   }
 }
 
