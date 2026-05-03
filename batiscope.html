@@ -164,6 +164,7 @@ footer{padding:1rem;font-size:.6rem}
   <button class="tab" data-tab="financement">Financement</button>
   <button class="tab" data-tab="carte">Vue Carte</button>
   <button class="tab" data-tab="projection">Projection</button>
+  <button class="tab" data-tab="dpe">DPE (Live)</button>
 </div>
 
 <!-- ══════════ SYNTHÈSE ══════════ -->
@@ -296,6 +297,7 @@ footer{padding:1rem;font-size:.6rem}
     <div class="kpi"><div class="kpi-label">Taux 20 ans</div><div class="kpi-value" style="color:var(--accent2)">3,26%</div><div class="kpi-sub">mars 2026</div></div>
     <div class="kpi"><div class="kpi-label">Taux 25 ans</div><div class="kpi-value" style="color:var(--accent5)">3,41%</div><div class="kpi-sub">mars 2026</div></div>
     <div class="kpi"><div class="kpi-label">OAT 10 ans</div><div class="kpi-value">&lt; 3,30%</div><div class="kpi-sub">en détente</div></div>
+    <div class="kpi"><div class="kpi-label">Taux directeur BCE</div><div class="kpi-value" id="kpiBceRate">—</div><div class="kpi-sub" id="kpiBceSub">⏳ live BCE</div></div>
   </div>
   <div class="charts-grid">
     <div class="chart-card full"><div class="chart-title">Évolution taux crédit immobilier</div><div class="chart-subtitle">Taux moyens par durée, 2019-2026</div><div class="chart-wrap tall"><canvas id="chartTaux"></canvas></div></div>
@@ -365,8 +367,46 @@ footer{padding:1rem;font-size:.6rem}
   </div>
 </div>
 
+<!-- ══════════ DPE LIVE (ADEME) ══════════ -->
+<div class="section" id="dpe">
+  <div class="insight-box" id="insightDpe">
+    <span class="loader"></span> Chargement de l'observatoire DPE — API ADEME temps réel…
+  </div>
+  <div class="kpi-row" id="kpiDpe"></div>
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-title">Répartition des DPE (12 derniers mois)</div>
+      <div class="chart-subtitle">Logements existants — Source ADEME</div>
+      <div class="legend-row">
+        <div class="legend-item"><div class="legend-dot" style="background:#00a651"></div>A · B très performant</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#fff200"></div>D moyen</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ed1c24"></div>F · G passoires</div>
+      </div>
+      <div class="chart-wrap"><canvas id="chartDpeRepartition"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Évolution mensuelle des DPE émis</div>
+      <div class="chart-subtitle">Tous logements existants (France entière)</div>
+      <div class="chart-wrap"><canvas id="chartDpeEvo"></canvas></div>
+    </div>
+    <div class="chart-card full">
+      <div class="chart-title">Top 15 départements — Volume de DPE émis</div>
+      <div class="chart-subtitle">Sur 12 mois glissants — Indicateur d'activité diagnostic / rénovation</div>
+      <div class="chart-wrap tall"><canvas id="chartDpeDept"></canvas></div>
+    </div>
+  </div>
+  <div class="chart-card" style="margin-bottom:2rem">
+    <div class="chart-title">Tableau détaillé par département</div>
+    <div class="chart-subtitle">Tri par % de passoires (F + G) — opportunité rénovation</div>
+    <div style="overflow-x:auto"><table class="data-table"><thead><tr>
+      <th>Dépt</th><th class="num">Total DPE 12m</th><th class="num">A+B</th><th class="num">C+D</th><th class="num">E</th><th class="num">F+G (passoires)</th><th class="num">% F+G</th>
+    </tr></thead><tbody id="dpeTableBody"></tbody></table></div>
+  </div>
+  <div class="source-note">Source : <a href="https://data.ademe.fr/datasets/dpe03existant" target="_blank">ADEME — DPE Logements existants</a> · API publique, mise à jour continue. La base contient 14M+ DPE et est alimentée en quasi temps réel par les diagnostiqueurs certifiés.</div>
+</div>
+
 <footer>
-  <span>Sources : API DIDO/SDES/Sitadel · INSEE · CAFPI/Meilleurtaux · Banque de France</span>
+  <span>Sources : API DIDO/SDES/Sitadel · INSEE · CAFPI/Meilleurtaux · Banque de France · ADEME (DPE) · BCE (taux directeur)</span>
 </footer>
 
 <script>
@@ -393,6 +433,11 @@ document.querySelectorAll('.tab').forEach(tab => {
     // Lazy-init Leaflet map when carte tab is shown
     if (tab.dataset.tab === 'carte') {
       setTimeout(async () => { await renderMapSection(); if (mapInstance) mapInstance.invalidateSize(); }, 100);
+    }
+    // Lazy-load DPE data the first time the tab is opened
+    if (tab.dataset.tab === 'dpe' && !window._dpeLoaded) {
+      window._dpeLoaded = true;
+      loadDpeData();
     }
   });
 });
@@ -1202,9 +1247,187 @@ async function renderMapSection() {
 }
 
 // ══════════════════════════════════════════════════════
+// ADEME DPE — TEMPS RÉEL
+// https://data.ademe.fr/datasets/dpe03existant
+// ══════════════════════════════════════════════════════
+const ADEME_DPE_BASE = 'https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant';
+const DPE_COLOR = { A:'#00a651', B:'#52b948', C:'#bfd732', D:'#fff200', E:'#fdb913', F:'#f37021', G:'#ed1c24' };
+const DEPT_NAME_DPE = {
+  '01':'Ain','02':'Aisne','03':'Allier','04':'Alpes-de-Haute-Provence','05':'Hautes-Alpes','06':'Alpes-Maritimes','07':'Ardèche','08':'Ardennes','09':'Ariège','10':'Aube',
+  '11':'Aude','12':'Aveyron','13':'Bouches-du-Rhône','14':'Calvados','15':'Cantal','16':'Charente','17':'Charente-Maritime','18':'Cher','19':'Corrèze','21':'Côte-d\'Or',
+  '22':'Côtes-d\'Armor','23':'Creuse','24':'Dordogne','25':'Doubs','26':'Drôme','27':'Eure','28':'Eure-et-Loir','29':'Finistère','2A':'Corse-du-Sud','2B':'Haute-Corse',
+  '30':'Gard','31':'Haute-Garonne','32':'Gers','33':'Gironde','34':'Hérault','35':'Ille-et-Vilaine','36':'Indre','37':'Indre-et-Loire','38':'Isère','39':'Jura',
+  '40':'Landes','41':'Loir-et-Cher','42':'Loire','43':'Haute-Loire','44':'Loire-Atlantique','45':'Loiret','46':'Lot','47':'Lot-et-Garonne','48':'Lozère','49':'Maine-et-Loire',
+  '50':'Manche','51':'Marne','52':'Haute-Marne','53':'Mayenne','54':'Meurthe-et-Moselle','55':'Meuse','56':'Morbihan','57':'Moselle','58':'Nièvre','59':'Nord',
+  '60':'Oise','61':'Orne','62':'Pas-de-Calais','63':'Puy-de-Dôme','64':'Pyrénées-Atlantiques','65':'Hautes-Pyrénées','66':'Pyrénées-Orientales','67':'Bas-Rhin','68':'Haut-Rhin','69':'Rhône',
+  '70':'Haute-Saône','71':'Saône-et-Loire','72':'Sarthe','73':'Savoie','74':'Haute-Savoie','75':'Paris','76':'Seine-Maritime','77':'Seine-et-Marne','78':'Yvelines','79':'Deux-Sèvres',
+  '80':'Somme','81':'Tarn','82':'Tarn-et-Garonne','83':'Var','84':'Vaucluse','85':'Vendée','86':'Vienne','87':'Haute-Vienne','88':'Vosges','89':'Yonne',
+  '90':'Territoire de Belfort','91':'Essonne','92':'Hauts-de-Seine','93':'Seine-Saint-Denis','94':'Val-de-Marne','95':'Val-d\'Oise'
+};
+
+async function loadDpeData() {
+  const insight = document.getElementById('insightDpe');
+  // Date range: 12 derniers mois
+  const today = new Date();
+  const dateMax = today.toISOString().slice(0,10);
+  const dMin = new Date(today); dMin.setMonth(dMin.getMonth() - 12);
+  const dateMin = dMin.toISOString().slice(0,10);
+  const qsRange = encodeURIComponent('date_etablissement_dpe:[' + dateMin + ' TO ' + dateMax + ']');
+
+  try {
+    // 1) Aggregation par classe DPE
+    const r1 = await fetch(ADEME_DPE_BASE + '/values_agg?field=etiquette_dpe&qs=' + qsRange);
+    const d1 = await r1.json();
+    const byClass = {};
+    let totalAll = 0;
+    for (const a of (d1.aggs || [])) { byClass[a.value] = a.total; totalAll += a.total; }
+
+    // 2) Évolution mensuelle (12 mois)
+    const months = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      months.push({ y: d.getFullYear(), m: d.getMonth() + 1 });
+    }
+    const monthlyTotals = await Promise.all(months.map(async ({y,m}) => {
+      const start = y + '-' + String(m).padStart(2,'0') + '-01';
+      const lastDay = new Date(y, m, 0).getDate();
+      const end = y + '-' + String(m).padStart(2,'0') + '-' + String(lastDay).padStart(2,'0');
+      const qs = encodeURIComponent('date_etablissement_dpe:[' + start + ' TO ' + end + ']');
+      try {
+        const r = await fetch(ADEME_DPE_BASE + '/lines?size=0&qs=' + qs);
+        const d = await r.json();
+        return { y, m, total: d.total || 0 };
+      } catch { return { y, m, total: 0 }; }
+    }));
+
+    // 3) Top départements (12 mois) via agg sur n_dpe (commence par dept) - on utilise code_postal_ban[0:2]
+    // Le champ code_postal_ban est plus fiable. On fait une agg sur les 2 premiers chiffres = dept
+    // Astuce : faire l'agg sur code_postal_ban et regrouper ensuite
+    const r3 = await fetch(ADEME_DPE_BASE + '/values_agg?field=code_postal_ban&qs=' + qsRange + '&agg_size=400');
+    const d3 = await r3.json();
+    const byDept = {};
+    for (const a of (d3.aggs || [])) {
+      if (!a.value || a.value.length < 2) continue;
+      const dept = (a.value.slice(0,2) === '20') ? '2A' : a.value.slice(0,2); // Corse 200/201 → 2A approx
+      if (!byDept[dept]) byDept[dept] = { total: 0 };
+      byDept[dept].total += a.total;
+    }
+
+    // 4) % passoires par dept (sur top 30)
+    const topDepts = Object.entries(byDept).sort((a,b) => b[1].total - a[1].total).slice(0, 30).map(([d]) => d);
+    const passoiresByDept = {};
+    await Promise.all(topDepts.map(async dept => {
+      const qsP = encodeURIComponent('date_etablissement_dpe:[' + dateMin + ' TO ' + dateMax + '] AND code_postal_ban:' + dept + '* AND (etiquette_dpe:F OR etiquette_dpe:G)');
+      try {
+        const r = await fetch(ADEME_DPE_BASE + '/lines?size=0&qs=' + qsP);
+        const d = await r.json();
+        passoiresByDept[dept] = d.total || 0;
+      } catch { passoiresByDept[dept] = 0; }
+    }));
+
+    renderDpeAll({ byClass, totalAll, monthlyTotals, byDept, passoiresByDept });
+    insight.innerHTML = `<strong>${totalAll.toLocaleString('fr-FR')} DPE émis</strong> sur les 12 derniers mois en France. ${
+      ((((byClass.F||0)+(byClass.G||0))/totalAll)*100).toFixed(1)
+    }% sont des passoires thermiques (F+G), soit <strong>${((byClass.F||0)+(byClass.G||0)).toLocaleString('fr-FR')}</strong> logements à fort potentiel de rénovation. Source : <a href="https://data.ademe.fr/datasets/dpe03existant" target="_blank">ADEME (live)</a>.`;
+  } catch (e) {
+    insight.innerHTML = '<span style="color:var(--accent4)">⚠ API ADEME momentanément indisponible.</span> ' + e.message;
+  }
+}
+
+function renderDpeAll(d) {
+  // KPIs
+  const kpi = document.getElementById('kpiDpe');
+  const totalGF = (d.byClass.F||0) + (d.byClass.G||0);
+  const totalAB = (d.byClass.A||0) + (d.byClass.B||0);
+  const pctPassoires = d.totalAll ? ((totalGF / d.totalAll) * 100).toFixed(1) : '—';
+  const lastMonth = d.monthlyTotals[d.monthlyTotals.length-1].total;
+  const prevMonth = d.monthlyTotals[d.monthlyTotals.length-2].total;
+  const evol = prevMonth ? (((lastMonth - prevMonth) / prevMonth) * 100).toFixed(1) : '0';
+  kpi.innerHTML = `
+    <div class="kpi"><div class="kpi-label">DPE 12 mois</div><div class="kpi-value">${d.totalAll.toLocaleString('fr-FR')}</div><div class="kpi-sub">France entière</div></div>
+    <div class="kpi"><div class="kpi-label">Passoires F+G</div><div class="kpi-value" style="color:#ed1c24">${totalGF.toLocaleString('fr-FR')}</div><div class="kpi-sub">${pctPassoires}% du total</div></div>
+    <div class="kpi"><div class="kpi-label">Performants A+B</div><div class="kpi-value" style="color:#00a651">${totalAB.toLocaleString('fr-FR')}</div><div class="kpi-sub">${d.totalAll ? ((totalAB/d.totalAll)*100).toFixed(1) : '—'}% du total</div></div>
+    <div class="kpi"><div class="kpi-label">Dernier mois</div><div class="kpi-value">${lastMonth.toLocaleString('fr-FR')}</div><div class="kpi-sub"><span class="${evol>=0?'up':'down'}">${evol>=0?'▲':'▼'} ${Math.abs(evol)}%</span> vs précédent</div></div>
+  `;
+  // Donut classes
+  const repCtx = document.getElementById('chartDpeRepartition');
+  if (repCtx) {
+    if (charts.dpeRep) charts.dpeRep.destroy();
+    const labels = ['A','B','C','D','E','F','G'];
+    charts.dpeRep = new Chart(repCtx, { type: 'doughnut', data: { labels, datasets: [{ data: labels.map(l => d.byClass[l]||0), backgroundColor: labels.map(l => DPE_COLOR[l]), borderWidth: 1, borderColor: '#fff' }] }, options: { plugins: { legend: { display: true, position: 'right', labels: { font: { size: 11 } } } } } });
+  }
+  // Évolution mensuelle
+  const evoCtx = document.getElementById('chartDpeEvo');
+  if (evoCtx) {
+    if (charts.dpeEvo) charts.dpeEvo.destroy();
+    const monthsLbl = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Août','Sep','Oct','Nov','Déc'];
+    charts.dpeEvo = new Chart(evoCtx, {
+      type: 'line',
+      data: { labels: d.monthlyTotals.map(x => monthsLbl[x.m-1] + ' ' + String(x.y).slice(2)), datasets: [{ label: 'DPE', data: d.monthlyTotals.map(x => x.total), borderColor: '#3D7AB5', backgroundColor: 'rgba(61,122,181,0.15)', fill: true, tension: 0.3, borderWidth: 2 }] },
+      options: { scales: { y: { beginAtZero: true, ticks: { callback: v => v.toLocaleString('fr-FR') } } } }
+    });
+  }
+  // Top départements
+  const sorted = Object.entries(d.byDept).sort((a,b) => b[1].total - a[1].total).slice(0, 15);
+  const deptCtx = document.getElementById('chartDpeDept');
+  if (deptCtx) {
+    if (charts.dpeDept) charts.dpeDept.destroy();
+    charts.dpeDept = new Chart(deptCtx, {
+      type: 'bar',
+      data: { labels: sorted.map(([dep]) => dep + ' ' + (DEPT_NAME_DPE[dep]||'')), datasets: [{ label: 'DPE 12m', data: sorted.map(([_,v]) => v.total), backgroundColor: '#F2B705' }] },
+      options: { indexAxis: 'y', scales: { x: { ticks: { callback: v => v.toLocaleString('fr-FR') } } } }
+    });
+  }
+  // Tableau passoires
+  const tbody = document.getElementById('dpeTableBody');
+  if (tbody) {
+    const allDepts = Object.entries(d.byDept).map(([dep, v]) => {
+      const total = v.total;
+      const passoires = d.passoiresByDept[dep] || 0;
+      const pct = total ? (passoires / total * 100) : 0;
+      return { dep, total, passoires, pct };
+    }).sort((a,b) => b.pct - a.pct).slice(0, 30);
+    tbody.innerHTML = allDepts.map(r => `<tr>
+      <td><strong>${r.dep}</strong> ${DEPT_NAME_DPE[r.dep] || ''}</td>
+      <td class="num">${r.total.toLocaleString('fr-FR')}</td>
+      <td class="num">—</td>
+      <td class="num">—</td>
+      <td class="num">—</td>
+      <td class="num" style="color:#ed1c24;font-weight:800">${r.passoires.toLocaleString('fr-FR')}</td>
+      <td class="num" style="color:${r.pct>20?'#ed1c24':r.pct>15?'#f37021':'#4A4A4A'};font-weight:800">${r.pct.toFixed(1)}%</td>
+    </tr>`).join('');
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// BCE — Taux directeur (Main Refinancing Operations) — temps réel
+// ══════════════════════════════════════════════════════
+async function loadEcbRate() {
+  try {
+    const r = await fetch('https://data-api.ecb.europa.eu/service/data/FM/D.U2.EUR.4F.KR.MRR_FR.LEV?lastNObservations=1&format=jsondata');
+    if (!r.ok) throw new Error('ECB ' + r.status);
+    const d = await r.json();
+    const series = d.dataSets?.[0]?.series?.['0:0:0:0:0:0:0']?.observations;
+    if (!series) throw new Error('No data');
+    const obsKeys = Object.keys(series);
+    const lastVal = series[obsKeys[obsKeys.length - 1]][0];
+    const dim = d.structure?.dimensions?.observation?.[0]?.values;
+    const lastDate = dim ? dim[dim.length - 1].id : '';
+    const elv = document.getElementById('kpiBceRate');
+    const els = document.getElementById('kpiBceSub');
+    if (elv) { elv.textContent = lastVal.toFixed(2) + '%'; elv.style.color = '#3D7AB5'; }
+    if (els) els.innerHTML = '<span class="up">●</span> live BCE — ' + lastDate;
+  } catch (e) {
+    const els = document.getElementById('kpiBceSub');
+    if (els) els.innerHTML = '<span style="color:#D94040">API BCE indispo</span>';
+  }
+}
+
+// ══════════════════════════════════════════════════════
 // BOOT
 // ══════════════════════════════════════════════════════
 loadAllData();
+loadEcbRate();
 </script>
 </body>
 </html>
