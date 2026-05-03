@@ -8422,6 +8422,19 @@ async function searchSirene() {
       }
     }
 
+    // Détecter les liens entre entreprises (dirigeants communs)
+    const dirMap = {};
+    for (const e of results) {
+      for (const d of (e.dirigeants || [])) {
+        const key = d.type_dirigeant === 'personne morale'
+          ? 'PM-' + (d.siren || d.denomination)
+          : 'PP-' + (d.nom || '') + '-' + (d.prenoms || '').split(' ')[0];
+        if (!key || key === 'PP--' || key === 'PM-') continue;
+        if (!dirMap[key]) dirMap[key] = { dirigeant: d, companies: [] };
+        dirMap[key].companies.push(e.siren);
+      }
+    }
+
     resultsDiv.innerHTML = results.map((r, i) => {
       const siege = r.siege || {};
       const nom = r.nom_complet || r.nom_raison_sociale || '';
@@ -8440,12 +8453,14 @@ async function searchSirene() {
       const existingHint = existing
         ? `<div onclick="event.stopPropagation();showClient('${existing.id}');closeModal('new-client')" style="margin-top:4px;padding:4px 8px;background:rgba(245,158,11,.1);border-left:3px solid #f59e0b;border-radius:4px;font-size:11px;color:#f59e0b;cursor:pointer">→ Voir la fiche existante : <strong>${existing.name}</strong></div>`
         : '';
+      const liensHTML = buildLiensHTML(r, dirMap, results);
       return `<div style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px;${existing?'opacity:0.85':''}"
         onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
         onclick="fillFromSirene(${i})">
         <div style="display:flex;justify-content:space-between;gap:8px"><div style="font-weight:600;color:var(--t1)">${nom}${existingBadge}</div><div style="font-size:11px">${etatLabel}</div></div>
         <div style="color:var(--t3);margin-top:2px;font-size:11px">SIRET: ${siret} | APE: ${activite} | Effectif: ${effFmt} | Cat: ${cat2}</div>
         <div style="color:var(--t3);font-size:11px">📍 ${cp2} ${ville} (${dept2})</div>
+        ${liensHTML}
         ${existingHint}
       </div>`;
     }).join('');
@@ -10298,6 +10313,19 @@ async function searchProspects(page) {
       }
     }
 
+    // Détecter les liens entre entreprises (dirigeants communs)
+    const dirigeantToCompanies = {};
+    for (const e of merged) {
+      for (const d of (e.dirigeants || [])) {
+        const key = d.type_dirigeant === 'personne morale'
+          ? 'PM-' + (d.siren || d.denomination)
+          : 'PP-' + (d.nom || '') + '-' + (d.prenoms || '').split(' ')[0];
+        if (!key || key === 'PP--' || key === 'PM-') continue;
+        if (!dirigeantToCompanies[key]) dirigeantToCompanies[key] = { dirigeant: d, companies: [] };
+        dirigeantToCompanies[key].companies.push(e.siren);
+      }
+    }
+
     status.textContent = '';
     resEl.innerHTML = merged.map((e, i) => {
       const s = e.siege || {};
@@ -10317,6 +10345,8 @@ async function searchProspects(page) {
       const existingLink = existing
         ? `<div onclick="event.stopPropagation();showClient('${existing.id}');closeModal('prospect-target')" style="margin-top:4px;padding:4px 8px;background:rgba(245,158,11,.1);border-left:3px solid #f59e0b;border-radius:4px;font-size:11px;color:#f59e0b;cursor:pointer;display:inline-block">→ Voir la fiche existante : <strong>${existing.name}</strong></div>`
         : '';
+      // Liens : dirigeants personne morale (holdings) + dirigeants en commun
+      const liensHTML = buildLiensHTML(e, dirigeantToCompanies, merged);
       return `<div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start;${existing?'opacity:0.7':''}">
         <input type="checkbox" class="pt-check" data-idx="${i}" ${existing?'disabled':''} style="margin-top:6px">
         <div style="flex:1;font-size:12px">
@@ -10330,6 +10360,7 @@ async function searchProspects(page) {
           <div style="color:var(--t3);font-size:11px">
             📍 ${(s.adresse || [s.numero_voie, s.type_voie, s.libelle_voie].filter(Boolean).join(' '))} ${cp2} ${ville} (${dept2})
           </div>
+          ${liensHTML}
           ${existingLink}
         </div>
       </div>`;
@@ -10361,6 +10392,43 @@ async function searchProspects(page) {
     status.textContent = '';
     resEl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--red)">Erreur: ' + e.message + '</div>';
   }
+}
+
+function buildLiensHTML(entreprise, dirigeantMap, allResults) {
+  const dirs = entreprise.dirigeants || [];
+  if (!dirs.length) return '';
+  const blocs = [];
+  // 1. Dirigeants personne morale (holdings, sociétés mères)
+  const holdings = dirs.filter(d => d.type_dirigeant === 'personne morale' && d.siren);
+  if (holdings.length > 0) {
+    blocs.push(holdings.map(h => `<a href="https://www.pappers.fr/entreprise/${h.siren}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="display:inline-block;padding:2px 8px;border-radius:4px;background:rgba(99,102,241,.15);color:#6366f1;font-size:10px;font-weight:600;text-decoration:none;margin-right:4px;margin-top:2px" title="${h.qualite || ''}">🏢 ${h.denomination || h.siren} ${h.qualite ? '· '+h.qualite : ''}</a>`).join(''));
+  }
+  // 2. Personnes physiques avec d'autres entreprises dans les résultats
+  const linkedCompanies = new Set();
+  for (const d of dirs) {
+    if (d.type_dirigeant === 'personne morale') continue;
+    const key = 'PP-' + (d.nom || '') + '-' + (d.prenoms || '').split(' ')[0];
+    const dm = dirigeantMap[key];
+    if (dm && dm.companies.length > 1) {
+      for (const sir of dm.companies) {
+        if (sir !== entreprise.siren) linkedCompanies.add(sir);
+      }
+    }
+  }
+  if (linkedCompanies.size > 0) {
+    const linkedNames = [...linkedCompanies].map(sir => {
+      const target = allResults.find(x => x.siren === sir);
+      return target ? `<a href="https://www.pappers.fr/entreprise/${sir}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#10b981;text-decoration:none;font-weight:600">${target.nom_complet || target.nom_raison_sociale}</a>` : sir;
+    }).join(', ');
+    blocs.push(`<div style="margin-top:3px;padding:3px 6px;background:rgba(16,185,129,.1);border-left:2px solid #10b981;border-radius:3px;font-size:10px;color:#10b981">👥 Mêmes dirigeants que : ${linkedNames}</div>`);
+  }
+  // 3. Premiers dirigeants (si non holding)
+  const persPhys = dirs.filter(d => d.type_dirigeant !== 'personne morale').slice(0, 2);
+  if (persPhys.length > 0) {
+    const dirText = persPhys.map(d => `${d.prenoms ? d.prenoms.split(' ')[0] + ' ' : ''}${d.nom} <span style="color:var(--t3)">${d.qualite ? '('+d.qualite+')' : ''}</span>`).join(' · ');
+    blocs.push(`<div style="margin-top:3px;font-size:10px;color:var(--t3)">👤 ${dirText}</div>`);
+  }
+  return blocs.length > 0 ? '<div style="margin-top:4px">' + blocs.join('') + '</div>' : '';
 }
 
 function ptToggleAll(checked) {
