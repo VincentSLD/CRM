@@ -5221,7 +5221,19 @@ async function loadAkuiteoRefs() {
       akRef.sectors = (sectors || []).map(c => ({ id: c.id, code: c.code, name: c.name }));
       akRef.linkTypes = (linkTypes || []).map(c => ({ id: String(c.id), code: c.code, name: c.name }));
       akRef.pricingMethods = (pricingMethods || []).map(c => ({ id: c.id, code: c.code, name: c.name }));
-      akRef.employees = (employees || []).map(e => ({ id: e.id, code: e.code, name: ((e.firstName||'') + ' ' + (e.name||'')).trim() }));
+      // Filtrer les comptes génériques (Dessinateur, Ingénieur, etc. déclinés par agence)
+      // et ajouter le code Akuiteo en suffixe pour les vrais doublons (même prénom+nom)
+      const realEmployees = (employees || []).filter(e => !e.generic);
+      const nameCount = {};
+      for (const e of realEmployees) {
+        const fn = ((e.firstName||'') + ' ' + (e.name||'')).trim();
+        nameCount[fn] = (nameCount[fn] || 0) + 1;
+      }
+      akRef.employees = realEmployees.map(e => {
+        const fn = ((e.firstName||'') + ' ' + (e.name||'')).trim();
+        const label = nameCount[fn] > 1 ? `${fn} (${e.code || e.id})` : fn;
+        return { id: e.id, code: e.code, name: label };
+      }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       console.log('[AkRef] Chargé:', akRef.categories.length, 'cats,', akRef.subCategories.length, 'subCats,', akRef.employees.length, 'employees');
     } catch (e) { console.error('[AkRef] Erreur chargement:', e.message); }
     akRef._loading = null;
