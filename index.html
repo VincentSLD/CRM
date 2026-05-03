@@ -2181,25 +2181,23 @@ tbody tr:last-child td { border-bottom: none; }
             </select></div>
           <div class="fg"><label class="fl">Code postal</label>
             <input class="fi" id="pt-cp" placeholder="Ex: 85000" style="font-size:12px"></div>
-          <div class="fg"><label class="fl">Code APE / NAF</label>
-            <input class="fi" id="pt-ape" placeholder="Ex: 41.20B, 71.12B" style="font-size:12px"></div>
-          <div class="fg"><label class="fl">Effectif min</label>
-            <select class="fi" id="pt-eff-min" style="font-size:12px">
-              <option value="">— Indifférent —</option>
-              <option value="00">0 salarié</option>
-              <option value="01">1-2 salariés</option>
-              <option value="02">3-5 salariés</option>
-              <option value="03">6-9 salariés</option>
-              <option value="11">10-19 salariés</option>
-              <option value="12">20-49 salariés</option>
-              <option value="21">50-99 salariés</option>
-              <option value="22">100-199 salariés</option>
-              <option value="31">200-249 salariés</option>
-              <option value="32">250-499 salariés</option>
-              <option value="41">500-999 salariés</option>
-              <option value="42">1000-1999 salariés</option>
-              <option value="51">2000-4999 salariés</option>
-            </select></div>
+          <div class="fg" style="position:relative"><label class="fl">Codes APE / NAF (multi)</label>
+            <button type="button" class="fi" id="pt-ape-btn" onclick="togglePtDropdown('pt-ape-dd')" style="font-size:12px;text-align:left;cursor:pointer;background:var(--card)">— Tous —</button>
+            <input type="hidden" id="pt-ape">
+            <div id="pt-ape-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:280px;overflow-y:auto;box-shadow:0 6px 18px rgba(0,0,0,.15);margin-top:2px">
+              <div style="padding:6px 8px;border-bottom:1px solid var(--border);background:var(--bg-2)">
+                <input type="text" id="pt-ape-search" placeholder="Rechercher..." style="width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:var(--bg-1);color:var(--t1)" oninput="filterApeList(this.value)">
+              </div>
+              <div id="pt-ape-list" style="padding:4px 0"></div>
+            </div>
+          </div>
+          <div class="fg" style="position:relative"><label class="fl">Effectifs (multi)</label>
+            <button type="button" class="fi" id="pt-eff-btn" onclick="togglePtDropdown('pt-eff-dd')" style="font-size:12px;text-align:left;cursor:pointer;background:var(--card)">— Tous —</button>
+            <input type="hidden" id="pt-eff-min">
+            <div id="pt-eff-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:280px;overflow-y:auto;box-shadow:0 6px 18px rgba(0,0,0,.15);margin-top:2px">
+              <div id="pt-eff-list" style="padding:4px 0"></div>
+            </div>
+          </div>
           <div class="fg"><label class="fl">Catégorie</label>
             <select class="fi" id="pt-cat" style="font-size:12px">
               <option value="">— Toutes —</option>
@@ -2229,6 +2227,7 @@ tbody tr:last-child td { border-bottom: none; }
         </div>
       </div>
       <div id="pt-results" style="max-height:50vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
+      <div id="pt-pagination" style="display:none;justify-content:center;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center"></div>
     </div>
   </div>
 </div>
@@ -9754,6 +9753,93 @@ async function doSearchSirene() {
 
 // ═══ CIBLAGE DE PROSPECTS via API SIRENE ═══
 let _prospectResults = [];
+let _prospectPage = 0;
+let _prospectTotal = 0;
+const PROSPECT_PER_PAGE = 100;
+
+// Liste des codes APE/NAF utiles pour BTP/Ingénierie/Construction
+const APE_LIST = [
+  { group: 'Construction de bâtiments', codes: [
+    ['41.10A', 'Promotion immobilière de logements'],
+    ['41.10B', 'Promotion immobilière de bureaux'],
+    ['41.10C', 'Promotion immobilière d\'autres bâtiments'],
+    ['41.10D', 'Supports juridiques de programmes'],
+    ['41.20A', 'Construction de maisons individuelles'],
+    ['41.20B', 'Construction d\'autres bâtiments'],
+  ]},
+  { group: 'Génie civil', codes: [
+    ['42.11Z', 'Construction de routes et autoroutes'],
+    ['42.12Z', 'Construction de voies ferrées'],
+    ['42.13A', 'Construction d\'ouvrages d\'art'],
+    ['42.13B', 'Construction et entretien de tunnels'],
+    ['42.21Z', 'Construction de réseaux pour fluides'],
+    ['42.22Z', 'Construction de réseaux électriques et de télécommunications'],
+    ['42.91Z', 'Construction d\'ouvrages maritimes et fluviaux'],
+    ['42.99Z', 'Construction d\'autres ouvrages de génie civil'],
+  ]},
+  { group: 'Travaux spécialisés', codes: [
+    ['43.11Z', 'Travaux de démolition'],
+    ['43.12A', 'Travaux de terrassement courants'],
+    ['43.12B', 'Travaux de terrassement spécialisés ou de grande masse'],
+    ['43.13Z', 'Forages et sondages'],
+    ['43.21A', 'Travaux d\'installation électrique dans tous locaux'],
+    ['43.21B', 'Travaux d\'installation électrique sur la voie publique'],
+    ['43.22A', 'Travaux d\'installation d\'eau et de gaz en tous locaux'],
+    ['43.22B', 'Travaux d\'installation d\'équipements thermiques et de climatisation'],
+    ['43.29A', 'Travaux d\'isolation'],
+    ['43.29B', 'Autres travaux d\'installation n.c.a.'],
+    ['43.31Z', 'Travaux de plâtrerie'],
+    ['43.32A', 'Travaux de menuiserie bois et PVC'],
+    ['43.32B', 'Travaux de menuiserie métallique et serrurerie'],
+    ['43.33Z', 'Travaux de revêtement des sols et des murs'],
+    ['43.34Z', 'Travaux de peinture et vitrerie'],
+    ['43.91A', 'Travaux de charpente'],
+    ['43.91B', 'Travaux de couverture par éléments'],
+    ['43.99A', 'Travaux d\'étanchéification'],
+    ['43.99B', 'Travaux de montage de structures métalliques'],
+    ['43.99C', 'Travaux de maçonnerie générale et gros oeuvre de bâtiment'],
+    ['43.99D', 'Autres travaux spécialisés de construction'],
+    ['43.99E', 'Location avec opérateur de matériel de construction'],
+  ]},
+  { group: 'Ingénierie & Architecture', codes: [
+    ['71.11Z', 'Activités d\'architecture'],
+    ['71.12A', 'Activités des géomètres'],
+    ['71.12B', 'Ingénierie, études techniques'],
+    ['71.20A', 'Contrôle technique automobile'],
+    ['71.20B', 'Analyses, essais et inspections techniques'],
+    ['74.10Z', 'Activités spécialisées de design'],
+  ]},
+  { group: 'Immobilier', codes: [
+    ['68.10Z', 'Activités des marchands de biens immobiliers'],
+    ['68.20A', 'Location de logements'],
+    ['68.20B', 'Location de terrains et autres biens immobiliers'],
+    ['68.31Z', 'Agences immobilières'],
+    ['68.32A', 'Administration d\'immeubles et autres biens'],
+    ['68.32B', 'Supports juridiques de gestion de patrimoine immobilier'],
+  ]},
+];
+
+const EFFECTIF_LIST = [
+  ['NN', 'Non employeur'],
+  ['00', '0 salarié'],
+  ['01', '1-2 salariés'],
+  ['02', '3-5 salariés'],
+  ['03', '6-9 salariés'],
+  ['11', '10-19 salariés'],
+  ['12', '20-49 salariés'],
+  ['21', '50-99 salariés'],
+  ['22', '100-199 salariés'],
+  ['31', '200-249 salariés'],
+  ['32', '250-499 salariés'],
+  ['41', '500-999 salariés'],
+  ['42', '1000-1999 salariés'],
+  ['51', '2000-4999 salariés'],
+  ['52', '5000-9999 salariés'],
+  ['53', '10000+ salariés'],
+];
+
+let _selectedApe = new Set();
+let _selectedEff = new Set();
 
 function initProspectFilters() {
   const sel = document.getElementById('pt-dept');
@@ -9761,26 +9847,118 @@ function initProspectFilters() {
     const opts = Object.entries(DEPT_NAMES).sort((a,b) => a[0].localeCompare(b[0]));
     sel.innerHTML = '<option value="">— Tous —</option>' + opts.map(([code, name]) => `<option value="${code}">${code} — ${name}</option>`).join('');
   }
+  // Construire la liste APE
+  const apeList = document.getElementById('pt-ape-list');
+  if (apeList && !apeList.dataset.built) {
+    apeList.innerHTML = APE_LIST.map(g => `
+      <div class="ape-grp" data-group="${g.group.toLowerCase()}">
+        <div style="padding:6px 10px;font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;background:var(--bg-2);border-bottom:1px solid var(--border)">${g.group}</div>
+        ${g.codes.map(([code, lib]) => `
+          <label class="ape-item" data-search="${(code+' '+lib).toLowerCase()}" style="display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)">
+            <input type="checkbox" value="${code}" onchange="toggleApe('${code}', this.checked)">
+            <span class="mono" style="font-weight:600;min-width:54px">${code}</span>
+            <span style="color:var(--t2)">${lib}</span>
+          </label>
+        `).join('')}
+      </div>
+    `).join('');
+    apeList.dataset.built = '1';
+  }
+  // Construire la liste effectifs
+  const effList = document.getElementById('pt-eff-list');
+  if (effList && !effList.dataset.built) {
+    effList.innerHTML = EFFECTIF_LIST.map(([code, lib]) => `
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)">
+        <input type="checkbox" value="${code}" onchange="toggleEff('${code}', this.checked)">
+        <span class="mono" style="font-weight:600;min-width:32px">${code}</span>
+        <span>${lib}</span>
+      </label>
+    `).join('');
+    effList.dataset.built = '1';
+  }
+  _selectedApe.clear(); _selectedEff.clear();
+  updateApeButton(); updateEffButton();
 }
 
+function togglePtDropdown(id) {
+  // Fermer les autres
+  ['pt-ape-dd','pt-eff-dd'].forEach(d => { if (d !== id) { const e = document.getElementById(d); if (e) e.style.display = 'none'; } });
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+}
+
+function filterApeList(q) {
+  q = (q || '').toLowerCase().trim();
+  document.querySelectorAll('#pt-ape-list .ape-item').forEach(el => {
+    el.style.display = !q || el.dataset.search.includes(q) ? 'flex' : 'none';
+  });
+  document.querySelectorAll('#pt-ape-list .ape-grp').forEach(g => {
+    const visible = [...g.querySelectorAll('.ape-item')].some(it => it.style.display !== 'none');
+    g.style.display = visible ? 'block' : 'none';
+  });
+}
+
+function toggleApe(code, checked) {
+  if (checked) _selectedApe.add(code); else _selectedApe.delete(code);
+  updateApeButton();
+}
+function toggleEff(code, checked) {
+  if (checked) _selectedEff.add(code); else _selectedEff.delete(code);
+  updateEffButton();
+}
+function updateApeButton() {
+  const btn = document.getElementById('pt-ape-btn');
+  const hidden = document.getElementById('pt-ape');
+  if (!btn || !hidden) return;
+  if (_selectedApe.size === 0) btn.textContent = '— Tous —';
+  else btn.textContent = _selectedApe.size + ' code(s) sélectionné(s)';
+  hidden.value = [..._selectedApe].join(',');
+}
+function updateEffButton() {
+  const btn = document.getElementById('pt-eff-btn');
+  const hidden = document.getElementById('pt-eff-min');
+  if (!btn || !hidden) return;
+  if (_selectedEff.size === 0) btn.textContent = '— Tous —';
+  else btn.textContent = _selectedEff.size + ' tranche(s) sélectionnée(s)';
+  hidden.value = [..._selectedEff].join(',');
+}
+
+// Fermer dropdowns au clic extérieur
+document.addEventListener('click', e => {
+  if (!e.target.closest('#pt-ape-dd') && !e.target.closest('#pt-ape-btn')) {
+    const d = document.getElementById('pt-ape-dd'); if (d) d.style.display = 'none';
+  }
+  if (!e.target.closest('#pt-eff-dd') && !e.target.closest('#pt-eff-btn')) {
+    const d = document.getElementById('pt-eff-dd'); if (d) d.style.display = 'none';
+  }
+});
+
 function resetProspectFilters() {
-  ['pt-q','pt-cp','pt-ape'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
-  ['pt-dept','pt-eff-min','pt-cat'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  ['pt-q','pt-cp'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  ['pt-dept','pt-cat'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  document.getElementById('pt-ape').value = '';
+  document.getElementById('pt-eff-min').value = '';
+  _selectedApe.clear(); _selectedEff.clear();
+  updateApeButton(); updateEffButton();
+  document.querySelectorAll('#pt-ape-list input[type=checkbox]').forEach(cb => cb.checked = false);
+  document.querySelectorAll('#pt-eff-list input[type=checkbox]').forEach(cb => cb.checked = false);
   const etat = document.getElementById('pt-etat'); if (etat) etat.value = 'A';
   document.getElementById('pt-results').innerHTML = '';
   document.getElementById('pt-status').textContent = 'Renseignez vos filtres et cliquez "Rechercher"';
   document.getElementById('pt-result-count').textContent = '';
+  document.getElementById('pt-pagination').style.display = 'none';
+  _prospectPage = 0; _prospectTotal = 0; _prospectResults = [];
 }
 
-async function searchProspects() {
+function buildProspectQuery() {
   const q = document.getElementById('pt-q').value.trim();
   const dept = document.getElementById('pt-dept').value;
   const cp = document.getElementById('pt-cp').value.trim();
   const ape = document.getElementById('pt-ape').value.trim();
-  const eff = document.getElementById('pt-eff-min').value;
+  const eff = document.getElementById('pt-eff-min').value.trim();
   const cat = document.getElementById('pt-cat').value;
   const etat = document.getElementById('pt-etat').value;
-
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   if (dept) params.set('departement', dept);
@@ -9789,37 +9967,61 @@ async function searchProspects() {
   if (eff) params.set('tranche_effectif_salarie', eff);
   if (cat) params.set('categorie_entreprise', cat);
   if (etat) params.set('etat_administratif', etat);
-  params.set('per_page', '25');
+  if ([...params.keys()].filter(k => k !== 'etat_administratif').length === 0) return null;
+  return params;
+}
 
-  if (params.toString() === 'per_page=25' || (q.length === 0 && !dept && !cp && !ape && !eff && !cat)) {
-    toast('Renseignez au moins un filtre', 'warn');
-    return;
-  }
+async function searchProspects(page) {
+  const params = buildProspectQuery();
+  if (!params) { toast('Renseignez au moins un filtre', 'warn'); return; }
+  _prospectPage = typeof page === 'number' ? page : 0;
 
   const status = document.getElementById('pt-status');
   const resEl = document.getElementById('pt-results');
   const countEl = document.getElementById('pt-result-count');
+  const pagEl = document.getElementById('pt-pagination');
   status.textContent = '🔍 Recherche en cours...';
-  resEl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--t3)">Chargement...</div>';
+  resEl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--t3)">Chargement page ' + (_prospectPage + 1) + '...</div>';
+  pagEl.style.display = 'none';
 
   try {
-    const url = 'https://recherche-entreprises.api.gouv.fr/search?' + params.toString() + '&mtm_campaign=crm-novam';
-    const r = await fetch(url);
-    const data = await r.json();
-    _prospectResults = data.results || [];
-    countEl.textContent = (data.total_results || 0) + ' résultats au total (25 affichés)';
-    if (_prospectResults.length === 0) {
+    // L'API SIRENE limite à per_page=25, on charge 4 pages pour avoir 100 résultats
+    const apiPageStart = _prospectPage * 4 + 1; // pages 1-4 = page 0 du CRM
+    const fetches = [];
+    for (let i = 0; i < 4; i++) {
+      const p = new URLSearchParams(params);
+      p.set('per_page', '25');
+      p.set('page', String(apiPageStart + i));
+      p.set('mtm_campaign', 'crm-novam');
+      fetches.push(fetch('https://recherche-entreprises.api.gouv.fr/search?' + p.toString()).then(r => r.json()).catch(() => null));
+    }
+    const responses = await Promise.all(fetches);
+    let merged = [];
+    let total = 0;
+    for (const r of responses) {
+      if (!r) continue;
+      total = r.total_results || total;
+      if (Array.isArray(r.results)) merged = merged.concat(r.results);
+    }
+    _prospectResults = merged;
+    _prospectTotal = total;
+
+    countEl.textContent = total + ' résultats au total — page ' + (_prospectPage + 1) + ' / ' + Math.max(1, Math.ceil(total / PROSPECT_PER_PAGE)) + ' (' + merged.length + ' affichés)';
+    if (merged.length === 0) {
       status.textContent = '';
       resEl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--t3)">Aucune entreprise trouvée avec ces filtres</div>';
       return;
     }
-    // Charger les SIRET déjà en base pour griser les déjà existants
-    const sirets = _prospectResults.map(r => r.siege?.siret).filter(Boolean);
-    const { data: existingClients } = await sb.from('clients').select('siret').in('siret', sirets);
-    const existingSirets = new Set((existingClients || []).map(c => c.siret));
+    // SIRETs existants pour griser les doublons
+    const sirets = merged.map(r => r.siege?.siret).filter(Boolean);
+    let existingSirets = new Set();
+    if (sirets.length) {
+      const { data: existingClients } = await sb.from('clients').select('siret').in('siret', sirets);
+      existingSirets = new Set((existingClients || []).map(c => c.siret));
+    }
 
     status.textContent = '';
-    resEl.innerHTML = _prospectResults.map((e, i) => {
+    resEl.innerHTML = merged.map((e, i) => {
       const s = e.siege || {};
       const exists = existingSirets.has(s.siret);
       const fullName = e.nom_complet || e.nom_raison_sociale || '';
@@ -9847,6 +10049,29 @@ async function searchProspects() {
         </div>
       </div>`;
     }).join('');
+
+    // Pagination
+    const totalPages = Math.ceil(total / PROSPECT_PER_PAGE);
+    if (totalPages > 1) {
+      pagEl.style.display = 'flex';
+      const cur = _prospectPage;
+      const buttons = [];
+      buttons.push(`<button class="btn" ${cur===0?'disabled':''} onclick="searchProspects(${cur-1})" style="font-size:11px">← Précédent</button>`);
+      // Pagination intelligente
+      const maxBtns = 7;
+      let start = Math.max(0, cur - 3);
+      let end = Math.min(totalPages, start + maxBtns);
+      if (end - start < maxBtns) start = Math.max(0, end - maxBtns);
+      if (start > 0) buttons.push(`<button class="btn" onclick="searchProspects(0)" style="font-size:11px">1</button>`);
+      if (start > 1) buttons.push('<span style="font-size:11px;color:var(--t3)">…</span>');
+      for (let p = start; p < end; p++) {
+        buttons.push(`<button class="btn ${p===cur?'btn-primary':''}" onclick="searchProspects(${p})" style="font-size:11px">${p+1}</button>`);
+      }
+      if (end < totalPages - 1) buttons.push('<span style="font-size:11px;color:var(--t3)">…</span>');
+      if (end < totalPages) buttons.push(`<button class="btn" onclick="searchProspects(${totalPages-1})" style="font-size:11px">${totalPages}</button>`);
+      buttons.push(`<button class="btn" ${cur>=totalPages-1?'disabled':''} onclick="searchProspects(${cur+1})" style="font-size:11px">Suivant →</button>`);
+      pagEl.innerHTML = buttons.join('');
+    }
   } catch (e) {
     status.textContent = '';
     resEl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--red)">Erreur: ' + e.message + '</div>';
