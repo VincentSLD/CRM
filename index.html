@@ -3780,14 +3780,17 @@ function renderClients(filter='all') {
     ${letters.map(l => `<button class="btn ${clientsLetter===l?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'${l}','')">${l}</button>`).join('')}
   </div>
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Société</th><th>Ville</th><th>Secteur</th><th>Statut</th></tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">Aucun client/prospect trouvé</td></tr>' : filtered.map(c => {
+    <table><thead><tr><th>Société</th><th>Ville</th><th>Secteur</th><th>Statut</th><th style="width:60px;text-align:center">Pappers</th></tr></thead>
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--t3)">Aucun client/prospect trouvé</td></tr>' : filtered.map(c => {
       const s = statusMap[c.status] || {cls:'',label:c.status};
+      const pappersRef = c.siren || c.siret;
+      const pappersLink = pappersRef ? '<a href="https://www.pappers.fr/entreprise/'+pappersRef+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Voir sur Pappers" style="color:#3b82f6;text-decoration:none;font-size:14px">📋</a>' : '<span style="color:var(--t3);font-size:11px">—</span>';
       return `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
         <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div><div><div class="cell-name">${c.name} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'};margin-left:4px;vertical-align:middle" title="${c.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span></div><div class="cell-code">${c.code}</div></div></div></td>
         <td style="font-size:12px">${c.city||''}</td>
         <td style="font-size:12px">${c.sector||''}</td>
         <td><span class="badge ${s.cls}">${s.label}</span></td>
+        <td style="text-align:center">${pappersLink}</td>
       </tr>`;
     }).join('')}</tbody></table>
   </div></div></div>
@@ -3864,6 +3867,7 @@ function renderClientDetail() {
         return '<button class="btn '+cls+'" onclick="openSireneModal(\''+c.id+'\',\''+((c.name||'').replace(/'/g,"\\'"))+'\')" title="'+title+'">'+label+'</button>';
       })()}
       ${c.akuiteo_id ? '<button class="btn" onclick="pullClientFromAkuiteo(\''+c.id+'\')" title="Récupérer les mises à jour depuis Akuiteo">⬇ Recup Akuiteo</button>' : ''}
+      ${(c.siren || c.siret) ? '<a href="https://www.pappers.fr/entreprise/'+(c.siren || c.siret)+'" target="_blank" rel="noopener" class="btn" style="text-decoration:none;background:#3b82f6;color:#fff;border-color:#3b82f6" title="Voir la fiche Pappers (infos juridiques, dirigeants, comptes...)">📋 Pappers</a>' : ''}
       <button class="btn ${c.akuiteo_id ? (c.akuiteo_dirty ? 'btn-not-synced' : 'btn-synced') : 'btn-not-synced'}" onclick="pushClientToAkuiteo('${c.id}')" title="${c.akuiteo_id ? (c.akuiteo_dirty ? 'Modifié localement — cliquez pour synchroniser' : 'Synchronisé (ID: '+c.akuiteo_id+')') : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? (c.akuiteo_dirty ? '⬆ Synchroniser' : '✔ Synchronisé') : '⬆ Sync Akuiteo'}</button>
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
       <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer ce client/prospect">Supprimer</button>
