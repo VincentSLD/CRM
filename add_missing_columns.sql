@@ -96,3 +96,41 @@ CREATE TABLE IF NOT EXISTS objectifs_clients (
 );
 ALTER TABLE objectifs_clients ENABLE ROW LEVEL SECURITY;
 CREATE POLICY IF NOT EXISTS "objectifs_clients_all" ON objectifs_clients FOR ALL USING (true) WITH CHECK (true);
+
+-- ═══ Concurrence ═══
+CREATE TABLE IF NOT EXISTS concurrents (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  nom TEXT NOT NULL,
+  raison_sociale TEXT,
+  siren TEXT,
+  siret TEXT,
+  ape TEXT,
+  ville TEXT,
+  code_postal TEXT,
+  departement TEXT,
+  region TEXT,
+  site_web TEXT,
+  metiers TEXT[],
+  notes TEXT,
+  couleur TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE concurrents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY IF NOT EXISTS "concurrents_all" ON concurrents FOR ALL USING (true) WITH CHECK (true);
+CREATE INDEX IF NOT EXISTS idx_concurrents_nom ON concurrents(nom);
+CREATE INDEX IF NOT EXISTS idx_concurrents_siren ON concurrents(siren);
+
+CREATE TABLE IF NOT EXISTS client_concurrents (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  client_id TEXT NOT NULL,
+  concurrent_id UUID NOT NULL REFERENCES concurrents(id) ON DELETE CASCADE,
+  metiers TEXT[],
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(client_id, concurrent_id)
+);
+ALTER TABLE client_concurrents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY IF NOT EXISTS "client_concurrents_all" ON client_concurrents FOR ALL USING (true) WITH CHECK (true);
+CREATE INDEX IF NOT EXISTS idx_client_concurrents_client ON client_concurrents(client_id);
+CREATE INDEX IF NOT EXISTS idx_client_concurrents_concurrent ON client_concurrents(concurrent_id);

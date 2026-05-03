@@ -1657,6 +1657,11 @@ tbody tr:last-child td { border-bottom: none; }
         Contacts
         <span class="nav-badge" id="navBadgeContacts" style="display:none"></span>
       </div>
+      <div class="nav-item" data-page="concurrence" onclick="go('concurrence')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 9a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0z"/><path d="M11 13.5h.5a4.5 4.5 0 0 1 4.5 4.5v3H6v-3a4.5 4.5 0 0 1 4.5-4.5z"/><path d="M19 8l2 2-2 2"/><path d="M5 8l-2 2 2 2"/></svg>
+        Concurrence
+        <span class="nav-badge" id="navBadgeConcurrence" style="display:none"></span>
+      </div>
       <div class="nav-item" data-page="pipeline" onclick="go('pipeline')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Pipeline
@@ -2024,6 +2029,85 @@ tbody tr:last-child td { border-bottom: none; }
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('new-contact')">Annuler</button>
       <button class="btn btn-primary" onclick="submitNewContactFromCR()">Créer le contact</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: CONCURRENT FORM ═══ -->
+<div class="modal-overlay" id="modal-concurrent-form">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-head">
+      <h3 id="cf-title">Nouveau concurrent</h3>
+      <button class="modal-close" onclick="closeModal('concurrent-form')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="fg"><label class="fl">Nom *</label><input class="fi" id="cf-nom"></div>
+        <div class="fg"><label class="fl">Raison sociale</label><input class="fi" id="cf-raison"></div>
+        <div class="fg"><label class="fl">SIREN</label><input class="fi" id="cf-siren"></div>
+        <div class="fg"><label class="fl">SIRET</label><input class="fi" id="cf-siret"></div>
+        <div class="fg"><label class="fl">Code APE</label><input class="fi" id="cf-ape"></div>
+        <div class="fg"><label class="fl">Site web</label><input class="fi" id="cf-web" placeholder="https://..."></div>
+        <div class="fg"><label class="fl">Ville</label><input class="fi" id="cf-ville"></div>
+        <div class="fg"><label class="fl">Code postal</label><input class="fi" id="cf-cp"></div>
+        <div class="fg"><label class="fl">Département</label><input class="fi" id="cf-dept"></div>
+        <div class="fg"><label class="fl">Région</label><input class="fi" id="cf-region"></div>
+      </div>
+      <div class="fg" style="margin-top:10px">
+        <label class="fl">Métiers concernés</label>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--card)">
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="cf-metier" value="SOL"> SOL</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="cf-metier" value="EXE"> EXE</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="cf-metier" value="GO"> GO</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="cf-metier" value="ARCHI"> ARCHI</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="cf-metier" value="TOPO"> TOPO</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="cf-metier" value="GEOTECH"> GEOTECH</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="cf-metier" value="BET"> BET</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="cf-metier" value="AUTRE"> AUTRE</label>
+        </div>
+      </div>
+      <div class="fg" style="margin-top:10px"><label class="fl">Notes</label><textarea class="fi" id="cf-notes" rows="3" style="resize:vertical"></textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('concurrent-form')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveConcurrent()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: LIER CONCURRENT À CLIENT ═══ -->
+<div class="modal-overlay" id="modal-link-concurrent">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-head">
+      <h3 id="lc-title">Lier un concurrent au client</h3>
+      <button class="modal-close" onclick="closeModal('link-concurrent')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="fg">
+        <label class="fl">Concurrent *</label>
+        <select class="fi" id="lc-concurrent-id">
+          <option value="">— Sélectionner un concurrent —</option>
+        </select>
+        <div style="font-size:11px;color:var(--t3);margin-top:4px">Pas dans la liste ? <a href="#" onclick="closeModal('link-concurrent');go('concurrence');return false" style="color:#6366f1">Créer un concurrent</a></div>
+      </div>
+      <div class="fg" style="margin-top:10px">
+        <label class="fl">Métiers concernés</label>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--card)">
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="lc-metier" value="SOL"> SOL</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="lc-metier" value="EXE"> EXE</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="lc-metier" value="GO"> GO</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="lc-metier" value="ARCHI"> ARCHI</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="lc-metier" value="TOPO"> TOPO</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="lc-metier" value="GEOTECH"> GEOTECH</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="lc-metier" value="BET"> BET</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" name="lc-metier" value="AUTRE"> AUTRE</label>
+        </div>
+      </div>
+      <div class="fg" style="margin-top:10px"><label class="fl">Notes</label><textarea class="fi" id="lc-notes" rows="2" style="resize:vertical"></textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('link-concurrent')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveClientConcurrent()">Enregistrer</button>
     </div>
   </div>
 </div>
@@ -3217,7 +3301,7 @@ function go(page) {
   if (page === 'cr') { crViewMode = 'list'; currentReport = null; }
   const navPage = page === 'client-detail' ? 'clients' : page === 'contact-detail' ? 'contacts' : page === 'marche-detail' ? 'marches' : page === 'affaire-detail' ? 'marches' : page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
-  const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',pipeline:'Pipeline commercial',carte:'Carte sociétés',
+  const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures',objectifs:'Objectifs',
     cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA'};
@@ -3240,6 +3324,7 @@ function renderPage(page) {
     dashboard: renderDashboard,
     clients: renderClients,
     contacts: renderContacts,
+    concurrence: renderConcurrence,
     'contact-detail': renderContactDetail,
     'client-detail': renderClientDetail,
     pipeline: renderPipeline,
@@ -3762,6 +3847,319 @@ function renderPortfolioHealth() {
 }
 
 // ═══ CLIENTS PAGE ═══
+// ═══ CONCURRENCE ═══
+let concurrentsCache = [];
+let concurrentsClientCount = {};
+let concurrentsLoaded = false;
+let concurrentsSearch = '';
+let concurrentsMetierFilter = '';
+let concurrentsDeptFilter = '';
+const METIERS_CONCURRENT = ['SOL','EXE','GO','ARCHI','TOPO','GEOTECH','BET','AUTRE'];
+
+async function loadConcurrents() {
+  const [{ data: list }, { data: liens }] = await Promise.all([
+    sb.from('concurrents').select('*').order('nom'),
+    sb.from('client_concurrents').select('concurrent_id')
+  ]);
+  concurrentsCache = list || [];
+  concurrentsClientCount = {};
+  for (const l of (liens || [])) {
+    concurrentsClientCount[l.concurrent_id] = (concurrentsClientCount[l.concurrent_id] || 0) + 1;
+  }
+  concurrentsLoaded = true;
+}
+
+function renderConcurrence() {
+  if (!concurrentsLoaded) {
+    loadConcurrents().then(() => renderPage('concurrence'));
+    return '<div style="text-align:center;padding:40px;color:var(--t3)">Chargement...</div>';
+  }
+  // Filtrer
+  let filtered = concurrentsCache;
+  if (concurrentsSearch) {
+    const q = concurrentsSearch.toLowerCase();
+    filtered = filtered.filter(c =>
+      (c.nom||'').toLowerCase().includes(q) ||
+      (c.raison_sociale||'').toLowerCase().includes(q) ||
+      (c.ville||'').toLowerCase().includes(q) ||
+      (c.siren||'').includes(q) ||
+      (c.siret||'').includes(q)
+    );
+  }
+  if (concurrentsMetierFilter) {
+    filtered = filtered.filter(c => Array.isArray(c.metiers) && c.metiers.includes(concurrentsMetierFilter));
+  }
+  if (concurrentsDeptFilter) {
+    filtered = filtered.filter(c => (c.departement||'').includes(concurrentsDeptFilter));
+  }
+  const total = concurrentsCache.length;
+  const totalLies = Object.values(concurrentsClientCount).reduce((a,n)=>a+n,0);
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:13px;color:var(--t2)"><strong>${total}</strong> concurrent(s) — <strong>${totalLies}</strong> liaison(s) avec des clients</span>
+      <button class="btn btn-primary" onclick="addConcurrent()" style="font-size:12px">+ Nouveau concurrent</button>
+      <button class="btn" onclick="addConcurrentFromSirene()" style="font-size:12px">🔍 Ajouter depuis SIRENE</button>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="concSearchInput" placeholder="Rechercher (nom, SIREN, ville...)" value="${concurrentsSearch}"
+        oninput="concurrentsSearch=this.value;renderPage('concurrence')"
+        style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:240px;background:var(--card);color:var(--t1)">
+      <select onchange="concurrentsMetierFilter=this.value;renderPage('concurrence')" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--t1)">
+        <option value="">— Tous métiers —</option>
+        ${METIERS_CONCURRENT.map(m => '<option value="'+m+'"'+(concurrentsMetierFilter===m?' selected':'')+'>'+m+'</option>').join('')}
+      </select>
+      <input type="text" placeholder="Département" value="${concurrentsDeptFilter}" oninput="concurrentsDeptFilter=this.value;renderPage('concurrence')" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:120px;background:var(--card);color:var(--t1)">
+    </div>
+  </div>
+  <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
+    <table><thead><tr>
+      <th>Nom</th><th>Raison sociale</th><th>SIREN</th><th>Ville</th><th>Dpt</th>
+      <th>Métiers</th><th style="text-align:center">Clients liés</th><th style="text-align:right">Actions</th>
+    </tr></thead>
+    <tbody>${filtered.length === 0
+      ? '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--t3)">Aucun concurrent trouvé. Cliquez "+ Nouveau concurrent" pour commencer.</td></tr>'
+      : filtered.map(c => {
+          const nbClients = concurrentsClientCount[c.id] || 0;
+          const metiersHTML = Array.isArray(c.metiers) ? c.metiers.map(m => `<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:rgba(99,102,241,.15);color:#6366f1;font-size:10px;font-weight:600;margin-right:3px">${m}</span>`).join('') : '—';
+          return `<tr>
+            <td><strong>${c.nom}</strong></td>
+            <td style="font-size:12px;color:var(--t2)">${c.raison_sociale || '—'}</td>
+            <td class="mono" style="font-size:12px">${c.siren || '—'}</td>
+            <td style="font-size:12px">${c.ville || '—'}</td>
+            <td style="font-size:12px">${c.departement || '—'}</td>
+            <td>${metiersHTML}</td>
+            <td style="text-align:center"><span style="display:inline-block;padding:2px 8px;border-radius:10px;background:${nbClients>0?'rgba(34,197,94,.15)':'rgba(107,114,128,.15)'};color:${nbClients>0?'#22c55e':'#6b7280'};font-size:11px;font-weight:600">${nbClients}</span></td>
+            <td style="text-align:right;white-space:nowrap">
+              ${(c.siren||c.siret) ? '<a href="https://www.pappers.fr/entreprise/'+(c.siren||c.siret)+'" target="_blank" rel="noopener" class="btn" style="font-size:11px;text-decoration:none;color:#3b82f6" title="Pappers">📋</a>' : ''}
+              <button class="btn" onclick="editConcurrent('${c.id}')" style="font-size:11px">Modifier</button>
+              <button class="btn" onclick="deleteConcurrent('${c.id}')" style="font-size:11px;color:var(--red)">×</button>
+            </td>
+          </tr>`;
+        }).join('')}
+    </tbody></table>
+  </div></div></div>`;
+}
+
+let _editingConcurrentId = null;
+
+function addConcurrent() { _editingConcurrentId = null; openModal('concurrent-form'); fillConcurrentForm(null); }
+
+async function editConcurrent(id) {
+  const c = concurrentsCache.find(x => x.id === id);
+  if (!c) return;
+  _editingConcurrentId = id;
+  openModal('concurrent-form');
+  fillConcurrentForm(c);
+}
+
+function fillConcurrentForm(c) {
+  c = c || {};
+  document.getElementById('cf-nom').value = c.nom || '';
+  document.getElementById('cf-raison').value = c.raison_sociale || '';
+  document.getElementById('cf-siren').value = c.siren || '';
+  document.getElementById('cf-siret').value = c.siret || '';
+  document.getElementById('cf-ape').value = c.ape || '';
+  document.getElementById('cf-ville').value = c.ville || '';
+  document.getElementById('cf-cp').value = c.code_postal || '';
+  document.getElementById('cf-dept').value = c.departement || '';
+  document.getElementById('cf-region').value = c.region || '';
+  document.getElementById('cf-web').value = c.site_web || '';
+  document.getElementById('cf-notes').value = c.notes || '';
+  // Métiers checkboxes
+  const metiers = Array.isArray(c.metiers) ? c.metiers : [];
+  document.querySelectorAll('input[name="cf-metier"]').forEach(cb => cb.checked = metiers.includes(cb.value));
+  document.getElementById('cf-title').textContent = c.id ? 'Modifier le concurrent' : 'Nouveau concurrent';
+}
+
+async function saveConcurrent() {
+  const nom = document.getElementById('cf-nom').value.trim();
+  if (!nom) { toast('Le nom est obligatoire', 'error'); return; }
+  const metiers = [...document.querySelectorAll('input[name="cf-metier"]:checked')].map(cb => cb.value);
+  const data = {
+    nom,
+    raison_sociale: document.getElementById('cf-raison').value.trim() || null,
+    siren: document.getElementById('cf-siren').value.trim() || null,
+    siret: document.getElementById('cf-siret').value.trim() || null,
+    ape: document.getElementById('cf-ape').value.trim() || null,
+    ville: document.getElementById('cf-ville').value.trim() || null,
+    code_postal: document.getElementById('cf-cp').value.trim() || null,
+    departement: document.getElementById('cf-dept').value.trim() || null,
+    region: document.getElementById('cf-region').value.trim() || null,
+    site_web: document.getElementById('cf-web').value.trim() || null,
+    notes: document.getElementById('cf-notes').value.trim() || null,
+    metiers: metiers.length > 0 ? metiers : null,
+    updated_at: new Date().toISOString(),
+  };
+  let error;
+  if (_editingConcurrentId) {
+    ({ error } = await sb.from('concurrents').update(data).eq('id', _editingConcurrentId));
+  } else {
+    ({ error } = await sb.from('concurrents').insert(data));
+  }
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  toast('Concurrent enregistré', 'success');
+  closeModal('concurrent-form');
+  concurrentsLoaded = false;
+  await loadConcurrents();
+  renderPage('concurrence');
+}
+
+async function deleteConcurrent(id) {
+  if (!confirm('Supprimer ce concurrent ? Toutes les liaisons clients seront aussi supprimées.')) return;
+  await sb.from('concurrents').delete().eq('id', id);
+  toast('Concurrent supprimé', 'success');
+  concurrentsLoaded = false;
+  await loadConcurrents();
+  renderPage('concurrence');
+}
+
+async function addConcurrentFromSirene() {
+  const q = prompt('Recherche SIRENE — nom de l\'entreprise concurrente :');
+  if (!q) return;
+  showSyncLoading(true); setSyncText('Recherche SIRENE...');
+  try {
+    const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + encodeURIComponent(q) + '&per_page=10&etat_administratif=A');
+    const data = await r.json();
+    const results = data.results || [];
+    showSyncLoading(false);
+    if (!results.length) { toast('Aucun résultat', 'warn'); return; }
+    // Liste à choisir
+    const list = results.map((e, i) => `${i+1}. ${e.nom_complet || ''} (${e.siege?.code_postal||''} ${e.siege?.libelle_commune||''}) — APE ${e.siege?.activite_principale||'?'}`).join('\n');
+    const choice = prompt('Choisissez un résultat (1-' + results.length + ') :\n\n' + list, '1');
+    const idx = parseInt(choice) - 1;
+    if (isNaN(idx) || !results[idx]) return;
+    const e = results[idx];
+    const s = e.siege || {};
+    _editingConcurrentId = null;
+    openModal('concurrent-form');
+    fillConcurrentForm({
+      nom: e.nom_complet || e.nom_raison_sociale || '',
+      raison_sociale: e.nom_raison_sociale || '',
+      siren: e.siren || '',
+      siret: s.siret || '',
+      ape: s.activite_principale || '',
+      ville: s.libelle_commune || '',
+      code_postal: s.code_postal || '',
+      departement: deptName(s.departement) || '',
+      region: regionFromDept(s.departement) || '',
+    });
+  } catch (err) {
+    showSyncLoading(false);
+    toast('Erreur: ' + err.message, 'error');
+  }
+}
+
+// ═══ Liens client ↔ concurrents ═══
+let _currentClientForConcurrent = null;
+let _editingClientConcurrentId = null;
+
+async function renderClientConcurrents(clientId) {
+  const el = document.getElementById('clientConcurrentsList');
+  if (!el) return;
+  // S'assurer que les concurrents sont chargés (pour résoudre les noms)
+  if (!concurrentsLoaded) await loadConcurrents();
+  const { data: liens, error } = await sb.from('client_concurrents').select('*').eq('client_id', clientId);
+  if (error) { el.innerHTML = '<div style="color:var(--red)">Erreur : '+error.message+'</div>'; return; }
+  if (!liens || liens.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:18px;color:var(--t3)">Aucun concurrent identifié pour ce compte. Cliquez "+ Ajouter un concurrent" pour en ajouter.</div>';
+    return;
+  }
+  const rows = liens.map(l => {
+    const c = concurrentsCache.find(x => x.id === l.concurrent_id);
+    if (!c) return '';
+    const metiersHTML = Array.isArray(l.metiers) ? l.metiers.map(m => `<span style="display:inline-block;padding:1px 7px;border-radius:3px;background:rgba(99,102,241,.15);color:#6366f1;font-size:11px;font-weight:600;margin-right:3px">${m}</span>`).join('') : '<span style="color:var(--t3);font-size:12px">—</span>';
+    const pappersLink = (c.siren||c.siret) ? `<a href="https://www.pappers.fr/entreprise/${c.siren||c.siret}" target="_blank" rel="noopener" style="text-decoration:none;color:#3b82f6;margin-right:6px" title="Pappers">📋</a>` : '';
+    return `<tr>
+      <td><strong>${c.nom}</strong>${c.ville ? ' <span style="color:var(--t3);font-size:11px">— '+c.ville+'</span>' : ''}</td>
+      <td>${metiersHTML}</td>
+      <td style="font-size:12px;color:var(--t2)">${l.notes || '—'}</td>
+      <td style="text-align:right;white-space:nowrap">
+        ${pappersLink}
+        <button class="btn" onclick="editClientConcurrent('${l.id}','${clientId}')" style="font-size:11px">Modifier</button>
+        <button class="btn" onclick="deleteClientConcurrent('${l.id}','${clientId}')" style="font-size:11px;color:var(--red)">×</button>
+      </td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<div class="table-wrap"><table>
+    <thead><tr><th>Concurrent</th><th>Métiers</th><th>Notes</th><th style="text-align:right">Actions</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+async function addClientConcurrent(clientId) {
+  _currentClientForConcurrent = clientId;
+  _editingClientConcurrentId = null;
+  if (!concurrentsLoaded) await loadConcurrents();
+  // Filtrer les concurrents déjà liés
+  const { data: existing } = await sb.from('client_concurrents').select('concurrent_id').eq('client_id', clientId);
+  const existingIds = new Set((existing || []).map(e => e.concurrent_id));
+  const sel = document.getElementById('lc-concurrent-id');
+  sel.innerHTML = '<option value="">— Sélectionner un concurrent —</option>' +
+    concurrentsCache.filter(c => !existingIds.has(c.id))
+      .map(c => `<option value="${c.id}">${c.nom}${c.ville ? ' ('+c.ville+')' : ''}</option>`).join('');
+  sel.disabled = false;
+  document.getElementById('lc-title').textContent = 'Lier un concurrent au client';
+  document.querySelectorAll('input[name="lc-metier"]').forEach(cb => cb.checked = false);
+  document.getElementById('lc-notes').value = '';
+  openModal('link-concurrent');
+}
+
+async function editClientConcurrent(linkId, clientId) {
+  _currentClientForConcurrent = clientId;
+  _editingClientConcurrentId = linkId;
+  if (!concurrentsLoaded) await loadConcurrents();
+  const { data: lien } = await sb.from('client_concurrents').select('*').eq('id', linkId).single();
+  if (!lien) { toast('Lien introuvable', 'error'); return; }
+  const sel = document.getElementById('lc-concurrent-id');
+  sel.innerHTML = concurrentsCache.map(c => `<option value="${c.id}"${c.id===lien.concurrent_id?' selected':''}>${c.nom}${c.ville ? ' ('+c.ville+')' : ''}</option>`).join('');
+  sel.disabled = true;
+  document.getElementById('lc-title').textContent = 'Modifier le lien concurrent';
+  const metiers = Array.isArray(lien.metiers) ? lien.metiers : [];
+  document.querySelectorAll('input[name="lc-metier"]').forEach(cb => cb.checked = metiers.includes(cb.value));
+  document.getElementById('lc-notes').value = lien.notes || '';
+  openModal('link-concurrent');
+}
+
+async function saveClientConcurrent() {
+  const concurrentId = document.getElementById('lc-concurrent-id').value;
+  if (!concurrentId) { toast('Sélectionnez un concurrent', 'error'); return; }
+  if (!_currentClientForConcurrent) { toast('Erreur : client non défini', 'error'); return; }
+  const metiers = [...document.querySelectorAll('input[name="lc-metier"]:checked')].map(cb => cb.value);
+  const notes = document.getElementById('lc-notes').value.trim() || null;
+  let error;
+  if (_editingClientConcurrentId) {
+    ({ error } = await sb.from('client_concurrents').update({
+      metiers: metiers.length > 0 ? metiers : null,
+      notes
+    }).eq('id', _editingClientConcurrentId));
+  } else {
+    ({ error } = await sb.from('client_concurrents').insert({
+      client_id: _currentClientForConcurrent,
+      concurrent_id: concurrentId,
+      metiers: metiers.length > 0 ? metiers : null,
+      notes
+    }));
+  }
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  toast('Lien enregistré', 'success');
+  closeModal('link-concurrent');
+  // Recharger pour rafraîchir le compteur de clients liés
+  concurrentsLoaded = false;
+  await loadConcurrents();
+  renderClientConcurrents(_currentClientForConcurrent);
+}
+
+async function deleteClientConcurrent(linkId, clientId) {
+  if (!confirm('Retirer ce concurrent de la fiche client ?')) return;
+  const { error } = await sb.from('client_concurrents').delete().eq('id', linkId);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  toast('Concurrent retiré', 'success');
+  concurrentsLoaded = false;
+  await loadConcurrents();
+  renderClientConcurrents(clientId);
+}
+
 function renderClients(filter='all') {
   const filtered = filter==='all' ? DB.clients : DB.clients.filter(c=>c.status===filter);
   const totalPages = Math.ceil(clientsTotalCount / CLIENTS_PER_PAGE);
@@ -3848,6 +4246,8 @@ async function showClient(id) {
   setTimeout(() => loadClientContacts(currentClient.id), 100);
   // Charger les objectifs annuels et le réalisé
   setTimeout(() => renderClientObjectifs(currentClient.id), 120);
+  // Charger les concurrents liés
+  setTimeout(() => renderClientConcurrents(currentClient.id), 140);
 }
 
 function renderClientDetail() {
@@ -3960,6 +4360,15 @@ function renderClientDetail() {
     </div>
   </div>
   <div class="card" style="margin-bottom:16px"><div class="card-header"><div class="card-title">Habitudes Administratives</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes || '—'}</div></div></div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <div class="card-title">Concurrents qui travaillent avec ce compte</div>
+      <button class="btn btn-primary" onclick="addClientConcurrent('${c.id}')" style="font-size:12px">+ Ajouter un concurrent</button>
+    </div>
+    <div class="card-body" style="padding:0">
+      <div id="clientConcurrentsList" style="padding:14px;color:var(--t3);font-size:13px">Chargement...</div>
+    </div>
+  </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
     <div class="card"><div class="card-header"><div class="card-title">Habitudes Techniques</div></div><div class="card-body"><div style="font-size:13px;line-height:1.6;color:var(--t2)">${c.habitudes_techniques || '—'}</div></div></div>
     <div class="card"><div class="card-header"><div class="card-title">Habitudes Géotechniques</div></div><div class="card-body"><div style="font-size:13px;line-height:1.6;color:var(--t2)">${c.habitudes_geotechniques || '—'}</div></div></div>
