@@ -1701,6 +1701,10 @@ tbody tr:last-child td { border-bottom: none; }
         Factures
         <span class="nav-badge" id="navBadgeFactures" style="display:none"></span>
       </div>
+      <div class="nav-item" data-page="carte-affaires" onclick="go('carte-affaires')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        Carte des Affaires
+      </div>
     </div>
     <div class="nav-section">
       <div class="nav-section-title">Communication</div>
@@ -3380,7 +3384,7 @@ function go(page) {
   const navPage = page === 'client-detail' ? 'clients' : page === 'contact-detail' ? 'contacts' : page === 'marche-detail' ? 'marches' : page === 'affaire-detail' ? 'marches' : page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
   const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence',pipeline:'Pipeline commercial',carte:'Carte sociétés',
-    marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures',objectifs:'Objectifs',
+    marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',
     cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA'};
   document.getElementById('pageTitle').textContent = titles[page]||page;
@@ -3414,6 +3418,7 @@ function renderPage(page) {
     devis: renderDevis,
     commandes: renderCommandes,
     factures: renderFactures,
+    'carte-affaires': renderCarteAffaires,
     objectifs: renderObjectifs,
     cr: renderCR,
     envois: renderEnvois,
@@ -3434,6 +3439,7 @@ function renderPage(page) {
   // Post-render hooks
   if (page === 'cr') initEditor();
   if (page === 'carte') setTimeout(initCarteMap, 50);
+  if (page === 'carte-affaires') setTimeout(initCarteAffairesMap, 50);
   if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
   if (page === 'dashboard') setTimeout(() => renderDashObjectifsAgences(), 50);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
@@ -5780,6 +5786,131 @@ async function initCarteMap() {
     `, { maxWidth: 280 });
   });
   if (bounds.length) carteMap.fitBounds(bounds, { padding: [40, 40] });
+}
+
+// ═══ CARTE DES AFFAIRES ═══
+let carteAffairesMap = null;
+let _carteAffairesStatutFilter = 'all';
+
+function renderCarteAffaires() {
+  const all = filterByCommercial(filterBySociete(DB.affaires || []));
+  const enCours = all.filter(a => a.statut === 'en_cours').length;
+  const termines = all.filter(a => a.statut === 'termine').length;
+  const suspendus = all.filter(a => a.statut === 'suspendu').length;
+  const annules = all.filter(a => a.statut === 'annule').length;
+  return `
+  <div style="margin-bottom:12px;font-size:13px;color:var(--t2)">Géolocalisation des affaires (regroupées par société). Cliquez un point pour voir le détail.</div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+    <button class="btn ${_carteAffairesStatutFilter==='all'?'active':''}" onclick="_carteAffairesStatutFilter='all';initCarteAffairesMap()">Toutes <span style="opacity:.4">${all.length}</span></button>
+    <button class="btn ${_carteAffairesStatutFilter==='en_cours'?'active':''}" onclick="_carteAffairesStatutFilter='en_cours';initCarteAffairesMap()">En cours <span style="opacity:.4">${enCours}</span></button>
+    <button class="btn ${_carteAffairesStatutFilter==='termine'?'active':''}" onclick="_carteAffairesStatutFilter='termine';initCarteAffairesMap()">Terminées <span style="opacity:.4">${termines}</span></button>
+    <button class="btn ${_carteAffairesStatutFilter==='suspendu'?'active':''}" onclick="_carteAffairesStatutFilter='suspendu';initCarteAffairesMap()">Suspendues <span style="opacity:.4">${suspendus}</span></button>
+    <button class="btn ${_carteAffairesStatutFilter==='annule'?'active':''}" onclick="_carteAffairesStatutFilter='annule';initCarteAffairesMap()">Annulées <span style="opacity:.4">${annules}</span></button>
+  </div>
+  <div class="map-container">
+    <div id="mapAffairesLeaflet"></div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="card-header"><div class="card-title">Affaires localisées</div></div>
+    <div class="card-body" style="padding:0"><div class="table-wrap" id="carteAffairesTable">
+      <div style="padding:14px;color:var(--t3);font-size:13px">Chargement...</div>
+    </div></div>
+  </div>`;
+}
+
+async function initCarteAffairesMap() {
+  if (carteAffairesMap) { carteAffairesMap.remove(); carteAffairesMap = null; }
+  const el = document.getElementById('mapAffairesLeaflet');
+  if (!el) return;
+  carteAffairesMap = L.map('mapAffairesLeaflet', { zoomControl: true }).setView([46.8, 2.5], 6);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CARTO',
+    maxZoom: 19
+  }).addTo(carteAffairesMap);
+
+  let affaires = filterByCommercial(filterBySociete(DB.affaires || []));
+  if (_carteAffairesStatutFilter !== 'all') affaires = affaires.filter(a => a.statut === _carteAffairesStatutFilter);
+  if (affaires.length === 0) {
+    const tbl = document.getElementById('carteAffairesTable');
+    if (tbl) tbl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--t3)">Aucune affaire à afficher</div>';
+    return;
+  }
+
+  // Charger les coords clients pour les client_id concernés
+  const clientIds = [...new Set(affaires.map(a => a.client_id).filter(Boolean))];
+  const clientCoords = {};
+  if (clientIds.length) {
+    const CHUNK = 200;
+    for (let i = 0; i < clientIds.length; i += CHUNK) {
+      const slice = clientIds.slice(i, i + CHUNK);
+      const { data } = await sb.from('clients').select('id,name,city,lat,lng').in('id', slice);
+      for (const c of (data || [])) if (c.lat && c.lng) clientCoords[c.id] = c;
+    }
+  }
+
+  // Regrouper par client (même lat/lng)
+  const byClient = {};
+  for (const a of affaires) {
+    const c = clientCoords[a.client_id];
+    if (!c) continue;
+    if (!byClient[a.client_id]) byClient[a.client_id] = { client: c, affaires: [] };
+    byClient[a.client_id].affaires.push(a);
+  }
+
+  const statutLabels = { en_cours:'En cours', termine:'Terminée', suspendu:'Suspendue', annule:'Annulée' };
+  const statutColor = { en_cours:'#4f8ff7', termine:'#22c55e', suspendu:'#f59e0b', annule:'#ef4444' };
+
+  const bounds = [];
+  Object.values(byClient).forEach(grp => {
+    const c = grp.client;
+    const list = grp.affaires;
+    // Couleur dominante = statut majoritaire
+    const counts = {};
+    for (const a of list) counts[a.statut||'autre'] = (counts[a.statut||'autre']||0) + 1;
+    const dominantStatut = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0];
+    const color = statutColor[dominantStatut] || '#6b7280';
+    const totalHT = list.reduce((s, a) => s + Number(a.montant || 0), 0);
+    const radius = Math.min(20, 8 + Math.sqrt(list.length) * 2);
+    const marker = L.circleMarker([c.lat, c.lng], {
+      radius, fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.9
+    }).addTo(carteAffairesMap);
+    bounds.push([c.lat, c.lng]);
+    const liste = list.slice(0, 8).map(a => {
+      const lab = statutLabels[a.statut] || a.statut || '—';
+      return `<li style="margin:2px 0"><a onclick="showAffaireDetail('${a.id}');return false" href="#" style="color:#3b82f6;text-decoration:none;font-size:12px">${a.nom||a.ref||'(sans nom)'}</a> <span style="color:#888;font-size:11px">— ${lab} · ${fmt(a.montant||0)}</span></li>`;
+    }).join('');
+    const more = list.length > 8 ? `<div style="font-size:11px;color:#888;margin-top:4px">+ ${list.length - 8} autre(s)</div>` : '';
+    marker.bindPopup(`
+      <div class="map-popup">
+        <h4>${c.name}</h4>
+        <div class="map-popup-city">${c.city || ''}</div>
+        <div style="font-size:12px;margin-top:6px"><strong>${list.length}</strong> affaire(s) — Total : <strong>${fmt(totalHT)}</strong></div>
+        <ul style="margin:6px 0;padding-left:16px">${liste}</ul>
+        ${more}
+        <div style="margin-top:8px"><button class="map-popup-btn" style="width:100%" onclick="showClient('${c.id}')">Voir la fiche client</button></div>
+      </div>
+    `, { maxWidth: 320 });
+  });
+  if (bounds.length) carteAffairesMap.fitBounds(bounds, { padding: [40, 40] });
+
+  // Tableau récap
+  const tbl = document.getElementById('carteAffairesTable');
+  if (tbl) {
+    const rows = affaires.map(a => {
+      const c = clientCoords[a.client_id];
+      const lab = statutLabels[a.statut] || a.statut || '—';
+      const localised = c ? '✅' : '<span style="color:var(--red)">❌</span>';
+      return `<tr style="cursor:pointer" onclick="showAffaireDetail('${a.id}')">
+        <td>${localised}</td>
+        <td><strong>${a.nom||a.ref||'—'}</strong></td>
+        <td>${a.client_name||'—'}</td>
+        <td>${c?.city || '—'}</td>
+        <td>${lab}</td>
+        <td class="mono" style="text-align:right">${fmt(a.montant||0)}</td>
+      </tr>`;
+    }).join('');
+    tbl.innerHTML = `<table><thead><tr><th>Géo</th><th>Affaire</th><th>Client</th><th>Ville</th><th>Statut</th><th style="text-align:right">Montant</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
 }
 
 // ═══ DEVIS / COMMANDES / FACTURES / OBJECTIFS ═══
