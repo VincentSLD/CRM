@@ -3913,7 +3913,8 @@ function renderClientDetail() {
       detailRow('SIREN', c.siren || '—'),
       detailRow('SIRET', c.siret || '—'),
       detailRow('TVA intracommunautaire', c.tva_intracommunautaire || computeTVA(c.siren) || '—'),
-      detailRow('Code APE', c.ape || '—'),
+      detailRow('Code APE', c.ape ? c.ape + (apeLabel(c.ape) ? ' <span style="color:var(--t3);font-size:11px">— ' + apeLabel(c.ape) + '</span>' : '') : '—'),
+      detailRow('Métier (APE)', apeLabel(c.ape) || '—'),
       detailRow('Forme juridique', c.forme_juridique || '—'),
       detailRow('Réf. externe', c.reference_externe || '—'),
     ])}
@@ -10102,6 +10103,62 @@ const EFFECTIF_LIST = [
   ['52', '5000-9999 salariés'],
   ['53', '10000+ salariés'],
 ];
+
+// Codes APE NAF courants (extension de APE_LIST avec codes hors BTP)
+const APE_LABELS_EXT = {
+  '01.13Z':'Culture de légumes, melons, racines','01.61Z':'Activités de soutien aux cultures',
+  '02.10Z':'Sylviculture et autres activités forestières','10.11Z':'Transformation et conservation de la viande',
+  '10.71B':'Cuisson de produits de boulangerie','10.71C':'Boulangerie et boulangerie-pâtisserie',
+  '14.13Z':'Fabrication de vêtements de dessus','16.10A':'Sciage et rabotage du bois, hors imprégnation',
+  '23.11Z':'Fabrication de verre plat','23.12Z':'Façonnage et transformation du verre plat',
+  '23.61Z':'Fabrication d\'éléments en béton pour la construction','23.63Z':'Fabrication de béton prêt à l\'emploi',
+  '24.10Z':'Sidérurgie','25.11Z':'Fabrication de structures métalliques et de parties de structures',
+  '25.12Z':'Fabrication de portes et fenêtres en métal','25.21Z':'Fabrication de radiateurs et de chaudières',
+  '25.50A':'Forge, estampage, matriçage','25.62B':'Mécanique industrielle',
+  '27.12Z':'Fabrication de matériel de distribution et de commande électrique',
+  '28.14Z':'Fabrication d\'autres articles de robinetterie','28.22Z':'Fabrication de matériel de levage et de manutention',
+  '38.11Z':'Collecte des déchets non dangereux','38.21Z':'Traitement et élimination des déchets non dangereux',
+  '46.11Z':'Intermédiaires du commerce en matières premières agricoles','46.13Z':'Intermédiaires du commerce en bois et matériaux de construction',
+  '46.21Z':'Commerce de gros de céréales','46.51Z':'Commerce de gros d\'ordinateurs',
+  '46.69B':'Commerce de gros de fournitures et équipements industriels divers',
+  '46.73A':'Commerce de gros de bois et de matériaux de construction','46.73B':'Commerce de gros d\'appareils sanitaires et de produits de décoration',
+  '46.74A':'Commerce de gros de quincaillerie','46.74B':'Commerce de gros de fournitures pour la plomberie et le chauffage',
+  '47.11D':'Supermarchés','47.11F':'Hypermarchés','47.52A':'Commerce de détail de quincaillerie',
+  '49.41A':'Transports routiers de fret interurbains','49.41B':'Transports routiers de fret de proximité',
+  '52.21Z':'Services auxiliaires des transports terrestres','55.10Z':'Hôtels et hébergement similaire',
+  '56.10A':'Restauration traditionnelle','56.10B':'Cafétérias et autres libres-services','56.30Z':'Débits de boissons',
+  '58.29C':'Édition de logiciels applicatifs','62.01Z':'Programmation informatique',
+  '62.02A':'Conseil en systèmes et logiciels informatiques','62.03Z':'Gestion d\'installations informatiques',
+  '63.11Z':'Traitement de données, hébergement','64.20Z':'Activités des sociétés holding',
+  '69.10Z':'Activités juridiques','69.20Z':'Activités comptables','70.10Z':'Activités des sièges sociaux',
+  '70.21Z':'Conseil en relations publiques et communication','70.22Z':'Conseil pour les affaires et autres conseils de gestion',
+  '73.11Z':'Activités des agences de publicité','73.20Z':'Études de marché et sondages',
+  '74.30Z':'Traduction et interprétation','74.90B':'Activités spécialisées, scientifiques et techniques diverses',
+  '77.11A':'Location de courte durée de voitures','77.32Z':'Location et location-bail de machines et équipements',
+  '78.10Z':'Activités des agences de placement de main-d\'œuvre','78.20Z':'Activités des agences de travail temporaire',
+  '80.10Z':'Activités de sécurité privée','81.10Z':'Activités combinées de soutien lié aux bâtiments',
+  '81.21Z':'Nettoyage courant des bâtiments','81.22Z':'Autres activités de nettoyage des bâtiments',
+  '81.30Z':'Services d\'aménagement paysager',
+  '82.11Z':'Services administratifs combinés de bureau','82.99Z':'Autres activités de soutien aux entreprises',
+  '85.10Z':'Enseignement pré-primaire','85.32Z':'Enseignement secondaire technique',
+  '85.59A':'Formation continue d\'adultes','85.59B':'Autres enseignements',
+  '86.10Z':'Activités hospitalières','86.21Z':'Activité des médecins généralistes','86.22A':'Activités de radiodiagnostic',
+  '94.99Z':'Autres organisations fonctionnant par adhésion volontaire',
+  '96.01A':'Blanchisserie-teinturerie de gros','96.02A':'Coiffure',
+};
+
+// Construit un dictionnaire complet code→libellé (APE_LIST + APE_LABELS_EXT)
+const APE_FULL_LABELS = (() => {
+  const m = { ...APE_LABELS_EXT };
+  for (const g of APE_LIST) for (const [code, lib] of g.codes) m[code] = lib;
+  return m;
+})();
+
+function apeLabel(code) {
+  if (!code) return '';
+  const c = String(code).toUpperCase().trim();
+  return APE_FULL_LABELS[c] || '';
+}
 
 let _selectedApe = new Set();
 let _selectedEff = new Set();
