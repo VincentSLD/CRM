@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS groupes_diffusion (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 ALTER TABLE groupes_diffusion ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "groupes_diffusion_all" ON groupes_diffusion;
 CREATE POLICY "groupes_diffusion_all" ON groupes_diffusion FOR ALL USING (true) WITH CHECK (true);
 
 -- Colonnes manquantes table clients
