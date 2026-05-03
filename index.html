@@ -1838,7 +1838,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 <!-- ═══ MODAL: NEW CLIENT ═══ -->
 <div class="modal-overlay" id="modal-new-client">
-  <div class="modal" style="max-width:750px;max-height:90vh;overflow-y:auto">
+  <div class="modal" style="max-width:100vw;width:100vw;max-height:100vh;height:100vh;border-radius:0;overflow-y:auto">
     <div class="modal-head">
       <h3>Nouveau client/prospect</h3>
       <button class="modal-close" onclick="closeModal('new-client')">×</button>
@@ -1903,7 +1903,7 @@ tbody tr:last-child td { border-bottom: none; }
           <button class="btn" onclick="clearNewClientForm()" style="font-size:12px;color:var(--t3)">Effacer formulaire</button>
           <button class="btn btn-primary" onclick="searchSirene()" style="font-size:12px;white-space:nowrap">🔍 Rechercher</button>
         </div>
-        <div id="nc-sirene-results" style="display:none;margin-top:10px;max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
+        <div id="nc-sirene-results" style="display:none;margin-top:10px;max-height:50vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Identité</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
@@ -2214,8 +2214,8 @@ tbody tr:last-child td { border-bottom: none; }
 
 <!-- ═══ MODAL: LIER MANUELLEMENT LUCCA ═══ -->
 <!-- ═══ MODAL: CIBLAGE PROSPECTS via API SIRENE ═══ -->
-<div class="modal-overlay" id="modal-prospect-target" onclick="if(event.target===this)closeModal('prospect-target')">
-  <div class="modal" style="max-width:1000px;max-height:92vh;overflow-y:auto">
+<div class="modal-overlay" id="modal-prospect-target">
+  <div class="modal" style="max-width:100vw;width:100vw;max-height:100vh;height:100vh;border-radius:0;overflow-y:auto">
     <div class="modal-head">
       <h3>🎯 Ciblage de prospects (API SIRENE)</h3>
       <button class="modal-close" onclick="closeModal('prospect-target')">×</button>
@@ -2287,7 +2287,7 @@ tbody tr:last-child td { border-bottom: none; }
           <button class="btn btn-primary" onclick="addSelectedProspects()" style="font-size:12px">Ajouter en prospects</button>
         </div>
       </div>
-      <div id="pt-results" style="max-height:50vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
+      <div id="pt-results" style="max-height:calc(100vh - 380px);overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
       <div id="pt-pagination" style="display:none;justify-content:center;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center"></div>
     </div>
   </div>
