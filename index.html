@@ -3851,10 +3851,14 @@ function renderPortfolioHealth() {
 let concurrentsCache = [];
 let concurrentsClientCount = {};
 let concurrentsLoaded = false;
-let concurrentsSearch = '';
-let concurrentsMetierFilter = '';
-let concurrentsDeptFilter = '';
 const METIERS_CONCURRENT = ['SOL','EXE','GO','ARCHI','TOPO','GEOTECH','BET','AUTRE'];
+
+// Filtres concurrents
+let _cnSearch = '';
+let _cnDept = '';
+let _cnVille = '';
+let _cnSelectedApe = new Set();
+let _cnSelectedMetiers = new Set();
 
 async function loadConcurrents() {
   const [{ data: list }, { data: liens }] = await Promise.all([
@@ -3874,10 +3878,115 @@ function renderConcurrence() {
     loadConcurrents().then(() => renderPage('concurrence'));
     return '<div style="text-align:center;padding:40px;color:var(--t3)">Chargement...</div>';
   }
-  // Filtrer
+  setTimeout(() => initConcurrentFilters(), 30);
+  return `
+  <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:12px;font-weight:600;color:var(--t1)">Filtres de recherche</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-primary" onclick="addConcurrent()" style="font-size:12px">+ Nouveau concurrent</button>
+        <button class="btn" onclick="addConcurrentFromSirene()" style="font-size:12px">🔍 Ajouter depuis SIRENE</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:10px">
+      <div class="fg"><label class="fl">Mot-clé / Nom</label>
+        <input class="fi" id="cn-q" oninput="_cnSearch=this.value;applyCnFilters()" style="font-size:12px" placeholder="Nom, SIREN, raison sociale..."></div>
+      <div class="fg"><label class="fl">Département</label>
+        <select class="fi" id="cn-dept" style="font-size:12px" onchange="_cnDept=this.value;_cnVille='';loadCommunesForDept('cn-dept','cn-ville');applyCnFilters()">
+          <option value="">— Tous —</option>
+        </select></div>
+      <div class="fg"><label class="fl">Ville</label>
+        <select class="fi" id="cn-ville" style="font-size:12px" disabled onchange="_cnVille=this.value;applyCnFilters()">
+          <option value="">— Choisir un département —</option>
+        </select></div>
+      <div class="fg" style="position:relative"><label class="fl">Codes APE / NAF (multi)</label>
+        <button type="button" class="fi" id="cn-ape-btn" onclick="toggleCnDropdown('cn-ape-dd')" style="font-size:12px;text-align:left;cursor:pointer;background:var(--card)">— Tous —</button>
+        <div id="cn-ape-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25);margin-top:2px">
+          <div style="padding:6px 8px;border-bottom:1px solid var(--border);background:#f5f5f5;position:sticky;top:0;z-index:1">
+            <input type="text" id="cn-ape-search" placeholder="Rechercher..." style="width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:#fff;color:#1a1a1a" oninput="filterCnApeList(this.value)">
+            <div style="display:flex;gap:4px;margin-top:4px">
+              <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllCnApe(true)">Tout cocher</button>
+              <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllCnApe(false)">Tout décocher (Tous)</button>
+            </div>
+          </div>
+          <div id="cn-ape-list" style="padding:4px 0;background:#fff"></div>
+        </div>
+      </div>
+      <div class="fg" style="position:relative"><label class="fl">Métiers (multi)</label>
+        <button type="button" class="fi" id="cn-metier-btn" onclick="toggleCnDropdown('cn-metier-dd')" style="font-size:12px;text-align:left;cursor:pointer;background:var(--card)">— Tous —</button>
+        <div id="cn-metier-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25);margin-top:2px">
+          <div style="padding:6px 8px;border-bottom:1px solid var(--border);background:#f5f5f5;position:sticky;top:0;z-index:1;display:flex;gap:4px">
+            <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllCnMetier(true)">Tout cocher</button>
+            <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllCnMetier(false)">Tout décocher (Tous)</button>
+          </div>
+          <div id="cn-metier-list" style="padding:4px 0;background:#fff"></div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center">
+      <span id="cn-result-count" style="font-size:11px;color:var(--t3);margin-right:auto"></span>
+      <button class="btn" onclick="resetCnFilters()" style="font-size:12px">Réinitialiser</button>
+    </div>
+  </div>
+  <div id="cnTableArea"></div>`;
+}
+
+function initConcurrentFilters() {
+  // Département
+  const sel = document.getElementById('cn-dept');
+  if (sel && sel.options.length <= 1 && typeof DEPT_NAMES !== 'undefined') {
+    const opts = Object.entries(DEPT_NAMES).sort((a,b) => a[0].localeCompare(b[0]));
+    sel.innerHTML = '<option value="">— Tous —</option>' + opts.map(([code, name]) => `<option value="${code}">${code} — ${name}</option>`).join('');
+  }
+  if (sel) sel.value = _cnDept || '';
+  // APE list
+  const apeList = document.getElementById('cn-ape-list');
+  if (apeList && !apeList.dataset.built && typeof APE_LIST !== 'undefined') {
+    apeList.innerHTML = APE_LIST.map(g => `
+      <div class="cn-ape-grp" data-group="${g.group.toLowerCase()}">
+        <div style="padding:6px 10px;font-size:10px;font-weight:700;color:#666;text-transform:uppercase;background:#eef0f3;border-bottom:1px solid var(--border)">${g.group}</div>
+        ${g.codes.map(([code, lib]) => `
+          <label class="cn-ape-item" data-search="${(code+' '+lib).toLowerCase()}" style="display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #eee;background:#fff;color:#1a1a1a" onmouseover="this.style.background='#f5f7fa'" onmouseout="this.style.background='#fff'">
+            <input type="checkbox" value="${code}" onchange="toggleCnApe('${code}', this.checked)">
+            <span class="mono" style="font-weight:600;min-width:54px">${code}</span>
+            <span style="color:#444">${lib}</span>
+          </label>
+        `).join('')}
+      </div>
+    `).join('');
+    apeList.dataset.built = '1';
+  }
+  document.querySelectorAll('#cn-ape-list input[type=checkbox]').forEach(cb => cb.checked = _cnSelectedApe.has(cb.value));
+  // Métiers list
+  const metList = document.getElementById('cn-metier-list');
+  if (metList && !metList.dataset.built) {
+    metList.innerHTML = METIERS_CONCURRENT.map(m => `
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #eee;background:#fff;color:#1a1a1a" onmouseover="this.style.background='#f5f7fa'" onmouseout="this.style.background='#fff'">
+        <input type="checkbox" value="${m}" onchange="toggleCnMetier('${m}', this.checked)">
+        <span style="font-weight:600">${m}</span>
+      </label>
+    `).join('');
+    metList.dataset.built = '1';
+  }
+  document.querySelectorAll('#cn-metier-list input[type=checkbox]').forEach(cb => cb.checked = _cnSelectedMetiers.has(cb.value));
+  // Recherche libre
+  const q = document.getElementById('cn-q'); if (q) q.value = _cnSearch || '';
+  // Si dept déjà sélectionné, charger les villes
+  if (_cnDept) {
+    Promise.resolve(loadCommunesForDept('cn-dept','cn-ville')).then(() => {
+      const v = document.getElementById('cn-ville'); if (v && _cnVille) v.value = _cnVille;
+    });
+  }
+  updateCnApeButton(); updateCnMetierButton();
+  applyCnFilters();
+}
+
+function applyCnFilters() {
+  const area = document.getElementById('cnTableArea');
+  if (!area) return;
   let filtered = concurrentsCache;
-  if (concurrentsSearch) {
-    const q = concurrentsSearch.toLowerCase();
+  if (_cnSearch) {
+    const q = _cnSearch.toLowerCase();
     filtered = filtered.filter(c =>
       (c.nom||'').toLowerCase().includes(q) ||
       (c.raison_sociale||'').toLowerCase().includes(q) ||
@@ -3886,59 +3995,119 @@ function renderConcurrence() {
       (c.siret||'').includes(q)
     );
   }
-  if (concurrentsMetierFilter) {
-    filtered = filtered.filter(c => Array.isArray(c.metiers) && c.metiers.includes(concurrentsMetierFilter));
+  if (_cnDept) {
+    const wantedName = (typeof DEPT_NAMES !== 'undefined' ? (DEPT_NAMES[_cnDept]||'') : '').toLowerCase();
+    filtered = filtered.filter(c => {
+      const d = (c.departement||'').toLowerCase();
+      const cp = c.code_postal || '';
+      return d === _cnDept.toLowerCase() || (wantedName && (d === wantedName || d.includes(wantedName))) || cp.startsWith(_cnDept);
+    });
   }
-  if (concurrentsDeptFilter) {
-    filtered = filtered.filter(c => (c.departement||'').includes(concurrentsDeptFilter));
+  if (_cnVille) {
+    filtered = filtered.filter(c => (c.code_postal||'') === _cnVille);
   }
-  const total = concurrentsCache.length;
+  if (_cnSelectedApe.size) {
+    filtered = filtered.filter(c => c.ape && _cnSelectedApe.has(c.ape));
+  }
+  if (_cnSelectedMetiers.size) {
+    filtered = filtered.filter(c => Array.isArray(c.metiers) && [..._cnSelectedMetiers].some(m => c.metiers.includes(m)));
+  }
   const totalLies = Object.values(concurrentsClientCount).reduce((a,n)=>a+n,0);
-  return `
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-      <span style="font-size:13px;color:var(--t2)"><strong>${total}</strong> concurrent(s) — <strong>${totalLies}</strong> liaison(s) avec des clients</span>
-      <button class="btn btn-primary" onclick="addConcurrent()" style="font-size:12px">+ Nouveau concurrent</button>
-      <button class="btn" onclick="addConcurrentFromSirene()" style="font-size:12px">🔍 Ajouter depuis SIRENE</button>
-    </div>
-    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-      <input type="text" id="concSearchInput" placeholder="Rechercher (nom, SIREN, ville...)" value="${concurrentsSearch}"
-        oninput="concurrentsSearch=this.value;renderPage('concurrence')"
-        style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:240px;background:var(--card);color:var(--t1)">
-      <select onchange="concurrentsMetierFilter=this.value;renderPage('concurrence')" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--t1)">
-        <option value="">— Tous métiers —</option>
-        ${METIERS_CONCURRENT.map(m => '<option value="'+m+'"'+(concurrentsMetierFilter===m?' selected':'')+'>'+m+'</option>').join('')}
-      </select>
-      <input type="text" placeholder="Département" value="${concurrentsDeptFilter}" oninput="concurrentsDeptFilter=this.value;renderPage('concurrence')" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:120px;background:var(--card);color:var(--t1)">
-    </div>
-  </div>
-  <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr>
-      <th>Nom</th><th>Raison sociale</th><th>SIREN</th><th>Ville</th><th>Dpt</th>
-      <th>Métiers</th><th style="text-align:center">Clients liés</th><th style="text-align:right">Actions</th>
-    </tr></thead>
-    <tbody>${filtered.length === 0
-      ? '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--t3)">Aucun concurrent trouvé. Cliquez "+ Nouveau concurrent" pour commencer.</td></tr>'
+  const count = document.getElementById('cn-result-count');
+  if (count) count.textContent = filtered.length + ' sur ' + concurrentsCache.length + ' concurrent(s) — ' + totalLies + ' liaison(s) avec des clients';
+  area.innerHTML = renderCnTable(filtered);
+}
+
+function renderCnTable(filtered) {
+  return '<div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">' +
+    '<table><thead><tr>' +
+      '<th>Nom</th><th>Raison sociale</th><th>SIREN</th><th>APE</th><th>Ville</th><th>Dpt</th>' +
+      '<th>Métiers</th><th style="text-align:center">Clients liés</th><th style="text-align:right">Actions</th>' +
+    '</tr></thead><tbody>' +
+    (filtered.length === 0
+      ? '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--t3)">Aucun concurrent trouvé.</td></tr>'
       : filtered.map(c => {
           const nbClients = concurrentsClientCount[c.id] || 0;
-          const metiersHTML = Array.isArray(c.metiers) ? c.metiers.map(m => `<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:rgba(99,102,241,.15);color:#6366f1;font-size:10px;font-weight:600;margin-right:3px">${m}</span>`).join('') : '—';
-          return `<tr>
-            <td><strong>${c.nom}</strong></td>
-            <td style="font-size:12px;color:var(--t2)">${c.raison_sociale || '—'}</td>
-            <td class="mono" style="font-size:12px">${c.siren || '—'}</td>
-            <td style="font-size:12px">${c.ville || '—'}</td>
-            <td style="font-size:12px">${c.departement || '—'}</td>
-            <td>${metiersHTML}</td>
-            <td style="text-align:center"><span style="display:inline-block;padding:2px 8px;border-radius:10px;background:${nbClients>0?'rgba(34,197,94,.15)':'rgba(107,114,128,.15)'};color:${nbClients>0?'#22c55e':'#6b7280'};font-size:11px;font-weight:600">${nbClients}</span></td>
-            <td style="text-align:right;white-space:nowrap">
-              ${(c.siren||c.siret) ? '<a href="https://www.pappers.fr/entreprise/'+(c.siren||c.siret)+'" target="_blank" rel="noopener" class="btn" style="font-size:11px;text-decoration:none;color:#3b82f6" title="Pappers">📋</a>' : ''}
-              <button class="btn" onclick="editConcurrent('${c.id}')" style="font-size:11px">Modifier</button>
-              <button class="btn" onclick="deleteConcurrent('${c.id}')" style="font-size:11px;color:var(--red)">×</button>
-            </td>
-          </tr>`;
-        }).join('')}
-    </tbody></table>
-  </div></div></div>`;
+          const metiersHTML = Array.isArray(c.metiers) && c.metiers.length ? c.metiers.map(m => '<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:rgba(99,102,241,.15);color:#6366f1;font-size:10px;font-weight:600;margin-right:3px">'+m+'</span>').join('') : '—';
+          return '<tr>' +
+            '<td><strong>'+(c.nom||'')+'</strong></td>' +
+            '<td style="font-size:12px;color:var(--t2)">'+(c.raison_sociale || '—')+'</td>' +
+            '<td class="mono" style="font-size:12px">'+(c.siren || '—')+'</td>' +
+            '<td class="mono" style="font-size:12px">'+(c.ape || '—')+'</td>' +
+            '<td style="font-size:12px">'+(c.ville || '—')+'</td>' +
+            '<td style="font-size:12px">'+(c.departement || '—')+'</td>' +
+            '<td>'+metiersHTML+'</td>' +
+            '<td style="text-align:center"><span style="display:inline-block;padding:2px 8px;border-radius:10px;background:'+(nbClients>0?'rgba(34,197,94,.15)':'rgba(107,114,128,.15)')+';color:'+(nbClients>0?'#22c55e':'#6b7280')+';font-size:11px;font-weight:600">'+nbClients+'</span></td>' +
+            '<td style="text-align:right;white-space:nowrap">' +
+              ((c.siren||c.siret) ? '<a href="https://www.pappers.fr/entreprise/'+(c.siren||c.siret)+'" target="_blank" rel="noopener" class="btn" style="font-size:11px;text-decoration:none;color:#3b82f6" title="Pappers">📋</a>' : '') +
+              ' <button class="btn" onclick="editConcurrent(\''+c.id+'\')" style="font-size:11px">Modifier</button>' +
+              ' <button class="btn" onclick="deleteConcurrent(\''+c.id+'\')" style="font-size:11px;color:var(--red)">×</button>' +
+            '</td>' +
+          '</tr>';
+        }).join('')) +
+    '</tbody></table></div></div></div>';
+}
+
+function toggleCnDropdown(id) {
+  ['cn-ape-dd','cn-metier-dd'].forEach(d => { if (d !== id) { const e = document.getElementById(d); if (e) e.style.display = 'none'; } });
+  const el = document.getElementById(id); if (!el) return;
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+}
+
+function filterCnApeList(q) {
+  q = (q || '').toLowerCase().trim();
+  document.querySelectorAll('#cn-ape-list .cn-ape-item').forEach(el => {
+    el.style.display = !q || el.dataset.search.includes(q) ? 'flex' : 'none';
+  });
+  document.querySelectorAll('#cn-ape-list .cn-ape-grp').forEach(g => {
+    const visible = [...g.querySelectorAll('.cn-ape-item')].some(it => it.style.display !== 'none');
+    g.style.display = visible ? 'block' : 'none';
+  });
+}
+
+function toggleCnApe(code, checked) {
+  if (checked) _cnSelectedApe.add(code); else _cnSelectedApe.delete(code);
+  updateCnApeButton(); applyCnFilters();
+}
+function toggleCnMetier(code, checked) {
+  if (checked) _cnSelectedMetiers.add(code); else _cnSelectedMetiers.delete(code);
+  updateCnMetierButton(); applyCnFilters();
+}
+function toggleAllCnApe(checked) {
+  document.querySelectorAll('#cn-ape-list .cn-ape-item').forEach(item => {
+    if (item.style.display === 'none') return;
+    const cb = item.querySelector('input[type=checkbox]'); if (!cb) return;
+    cb.checked = checked;
+    if (checked) _cnSelectedApe.add(cb.value); else _cnSelectedApe.delete(cb.value);
+  });
+  updateCnApeButton(); applyCnFilters();
+}
+function toggleAllCnMetier(checked) {
+  document.querySelectorAll('#cn-metier-list input[type=checkbox]').forEach(cb => {
+    cb.checked = checked;
+    if (checked) _cnSelectedMetiers.add(cb.value); else _cnSelectedMetiers.delete(cb.value);
+  });
+  updateCnMetierButton(); applyCnFilters();
+}
+function updateCnApeButton() {
+  const btn = document.getElementById('cn-ape-btn'); if (!btn) return;
+  btn.textContent = _cnSelectedApe.size === 0 ? '— Tous —' : _cnSelectedApe.size + ' code(s) sélectionné(s)';
+}
+function updateCnMetierButton() {
+  const btn = document.getElementById('cn-metier-btn'); if (!btn) return;
+  btn.textContent = _cnSelectedMetiers.size === 0 ? '— Tous —' : _cnSelectedMetiers.size + ' métier(s) sélectionné(s)';
+}
+
+function resetCnFilters() {
+  _cnSearch = ''; _cnDept = ''; _cnVille = '';
+  _cnSelectedApe.clear(); _cnSelectedMetiers.clear();
+  const q = document.getElementById('cn-q'); if (q) q.value = '';
+  const d = document.getElementById('cn-dept'); if (d) d.value = '';
+  const v = document.getElementById('cn-ville'); if (v) { v.innerHTML = '<option value="">— Choisir un département —</option>'; v.disabled = true; }
+  document.querySelectorAll('#cn-ape-list input[type=checkbox]').forEach(cb => cb.checked = false);
+  document.querySelectorAll('#cn-metier-list input[type=checkbox]').forEach(cb => cb.checked = false);
+  updateCnApeButton(); updateCnMetierButton();
+  applyCnFilters();
 }
 
 let _editingConcurrentId = null;
@@ -10690,6 +10859,12 @@ document.addEventListener('click', e => {
   }
   if (!e.target.closest('#pt-eff-dd') && !e.target.closest('#pt-eff-btn')) {
     const d = document.getElementById('pt-eff-dd'); if (d) d.style.display = 'none';
+  }
+  if (!e.target.closest('#cn-ape-dd') && !e.target.closest('#cn-ape-btn')) {
+    const d = document.getElementById('cn-ape-dd'); if (d) d.style.display = 'none';
+  }
+  if (!e.target.closest('#cn-metier-dd') && !e.target.closest('#cn-metier-btn')) {
+    const d = document.getElementById('cn-metier-dd'); if (d) d.style.display = 'none';
   }
 });
 
