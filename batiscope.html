@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BatiScop' — Observatoire Construction & Démographie</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,opsz,wght@0,6..12,300;0,6..12,500;0,6..12,700;0,6..12,800;0,6..12,900;1,6..12,400&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<style>
+:root{--yellow:#F2B705;--yellow-light:#F5C842;--yellow-dark:#D9A004;--yellow-pale:#FFF8E1;--yellow-glow:rgba(242,183,5,0.25);--bg:#F5F5F5;--surface:#FFFFFF;--surface2:#FAFAFA;--border:#E0E0E0;--border-light:#ECECEC;--black:#1A1A1A;--black-soft:#2D2D2D;--gray-700:#4A4A4A;--gray-500:#7A7A7A;--gray-300:#B0B0B0;--gray-200:#D4D4D4;--accent:#F2B705;--accent2:#3D7AB5;--accent3:#4CAF50;--accent4:#D94040;--accent5:#8B5CF6;--text:#1A1A1A;--text-dim:#4A4A4A;--text-muted:#7A7A7A;--individuel:#F2B705;--collectif:#3D7AB5;--residence:#8B5CF6;--groupe:#4CAF50;--shadow-sm:0 1px 3px rgba(0,0,0,0.08);--shadow-md:0 4px 12px rgba(0,0,0,0.1);--radius:10px;--radius-lg:16px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Nunito Sans',sans-serif;min-height:100vh;overflow-x:hidden}
+.grain{display:none}
+header{padding:12px 3rem;border-bottom:3px solid var(--yellow);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;background:var(--black)}
+header .brand{display:flex;align-items:center;gap:1rem}
+header .logo{width:42px;height:42px;background:var(--yellow);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:1.1rem;color:var(--black);box-shadow:0 2px 10px var(--yellow-glow)}
+header h1{font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;letter-spacing:-.02em;line-height:1.1;color:#fff}
+header h1 .highlight{color:var(--yellow);display:inline}
+header .logo-sub{font-size:9px;color:rgba(255,255,255,0.5);font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-top:-2px}
+header .logo-byline{font-size:9px;color:rgba(255,255,255,0.35);font-weight:600;letter-spacing:.04em;margin-top:2px}
+.meta-strip{display:flex;gap:1.5rem;font-size:.75rem;color:rgba(255,255,255,0.6);font-family:'Nunito Sans',sans-serif;font-weight:600;align-items:center}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:.4rem;animation:pulse 2s infinite}
+.status-dot.live{background:var(--accent3)}
+.status-dot.fallback{background:var(--yellow);animation:none}
+.status-dot.error{background:var(--accent4);animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.tabs{display:flex;gap:0;padding:0 3rem;border-bottom:1px solid var(--border);overflow-x:auto;background:var(--surface)}
+.tab{padding:1rem 1.5rem;font-size:.8rem;font-weight:700;color:var(--text-muted);cursor:pointer;border-bottom:3px solid transparent;transition:all .3s;white-space:nowrap;background:none;border-top:none;border-left:none;border-right:none;font-family:inherit}
+.tab:hover{color:var(--text-dim);background:var(--yellow-pale)}
+.tab.active{color:var(--black);border-bottom-color:var(--yellow);background:var(--yellow-pale)}
+.section{display:none;padding:2rem 3rem}
+.section.active{display:block}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin-bottom:2rem}
+.kpi{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:1.5rem;position:relative;overflow:hidden;transition:transform .2s,box-shadow .3s;box-shadow:var(--shadow-sm)}
+.kpi:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--yellow);opacity:0;transition:opacity .3s}
+.kpi:hover::before{opacity:1}
+.kpi-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:.75rem;font-weight:800}
+.kpi-value{font-size:2rem;font-weight:900;letter-spacing:-.03em;line-height:1;color:var(--black)}
+.kpi-sub{font-size:.75rem;color:var(--text-dim);margin-top:.5rem;display:flex;align-items:center;gap:.3rem;font-weight:600}
+.kpi-sub .up{color:var(--accent3)}.kpi-sub .down{color:var(--accent4)}
+.charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(480px,1fr));gap:1.5rem;margin-bottom:2rem}
+.chart-card{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:1.5rem;box-shadow:var(--shadow-sm)}
+.chart-card.full{grid-column:1/-1}
+.chart-title{font-size:.9rem;font-weight:800;margin-bottom:.3rem;color:var(--black)}
+.chart-subtitle{font-size:.7rem;color:var(--text-muted);margin-bottom:1.2rem;font-weight:600}
+.chart-wrap{position:relative;width:100%;height:320px}
+.chart-wrap.tall{height:400px}
+.legend-row{display:flex;flex-wrap:wrap;gap:1rem;margin-bottom:1rem}
+.legend-item{display:flex;align-items:center;gap:.4rem;font-size:.72rem;color:var(--text-dim);font-weight:600}
+.legend-dot{width:10px;height:10px;border-radius:3px}
+.source-note{font-size:.65rem;color:var(--text-muted);font-weight:600;margin-top:.5rem;padding-top:.75rem;border-top:1px solid var(--border-light)}
+.insight-box{background:var(--yellow-pale);border:1px solid rgba(242,183,5,0.3);border-radius:var(--radius);padding:1.25rem 1.5rem;margin-bottom:1.5rem;font-size:.85rem;line-height:1.6;color:var(--text-dim);border-left:4px solid var(--yellow)}
+.insight-box strong{color:var(--yellow-dark)}
+.data-table{width:100%;border-collapse:collapse;font-size:.8rem}
+.data-table th{text-align:left;font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);font-weight:800;padding:.75rem 1rem;border-bottom:2px solid var(--yellow);background:var(--yellow-pale)}
+.data-table td{padding:.75rem 1rem;border-bottom:1px solid var(--border-light);color:var(--text-dim)}
+.data-table tr:hover td{color:var(--black);background:var(--yellow-pale)}
+.data-table .num{text-align:right;font-weight:700;font-size:.75rem}
+.data-table .positive{color:var(--accent3)}.data-table .negative{color:var(--accent4)}
+footer{padding:2rem 3rem;border-top:3px solid var(--yellow);font-size:.65rem;color:var(--text-muted);font-weight:700;display:flex;justify-content:space-between;flex-wrap:wrap;gap:1rem;background:var(--black);color:rgba(255,255,255,0.5)}
+.loader{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--yellow);border-radius:50%;animation:spin .8s linear infinite;margin-right:.5rem;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.refresh-btn{background:var(--black-soft);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.7);padding:.4rem .8rem;border-radius:8px;font-size:.7rem;font-weight:700;font-family:inherit;cursor:pointer;transition:all .2s}
+.refresh-btn:hover{background:var(--yellow);color:var(--black);border-color:var(--yellow)}
+.map-container{display:grid;grid-template-columns:1fr 300px;gap:1.5rem;margin-top:1rem}
+.map-main{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:1.5rem;box-shadow:var(--shadow-sm)}
+.map-filters{display:flex;gap:1rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap}
+.map-filters label{font-size:.75rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+.map-filters select{padding:.5rem 1rem;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:.8rem;font-weight:600;background:var(--surface);color:var(--text);cursor:pointer}
+.map-filters select:focus{outline:none;border-color:var(--yellow);box-shadow:0 0 0 3px var(--yellow-glow)}
+#mapLeaflet{width:100%;height:500px;border-radius:var(--radius);border:1px solid var(--border-light);z-index:1}
+.map-tooltip{background:var(--black)!important;color:#fff!important;border:none!important;border-radius:6px!important;padding:4px 10px!important;font-family:'Nunito Sans',sans-serif!important;font-size:.75rem!important;font-weight:700!important;box-shadow:var(--shadow-md)!important}
+.map-tooltip::before{border-top-color:var(--black)!important}
+.leaflet-popup-content-wrapper{border-radius:var(--radius)!important;box-shadow:var(--shadow-md)!important;font-family:'Nunito Sans',sans-serif!important}
+.leaflet-popup-content{margin:0!important;padding:0!important}
+.map-popup{padding:1rem 1.2rem;min-width:220px}
+.map-popup h4{font-size:.9rem;font-weight:800;color:var(--black);margin-bottom:.15rem}
+.map-popup .map-popup-region{font-size:.7rem;color:var(--text-muted);font-weight:600;margin-bottom:.75rem}
+.map-popup-row{display:flex;justify-content:space-between;padding:.3rem 0;border-bottom:1px solid var(--border-light);font-size:.75rem}
+.map-popup-row:last-child{border-bottom:none}
+.map-popup-label{color:var(--text-muted);font-weight:600}
+.map-popup-val{font-weight:800;color:var(--black)}
+.map-legend{display:flex;align-items:center;gap:.5rem;margin-top:1rem;font-size:.7rem;color:var(--text-muted);font-weight:600}
+.map-legend-bar{height:12px;flex:1;border-radius:6px;background:linear-gradient(to right,#e8f5e9,#fff9c4,#ffcc80,#ef9a9a,#e53935)}
+.map-legend-labels{display:flex;justify-content:space-between;flex:1;font-size:.65rem;color:var(--text-muted)}
+.map-sidebar{display:flex;flex-direction:column;gap:1rem}
+.map-info{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:1.25rem;box-shadow:var(--shadow-sm);min-height:140px}
+.map-info h3{font-size:.9rem;font-weight:800;color:var(--black);margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem}
+.map-info-placeholder{color:var(--text-muted);font-size:.8rem;font-style:italic}
+.map-info-row{display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border-light);font-size:.78rem}
+.map-info-row:last-child{border-bottom:none}
+.map-info-label{color:var(--text-muted);font-weight:600}
+.map-info-val{font-weight:800;color:var(--black)}
+.map-ranking{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:1.25rem;box-shadow:var(--shadow-sm);flex:1;overflow-y:auto;max-height:400px}
+.map-ranking h3{font-size:.8rem;font-weight:800;color:var(--black);margin-bottom:.75rem;text-transform:uppercase;letter-spacing:.05em}
+.map-rank-item{display:flex;align-items:center;gap:.6rem;padding:.45rem 0;border-bottom:1px solid var(--border-light);font-size:.75rem}
+.map-rank-item:last-child{border-bottom:none}
+.map-rank-num{width:20px;height:20px;border-radius:50%;background:var(--yellow-pale);color:var(--yellow-dark);font-weight:800;font-size:.65rem;display:flex;align-items:center;justify-content:center}
+.map-rank-name{flex:1;color:var(--text-dim);font-weight:600}
+.map-rank-val{font-weight:800;color:var(--black)}
+.map-rank-bar{flex:1;height:6px;background:var(--border-light);border-radius:3px;overflow:hidden}
+.map-rank-fill{height:100%;border-radius:3px;background:var(--yellow);transition:width .5s}
+@media(max-width:768px){
+header{padding:10px 1rem;gap:.5rem}
+header .logo{width:34px;height:34px;font-size:.9rem;border-radius:8px}
+header h1{font-size:1.2rem}
+header .logo-byline{font-size:8px}
+.meta-strip{gap:.5rem;font-size:.65rem;flex-wrap:wrap}
+.refresh-btn{padding:.3rem .6rem;font-size:.6rem}
+.tabs{padding:0 .5rem;gap:0}
+.tab{padding:.7rem .8rem;font-size:.7rem}
+.section{padding:1.25rem 1rem}
+footer{padding:1rem;font-size:.6rem}
+.kpi-row{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.6rem}
+.kpi{padding:1rem}
+.kpi-value{font-size:1.4rem}
+.kpi-label{font-size:.6rem}
+.kpi-sub{font-size:.65rem}
+.charts-grid{grid-template-columns:1fr;gap:1rem}
+.chart-wrap{height:240px}
+.chart-wrap.tall{height:280px}
+.chart-title{font-size:.8rem}
+.chart-subtitle{font-size:.6rem}
+.insight-box{font-size:.78rem;padding:1rem}
+.legend-row{gap:.5rem}
+.legend-item{font-size:.6rem}
+.data-table{font-size:.7rem}
+.data-table th,.data-table td{padding:.5rem .6rem}
+.map-container{grid-template-columns:1fr}
+#mapLeaflet{height:350px}
+.map-sidebar{flex-direction:column}
+.map-ranking{max-height:250px}
+}
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--gray-300);border-radius:3px}
+</style>
+</head>
+<body>
+<div class="grain"></div>
+
+<header>
+  <div class="brand">
+    <div class="logo">B</div>
+    <div>
+      <h1>Bati<span class="highlight">Scop'</span></h1>
+      <div class="logo-byline">by GPH</div>
+    </div>
+  </div>
+  <div class="meta-strip">
+    <span id="dataStatus"><span class="status-dot live"></span>Chargement des données…</span>
+    <span id="lastUpdate"></span>
+    <button class="refresh-btn" onclick="loadAllData()">⟳ Rafraîchir</button>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" data-tab="synthese">Synthèse</button>
+  <button class="tab" data-tab="individuel">Maisons Individuelles</button>
+  <button class="tab" data-tab="collectif">Autres Constructions</button>
+  <button class="tab" data-tab="regions">Régions</button>
+  <button class="tab" data-tab="demographie">Démographie</button>
+  <button class="tab" data-tab="financement">Financement</button>
+  <button class="tab" data-tab="carte">Vue Carte</button>
+  <button class="tab" data-tab="projection">Projection</button>
+</div>
+
+<!-- ══════════ SYNTHÈSE ══════════ -->
+<div class="section active" id="synthese">
+  <div class="insight-box" id="insightSynthese">
+    <span class="loader"></span> Chargement de l'analyse conjoncturelle…
+  </div>
+  <div class="kpi-row" id="kpiSynthese"></div>
+  <div class="charts-grid">
+    <div class="chart-card full">
+      <div class="chart-title">Évolution mensuelle des autorisations de logements</div>
+      <div class="chart-subtitle">Source : SDES / Sitadel — Données nationales — API DIDO</div>
+      <div class="legend-row">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--individuel)"></div>Individuel pur</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--groupe)"></div>Individuel groupé</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--collectif)"></div>Collectif</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--residence)"></div>Résidence</div>
+      </div>
+      <div class="chart-wrap tall"><canvas id="chartEvoMensuelle"></canvas></div>
+      <div class="source-note">Données mensuelles brutes en date réelle, niveau national hors Mayotte. Mises à jour auto via API DIDO.</div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Répartition par type (12 mois glissants)</div>
+      <div class="chart-subtitle" id="subtitleRepartition">Chargement…</div>
+      <div class="chart-wrap"><canvas id="chartRepartition"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Autorisations annuelles — Tendance longue</div>
+      <div class="chart-subtitle">Données nationales depuis 2017</div>
+      <div class="chart-wrap"><canvas id="chartAnnuel"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ INDIVIDUEL ══════════ -->
+<div class="section" id="individuel">
+  <div class="insight-box" id="insightIndiv">
+    <span class="loader"></span> Chargement des données maisons individuelles…
+  </div>
+  <div class="kpi-row" id="kpiIndiv"></div>
+  <div class="charts-grid">
+    <div class="chart-card full">
+      <div class="chart-title">Maisons individuelles — Autorisations mensuelles</div>
+      <div class="chart-subtitle">Individuel pur vs. groupé — API DIDO temps réel</div>
+      <div class="chart-wrap tall"><canvas id="chartIndivDetail"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Facteurs de pression sur l'individuel pur</div>
+      <div class="chart-subtitle">Impact relatif estimé — Analyse sectorielle</div>
+      <div class="chart-wrap"><canvas id="chartFacteurs"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Part de l'individuel dans le total (%)</div>
+      <div class="chart-subtitle">Évolution annuelle</div>
+      <div class="chart-wrap"><canvas id="chartPartIndiv"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ COLLECTIF ══════════ -->
+<div class="section" id="collectif">
+  <div class="insight-box" id="insightCollectif">
+    <span class="loader"></span> Chargement des données collectif…
+  </div>
+  <div class="kpi-row" id="kpiCollectif"></div>
+  <div class="charts-grid">
+    <div class="chart-card full">
+      <div class="chart-title">Logements collectifs & résidences — Autorisations mensuelles</div>
+      <div class="chart-subtitle">Collectif ordinaire vs. résidences — API DIDO</div>
+      <div class="chart-wrap tall"><canvas id="chartCollectifDetail"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ RÉGIONS ══════════ -->
+<div class="section" id="regions">
+  <div class="insight-box" id="insightRegions">
+    <span class="loader"></span> Chargement des données régionales…
+  </div>
+  <div class="charts-grid">
+    <div class="chart-card full">
+      <div class="chart-title">Autorisations par région (12 mois glissants)</div>
+      <div class="chart-subtitle">Données API DIDO — Niveau régional</div>
+      <div class="chart-wrap tall"><canvas id="chartRegions"></canvas></div>
+    </div>
+    <div class="chart-card full">
+      <div class="chart-title">Pression démographique vs. Construction neuve</div>
+      <div class="chart-subtitle">Croisement croissance pop. / autorisations logements</div>
+      <div class="chart-wrap tall"><canvas id="chartCroisement"></canvas></div>
+      <div class="source-note">Taille bulle = population. Plus haut+droite = plus forte pression logement.</div>
+    </div>
+  </div>
+  <div class="chart-card" style="margin-bottom:2rem">
+    <div class="chart-title">Tableau régional</div>
+    <div style="overflow-x:auto"><table class="data-table"><thead><tr>
+      <th>Région</th><th class="num">Pop. (M)</th><th class="num">Croiss. (%/an)</th>
+      <th class="num">Autorisations 12m</th><th class="num">Dont individuel</th><th class="num">Logts/1000 hab.</th>
+    </tr></thead><tbody id="regionTableBody"></tbody></table></div>
+  </div>
+</div>
+
+<!-- ══════════ DÉMOGRAPHIE ══════════ -->
+<div class="section" id="demographie">
+  <div class="insight-box">
+    <strong>Tendances démographiques :</strong> Au 1er janvier 2026, la France compte <strong>69,1 millions d'habitants</strong>. En 2025, le solde naturel est devenu <strong>négatif (−6 000)</strong> — une première depuis 1945. L'ICF est à 1,56 enfant/femme, le plus bas depuis 1918. 22 % de la population a 65+ ans.
+  </div>
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-label">Population (1/1/2026)</div><div class="kpi-value" style="color:var(--accent2)">69,1 M</div><div class="kpi-sub"><span class="up">▲ +0,25%</span></div></div>
+    <div class="kpi"><div class="kpi-label">Solde naturel 2025</div><div class="kpi-value" style="color:var(--accent4)">−6 000</div><div class="kpi-sub">1ᵉʳ négatif depuis 1945</div></div>
+    <div class="kpi"><div class="kpi-label">Naissances 2025</div><div class="kpi-value">645 000</div><div class="kpi-sub"><span class="down">▼ −2,1%</span> vs 2024</div></div>
+    <div class="kpi"><div class="kpi-label">ICF 2025</div><div class="kpi-value" style="color:var(--accent5)">1,56</div><div class="kpi-sub">enfant/femme</div></div>
+    <div class="kpi"><div class="kpi-label">Part 65 ans et +</div><div class="kpi-value">22%</div><div class="kpi-sub">≈ même que les &lt;20 ans</div></div>
+    <div class="kpi"><div class="kpi-label">Espérance de vie H/F</div><div class="kpi-value" style="color:var(--accent3)">80/86</div><div class="kpi-sub">ans — en hausse</div></div>
+  </div>
+  <div class="charts-grid">
+    <div class="chart-card"><div class="chart-title">Population française</div><div class="chart-subtitle">En millions, 2000-2026 (INSEE)</div><div class="chart-wrap"><canvas id="chartPopulation"></canvas></div></div>
+    <div class="chart-card"><div class="chart-title">Naissances et décès</div><div class="chart-subtitle">En milliers, 2010-2025 (INSEE)</div><div class="chart-wrap"><canvas id="chartNaissances"></canvas></div></div>
+    <div class="chart-card"><div class="chart-title">Solde naturel</div><div class="chart-subtitle">En milliers, 2010-2025</div><div class="chart-wrap"><canvas id="chartSoldeNaturel"></canvas></div></div>
+    <div class="chart-card"><div class="chart-title">Structure par âge</div><div class="chart-subtitle">Répartition 2025 (%)</div><div class="chart-wrap"><canvas id="chartAge"></canvas></div></div>
+  </div>
+</div>
+
+<!-- ══════════ FINANCEMENT ══════════ -->
+<div class="section" id="financement">
+  <div class="insight-box">
+    <strong>Crédit immobilier — Mars 2026 :</strong> Taux stabilisés autour de <strong>3,2–3,4 %</strong> sur 20-25 ans. Budget 2026 voté, OAT 10 ans &lt; 3,30 %. PTZ élargi et prorogé. Primo-accédants portent la reprise.
+  </div>
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-label">Taux 15 ans</div><div class="kpi-value" style="color:var(--accent3)">3,13%</div><div class="kpi-sub">mars 2026</div></div>
+    <div class="kpi"><div class="kpi-label">Taux 20 ans</div><div class="kpi-value" style="color:var(--accent2)">3,26%</div><div class="kpi-sub">mars 2026</div></div>
+    <div class="kpi"><div class="kpi-label">Taux 25 ans</div><div class="kpi-value" style="color:var(--accent5)">3,41%</div><div class="kpi-sub">mars 2026</div></div>
+    <div class="kpi"><div class="kpi-label">OAT 10 ans</div><div class="kpi-value">&lt; 3,30%</div><div class="kpi-sub">en détente</div></div>
+  </div>
+  <div class="charts-grid">
+    <div class="chart-card full"><div class="chart-title">Évolution taux crédit immobilier</div><div class="chart-subtitle">Taux moyens par durée, 2019-2026</div><div class="chart-wrap tall"><canvas id="chartTaux"></canvas></div></div>
+    <div class="chart-card"><div class="chart-title">Coût total crédit 200 000 € / 20 ans</div><div class="chart-subtitle">Selon le taux d'intérêt</div><div class="chart-wrap"><canvas id="chartCoutCredit"></canvas></div></div>
+    <div class="chart-card"><div class="chart-title">Capacité d'emprunt (1 000 €/mois)</div><div class="chart-subtitle">Montant empruntable selon taux et durée</div><div class="chart-wrap"><canvas id="chartCapacite"></canvas></div></div>
+  </div>
+</div>
+
+<!-- ══════════ VUE CARTE ══════════ -->
+<div class="section" id="carte">
+  <div class="map-container">
+    <div class="map-main">
+      <div class="map-filters">
+        <label for="mapMetric">Indicateur :</label>
+        <select id="mapMetric" onchange="updateMap()">
+          <option value="autoris">Autorisations (12m)</option>
+          <option value="indiv">Individuel pur (12m)</option>
+          <option value="croiss">Croissance démographique (%)</option>
+          <option value="pop">Population (M hab.)</option>
+          <option value="ratio">Ratio logts / 1000 hab.</option>
+        </select>
+      </div>
+      <div id="mapLeaflet"></div>
+      <div class="map-legend">
+        <span id="mapLegendMin">Min</span>
+        <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+          <div class="map-legend-bar"></div>
+          <div class="map-legend-labels"><span id="mapLegendMinVal"></span><span id="mapLegendMaxVal"></span></div>
+        </div>
+        <span id="mapLegendMax">Max</span>
+      </div>
+    </div>
+    <div class="map-sidebar">
+      <div class="map-info" id="mapInfo">
+        <h3>Détail département</h3>
+        <div class="map-info-placeholder">Survolez un département sur la carte</div>
+      </div>
+      <div class="map-ranking" id="mapRanking">
+        <h3>Classement</h3>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PROJECTION ══════════ -->
+<div class="section" id="projection">
+  <div class="kpi-row" id="kpiProjection"></div>
+  <div class="charts-grid">
+    <div class="chart-card full">
+      <div class="chart-title">Projection des autorisations de logements — 2026 / 2027</div>
+      <div class="chart-subtitle">Extrapolation par régression linéaire sur les données 2022–2025</div>
+      <div class="chart-wrap tall"><canvas id="chartProjectionTotal"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Projection par type de logement</div>
+      <div class="chart-subtitle">Individuel pur · Individuel groupé · Collectif · Résidences</div>
+      <div class="chart-wrap"><canvas id="chartProjectionType"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Scénarios de reprise</div>
+      <div class="chart-subtitle">Tendanciel · Optimiste · Pessimiste</div>
+      <div class="chart-wrap"><canvas id="chartProjectionScenarios"></canvas></div>
+    </div>
+  </div>
+  <div class="insight-box" id="insightProjection" style="margin-top:1.5rem">
+    <span class="loader"></span> Calcul des projections…
+  </div>
+</div>
+
+<footer>
+  <span>Sources : API DIDO/SDES/Sitadel · INSEE · CAFPI/Meilleurtaux · Banque de France</span>
+</footer>
+
+<script>
+// ══════════════════════════════════════════════════════
+// CONFIG & STATE
+// ══════════════════════════════════════════════════════
+const DIDO_BASE = 'https://data.statistiques.developpement-durable.gouv.fr/dido/api/v1';
+// Known datafile IDs for Sitadel construction data (monthly series)
+// National: 6513eed03b05e5cd969c2710 (dataset) — we'll list datafiles
+const DATASET_ID_MONTHLY = '6513eed03b05e5cd969c2710';
+
+let charts = {};
+let dataSource = 'loading'; // 'api' | 'fallback'
+
+// ══════════════════════════════════════════════════════
+// TAB NAVIGATION
+// ══════════════════════════════════════════════════════
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.tab).classList.add('active');
+    // Lazy-init Leaflet map when carte tab is shown
+    if (tab.dataset.tab === 'carte') {
+      setTimeout(async () => { await renderMapSection(); if (mapInstance) mapInstance.invalidateSize(); }, 100);
+    }
+  });
+});
+
+// ══════════════════════════════════════════════════════
+// CHART.JS DEFAULTS
+// ══════════════════════════════════════════════════════
+Chart.defaults.color = '#7A7A7A';
+Chart.defaults.borderColor = 'rgba(0,0,0,0.08)';
+Chart.defaults.font.family = "'Nunito Sans', sans-serif";
+Chart.defaults.font.size = 11;
+Chart.defaults.plugins.legend.display = false;
+Chart.defaults.responsive = true;
+Chart.defaults.maintainAspectRatio = false;
+const G = { color: 'rgba(0,0,0,0.06)' };
+
+// ══════════════════════════════════════════════════════
+// FALLBACK DATA (snapshot mars 2026 — used if API fails)
+// ══════════════════════════════════════════════════════
+const FALLBACK = {
+  // National monthly data: { year, month, ip, ig, co, re, total }
+  national: [
+    {y:2022,m:1,ip:9800,ig:3000,co:17500,re:4000},{y:2022,m:2,ip:9600,ig:2900,co:17200,re:3800},{y:2022,m:3,ip:10200,ig:3200,co:18000,re:4200},{y:2022,m:4,ip:9900,ig:3100,co:17800,re:4100},{y:2022,m:5,ip:10000,ig:3000,co:17500,re:3900},{y:2022,m:6,ip:9800,ig:2900,co:17000,re:3800},{y:2022,m:7,ip:9500,ig:2800,co:16800,re:3700},{y:2022,m:8,ip:9200,ig:2700,co:16200,re:3500},{y:2022,m:9,ip:9400,ig:2800,co:16500,re:3600},{y:2022,m:10,ip:9000,ig:2700,co:16000,re:3500},{y:2022,m:11,ip:8800,ig:2600,co:15800,re:3400},{y:2022,m:12,ip:8500,ig:2500,co:15500,re:3300},
+    {y:2023,m:1,ip:8200,ig:2500,co:15200,re:3400},{y:2023,m:2,ip:8000,ig:2400,co:15000,re:3300},{y:2023,m:3,ip:8100,ig:2500,co:14800,re:3200},{y:2023,m:4,ip:7800,ig:2400,co:14500,re:3100},{y:2023,m:5,ip:7600,ig:2300,co:14200,re:3000},{y:2023,m:6,ip:7500,ig:2300,co:14000,re:3100},{y:2023,m:7,ip:7400,ig:2200,co:13800,re:3000},{y:2023,m:8,ip:7200,ig:2200,co:13500,re:2900},{y:2023,m:9,ip:7400,ig:2300,co:14000,re:3100},{y:2023,m:10,ip:7300,ig:2300,co:14200,re:3200},{y:2023,m:11,ip:7200,ig:2200,co:14000,re:3100},{y:2023,m:12,ip:7100,ig:2200,co:13800,re:3000},
+    {y:2024,m:1,ip:7200,ig:2200,co:14000,re:3200},{y:2024,m:2,ip:7400,ig:2100,co:14500,re:3100},{y:2024,m:3,ip:7000,ig:2300,co:15000,re:3400},{y:2024,m:4,ip:7100,ig:2400,co:14200,re:3300},{y:2024,m:5,ip:7300,ig:2200,co:13800,re:3500},{y:2024,m:6,ip:7500,ig:2500,co:14500,re:3600},{y:2024,m:7,ip:7600,ig:2300,co:15200,re:3200},{y:2024,m:8,ip:7400,ig:2400,co:14800,re:3400},{y:2024,m:9,ip:7800,ig:2500,co:15500,re:3800},{y:2024,m:10,ip:7900,ig:2600,co:14800,re:3600},{y:2024,m:11,ip:8000,ig:2400,co:15200,re:3700},{y:2024,m:12,ip:7700,ig:2300,co:14500,re:3500},
+    {y:2025,m:1,ip:7500,ig:2400,co:15200,re:3900},{y:2025,m:2,ip:7600,ig:2500,co:16000,re:4000},{y:2025,m:3,ip:7200,ig:2600,co:17500,re:4200},{y:2025,m:4,ip:7400,ig:2700,co:17000,re:4100},{y:2025,m:5,ip:7600,ig:2500,co:16200,re:3800},{y:2025,m:6,ip:7800,ig:2800,co:16800,re:4200},{y:2025,m:7,ip:8000,ig:2600,co:17200,re:4400},{y:2025,m:8,ip:8100,ig:2700,co:16500,re:4100},{y:2025,m:9,ip:8300,ig:2800,co:17800,re:4500},{y:2025,m:10,ip:8200,ig:2900,co:16200,re:4200},{y:2025,m:11,ip:8400,ig:2700,co:15800,re:4100}
+  ],
+  regions: [
+    {nom:'Île-de-France',pop:12.3,croiss:0.05,autoris:58000,indiv:5800},
+    {nom:'Auvergne-Rhône-Alpes',pop:8.2,croiss:0.35,autoris:48000,indiv:13500},
+    {nom:'Nouvelle-Aquitaine',pop:6.1,croiss:0.45,autoris:38000,indiv:14200},
+    {nom:'Occitanie',pop:6.0,croiss:0.65,autoris:42000,indiv:14800},
+    {nom:'Hauts-de-France',pop:6.0,croiss:-0.05,autoris:22000,indiv:8200},
+    {nom:'Grand Est',pop:5.6,croiss:0.02,autoris:20000,indiv:7500},
+    {nom:'PACA',pop:5.1,croiss:0.25,autoris:28000,indiv:6200},
+    {nom:'Pays de la Loire',pop:3.9,croiss:0.55,autoris:28000,indiv:10500},
+    {nom:'Normandie',pop:3.3,croiss:-0.10,autoris:14000,indiv:5800},
+    {nom:'Bretagne',pop:3.4,croiss:0.40,autoris:24000,indiv:9200},
+    {nom:'Bourgogne-Franche-Comté',pop:2.8,croiss:-0.15,autoris:10000,indiv:4200},
+    {nom:'Centre-Val de Loire',pop:2.6,croiss:-0.02,autoris:10000,indiv:4800},
+    {nom:'Corse',pop:0.35,croiss:0.90,autoris:3500,indiv:1200}
+  ]
+};
+
+// Données par département (code → {n:nom, r:région, p:pop(M), a:autorisations 12m, i:individuel pur})
+const DEPT_DATA = {
+'01':{n:'Ain',r:'Auvergne-Rhône-Alpes',p:0.66,a:4200,i:1800},'02':{n:'Aisne',r:'Hauts-de-France',p:0.53,a:1800,i:900},'03':{n:'Allier',r:'Auvergne-Rhône-Alpes',p:0.34,a:1200,i:600},'04':{n:'Alpes-de-Haute-Provence',r:'PACA',p:0.16,a:1200,i:500},'05':{n:'Hautes-Alpes',r:'PACA',p:0.14,a:800,i:350},
+'06':{n:'Alpes-Maritimes',r:'PACA',p:1.08,a:5500,i:800},'07':{n:'Ardèche',r:'Auvergne-Rhône-Alpes',p:0.33,a:1800,i:900},'08':{n:'Ardennes',r:'Grand Est',p:0.27,a:800,i:350},'09':{n:'Ariège',r:'Occitanie',p:0.15,a:800,i:400},'10':{n:'Aube',r:'Grand Est',p:0.31,a:1200,i:500},
+'11':{n:'Aude',r:'Occitanie',p:0.37,a:2200,i:1000},'12':{n:'Aveyron',r:'Occitanie',p:0.28,a:1200,i:600},'13':{n:'Bouches-du-Rhône',r:'PACA',p:2.04,a:12000,i:2500},'14':{n:'Calvados',r:'Normandie',p:0.70,a:3500,i:1400},'15':{n:'Cantal',r:'Auvergne-Rhône-Alpes',p:0.14,a:500,i:250},
+'16':{n:'Charente',r:'Nouvelle-Aquitaine',p:0.35,a:1800,i:850},'17':{n:'Charente-Maritime',r:'Nouvelle-Aquitaine',p:0.65,a:4500,i:1800},'18':{n:'Cher',r:'Centre-Val de Loire',p:0.30,a:1000,i:500},'19':{n:'Corrèze',r:'Nouvelle-Aquitaine',p:0.24,a:1100,i:550},'21':{n:'Côte-d\'Or',r:'Bourgogne-Franche-Comté',p:0.53,a:2200,i:900},
+'22':{n:'Côtes-d\'Armor',r:'Bretagne',p:0.60,a:4200,i:1800},'23':{n:'Creuse',r:'Nouvelle-Aquitaine',p:0.12,a:400,i:200},'24':{n:'Dordogne',r:'Nouvelle-Aquitaine',p:0.41,a:2200,i:1000},'25':{n:'Doubs',r:'Bourgogne-Franche-Comté',p:0.54,a:2000,i:800},'26':{n:'Drôme',r:'Auvergne-Rhône-Alpes',p:0.52,a:3200,i:1400},
+'27':{n:'Eure',r:'Normandie',p:0.60,a:2800,i:1300},'28':{n:'Eure-et-Loir',r:'Centre-Val de Loire',p:0.43,a:1800,i:900},'29':{n:'Finistère',r:'Bretagne',p:0.91,a:6500,i:2400},'30':{n:'Gard',r:'Occitanie',p:0.75,a:4500,i:1950},'31':{n:'Haute-Garonne',r:'Occitanie',p:1.40,a:13000,i:3000},
+'32':{n:'Gers',r:'Occitanie',p:0.19,a:1000,i:500},'33':{n:'Gironde',r:'Nouvelle-Aquitaine',p:1.62,a:12000,i:3500},'34':{n:'Hérault',r:'Occitanie',p:1.18,a:9500,i:2500},'35':{n:'Ille-et-Vilaine',r:'Bretagne',p:1.08,a:8500,i:2800},'36':{n:'Indre',r:'Centre-Val de Loire',p:0.22,a:700,i:350},
+'37':{n:'Indre-et-Loire',r:'Centre-Val de Loire',p:0.61,a:2800,i:1200},'38':{n:'Isère',r:'Auvergne-Rhône-Alpes',p:1.27,a:8500,i:2500},'39':{n:'Jura',r:'Bourgogne-Franche-Comté',p:0.26,a:1000,i:450},'40':{n:'Landes',r:'Nouvelle-Aquitaine',p:0.41,a:3200,i:1400},'41':{n:'Loir-et-Cher',r:'Centre-Val de Loire',p:0.33,a:1400,i:700},
+'42':{n:'Loire',r:'Auvergne-Rhône-Alpes',p:0.76,a:3800,i:1500},'43':{n:'Haute-Loire',r:'Auvergne-Rhône-Alpes',p:0.23,a:1000,i:500},'44':{n:'Loire-Atlantique',r:'Pays de la Loire',p:1.43,a:11000,i:3800},'45':{n:'Loiret',r:'Centre-Val de Loire',p:0.68,a:2300,i:1150},'46':{n:'Lot',r:'Occitanie',p:0.17,a:800,i:400},
+'47':{n:'Lot-et-Garonne',r:'Nouvelle-Aquitaine',p:0.33,a:1600,i:800},'48':{n:'Lozère',r:'Occitanie',p:0.08,a:300,i:150},'49':{n:'Maine-et-Loire',r:'Pays de la Loire',p:0.82,a:5500,i:2200},'50':{n:'Manche',r:'Normandie',p:0.50,a:2200,i:1000},'51':{n:'Marne',r:'Grand Est',p:0.57,a:2200,i:800},
+'52':{n:'Haute-Marne',r:'Grand Est',p:0.17,a:500,i:250},'53':{n:'Mayenne',r:'Pays de la Loire',p:0.31,a:2000,i:1000},'54':{n:'Meurthe-et-Moselle',r:'Grand Est',p:0.73,a:2800,i:1000},'55':{n:'Meuse',r:'Grand Est',p:0.19,a:600,i:300},'56':{n:'Morbihan',r:'Bretagne',p:0.76,a:4800,i:2200},
+'57':{n:'Moselle',r:'Grand Est',p:1.05,a:3800,i:1400},'58':{n:'Nièvre',r:'Bourgogne-Franche-Comté',p:0.20,a:600,i:300},'59':{n:'Nord',r:'Hauts-de-France',p:2.60,a:9500,i:3200},'60':{n:'Oise',r:'Hauts-de-France',p:0.83,a:3800,i:1500},'61':{n:'Orne',r:'Normandie',p:0.28,a:1200,i:600},
+'62':{n:'Pas-de-Calais',r:'Hauts-de-France',p:1.47,a:4500,i:1800},'63':{n:'Puy-de-Dôme',r:'Auvergne-Rhône-Alpes',p:0.66,a:3500,i:1200},'64':{n:'Pyrénées-Atlantiques',r:'Nouvelle-Aquitaine',p:0.68,a:4500,i:1500},'65':{n:'Hautes-Pyrénées',r:'Occitanie',p:0.23,a:1200,i:500},'66':{n:'Pyrénées-Orientales',r:'Occitanie',p:0.48,a:3500,i:1500},
+'67':{n:'Bas-Rhin',r:'Grand Est',p:1.14,a:4200,i:1500},'68':{n:'Haut-Rhin',r:'Grand Est',p:0.76,a:2800,i:1000},'69':{n:'Rhône',r:'Auvergne-Rhône-Alpes',p:1.88,a:12000,i:1500},'70':{n:'Haute-Saône',r:'Bourgogne-Franche-Comté',p:0.24,a:800,i:400},'71':{n:'Saône-et-Loire',r:'Bourgogne-Franche-Comté',p:0.55,a:1800,i:750},
+'72':{n:'Sarthe',r:'Pays de la Loire',p:0.57,a:3500,i:1500},'73':{n:'Savoie',r:'Auvergne-Rhône-Alpes',p:0.44,a:3800,i:600},'74':{n:'Haute-Savoie',r:'Auvergne-Rhône-Alpes',p:0.83,a:4500,i:750},'75':{n:'Paris',r:'Île-de-France',p:2.10,a:4500,i:100},'76':{n:'Seine-Maritime',r:'Normandie',p:1.26,a:4300,i:1500},
+'77':{n:'Seine-et-Marne',r:'Île-de-France',p:1.42,a:9200,i:1800},'78':{n:'Yvelines',r:'Île-de-France',p:1.44,a:6800,i:900},'79':{n:'Deux-Sèvres',r:'Nouvelle-Aquitaine',p:0.37,a:2200,i:1000},'80':{n:'Somme',r:'Hauts-de-France',p:0.57,a:2400,i:800},'81':{n:'Tarn',r:'Occitanie',p:0.39,a:2500,i:1100},
+'82':{n:'Tarn-et-Garonne',r:'Occitanie',p:0.26,a:1500,i:700},'83':{n:'Var',r:'PACA',p:1.08,a:5500,i:1400},'84':{n:'Vaucluse',r:'PACA',p:0.56,a:3000,i:650},'85':{n:'Vendée',r:'Pays de la Loire',p:0.69,a:6000,i:2000},'86':{n:'Vienne',r:'Nouvelle-Aquitaine',p:0.44,a:2500,i:1000},
+'87':{n:'Haute-Vienne',r:'Nouvelle-Aquitaine',p:0.37,a:2000,i:700},'88':{n:'Vosges',r:'Grand Est',p:0.37,a:1100,i:400},'89':{n:'Yonne',r:'Bourgogne-Franche-Comté',p:0.34,a:1100,i:450},'90':{n:'Territoire de Belfort',r:'Bourgogne-Franche-Comté',p:0.14,a:500,i:150},'91':{n:'Essonne',r:'Île-de-France',p:1.30,a:7500,i:800},
+'92':{n:'Hauts-de-Seine',r:'Île-de-France',p:1.62,a:8500,i:200},'93':{n:'Seine-Saint-Denis',r:'Île-de-France',p:1.64,a:9000,i:300},'94':{n:'Val-de-Marne',r:'Île-de-France',p:1.41,a:6500,i:400},'95':{n:'Val-d\'Oise',r:'Île-de-France',p:1.25,a:6000,i:1300},
+'2A':{n:'Corse-du-Sud',r:'Corse',p:0.16,a:1800,i:600},'2B':{n:'Haute-Corse',r:'Corse',p:0.18,a:1700,i:600}
+};
+
+function getDeptCroiss(dept) {
+  const reg = FALLBACK.regions.find(r => r.nom === dept.r);
+  return reg ? reg.croiss : 0;
+}
+
+// ══════════════════════════════════════════════════════
+// API FETCHER
+// ══════════════════════════════════════════════════════
+async function fetchDIDO(datafileId, millesime) {
+  const url = `${DIDO_BASE}/datafiles/${datafileId}/csv?millesime=${millesime}&withColumnName=true&withColumnDescription=true&withColumnUnit=false`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const text = await res.text();
+  return parseCSV(text);
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 3) return [];
+  // Line 0: descriptions, Line 1: column names, Line 2+: data
+  const headers = lines[1].split(';').map(h => h.replace(/"/g, '').trim());
+  return lines.slice(2).map(line => {
+    const vals = line.split(';').map(v => v.replace(/"/g, '').trim());
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = isNaN(vals[i]) ? vals[i] : Number(vals[i]); });
+    return obj;
+  });
+}
+
+// ══════════════════════════════════════════════════════
+// MAIN DATA LOADER
+// ══════════════════════════════════════════════════════
+async function loadAllData() {
+  const statusEl = document.getElementById('dataStatus');
+  const updateEl = document.getElementById('lastUpdate');
+  statusEl.innerHTML = '<span class="loader"></span> Connexion API DIDO…';
+  
+  let data = null;
+  
+  try {
+    // Try to fetch the dataset info to find datafile IDs
+    const dsRes = await fetch(`${DIDO_BASE}/datasets/${DATASET_ID_MONTHLY}`);
+    if (!dsRes.ok) throw new Error('Dataset not found');
+    const dsInfo = await dsRes.json();
+    
+    // Find the national datafile (first one, usually)
+    const datafiles = dsInfo.datafiles || [];
+    if (datafiles.length === 0) throw new Error('No datafiles');
+    
+    // Get the latest millesime for national file
+    const natFile = datafiles[0]; // national is typically first
+    const latestMillesime = natFile.millesimes_info?.[0]?.millesime || null;
+    
+    if (natFile.rid && latestMillesime) {
+      const rawData = await fetchDIDO(natFile.rid, latestMillesime);
+      if (rawData.length > 0) {
+        data = processAPIData(rawData);
+        dataSource = 'api';
+        statusEl.innerHTML = '<span class="status-dot live"></span> Données API DIDO en direct';
+        updateEl.textContent = `Millésime : ${latestMillesime}`;
+      }
+    }
+    
+    // Try regional file too
+    if (datafiles.length > 1) {
+      const regFile = datafiles[1];
+      const regMillesime = regFile.millesimes_info?.[0]?.millesime || null;
+      if (regFile.rid && regMillesime) {
+        try {
+          const regRaw = await fetchDIDO(regFile.rid, regMillesime);
+          if (regRaw.length > 0 && data) {
+            data.regional = processRegionalData(regRaw);
+          }
+        } catch(e) { /* use fallback for regions */ }
+      }
+    }
+  } catch (err) {
+    console.warn('API DIDO unavailable, using fallback:', err.message);
+  }
+  
+  if (!data) {
+    data = { national: FALLBACK.national, regional: null };
+    dataSource = 'fallback';
+    statusEl.innerHTML = '<span class="status-dot fallback"></span> Données de référence (mars 2026)';
+    updateEl.textContent = 'API indisponible — données intégrées';
+  }
+  
+  renderAll(data);
+}
+
+function processAPIData(raw) {
+  // The API returns rows with ANNEE, MOIS, ZONE, TYPE_LGT, NAT_SERIES, LOG_AUT, etc.
+  // Filter for national brute data
+  const national = [];
+  const grouped = {};
+  
+  raw.forEach(row => {
+    const key = `${row.ANNEE}-${row.MOIS}`;
+    if (!grouped[key]) grouped[key] = { y: row.ANNEE, m: row.MOIS, ip: 0, ig: 0, co: 0, re: 0 };
+    
+    const series = row.NAT_SERIES || '';
+    if (series !== 'Brute') return; // Use raw data
+    
+    const type = row.TYPE_LGT || '';
+    const zone = row.ZONE || '';
+    const val = row.LOG_AUT || 0;
+    
+    // Only aggregate if it's a national/total zone
+    if (zone.includes('France') || zone === 'Ensemble') {
+      if (type.includes('Individuel pur')) grouped[key].ip += val;
+      else if (type.includes('Individuel groupé') || type.includes('groupé')) grouped[key].ig += val;
+      else if (type.includes('Collectif') && !type.includes('Résidence')) grouped[key].co += val;
+      else if (type.includes('Résidence')) grouped[key].re += val;
+    }
+  });
+  
+  return {
+    national: Object.values(grouped).sort((a, b) => a.y * 100 + a.m - (b.y * 100 + b.m)),
+    regional: null
+  };
+}
+
+function processRegionalData(raw) {
+  // Process regional API data
+  const regions = {};
+  raw.forEach(row => {
+    const reg = row.REGION || row.ZONE || '';
+    if (!reg || reg === 'France' || reg === 'Ensemble') return;
+    if (!regions[reg]) regions[reg] = { nom: reg, autoris: 0, indiv: 0 };
+    const val = row.LOG_AUT || 0;
+    const type = row.TYPE_LGT || '';
+    const series = row.NAT_SERIES || '';
+    if (series !== 'Brute') return;
+    regions[reg].autoris += val;
+    if (type.includes('Individuel')) regions[reg].indiv += val;
+  });
+  return Object.values(regions);
+}
+
+// ══════════════════════════════════════════════════════
+// RENDERING
+// ══════════════════════════════════════════════════════
+const MONTHS_FR = ['','Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+
+function renderAll(data) {
+  const d = data.national;
+  if (!d || d.length === 0) return;
+  
+  // Compute summary stats
+  const last12 = d.slice(-12);
+  const totalAut = last12.reduce((s, r) => s + (r.ip + r.ig + r.co + r.re), 0);
+  const totalIP = last12.reduce((s, r) => s + r.ip, 0);
+  const totalIG = last12.reduce((s, r) => s + r.ig, 0);
+  const totalCO = last12.reduce((s, r) => s + r.co, 0);
+  const totalRE = last12.reduce((s, r) => s + r.re, 0);
+  const lastMonth = d[d.length - 1];
+  const prevMonth = d.length > 1 ? d[d.length - 2] : lastMonth;
+  const lastTotal = lastMonth.ip + lastMonth.ig + lastMonth.co + lastMonth.re;
+  const prevTotal = prevMonth.ip + prevMonth.ig + prevMonth.co + prevMonth.re;
+  const monthVar = ((lastTotal - prevTotal) / prevTotal * 100).toFixed(1);
+  
+  // ─── SYNTHÈSE ───
+  document.getElementById('insightSynthese').innerHTML = `
+    <strong>Contexte marché :</strong> Sur les 12 derniers mois disponibles, environ <strong>${(totalAut/1000).toFixed(0)}k logements</strong> ont été autorisés.
+    L'individuel pur représente ${(totalIP/totalAut*100).toFixed(0)}% du total. Les autorisations de logements collectifs (${(totalCO/totalAut*100).toFixed(0)}%) restent majoritaires.
+    Le dernier mois (${MONTHS_FR[lastMonth.m]} ${lastMonth.y}) affiche ${lastTotal.toLocaleString('fr-FR')} autorisations (${monthVar > 0 ? '+' : ''}${monthVar}% vs mois précédent).
+    ${dataSource === 'api' ? '📡 <em>Données en direct via API DIDO/SDES.</em>' : '📋 <em>Données de référence intégrées.</em>'}
+  `;
+  
+  document.getElementById('kpiSynthese').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Autorisations (12m glissants)</div><div class="kpi-value" style="color:var(--accent)">${(totalAut/1000).toFixed(0)}k</div><div class="kpi-sub">tous types confondus</div></div>
+    <div class="kpi"><div class="kpi-label">Dernier mois (${MONTHS_FR[lastMonth.m]} ${lastMonth.y})</div><div class="kpi-value">${lastTotal.toLocaleString('fr-FR')}</div><div class="kpi-sub"><span class="${monthVar >= 0 ? 'up' : 'down'}">${monthVar >= 0 ? '▲' : '▼'} ${monthVar}%</span> vs mois précédent</div></div>
+    <div class="kpi"><div class="kpi-label">Individuel pur (12m)</div><div class="kpi-value" style="color:var(--individuel)">${(totalIP/1000).toFixed(0)}k</div><div class="kpi-sub">${(totalIP/totalAut*100).toFixed(0)}% du total</div></div>
+    <div class="kpi"><div class="kpi-label">Collectif + Résidences (12m)</div><div class="kpi-value" style="color:var(--collectif)">${((totalCO+totalRE)/1000).toFixed(0)}k</div><div class="kpi-sub">${((totalCO+totalRE)/totalAut*100).toFixed(0)}% du total</div></div>
+    <div class="kpi"><div class="kpi-label">Population France (1/1/2026)</div><div class="kpi-value" style="color:var(--accent2)">69,1 M</div><div class="kpi-sub"><span class="up">▲ +0,25%</span></div></div>
+    <div class="kpi"><div class="kpi-label">Taux crédit 20 ans</div><div class="kpi-value" style="color:var(--accent3)">3,26%</div><div class="kpi-sub">mars 2026</div></div>
+  `;
+  
+  // Charts
+  renderMonthlyChart(d);
+  renderRepartitionChart(totalIP, totalIG, totalCO, totalRE);
+  renderAnnualChart(d);
+  
+  // ─── INDIVIDUEL ───
+  renderIndividuelSection(d, totalIP, totalIG, totalAut);
+  
+  // ─── COLLECTIF ───
+  renderCollectifSection(d, totalCO, totalRE, totalAut);
+  
+  // ─── RÉGIONS ───
+  renderRegionsSection(data.regional || FALLBACK.regions);
+  
+  // ─── FIXED CHARTS (demo, financement, projection) ───
+  renderDemoCharts();
+  renderFinancementCharts();
+  renderProjectionSection(d);
+  
+  document.getElementById('subtitleRepartition').textContent = `${MONTHS_FR[last12[0].m]} ${last12[0].y} — ${MONTHS_FR[lastMonth.m]} ${lastMonth.y}`;
+}
+
+function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+function renderMonthlyChart(d) {
+  destroyChart('evo');
+  const labels = d.map(r => `${MONTHS_FR[r.m]}${String(r.y).slice(2)}`);
+  charts.evo = new Chart(document.getElementById('chartEvoMensuelle'), {
+    type: 'bar', data: { labels, datasets: [
+      { label:'Indiv. pur', data: d.map(r=>r.ip), backgroundColor:'rgba(245,158,11,.85)', stack:'a' },
+      { label:'Indiv. groupé', data: d.map(r=>r.ig), backgroundColor:'rgba(16,185,129,.85)', stack:'a' },
+      { label:'Collectif', data: d.map(r=>r.co), backgroundColor:'rgba(59,130,246,.85)', stack:'a' },
+      { label:'Résidence', data: d.map(r=>r.re), backgroundColor:'rgba(139,92,246,.85)', stack:'a' }
+    ]}, options: { scales: { x:{stacked:true,grid:G}, y:{stacked:true,grid:G,ticks:{callback:v=>(v/1000)+'k'}} }, plugins:{tooltip:{mode:'index',intersect:false}} }
+  });
+}
+
+function renderRepartitionChart(ip, ig, co, re) {
+  destroyChart('rep');
+  const total = ip+ig+co+re;
+  charts.rep = new Chart(document.getElementById('chartRepartition'), {
+    type:'doughnut', data: { labels:[`Indiv. pur (${(ip/total*100).toFixed(0)}%)`,`Indiv. groupé (${(ig/total*100).toFixed(0)}%)`,`Collectif (${(co/total*100).toFixed(0)}%)`,`Résidence (${(re/total*100).toFixed(0)}%)`],
+    datasets:[{ data:[ip,ig,co,re], backgroundColor:['#f59e0b','#10b981','#3b82f6','#8b5cf6'], borderWidth:0, hoverOffset:8 }]},
+    options:{ cutout:'55%', plugins:{ legend:{display:true,position:'bottom',labels:{boxWidth:12,padding:15,font:{size:10}}} }}
+  });
+}
+
+function renderAnnualChart(d) {
+  destroyChart('ann');
+  const years = {};
+  d.forEach(r => {
+    if (!years[r.y]) years[r.y] = { indiv:0, autre:0 };
+    years[r.y].indiv += r.ip + r.ig;
+    years[r.y].autre += r.co + r.re;
+  });
+  const yLabels = Object.keys(years).sort();
+  charts.ann = new Chart(document.getElementById('chartAnnuel'), {
+    type:'bar', data:{ labels:yLabels, datasets:[
+      { label:'Individuel', data:yLabels.map(y=>(years[y].indiv/1000).toFixed(1)), backgroundColor:'#f59e0b' },
+      { label:'Collectif+Rés.', data:yLabels.map(y=>(years[y].autre/1000).toFixed(1)), backgroundColor:'#3b82f6' }
+    ]}, options:{ scales:{ x:{stacked:true,grid:G}, y:{stacked:true,grid:G,title:{display:true,text:'milliers'}} }, plugins:{legend:{display:true,position:'top',labels:{boxWidth:12}}} }
+  });
+}
+
+function renderIndividuelSection(d, totalIP, totalIG, totalAut) {
+  const last12ip = d.slice(-12).reduce((s,r)=>s+r.ip,0);
+  const prev12ip = d.slice(-24,-12).reduce((s,r)=>s+r.ip,0);
+  const varIP = prev12ip ? ((last12ip-prev12ip)/prev12ip*100).toFixed(1) : 'n/a';
+  const last12ig = d.slice(-12).reduce((s,r)=>s+r.ig,0);
+  const prev12ig = d.slice(-24,-12).reduce((s,r)=>s+r.ig,0);
+  const varIG = prev12ig ? ((last12ig-prev12ig)/prev12ig*100).toFixed(1) : 'n/a';
+  
+  document.getElementById('insightIndiv').innerHTML = `
+    <strong>Focus Maisons Individuelles Pures :</strong> Sur 12 mois, ${(last12ip/1000).toFixed(0)}k autorisations individuel pur (${varIP>0?'+':''}${varIP}% vs 12m précédents). L'individuel groupé est à ${(last12ig/1000).toFixed(0)}k (${varIG>0?'+':''}${varIG}%). Ce segment reste le plus impacté par le ZAN, la RE2020, et le coût du foncier.
+  `;
+  
+  document.getElementById('kpiIndiv').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Indiv. pur (12m)</div><div class="kpi-value" style="color:var(--individuel)">${(last12ip/1000).toFixed(0)}k</div><div class="kpi-sub"><span class="${varIP>=0?'up':'down'}">${varIP>=0?'▲':'▼'} ${varIP}%</span> vs 12m préc.</div></div>
+    <div class="kpi"><div class="kpi-label">Indiv. groupé (12m)</div><div class="kpi-value" style="color:var(--groupe)">${(last12ig/1000).toFixed(0)}k</div><div class="kpi-sub"><span class="${varIG>=0?'up':'down'}">${varIG>=0?'▲':'▼'} ${varIG}%</span></div></div>
+    <div class="kpi"><div class="kpi-label">Part de l'individuel</div><div class="kpi-value">${((totalIP+totalIG)/(totalAut)*100).toFixed(0)}%</div><div class="kpi-sub">dans le total autorisations</div></div>
+  `;
+  
+  destroyChart('indivD');
+  charts.indivD = new Chart(document.getElementById('chartIndivDetail'), {
+    type:'line', data:{ labels:d.map(r=>`${MONTHS_FR[r.m]}${String(r.y).slice(2)}`), datasets:[
+      { label:'Individuel pur', data:d.map(r=>r.ip), borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,.1)', fill:true, tension:.4, borderWidth:2.5 },
+      { label:'Individuel groupé', data:d.map(r=>r.ig), borderColor:'#10b981', backgroundColor:'rgba(16,185,129,.1)', fill:true, tension:.4, borderWidth:2.5 }
+    ]}, options:{ scales:{x:{grid:G},y:{grid:G}}, plugins:{legend:{display:true,position:'top',labels:{boxWidth:12}}} }
+  });
+  
+  // Radar
+  destroyChart('fact');
+  charts.fact = new Chart(document.getElementById('chartFacteurs'), {
+    type:'radar', data:{ labels:['Coût foncier','RE2020','ZAN','Taux crédit','Inflation matériaux','Normes urba.'], datasets:[
+      { label:'Impact indiv. pur', data:[90,75,85,70,80,65], borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,.2)', pointBackgroundColor:'#f59e0b', borderWidth:2 },
+      { label:'Impact collectif', data:[60,50,40,65,70,55], borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,.15)', pointBackgroundColor:'#3b82f6', borderWidth:2 }
+    ]}, options:{ scales:{r:{beginAtZero:true,max:100,grid:{color:'rgba(30,41,59,.5)'},angleLines:{color:'rgba(30,41,59,.5)'},ticks:{display:false}}}, plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:12}}} }
+  });
+  
+  // Part individuel over years
+  destroyChart('partI');
+  const yrs = {};
+  d.forEach(r => { if(!yrs[r.y]) yrs[r.y]={ind:0,tot:0}; yrs[r.y].ind+=r.ip+r.ig; yrs[r.y].tot+=r.ip+r.ig+r.co+r.re; });
+  const yl = Object.keys(yrs).sort();
+  charts.partI = new Chart(document.getElementById('chartPartIndiv'), {
+    type:'line', data:{ labels:yl, datasets:[{
+      data:yl.map(y=>(yrs[y].ind/yrs[y].tot*100).toFixed(1)),
+      borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,.15)', fill:true, tension:.4, borderWidth:3, pointRadius:5, pointBackgroundColor:'#f59e0b'
+    }]}, options:{ scales:{x:{grid:G},y:{grid:G,title:{display:true,text:'%'},min:20,max:50}} }
+  });
+}
+
+function renderCollectifSection(d, totalCO, totalRE, totalAut) {
+  const last12co = d.slice(-12).reduce((s,r)=>s+r.co,0);
+  const prev12co = d.slice(-24,-12).reduce((s,r)=>s+r.co,0);
+  const varCO = prev12co ? ((last12co-prev12co)/prev12co*100).toFixed(1) : 'n/a';
+  
+  document.getElementById('insightCollectif').innerHTML = `
+    <strong>Focus Collectif & Résidences :</strong> Sur 12 mois, ${(totalCO/1000).toFixed(0)}k autorisations collectif ordinaire (${varCO>0?'+':''}${varCO}%) et ${(totalRE/1000).toFixed(0)}k résidences. Les résidences (étudiantes, seniors, tourisme) progressent et compensent partiellement le recul du collectif classique.
+  `;
+  
+  document.getElementById('kpiCollectif').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Collectif ordinaire (12m)</div><div class="kpi-value" style="color:var(--collectif)">${(totalCO/1000).toFixed(0)}k</div><div class="kpi-sub"><span class="${varCO>=0?'up':'down'}">${varCO>=0?'▲':'▼'} ${varCO}%</span></div></div>
+    <div class="kpi"><div class="kpi-label">Résidences (12m)</div><div class="kpi-value" style="color:var(--residence)">${(totalRE/1000).toFixed(0)}k</div><div class="kpi-sub">en progression</div></div>
+    <div class="kpi"><div class="kpi-label">Part collectif+rés.</div><div class="kpi-value">${((totalCO+totalRE)/totalAut*100).toFixed(0)}%</div><div class="kpi-sub">du total</div></div>
+  `;
+  
+  destroyChart('colD');
+  charts.colD = new Chart(document.getElementById('chartCollectifDetail'), {
+    type:'line', data:{ labels:d.map(r=>`${MONTHS_FR[r.m]}${String(r.y).slice(2)}`), datasets:[
+      { label:'Collectif', data:d.map(r=>r.co), borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,.1)', fill:true, tension:.4, borderWidth:2.5 },
+      { label:'Résidences', data:d.map(r=>r.re), borderColor:'#8b5cf6', backgroundColor:'rgba(139,92,246,.1)', fill:true, tension:.4, borderWidth:2.5 }
+    ]}, options:{ scales:{x:{grid:G},y:{grid:G}}, plugins:{legend:{display:true,position:'top',labels:{boxWidth:12}}} }
+  });
+}
+
+function renderRegionsSection(regions) {
+  const regData = Array.isArray(regions) && regions.length > 0 ? regions : FALLBACK.regions;
+  const isAPI = regions !== FALLBACK.regions && !regions[0].pop;
+  
+  // Enrich API data with demo data if needed
+  const enriched = regData.map(r => ({
+    nom: r.nom,
+    pop: r.pop || 0,
+    croiss: r.croiss || 0,
+    autoris: r.autoris || 0,
+    indiv: r.indiv || 0,
+    ratio: r.pop ? (r.autoris / r.pop / 1000).toFixed(1) : (r.autoris / 5000).toFixed(1)
+  }));
+  
+  document.getElementById('insightRegions').innerHTML = `
+    <strong>Disparités régionales :</strong> Croisement données construction (Sitadel) et démographie (INSEE). Les littoraux atlantique/méditerranéen et les métropoles concentrent la croissance. L'Île-de-France a le plus gros volume mais le plus faible ratio logements/habitant en individuel.
+    ${isAPI ? '📡 <em>Données régionales API.</em>' : '📋 <em>Données de référence.</em>'}
+  `;
+  
+  // Bar chart
+  destroyChart('reg');
+  const sorted = [...enriched].sort((a,b) => b.autoris - a.autoris);
+  charts.reg = new Chart(document.getElementById('chartRegions'), {
+    type:'bar', data:{ labels:sorted.map(r=>r.nom), datasets:[
+      { label:'Individuel', data:sorted.map(r=>r.indiv), backgroundColor:'#f59e0b' },
+      { label:'Autres', data:sorted.map(r=>r.autoris-r.indiv), backgroundColor:'#3b82f6' }
+    ]}, options:{ indexAxis:'y', scales:{ x:{stacked:true,grid:G,ticks:{callback:v=>(v/1000)+'k'}}, y:{stacked:true,grid:{display:false}} }, plugins:{legend:{display:true,position:'top',labels:{boxWidth:12}}} }
+  });
+  
+  // Bubble
+  destroyChart('crois');
+  const colors = ['rgba(245,158,11,.6)','rgba(59,130,246,.6)','rgba(16,185,129,.6)','rgba(139,92,246,.6)','rgba(239,68,68,.6)','rgba(236,72,153,.6)','rgba(14,165,233,.6)','rgba(168,85,247,.6)','rgba(234,179,8,.6)','rgba(34,197,94,.6)','rgba(249,115,22,.6)','rgba(99,102,241,.6)','rgba(20,184,166,.6)'];
+  charts.crois = new Chart(document.getElementById('chartCroisement'), {
+    type:'bubble', data:{ datasets: enriched.filter(r=>r.pop).map((r,i) => ({
+      label:r.nom, data:[{ x:r.croiss, y:parseFloat(r.ratio), r:Math.sqrt(r.pop)*5 }], backgroundColor:colors[i%colors.length]
+    }))}, options:{ scales:{ x:{grid:G,title:{display:true,text:'Croissance pop. (%/an)'}}, y:{grid:G,title:{display:true,text:'Logts autorisés / 1000 hab.'}} },
+      plugins:{ legend:{display:true,position:'right',labels:{boxWidth:10,font:{size:9},padding:8}}, tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.raw.x}% / ${c.raw.y} logts/1000h`}} }}
+  });
+  
+  // Table
+  const tbody = document.getElementById('regionTableBody');
+  tbody.innerHTML = '';
+  sorted.forEach(r => {
+    if (!r.pop) return;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.nom}</td><td class="num">${r.pop.toFixed(1)}</td><td class="num ${r.croiss>=0?'positive':'negative'}">${r.croiss>=0?'+':''}${r.croiss.toFixed(2)}%</td><td class="num">${r.autoris.toLocaleString('fr-FR')}</td><td class="num">${r.indiv.toLocaleString('fr-FR')}</td><td class="num">${r.ratio}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderDemoCharts() {
+  destroyChart('pop'); destroyChart('nais'); destroyChart('solde'); destroyChart('age');
+  
+  charts.pop = new Chart(document.getElementById('chartPopulation'), {
+    type:'line', data:{ labels:['00','02','04','06','08','10','12','14','16','18','20','22','24','26'], datasets:[{
+      data:[60.5,61.4,62.2,63.2,64.0,64.6,65.2,66.1,66.7,67.0,67.4,67.8,68.4,69.1],
+      borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.12)',fill:true,tension:.4,borderWidth:3,pointRadius:4,pointBackgroundColor:'#3b82f6'
+    }]}, options:{scales:{x:{grid:G},y:{grid:G,title:{display:true,text:'millions'}}}}
+  });
+  
+  charts.nais = new Chart(document.getElementById('chartNaissances'), {
+    type:'line', data:{ labels:['10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25'], datasets:[
+      { label:'Naissances', data:[832,823,822,812,818,800,784,770,758,753,736,742,726,678,663,645], borderColor:'#10b981', backgroundColor:'rgba(16,185,129,.1)', fill:true, tension:.4, borderWidth:2.5 },
+      { label:'Décès', data:[551,545,559,558,547,581,581,594,609,613,669,661,667,640,645,651], borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.1)', fill:true, tension:.4, borderWidth:2.5 }
+    ]}, options:{scales:{x:{grid:G},y:{grid:G,title:{display:true,text:'milliers'}}}, plugins:{legend:{display:true,position:'top',labels:{boxWidth:12}}}}
+  });
+  
+  const sd = [281,278,263,254,271,219,203,176,149,140,67,81,59,38,18,-6];
+  charts.solde = new Chart(document.getElementById('chartSoldeNaturel'), {
+    type:'bar', data:{ labels:['10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25'], datasets:[{
+      data:sd, backgroundColor:sd.map(v=>v>=0?'rgba(16,185,129,.7)':'rgba(239,68,68,.7)'), borderRadius:4
+    }]}, options:{scales:{x:{grid:G},y:{grid:G,title:{display:true,text:'milliers'}}}}
+  });
+  
+  charts.age = new Chart(document.getElementById('chartAge'), {
+    type:'bar', data:{ labels:['0-14','15-24','25-39','40-54','55-64','65-79','80+'], datasets:[{
+      data:[16.7,11.5,17.8,19.2,12.8,14.5,7.5], backgroundColor:['#64748b','#94a3b8','#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6'], borderRadius:6
+    }]}, options:{indexAxis:'y',scales:{x:{grid:G,title:{display:true,text:'%'}},y:{grid:{display:false}}}}
+  });
+}
+
+function renderFinancementCharts() {
+  destroyChart('taux'); destroyChart('cout'); destroyChart('capa');
+  
+  charts.taux = new Chart(document.getElementById('chartTaux'), {
+    type:'line', data:{ labels:['J19','J19','J20','J20','J21','J21','J22','J22','J23','J23','J24','J24','J25','J25','J26','M26'], datasets:[
+      { label:'15 ans', data:[1.05,.85,.80,.70,.75,.80,1.20,2.10,3.40,3.70,3.50,3.20,3.05,3.10,3.15,3.13], borderColor:'#10b981', tension:.4, borderWidth:2.5, pointRadius:3 },
+      { label:'20 ans', data:[1.20,1.00,.95,.85,.90,.95,1.40,2.35,3.60,3.90,3.70,3.40,3.20,3.25,3.28,3.26], borderColor:'#3b82f6', tension:.4, borderWidth:2.5, pointRadius:3 },
+      { label:'25 ans', data:[1.40,1.20,1.15,1.05,1.10,1.15,1.60,2.55,3.80,4.10,3.90,3.60,3.38,3.40,3.43,3.41], borderColor:'#8b5cf6', tension:.4, borderWidth:2.5, pointRadius:3 }
+    ]}, options:{scales:{x:{grid:G},y:{grid:G,title:{display:true,text:'Taux (%)'}}}, plugins:{legend:{display:true,position:'top',labels:{boxWidth:12}}}}
+  });
+  
+  charts.cout = new Chart(document.getElementById('chartCoutCredit'), {
+    type:'bar', data:{ labels:['1,0%','2,0%','3,0%','3,5%','4,0%'], datasets:[{
+      data:[20744,42310,66208,79440,93256], backgroundColor:['rgba(16,185,129,.7)','rgba(59,130,246,.7)','rgba(245,158,11,.7)','rgba(239,68,68,.5)','rgba(239,68,68,.7)'], borderRadius:6
+    }]}, options:{scales:{x:{grid:G},y:{grid:G,ticks:{callback:v=>(v/1000)+'k €'}}}}
+  });
+  
+  charts.capa = new Chart(document.getElementById('chartCapacite'), {
+    type:'bar', data:{ labels:['15 ans','20 ans','25 ans'], datasets:[
+      { label:'2,5%', data:[155000,189000,215000], backgroundColor:'rgba(16,185,129,.7)' },
+      { label:'3,25%', data:[145000,174000,195000], backgroundColor:'rgba(59,130,246,.7)' },
+      { label:'4,0%', data:[136000,160000,176000], backgroundColor:'rgba(239,68,68,.7)' }
+    ]}, options:{scales:{x:{grid:G},y:{grid:G,ticks:{callback:v=>(v/1000)+'k €'},title:{display:true,text:'Montant empruntable'}}}, plugins:{legend:{display:true,position:'top',labels:{boxWidth:12}}}}
+  });
+}
+
+// ══════════════════════════════════════════════════════
+// PROJECTION — Extrapolation tendancielle
+// ══════════════════════════════════════════════════════
+function linearRegression(points) {
+  const n = points.length;
+  let sx = 0, sy = 0, sxy = 0, sxx = 0;
+  points.forEach(([x, y]) => { sx += x; sy += y; sxy += x * y; sxx += x * x; });
+  const slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+  const intercept = (sy - slope * sx) / n;
+  return { slope, intercept, predict: x => slope * x + intercept };
+}
+
+function renderProjectionSection(d) {
+  // Aggregate by year
+  const years = {};
+  d.forEach(r => {
+    if (!years[r.y]) years[r.y] = { ip: 0, ig: 0, co: 0, re: 0, total: 0, n: 0 };
+    const y = years[r.y];
+    y.ip += r.ip; y.ig += r.ig; y.co += r.co; y.re += r.re;
+    y.total += r.ip + r.ig + r.co + r.re;
+    y.n++;
+  });
+
+  // Only use full years (12 months) for regression base, plus partial last year
+  const yrs = Object.keys(years).map(Number).sort();
+  const fullYears = yrs.filter(y => years[y].n === 12);
+  const lastYear = yrs[yrs.length - 1];
+
+  // Annualize partial year
+  if (years[lastYear].n < 12) {
+    const factor = 12 / years[lastYear].n;
+    years[lastYear].ip = Math.round(years[lastYear].ip * factor);
+    years[lastYear].ig = Math.round(years[lastYear].ig * factor);
+    years[lastYear].co = Math.round(years[lastYear].co * factor);
+    years[lastYear].re = Math.round(years[lastYear].re * factor);
+    years[lastYear].total = Math.round(years[lastYear].total * factor);
+  }
+
+  const allYrs = [...new Set([...fullYears, lastYear])].sort();
+
+  // Linear regressions per type
+  const regIP = linearRegression(allYrs.map(y => [y, years[y].ip]));
+  const regIG = linearRegression(allYrs.map(y => [y, years[y].ig]));
+  const regCO = linearRegression(allYrs.map(y => [y, years[y].co]));
+  const regRE = linearRegression(allYrs.map(y => [y, years[y].re]));
+  const regTotal = linearRegression(allYrs.map(y => [y, years[y].total]));
+
+  const proj2026 = Math.round(regTotal.predict(2026));
+  const proj2027 = Math.round(regTotal.predict(2027));
+  const lastTotal = years[lastYear].total;
+  const var2026 = ((proj2026 - lastTotal) / lastTotal * 100).toFixed(1);
+  const var2027 = ((proj2027 - lastTotal) / lastTotal * 100).toFixed(1);
+
+  // Scenarios: optimiste (+15% vs tendance), pessimiste (-15%)
+  const projOpt2026 = Math.round(proj2026 * 1.15);
+  const projOpt2027 = Math.round(proj2027 * 1.15);
+  const projPess2026 = Math.round(proj2026 * 0.85);
+  const projPess2027 = Math.round(proj2027 * 0.85);
+
+  // KPIs
+  document.getElementById('kpiProjection').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Projection 2026</div><div class="kpi-value" style="color:var(--accent)">${(proj2026/1000).toFixed(0)}k</div><div class="kpi-sub"><span class="${var2026 >= 0 ? 'up' : 'down'}">${var2026 >= 0 ? '▲' : '▼'} ${var2026}%</span> vs ${lastYear}</div></div>
+    <div class="kpi"><div class="kpi-label">Projection 2027</div><div class="kpi-value" style="color:var(--accent2)">${(proj2027/1000).toFixed(0)}k</div><div class="kpi-sub"><span class="${var2027 >= 0 ? 'up' : 'down'}">${var2027 >= 0 ? '▲' : '▼'} ${var2027}%</span> vs ${lastYear}</div></div>
+    <div class="kpi"><div class="kpi-label">Scénario optimiste 2026</div><div class="kpi-value" style="color:var(--accent3)">${(projOpt2026/1000).toFixed(0)}k</div><div class="kpi-sub">tendance +15%</div></div>
+    <div class="kpi"><div class="kpi-label">Scénario pessimiste 2026</div><div class="kpi-value" style="color:var(--accent4)">${(projPess2026/1000).toFixed(0)}k</div><div class="kpi-sub">tendance -15%</div></div>
+  `;
+
+  // Insight
+  document.getElementById('insightProjection').innerHTML = `
+    <strong>Projection :</strong> Sur la base de la tendance observée entre ${allYrs[0]} et ${lastYear}, le modèle d'extrapolation linéaire projette environ <strong>${(proj2026/1000).toFixed(0)}k logements</strong> autorisés en 2026 (${var2026 >= 0 ? '+' : ''}${var2026}%) et <strong>${(proj2027/1000).toFixed(0)}k</strong> en 2027. Le scénario optimiste (reprise accélérée, taux en baisse) envisage ${(projOpt2026/1000).toFixed(0)}k en 2026. Le scénario pessimiste (stagnation, contraintes réglementaires) se limiterait à ${(projPess2026/1000).toFixed(0)}k.
+    <em>Ces projections sont purement tendancielles et ne constituent pas des prévisions certaines.</em>
+  `;
+
+  // Chart 1: Total projection with historical
+  destroyChart('projTotal');
+  const chartLabels = [...allYrs, 2026, 2027];
+  const histData = allYrs.map(y => years[y].total);
+  const projData = allYrs.map(() => null);
+  projData.push(proj2026, proj2027);
+  const fullHist = [...histData, null, null];
+
+  charts.projTotal = new Chart(document.getElementById('chartProjectionTotal'), {
+    type: 'bar',
+    data: {
+      labels: chartLabels.map(String),
+      datasets: [
+        { label: 'Historique', data: fullHist, backgroundColor: 'rgba(59,130,246,.7)', borderRadius: 6 },
+        { label: 'Projection', data: projData, backgroundColor: 'rgba(242,183,5,.6)', borderRadius: 6, borderWidth: 2, borderColor: 'rgba(242,183,5,.9)', borderDash: [5, 5] }
+      ]
+    },
+    options: {
+      scales: { x: { grid: G }, y: { grid: G, beginAtZero: false, ticks: { callback: v => (v / 1000) + 'k' } } },
+      plugins: { legend: { display: true, position: 'top', labels: { boxWidth: 12 } } }
+    }
+  });
+
+  // Chart 2: Projection by type (stacked bar)
+  destroyChart('projType');
+  const typeLabels = [...allYrs, 2026, 2027].map(String);
+  const ipHist = allYrs.map(y => years[y].ip);
+  const igHist = allYrs.map(y => years[y].ig);
+  const coHist = allYrs.map(y => years[y].co);
+  const reHist = allYrs.map(y => years[y].re);
+
+  charts.projType = new Chart(document.getElementById('chartProjectionType'), {
+    type: 'bar',
+    data: {
+      labels: typeLabels,
+      datasets: [
+        { label: 'Individuel pur', data: [...ipHist, Math.round(regIP.predict(2026)), Math.round(regIP.predict(2027))], backgroundColor: 'rgba(59,130,246,.7)' },
+        { label: 'Individuel groupé', data: [...igHist, Math.round(regIG.predict(2026)), Math.round(regIG.predict(2027))], backgroundColor: 'rgba(16,185,129,.7)' },
+        { label: 'Collectif', data: [...coHist, Math.round(regCO.predict(2026)), Math.round(regCO.predict(2027))], backgroundColor: 'rgba(245,158,11,.7)' },
+        { label: 'Résidences', data: [...reHist, Math.round(regRE.predict(2026)), Math.round(regRE.predict(2027))], backgroundColor: 'rgba(239,68,68,.6)' }
+      ]
+    },
+    options: {
+      scales: { x: { stacked: true, grid: G }, y: { stacked: true, grid: G, ticks: { callback: v => (v / 1000) + 'k' } } },
+      plugins: { legend: { display: true, position: 'top', labels: { boxWidth: 12, font: { size: 10 } } } }
+    }
+  });
+
+  // Chart 3: Scenarios (line chart)
+  destroyChart('projScenarios');
+  const scenLabels = [...allYrs, 2026, 2027].map(String);
+  const scenHist = allYrs.map(y => years[y].total);
+  const tend = [...scenHist, proj2026, proj2027];
+  const opt = [...allYrs.map(() => null), projOpt2026, projOpt2027];
+  const pess = [...allYrs.map(() => null), projPess2026, projPess2027];
+
+  // Connect scenarios to last historical point
+  opt[allYrs.length - 1] = scenHist[scenHist.length - 1];
+  pess[allYrs.length - 1] = scenHist[scenHist.length - 1];
+
+  charts.projScenarios = new Chart(document.getElementById('chartProjectionScenarios'), {
+    type: 'line',
+    data: {
+      labels: scenLabels,
+      datasets: [
+        { label: 'Tendanciel', data: tend, borderColor: 'rgba(59,130,246,1)', backgroundColor: 'rgba(59,130,246,.1)', fill: false, borderWidth: 2.5, pointRadius: 4 },
+        { label: 'Optimiste', data: opt, borderColor: 'rgba(16,185,129,1)', backgroundColor: 'rgba(16,185,129,.1)', fill: false, borderWidth: 2, borderDash: [6, 3], pointRadius: 4 },
+        { label: 'Pessimiste', data: pess, borderColor: 'rgba(239,68,68,1)', backgroundColor: 'rgba(239,68,68,.1)', fill: false, borderWidth: 2, borderDash: [6, 3], pointRadius: 4 }
+      ]
+    },
+    options: {
+      scales: { x: { grid: G }, y: { grid: G, beginAtZero: false, ticks: { callback: v => (v / 1000) + 'k' } } },
+      plugins: { legend: { display: true, position: 'top', labels: { boxWidth: 12 } } },
+      spanGaps: true
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════
+// VUE CARTE — LEAFLET MAP (départements)
+// ══════════════════════════════════════════════════════
+let mapInstance = null;
+let deptLayer = null;
+let deptGeoJSON = null;
+
+function interpolateColor(val, min, max) {
+  const t = max === min ? 0.5 : (val - min) / (max - min);
+  const colors = [[76,175,80],[255,235,59],[255,152,0],[244,67,54]];
+  const idx = Math.min(t * (colors.length - 1), colors.length - 1.001);
+  const i = Math.floor(idx);
+  const f = idx - i;
+  const c1 = colors[i], c2 = colors[Math.min(i + 1, colors.length - 1)];
+  return `rgb(${Math.round(c1[0]+(c2[0]-c1[0])*f)},${Math.round(c1[1]+(c2[1]-c1[1])*f)},${Math.round(c1[2]+(c2[2]-c1[2])*f)})`;
+}
+
+function getDeptMetricValue(code, metric) {
+  const d = DEPT_DATA[code];
+  if (!d) return 0;
+  switch (metric) {
+    case 'autoris': return d.a;
+    case 'indiv': return d.i;
+    case 'croiss': return getDeptCroiss(d);
+    case 'pop': return d.p;
+    case 'ratio': return Math.round(d.a / d.p / 1000 * 1000);
+    default: return d.a;
+  }
+}
+
+function formatMapValue(val, metric) {
+  switch (metric) {
+    case 'autoris': case 'indiv': return val.toLocaleString('fr-FR');
+    case 'croiss': return (val >= 0 ? '+' : '') + val.toFixed(2) + ' %';
+    case 'pop': return val.toFixed(2) + ' M';
+    case 'ratio': return val + ' / 1000 hab.';
+    default: return val.toString();
+  }
+}
+
+function metricLabel(metric) {
+  const labels = { autoris: 'Autorisations (12m)', indiv: 'Individuel pur (12m)', croiss: 'Croissance démo.', pop: 'Population', ratio: 'Logts / 1000 hab.' };
+  return labels[metric] || metric;
+}
+
+function buildDeptPopup(code) {
+  const d = DEPT_DATA[code];
+  if (!d) return '';
+  const croiss = getDeptCroiss(d);
+  const ratio = Math.round(d.a / d.p / 1000 * 1000);
+  return `<div class="map-popup">
+    <h4>${code} — ${d.n}</h4>
+    <div class="map-popup-region">${d.r}</div>
+    <div class="map-popup-row"><span class="map-popup-label">Population</span><span class="map-popup-val">${d.p.toFixed(2)} M</span></div>
+    <div class="map-popup-row"><span class="map-popup-label">Autorisations (12m)</span><span class="map-popup-val">${d.a.toLocaleString('fr-FR')}</span></div>
+    <div class="map-popup-row"><span class="map-popup-label">Individuel pur</span><span class="map-popup-val">${d.i.toLocaleString('fr-FR')}</span></div>
+    <div class="map-popup-row"><span class="map-popup-label">Ratio logts/1000 hab.</span><span class="map-popup-val">${ratio}</span></div>
+    <div class="map-popup-row"><span class="map-popup-label">Croissance démo.</span><span class="map-popup-val" style="color:${croiss >= 0 ? 'var(--accent3)' : 'var(--accent4)'}">${croiss >= 0 ? '+' : ''}${croiss.toFixed(2)} %</span></div>
+  </div>`;
+}
+
+function showDeptInfo(code) {
+  const d = DEPT_DATA[code];
+  if (!d) return;
+  const croiss = getDeptCroiss(d);
+  const ratio = Math.round(d.a / d.p / 1000 * 1000);
+  const infoEl = document.getElementById('mapInfo');
+  infoEl.innerHTML = `
+    <h3>${code} — ${d.n}</h3>
+    <div class="map-info-row"><span class="map-info-label">Région</span><span class="map-info-val">${d.r}</span></div>
+    <div class="map-info-row"><span class="map-info-label">Population</span><span class="map-info-val">${d.p.toFixed(2)} M hab.</span></div>
+    <div class="map-info-row"><span class="map-info-label">Croissance démo.</span><span class="map-info-val" style="color:${croiss >= 0 ? 'var(--accent3)' : 'var(--accent4)'}">${croiss >= 0 ? '+' : ''}${croiss.toFixed(2)} %</span></div>
+    <div class="map-info-row"><span class="map-info-label">Autorisations (12m)</span><span class="map-info-val">${d.a.toLocaleString('fr-FR')}</span></div>
+    <div class="map-info-row"><span class="map-info-label">Individuel pur</span><span class="map-info-val">${d.i.toLocaleString('fr-FR')}</span></div>
+    <div class="map-info-row"><span class="map-info-label">Ratio logts/1000 hab.</span><span class="map-info-val">${ratio}</span></div>
+  `;
+}
+
+function updateMap() {
+  if (!deptLayer) return;
+  const metric = document.getElementById('mapMetric').value;
+  const codes = Object.keys(DEPT_DATA);
+  const values = codes.map(c => getDeptMetricValue(c, metric));
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+
+  deptLayer.eachLayer(layer => {
+    const code = layer.feature.properties.code;
+    if (DEPT_DATA[code]) {
+      const val = getDeptMetricValue(code, metric);
+      layer.setStyle({ fillColor: interpolateColor(val, min, max), fillOpacity: 0.75 });
+    }
+  });
+
+  document.getElementById('mapLegendMin').textContent = 'Faible';
+  document.getElementById('mapLegendMax').textContent = 'Élevé';
+  document.getElementById('mapLegendMinVal').textContent = formatMapValue(min, metric);
+  document.getElementById('mapLegendMaxVal').textContent = formatMapValue(max, metric);
+
+  const sorted = codes.map(c => ({ code: c, nom: DEPT_DATA[c].n, val: getDeptMetricValue(c, metric) }))
+    .sort((a, b) => b.val - a.val);
+  const topVal = sorted[0].val || 1;
+  const rankEl = document.getElementById('mapRanking');
+  rankEl.innerHTML = `<h3>Classement — ${metricLabel(metric)}</h3>` +
+    sorted.map((r, i) => `
+      <div class="map-rank-item">
+        <div class="map-rank-num">${i + 1}</div>
+        <div class="map-rank-name">${r.code} — ${r.nom}</div>
+        <div class="map-rank-bar"><div class="map-rank-fill" style="width:${(r.val / topVal * 100).toFixed(0)}%"></div></div>
+        <div class="map-rank-val">${formatMapValue(r.val, metric)}</div>
+      </div>
+    `).join('');
+}
+
+function addDeptLayerToMap(geojson) {
+  deptGeoJSON = geojson;
+  deptLayer = L.geoJSON(geojson, {
+    style: { color: '#fff', weight: 1.5, fillColor: '#ccc', fillOpacity: 0.65 },
+    onEachFeature: (feature, layer) => {
+      const code = feature.properties.code;
+      const d = DEPT_DATA[code];
+      const name = d ? d.n : feature.properties.nom;
+      layer.bindTooltip(code + ' — ' + name, { sticky: true, className: 'map-tooltip' });
+      layer.bindPopup(() => buildDeptPopup(code), { maxWidth: 280 });
+      layer.on({
+        mouseover: e => {
+          e.target.setStyle({ weight: 3, color: '#1A1A1A' });
+          e.target.bringToFront();
+          showDeptInfo(code);
+        },
+        mouseout: e => {
+          e.target.setStyle({ weight: 1.5, color: '#fff' });
+        }
+      });
+    }
+  }).addTo(mapInstance);
+  updateMap();
+}
+
+async function renderMapSection() {
+  const container = document.getElementById('mapLeaflet');
+  if (!container || mapInstance) return;
+
+  mapInstance = L.map('mapLeaflet', {
+    center: [46.6, 2.5],
+    zoom: 6,
+    zoomControl: true,
+    scrollWheelZoom: true,
+    attributionControl: false
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 12, minZoom: 5,
+    attribution: '&copy; OpenStreetMap &copy; CARTO'
+  }).addTo(mapInstance);
+
+  try {
+    const res = await fetch('https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements-version-simplifiee.geojson');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const geojson = await res.json();
+    addDeptLayerToMap(geojson);
+  } catch (err) {
+    console.warn('Dept GeoJSON fetch failed, using fallback simplified regions:', err.message);
+    container.insertAdjacentHTML('beforebegin', '<p style="text-align:center;color:var(--accent4);font-size:.8rem;margin-bottom:.5rem">⚠ Contours départementaux indisponibles — affichage simplifié</p>');
+    // Minimal fallback: no department boundaries, show message
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════════════════
+loadAllData();
+</script>
+</body>
+</html>
