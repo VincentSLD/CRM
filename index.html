@@ -8401,6 +8401,23 @@ async function searchSirene() {
       return;
     }
 
+    // Vérifier les SIRET et SIREN déjà en base
+    const sirets = results.map(r => r.siege?.siret).filter(Boolean);
+    const sirens = results.map(r => r.siren).filter(Boolean);
+    const existingByKey = {};
+    if (sirets.length || sirens.length) {
+      const queries = [];
+      if (sirets.length) queries.push(sb.from('clients').select('id,name,siret,siren').in('siret', sirets));
+      if (sirens.length) queries.push(sb.from('clients').select('id,name,siret,siren').in('siren', sirens));
+      const responses = await Promise.all(queries);
+      for (const { data: rows } of responses) {
+        for (const c of (rows || [])) {
+          if (c.siret) existingByKey[c.siret] = c;
+          if (c.siren) existingByKey[c.siren] = c;
+        }
+      }
+    }
+
     resultsDiv.innerHTML = results.map((r, i) => {
       const siege = r.siege || {};
       const nom = r.nom_complet || r.nom_raison_sociale || '';
@@ -8412,12 +8429,20 @@ async function searchSirene() {
       const effFmt = r.tranche_effectif_salarie || '?';
       const cat2 = r.categorie_entreprise || '—';
       const etatLabel = r.etat_administratif === 'A' ? '<span style="color:var(--green)">●</span> Active' : '<span style="color:var(--red)">●</span> Cessée';
-      return `<div style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px"
+      const existing = existingByKey[siret] || existingByKey[r.siren];
+      const existingBadge = existing
+        ? `<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;margin-left:6px">⚠ Déjà en base</span>`
+        : '';
+      const existingHint = existing
+        ? `<div onclick="event.stopPropagation();showClient('${existing.id}');closeModal('new-client')" style="margin-top:4px;padding:4px 8px;background:rgba(245,158,11,.1);border-left:3px solid #f59e0b;border-radius:4px;font-size:11px;color:#f59e0b;cursor:pointer">→ Voir la fiche existante : <strong>${existing.name}</strong></div>`
+        : '';
+      return `<div style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px;${existing?'opacity:0.85':''}"
         onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
         onclick="fillFromSirene(${i})">
-        <div style="display:flex;justify-content:space-between;gap:8px"><div style="font-weight:600;color:var(--t1)">${nom}</div><div style="font-size:11px">${etatLabel}</div></div>
+        <div style="display:flex;justify-content:space-between;gap:8px"><div style="font-weight:600;color:var(--t1)">${nom}${existingBadge}</div><div style="font-size:11px">${etatLabel}</div></div>
         <div style="color:var(--t3);margin-top:2px;font-size:11px">SIRET: ${siret} | APE: ${activite} | Effectif: ${effFmt} | Cat: ${cat2}</div>
         <div style="color:var(--t3);font-size:11px">📍 ${cp2} ${ville} (${dept2})</div>
+        ${existingHint}
       </div>`;
     }).join('');
 
@@ -10252,18 +10277,27 @@ async function searchProspects(page) {
       resEl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--t3)">Aucune entreprise trouvée avec ces filtres</div>';
       return;
     }
-    // SIRETs existants pour griser les doublons
+    // Vérifier SIRET et SIREN déjà en base
     const sirets = merged.map(r => r.siege?.siret).filter(Boolean);
-    let existingSirets = new Set();
-    if (sirets.length) {
-      const { data: existingClients } = await sb.from('clients').select('siret').in('siret', sirets);
-      existingSirets = new Set((existingClients || []).map(c => c.siret));
+    const sirens = merged.map(r => r.siren).filter(Boolean);
+    const existingByKey = {};
+    if (sirets.length || sirens.length) {
+      const queries = [];
+      if (sirets.length) queries.push(sb.from('clients').select('id,name,siret,siren').in('siret', sirets));
+      if (sirens.length) queries.push(sb.from('clients').select('id,name,siret,siren').in('siren', sirens));
+      const responses = await Promise.all(queries);
+      for (const { data: rows } of responses) {
+        for (const c of (rows || [])) {
+          if (c.siret) existingByKey[c.siret] = c;
+          if (c.siren) existingByKey[c.siren] = c;
+        }
+      }
     }
 
     status.textContent = '';
     resEl.innerHTML = merged.map((e, i) => {
       const s = e.siege || {};
-      const exists = existingSirets.has(s.siret);
+      const existing = existingByKey[s.siret] || existingByKey[e.siren];
       const fullName = e.nom_complet || e.nom_raison_sociale || '';
       const apeFmt = s.activite_principale || e.activite_principale || '—';
       const effFmt = e.tranche_effectif_salarie ? `${e.tranche_effectif_salarie}` : '?';
@@ -10273,11 +10307,17 @@ async function searchProspects(page) {
       const dateCreation = e.date_creation ? new Date(e.date_creation).toLocaleDateString('fr-FR') : '—';
       const cat2 = e.categorie_entreprise || '—';
       const etatLabel = e.etat_administratif === 'A' ? '<span style="color:var(--green)">●</span> Active' : '<span style="color:var(--red)">●</span> Cessée';
-      return `<div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start;${exists?'opacity:0.5':''}">
-        <input type="checkbox" class="pt-check" data-idx="${i}" ${exists?'disabled':''} style="margin-top:6px">
+      const existingBadge = existing
+        ? `<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;margin-left:6px">⚠ Déjà en base</span>`
+        : '';
+      const existingLink = existing
+        ? `<div onclick="event.stopPropagation();showClient('${existing.id}');closeModal('prospect-target')" style="margin-top:4px;padding:4px 8px;background:rgba(245,158,11,.1);border-left:3px solid #f59e0b;border-radius:4px;font-size:11px;color:#f59e0b;cursor:pointer;display:inline-block">→ Voir la fiche existante : <strong>${existing.name}</strong></div>`
+        : '';
+      return `<div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:flex-start;${existing?'opacity:0.7':''}">
+        <input type="checkbox" class="pt-check" data-idx="${i}" ${existing?'disabled':''} style="margin-top:6px">
         <div style="flex:1;font-size:12px">
           <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline">
-            <div style="font-weight:700;color:var(--t1);font-size:13px">${fullName}${exists?' <span style="color:var(--t3);font-weight:400;font-size:11px">— déjà en base</span>':''}</div>
+            <div style="font-weight:700;color:var(--t1);font-size:13px">${fullName}${existingBadge}</div>
             <div style="white-space:nowrap;font-size:11px">${etatLabel}</div>
           </div>
           <div style="color:var(--t3);margin-top:3px;font-size:11px">
@@ -10286,6 +10326,7 @@ async function searchProspects(page) {
           <div style="color:var(--t3);font-size:11px">
             📍 ${(s.adresse || [s.numero_voie, s.type_voie, s.libelle_voie].filter(Boolean).join(' '))} ${cp2} ${ville} (${dept2})
           </div>
+          ${existingLink}
         </div>
       </div>`;
     }).join('');
