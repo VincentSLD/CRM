@@ -2184,18 +2184,26 @@ tbody tr:last-child td { border-bottom: none; }
           <div class="fg" style="position:relative"><label class="fl">Codes APE / NAF (multi)</label>
             <button type="button" class="fi" id="pt-ape-btn" onclick="togglePtDropdown('pt-ape-dd')" style="font-size:12px;text-align:left;cursor:pointer;background:var(--card)">— Tous —</button>
             <input type="hidden" id="pt-ape">
-            <div id="pt-ape-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:280px;overflow-y:auto;box-shadow:0 6px 18px rgba(0,0,0,.15);margin-top:2px">
-              <div style="padding:6px 8px;border-bottom:1px solid var(--border);background:var(--bg-2)">
-                <input type="text" id="pt-ape-search" placeholder="Rechercher..." style="width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:var(--bg-1);color:var(--t1)" oninput="filterApeList(this.value)">
+            <div id="pt-ape-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25);margin-top:2px">
+              <div style="padding:6px 8px;border-bottom:1px solid var(--border);background:#f5f5f5;position:sticky;top:0;z-index:1">
+                <input type="text" id="pt-ape-search" placeholder="Rechercher..." style="width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:#fff;color:#1a1a1a" oninput="filterApeList(this.value)">
+                <div style="display:flex;gap:4px;margin-top:4px">
+                  <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllApe(true)">Tout cocher</button>
+                  <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllApe(false)">Tout décocher (Tous)</button>
+                </div>
               </div>
-              <div id="pt-ape-list" style="padding:4px 0"></div>
+              <div id="pt-ape-list" style="padding:4px 0;background:#fff"></div>
             </div>
           </div>
           <div class="fg" style="position:relative"><label class="fl">Effectifs (multi)</label>
             <button type="button" class="fi" id="pt-eff-btn" onclick="togglePtDropdown('pt-eff-dd')" style="font-size:12px;text-align:left;cursor:pointer;background:var(--card)">— Tous —</button>
             <input type="hidden" id="pt-eff-min">
-            <div id="pt-eff-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:280px;overflow-y:auto;box-shadow:0 6px 18px rgba(0,0,0,.15);margin-top:2px">
-              <div id="pt-eff-list" style="padding:4px 0"></div>
+            <div id="pt-eff-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25);margin-top:2px">
+              <div style="padding:6px 8px;border-bottom:1px solid var(--border);background:#f5f5f5;position:sticky;top:0;z-index:1;display:flex;gap:4px">
+                <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllEff(true)">Tout cocher</button>
+                <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllEff(false)">Tout décocher (Tous)</button>
+              </div>
+              <div id="pt-eff-list" style="padding:4px 0;background:#fff"></div>
             </div>
           </div>
           <div class="fg"><label class="fl">Catégorie</label>
@@ -9852,12 +9860,12 @@ function initProspectFilters() {
   if (apeList && !apeList.dataset.built) {
     apeList.innerHTML = APE_LIST.map(g => `
       <div class="ape-grp" data-group="${g.group.toLowerCase()}">
-        <div style="padding:6px 10px;font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;background:var(--bg-2);border-bottom:1px solid var(--border)">${g.group}</div>
+        <div style="padding:6px 10px;font-size:10px;font-weight:700;color:#666;text-transform:uppercase;background:#eef0f3;border-bottom:1px solid var(--border)">${g.group}</div>
         ${g.codes.map(([code, lib]) => `
-          <label class="ape-item" data-search="${(code+' '+lib).toLowerCase()}" style="display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)">
+          <label class="ape-item" data-search="${(code+' '+lib).toLowerCase()}" style="display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #eee;background:#fff;color:#1a1a1a" onmouseover="this.style.background='#f5f7fa'" onmouseout="this.style.background='#fff'">
             <input type="checkbox" value="${code}" onchange="toggleApe('${code}', this.checked)">
             <span class="mono" style="font-weight:600;min-width:54px">${code}</span>
-            <span style="color:var(--t2)">${lib}</span>
+            <span style="color:#444">${lib}</span>
           </label>
         `).join('')}
       </div>
@@ -9868,7 +9876,7 @@ function initProspectFilters() {
   const effList = document.getElementById('pt-eff-list');
   if (effList && !effList.dataset.built) {
     effList.innerHTML = EFFECTIF_LIST.map(([code, lib]) => `
-      <label style="display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)">
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #eee;background:#fff;color:#1a1a1a" onmouseover="this.style.background='#f5f7fa'" onmouseout="this.style.background='#fff'">
         <input type="checkbox" value="${code}" onchange="toggleEff('${code}', this.checked)">
         <span class="mono" style="font-weight:600;min-width:32px">${code}</span>
         <span>${lib}</span>
@@ -9905,6 +9913,25 @@ function toggleApe(code, checked) {
 }
 function toggleEff(code, checked) {
   if (checked) _selectedEff.add(code); else _selectedEff.delete(code);
+  updateEffButton();
+}
+function toggleAllApe(checked) {
+  // Ne cocher/décocher que les éléments visibles (respect du filtre de recherche)
+  document.querySelectorAll('#pt-ape-list .ape-item').forEach(item => {
+    if (item.style.display === 'none') return;
+    const cb = item.querySelector('input[type=checkbox]');
+    if (!cb) return;
+    cb.checked = checked;
+    const code = cb.value;
+    if (checked) _selectedApe.add(code); else _selectedApe.delete(code);
+  });
+  updateApeButton();
+}
+function toggleAllEff(checked) {
+  document.querySelectorAll('#pt-eff-list input[type=checkbox]').forEach(cb => {
+    cb.checked = checked;
+    if (checked) _selectedEff.add(cb.value); else _selectedEff.delete(cb.value);
+  });
   updateEffButton();
 }
 function updateApeButton() {
