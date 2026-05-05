@@ -7253,12 +7253,29 @@ async function esLaunchSearch() {
   toast('Recherche terminée — ' + _esResults.filter(r => r.candidates.length).length + ' fiches avec candidat(s)', 'success');
 }
 
+// Vérifie si un SIRET (ou SIREN) existe déjà sur une autre fiche.
+// Retourne true si l'utilisateur confirme ou s'il n'y a pas de doublon.
+async function esCheckDuplicate(siret, siren, currentClientId) {
+  if (!siret && !siren) return true;
+  let q = sb.from('clients').select('id,name,city,siret,siren').neq('id', currentClientId);
+  if (siret && siren) q = q.or('siret.eq.' + siret + ',siren.eq.' + siren);
+  else if (siret) q = q.eq('siret', siret);
+  else q = q.eq('siren', siren);
+  const { data } = await q.limit(3);
+  if (!data || !data.length) return true;
+  const lines = data.map(d => `• ${d.name || '?'} (${d.city || '—'}) — SIRET ${d.siret || '—'}`).join('\n');
+  return confirm('⚠ Doublon détecté\n\nCe SIRET / SIREN existe déjà sur ' + data.length + ' autre(s) fiche(s) :\n\n' + lines + '\n\nAppliquer quand même ?');
+}
+
 async function esApply(idx, candIdx, alsoAkuiteo) {
   const item = _esResults[idx];
   if (!item) return;
   const cand = item.candidates[candIdx || 0];
   if (!cand) return;
   const siege = cand.siege || {};
+  // Vérification doublon
+  const ok = await esCheckDuplicate(siege.siret, cand.siren, item.client.id);
+  if (!ok) return;
   const update = {
     siren: cand.siren || null,
     siret: siege.siret || null,
@@ -7294,6 +7311,9 @@ async function esApplyManualSiret(idx, raw, withAkuiteo) {
   if (siret.length !== 14) { toast('Saisissez un SIRET de 14 chiffres', 'error'); return; }
   const item = _esResults[idx];
   if (!item) return;
+  // Vérifier le doublon AVANT d'interroger SIRENE
+  const ok = await esCheckDuplicate(siret, siret.slice(0, 9), item.client.id);
+  if (!ok) return;
   toast('🔍 Récupération via SIRENE...', 'info');
   try {
     // L'API recherche-entreprises accepte le SIRET en q
