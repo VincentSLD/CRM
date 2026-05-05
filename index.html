@@ -15242,7 +15242,7 @@ async function onAuthSuccess(user) {
   document.getElementById('loginScreen').classList.add('hidden');
 
   // Charger les données
-  document.getElementById('contentArea').innerHTML = '<div class="page active" style="text-align:center;padding:60px 20px;color:var(--t3)"><div style="font-size:1.1rem;font-weight:600">Chargement des données...</div><div style="margin-top:8px;font-size:.85rem">Connexion à Supabase</div></div>';
+  document.getElementById('contentArea').innerHTML = '<div class="page active" style="text-align:center;padding:60px 20px;color:var(--t3)"><div style="font-size:1.1rem;font-weight:600">Chargement des données...</div></div>';
   await loadDB();
   updateSyncLabel();
   renderPage('dashboard');
