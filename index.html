@@ -7156,25 +7156,50 @@ function _esSimilarity(a, b) {
   if (na === nb) return 1;
   return 1 - _esLevenshtein(na, nb) / Math.max(na.length, nb.length);
 }
+// Match métier : recouvrement de tokens significatifs (≥4 chars) entre
+// 'mk_categorie + mk_sous_categorie + sector' (CRM) et le libellé APE (SIRENE)
+function _esMetierMatch(crmText, candApeLabel) {
+  const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ');
+  const STOP = new Set(['avec','dans','pour','sans','sous','autres','autre','generale','generaux','specialise','specialises','activite','activites','services','service']);
+  const tokenize = s => norm(s).split(/\s+/).filter(t => t.length >= 4 && !STOP.has(t));
+  const a = new Set(tokenize(crmText));
+  const b = new Set(tokenize(candApeLabel));
+  if (!a.size || !b.size) return null; // pas exploitable
+  let common = 0;
+  for (const t of a) if (b.has(t)) common++;
+  return common / Math.min(a.size, b.size); // 0..1
+}
+
 function _esScore(client, candidate) {
   const s = candidate.siege || {};
   const candName = candidate.nom_complet || candidate.nom_raison_sociale || '';
   let score = 0;
-  // Similarité du nom (max 60)
-  score += _esSimilarity(client.name, candName) * 60;
-  // Code postal exact (+25), ou département seul (+8)
+  // Similarité du nom (max 55)
+  score += _esSimilarity(client.name, candName) * 55;
+  // Code postal exact (+20), ou département seul (+5)
   const cp = client.code_postal || '';
-  if (cp && s.code_postal === cp) score += 25;
-  else if (cp && s.code_postal && cp.slice(0, 2) === s.code_postal.slice(0, 2)) score += 8;
+  if (cp && s.code_postal === cp) score += 20;
+  else if (cp && s.code_postal && cp.slice(0, 2) === s.code_postal.slice(0, 2)) score += 5;
   // Ville (+10) — tolère - vs espace et st/saint, ste/sainte
   if (client.city && s.libelle_commune) {
     const cityA = _esNormalizeCity(client.city), cityB = _esNormalizeCity(s.libelle_commune);
     if (cityA === cityB) score += 10;
     else if (cityA && cityB && (cityA.includes(cityB) || cityB.includes(cityA))) score += 5;
   }
-  // État administratif active (+5)
-  if (candidate.etat_administratif === 'A') score += 5;
-  return Math.round(score);
+  // État administratif active (+3)
+  if (candidate.etat_administratif === 'A') score += 3;
+  // Métier : compare CRM (catégorie + sous-cat + secteur) avec libellé APE (max +12, mismatch -4)
+  const crmText = [client.mk_categorie, client.mk_sous_categorie, client.sector].filter(Boolean).join(' ');
+  const apeCode = s.activite_principale || candidate.activite_principale || '';
+  const apeText = (typeof apeLabel === 'function' && apeCode) ? apeLabel(apeCode) : '';
+  const m = _esMetierMatch(crmText, apeText);
+  if (m != null) {
+    if (m >= 0.5) score += 12;
+    else if (m >= 0.3) score += 7;
+    else if (m >= 0.1) score += 2;
+    else score -= 4; // CRM a un métier mais aucun mot commun → probable homonyme
+  }
+  return Math.max(0, Math.round(score));
 }
 
 async function esLaunchSearch() {
@@ -7318,6 +7343,8 @@ function imxRenderEsList() {
     const candApe = s.activite_principale || cand.activite_principale || '';
     const candApeLabel = (typeof apeLabel === 'function' && candApe) ? apeLabel(candApe) : '';
     const crmMetier = [c.mk_categorie, c.mk_sous_categorie].filter(Boolean).join(' / ');
+    const metierM = _esMetierMatch([c.mk_categorie, c.mk_sous_categorie, c.sector].filter(Boolean).join(' '), candApeLabel);
+    const metierIcon = metierM == null ? '' : (metierM >= 0.5 ? '<span title="Match fort métier" style="color:#22c55e">●</span> ' : metierM >= 0.1 ? '<span title="Match partiel métier" style="color:#f59e0b">●</span> ' : '<span title="Métiers différents" style="color:#ef4444">●</span> ');
     return `<div style="padding:10px 14px;border-bottom:1px solid var(--border)">
       <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
         <div style="flex:1;min-width:240px">
@@ -7333,7 +7360,7 @@ function imxRenderEsList() {
           </div>
           <div style="font-size:11px;color:var(--t3);margin-top:4px">📍 ${sireneAdr(s) || '<em>—</em>'}</div>
           <div style="font-size:11px;color:var(--t3)">${s.code_postal||''} ${s.libelle_commune||''}</div>
-          ${candApe ? `<div style="font-size:11px;color:var(--t3);margin-top:2px">🏷 APE ${candApe}${candApeLabel ? ' — ' + candApeLabel : ''}</div>` : ''}
+          ${candApe ? `<div style="font-size:11px;color:var(--t3);margin-top:2px">${metierIcon}🏷 APE ${candApe}${candApeLabel ? ' — ' + candApeLabel : ''}</div>` : ''}
           <div style="font-size:11px;color:var(--t3);margin-top:4px">
             SIREN <span class="mono" style="color:var(--t1)">${cand.siren||''}</span> ·
             SIRET <span class="mono" style="color:var(--t1)">${s.siret||''}</span> ·
