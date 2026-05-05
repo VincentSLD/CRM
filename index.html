@@ -6376,10 +6376,18 @@ function imxAutoMapColumns() {
   _imxColMap.soc = {};
   _imxColMap.con = {};
   _imxColMap.cr  = {};
-  const apply = (cols, dict, target) => { for (const c of cols) if (dict[c]) target[c] = dict[c]; };
-  if (_imxOutSoc.length) apply([...new Set(_imxOutSoc.flatMap(r => Object.keys(r)))], AUTOMAP_SOC, _imxColMap.soc);
-  if (_imxOutCon.length) apply([...new Set(_imxOutCon.flatMap(r => Object.keys(r)))], AUTOMAP_CON, _imxColMap.con);
-  if (_imxOutCr.length)  apply([...new Set(_imxOutCr.flatMap(r => Object.keys(r)))],  AUTOMAP_CR,  _imxColMap.cr);
+  const apply = (cols, dict, crmList, target) => {
+    const crmSet = new Set(crmList);
+    for (const c of cols) {
+      // 1) Mapping XML connu (ex: TXT_Societe → name)
+      if (dict[c]) { target[c] = dict[c]; continue; }
+      // 2) Si la colonne porte directement le nom d'un champ CRM (cas des modèles), auto-mappe 1:1
+      if (crmSet.has(c)) { target[c] = c; continue; }
+    }
+  };
+  if (_imxOutSoc.length) apply([...new Set(_imxOutSoc.flatMap(r => Object.keys(r)))], AUTOMAP_SOC, CRM_FIELDS_SOC, _imxColMap.soc);
+  if (_imxOutCon.length) apply([...new Set(_imxOutCon.flatMap(r => Object.keys(r)))], AUTOMAP_CON, CRM_FIELDS_CON, _imxColMap.con);
+  if (_imxOutCr.length)  apply([...new Set(_imxOutCr.flatMap(r => Object.keys(r)))],  AUTOMAP_CR,  CRM_FIELDS_CR,  _imxColMap.cr);
 }
 
 function imxSetColumnMap(kind, csvCol, crmField) {
@@ -6495,12 +6503,8 @@ function imxLoadCsv(kind, file) {
       if (kind === 'soc') _imxOutSoc = rows;
       else if (kind === 'con') _imxOutCon = rows;
       else _imxOutCr = rows;
-      // Refaire les liens contact↔société et CR↔société/contact si possible
-      if (kind === 'soc' && _imxOutCon.length) {
-        const socByLegacy = {};
-        for (const s of _imxOutSoc) if (s.legacy_id) socByLegacy[s.legacy_id] = s.name || '';
-        for (const c of _imxOutCon) if (c.legacy_societe_id) c.client_name_legacy = socByLegacy[c.legacy_societe_id] || c.client_name_legacy || '';
-      }
+      // Re-déclenche l'auto-mapping pour cette catégorie (modèles 1:1 ou XML connu)
+      imxAutoMapColumns();
       imxRenderPreview();
       renderPage('import-xml');
       toast(rows.length + ' lignes chargées depuis le CSV', 'success');
