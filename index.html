@@ -8383,7 +8383,7 @@ const MP_SOURCES = {
   },
 };
 
-let _mpFilters = { tab: 'decp', q: '', dept: '', montantMin: '', dateMin: '' };
+let _mpFilters = { tab: 'decp', q: '', dept: '', montantMin: '', montantMax: '', dateMin: '', dateMax: '', acheteur: '', titulaire: '', cpv: '', typeMarche: '', procedure: '' };
 let _mpResults = [];
 let _mpTotal = 0;
 let _mpPage = 0;
@@ -8396,27 +8396,57 @@ function mpSetTab(t) {
   renderPage('marches-publics');
 }
 
+function mpResetFilters() {
+  const tab = _mpFilters.tab;
+  _mpFilters = { tab, q: '', dept: '', montantMin: '', montantMax: '', dateMin: '', dateMax: '', acheteur: '', titulaire: '', cpv: '', typeMarche: '', procedure: '' };
+  _mpPage = 0; _mpResults = []; _mpTotal = 0;
+  renderPage('marches-publics');
+}
+
 function mpBuildQuery() {
   const src = MP_SOURCES[_mpFilters.tab];
   const params = new URLSearchParams();
-  // Recherche full-text dans les champs principaux
-  if (_mpFilters.q) {
-    const qlow = _mpFilters.q.replace(/"/g, '');
-    const where = src.qFields.map(f => `search(${f},"${qlow}")`).join(' or ');
-    params.set('where', where);
-  }
-  // Département (préfixe sur le champ correspondant)
   const wheres = [];
-  if (_mpFilters.q) wheres.push(src.qFields.map(f => `search(${f},"${_mpFilters.q.replace(/"/g, '')}")`).join(' or '));
-  if (_mpFilters.dept) {
-    const f = src.fields.dept;
-    wheres.push(`startswith(${f},"${_mpFilters.dept}")`);
+  const esc = s => String(s || '').replace(/"/g, '');
+  // Recherche full-text globale
+  if (_mpFilters.q) {
+    const w = src.qFields.map(f => `search(${f},"${esc(_mpFilters.q)}")`).join(' or ');
+    wheres.push('(' + w + ')');
   }
+  // Acheteur (search ilike)
+  if (_mpFilters.acheteur && src.fields.acheteur) {
+    wheres.push(`search(${src.fields.acheteur},"${esc(_mpFilters.acheteur)}")`);
+  }
+  // Titulaire (DECP/MEF)
+  if (_mpFilters.titulaire && src.fields.titulaire) {
+    wheres.push(`search(${src.fields.titulaire},"${esc(_mpFilters.titulaire)}")`);
+  }
+  // Département (préfixe)
+  if (_mpFilters.dept && src.fields.dept) {
+    wheres.push(`startswith(${src.fields.dept},"${esc(_mpFilters.dept)}")`);
+  }
+  // Montant min/max
   if (_mpFilters.montantMin && src.fields.montant) {
-    wheres.push(`${src.fields.montant} > ${parseFloat(_mpFilters.montantMin) || 0}`);
+    wheres.push(`${src.fields.montant} >= ${parseFloat(_mpFilters.montantMin) || 0}`);
   }
-  if (_mpFilters.dateMin) {
-    wheres.push(`${src.fields.date} >= "${_mpFilters.dateMin}"`);
+  if (_mpFilters.montantMax && src.fields.montant) {
+    wheres.push(`${src.fields.montant} <= ${parseFloat(_mpFilters.montantMax) || 0}`);
+  }
+  // Date min/max
+  if (_mpFilters.dateMin) wheres.push(`${src.fields.date} >= "${_mpFilters.dateMin}"`);
+  if (_mpFilters.dateMax) wheres.push(`${src.fields.date} <= "${_mpFilters.dateMax}"`);
+  // Code CPV (DECP)
+  if (_mpFilters.cpv && _mpFilters.tab === 'decp') {
+    wheres.push(`startswith(codecpv,"${esc(_mpFilters.cpv)}")`);
+  }
+  // Type marché (BOAMP)
+  if (_mpFilters.typeMarche && _mpFilters.tab === 'boamp') {
+    wheres.push(`type_marche="${esc(_mpFilters.typeMarche)}"`);
+  }
+  // Procédure (BOAMP : libellé ; DECP : champ procedure)
+  if (_mpFilters.procedure) {
+    if (_mpFilters.tab === 'boamp') wheres.push(`search(procedure_libelle,"${esc(_mpFilters.procedure)}")`);
+    else if (_mpFilters.tab === 'decp') wheres.push(`search(procedure,"${esc(_mpFilters.procedure)}")`);
   }
   if (wheres.length) params.set('where', wheres.join(' and '));
   params.set('limit', String(MP_PAGE_SIZE));
@@ -8495,13 +8525,30 @@ function renderMarchesPublics() {
   </div>
 
   <div class="card" style="margin-bottom:12px">
-    <div class="card-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-      <input type="text" placeholder="Mots-clés (ex: géotechnique, BET, étude de sol...)" value="${(_mpFilters.q||'').replace(/"/g,'&quot;')}" oninput="_mpFilters.q=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="flex:1;min-width:240px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
-      <input type="text" placeholder="Dpt (ex: 85)" value="${_mpFilters.dept||''}" oninput="_mpFilters.dept=this.value" style="width:90px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
-      <input type="number" placeholder="Montant min €" value="${_mpFilters.montantMin||''}" oninput="_mpFilters.montantMin=this.value" style="width:130px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
-      <input type="date" value="${_mpFilters.dateMin||''}" oninput="_mpFilters.dateMin=this.value" title="Date min (publié/notifié après)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
-      <button class="btn btn-primary" onclick="mpSearch(0)" style="font-size:12px">${_mpRunning?'⏳':'🔍 Rechercher'}</button>
-      <button class="btn" onclick="mpExportCsv()" style="font-size:12px"${_mpResults.length===0?' disabled':''}>📥 CSV</button>
+    <div class="card-body" style="padding:10px 14px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <input type="text" placeholder="Mots-clés (ex: géotechnique, BET, étude de sol...)" value="${(_mpFilters.q||'').replace(/"/g,'&quot;')}" oninput="_mpFilters.q=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="flex:1;min-width:240px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+        <input type="text" placeholder="Dpt (ex: 85)" value="${_mpFilters.dept||''}" oninput="_mpFilters.dept=this.value" style="width:90px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+        <button class="btn btn-primary" onclick="mpSearch(0)" style="font-size:12px">${_mpRunning?'⏳':'🔍 Rechercher'}</button>
+        <button class="btn" onclick="mpExportCsv()" style="font-size:12px"${_mpResults.length===0?' disabled':''}>📥 CSV</button>
+        <button class="btn" onclick="mpResetFilters()" style="font-size:12px">✕ Reset</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="text" placeholder="Acheteur (contient)" value="${(_mpFilters.acheteur||'').replace(/"/g,'&quot;')}" oninput="_mpFilters.acheteur=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="width:170px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">
+        ${_mpFilters.tab !== 'boamp' ? `<input type="text" placeholder="Titulaire (contient)" value="${(_mpFilters.titulaire||'').replace(/"/g,'&quot;')}" oninput="_mpFilters.titulaire=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="width:170px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">` : ''}
+        <input type="number" placeholder="Montant min €" value="${_mpFilters.montantMin||''}" oninput="_mpFilters.montantMin=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="width:130px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)" ${_mpFilters.tab==='boamp'?'disabled title="Pas de montant en BOAMP"':''}>
+        <input type="number" placeholder="Montant max €" value="${_mpFilters.montantMax||''}" oninput="_mpFilters.montantMax=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="width:130px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)" ${_mpFilters.tab==='boamp'?'disabled':''}>
+        <input type="date" value="${_mpFilters.dateMin||''}" oninput="_mpFilters.dateMin=this.value" title="Date min" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">
+        <input type="date" value="${_mpFilters.dateMax||''}" oninput="_mpFilters.dateMax=this.value" title="Date max" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">
+        ${_mpFilters.tab === 'decp' ? `<input type="text" placeholder="Code CPV (préfixe)" value="${(_mpFilters.cpv||'').replace(/"/g,'&quot;')}" oninput="_mpFilters.cpv=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="width:130px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">` : ''}
+        ${_mpFilters.tab === 'boamp' ? `<select onchange="_mpFilters.typeMarche=this.value" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">
+          <option value="" ${!_mpFilters.typeMarche?'selected':''}>— Type marché —</option>
+          <option value="TRAVAUX" ${_mpFilters.typeMarche==='TRAVAUX'?'selected':''}>Travaux</option>
+          <option value="FOURNITURES" ${_mpFilters.typeMarche==='FOURNITURES'?'selected':''}>Fournitures</option>
+          <option value="SERVICES" ${_mpFilters.typeMarche==='SERVICES'?'selected':''}>Services</option>
+        </select>` : ''}
+        ${(_mpFilters.tab === 'decp' || _mpFilters.tab === 'boamp') ? `<input type="text" placeholder="Procédure (contient)" value="${(_mpFilters.procedure||'').replace(/"/g,'&quot;')}" oninput="_mpFilters.procedure=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="width:170px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">` : ''}
+      </div>
     </div>
   </div>
 
