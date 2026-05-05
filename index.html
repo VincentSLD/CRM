@@ -4617,16 +4617,19 @@ function renderClients(filter='all') {
     ${letters.map(l => `<button class="btn ${clientsLetter===l?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'${l}','')">${l}</button>`).join('')}
   </div>
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Société</th><th>Ville</th><th>Secteur</th><th>Statut</th><th style="width:60px;text-align:center">Pappers</th></tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--t3)">Aucun client/prospect trouvé</td></tr>' : filtered.map(c => {
-      const s = statusMap[c.status] || {cls:'',label:c.status};
+    <table><thead><tr><th>Société</th><th>Commercial Novam</th><th>Commercial GPH</th><th style="width:50px">Dpt</th><th>Ville</th><th style="width:60px;text-align:center">Pappers</th></tr></thead>
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--t3)">Aucun client/prospect trouvé</td></tr>' : filtered.map(c => {
       const pappersRef = c.siren || c.siret;
       const pappersLink = pappersRef ? '<a href="https://www.pappers.fr/entreprise/'+pappersRef+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Voir sur Pappers" style="color:#3b82f6;text-decoration:none;font-size:14px">📋</a>' : '<span style="color:var(--t3);font-size:11px">—</span>';
+      const dept = c.code_postal ? c.code_postal.slice(0,2) : (c.departement || '');
+      const novam = c.account_manager_name || '';
+      const gph = c.salesman_name || c.commerciaux_associes || '';
       return `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
         <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div><div><div class="cell-name">${c.name} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'};margin-left:4px;vertical-align:middle" title="${c.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span></div><div class="cell-code">${c.code}</div></div></div></td>
+        <td style="font-size:12px">${novam}</td>
+        <td style="font-size:12px">${gph}</td>
+        <td class="mono" style="font-size:12px">${dept}</td>
         <td style="font-size:12px">${c.city||''}</td>
-        <td style="font-size:12px">${c.sector||''}</td>
-        <td><span class="badge ${s.cls}">${s.label}</span></td>
         <td style="text-align:center">${pappersLink}</td>
       </tr>`;
     }).join('')}</tbody></table>
