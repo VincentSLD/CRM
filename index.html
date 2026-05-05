@@ -8525,18 +8525,28 @@ function mpRenderResults() {
   const f = MP_SOURCES[tab].fields;
   let head = '', rows = '';
   if (tab === 'decp') {
-    head = '<tr><th>Date</th><th>Dpt</th><th>Acheteur</th><th>Objet</th><th>Titulaire</th><th style="text-align:right">Montant</th><th>Actions</th></tr>';
+    head = '<tr><th>Date</th><th>Lieu</th><th>Acheteur</th><th>Objet</th><th>Titulaire</th><th style="text-align:right">Montant</th><th>Actions</th></tr>';
     rows = _mpResults.map(r => {
-      const titulaireNom = r[f.titulaire] || '—';
+      // Acheteur : nom si dispo, sinon SIRET avec lien Pappers
+      const acheteurNom = r[f.acheteur];
+      const acheteurSiret = r.acheteur_id || '';
+      const acheteurDisp = acheteurNom || (acheteurSiret ? '<span class="mono" style="font-size:10px;color:var(--t3)">SIRET ' + acheteurSiret + '</span>' : '—');
+      const acheteurPappers = acheteurSiret ? '<a href="https://www.pappers.fr/entreprise/' + String(acheteurSiret).substring(0,9) + '" target="_blank" rel="noopener" style="color:#3b82f6;margin-right:4px;text-decoration:none" title="Pappers">📋</a>' : '';
+      // Titulaire : nom si dispo, sinon SIRET avec lien Pappers
+      const titulaireNom = r[f.titulaire];
       const titulaireSiret = r[f.titulaireSiret] || '';
-      const sirenLink = titulaireSiret ? '<a href="https://www.pappers.fr/entreprise/' + String(titulaireSiret).substring(0,9) + '" target="_blank" rel="noopener" style="color:#3b82f6;margin-right:4px;text-decoration:none">📋</a>' : '';
-      const addBtn = titulaireSiret ? `<button class="btn" onclick="mpAddTitulaireConcurrent('${titulaireSiret}','${(titulaireNom||'').replace(/'/g,"\\'")}')" style="font-size:10px;padding:2px 6px" title="Ajouter aux concurrents">+ concurrent</button>` : '';
+      const titulaireDisp = titulaireNom || (titulaireSiret ? '<span class="mono" style="font-size:10px;color:var(--t3)">SIRET ' + titulaireSiret + '</span>' : '—');
+      const titulairePappers = titulaireSiret ? '<a href="https://www.pappers.fr/entreprise/' + String(titulaireSiret).substring(0,9) + '" target="_blank" rel="noopener" style="color:#3b82f6;margin-right:4px;text-decoration:none" title="Pappers">📋</a>' : '';
+      // Lieu d'exécution (commune) plus utile que juste le code dept
+      const lieuNom = r.lieuexecution_nom || '';
+      const lieuCode = r[f.dept] || '';
+      const addBtn = titulaireSiret ? `<button class="btn" onclick="mpAddTitulaireConcurrent('${titulaireSiret}','${(titulaireNom||titulaireSiret||'').replace(/'/g,"\\'")}')" style="font-size:10px;padding:2px 6px" title="Ajouter aux concurrents">+ concurrent</button>` : '';
       return `<tr>
         <td style="font-size:11px;white-space:nowrap">${mpFmtDate(r[f.date])}</td>
-        <td class="mono">${mpFmtDept(r[f.dept])}</td>
-        <td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis"><strong>${r[f.acheteur]||'—'}</strong></td>
+        <td style="font-size:11px"><strong>${lieuCode}</strong>${lieuNom?'<br><span style="color:var(--t3);font-size:10px">'+lieuNom+'</span>':''}</td>
+        <td style="font-size:11px;max-width:200px"><div>${acheteurPappers}<strong>${acheteurDisp}</strong></div></td>
         <td style="font-size:12px;max-width:340px">${r[f.objet]||'—'}</td>
-        <td style="font-size:11px">${sirenLink}${titulaireNom}</td>
+        <td style="font-size:11px;max-width:180px">${titulairePappers}<strong>${titulaireDisp}</strong></td>
         <td style="text-align:right;font-weight:700;white-space:nowrap">${mpFmtMoney(r[f.montant])}</td>
         <td>${addBtn}</td>
       </tr>`;
