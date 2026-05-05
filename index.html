@@ -6120,10 +6120,11 @@ async function initCarteAffairesMap() {
 }
 
 // ═══ IMPORT XML CODIAL — multi-fichiers flexible ═══
-let _imxFiles = [];   // [{id, filename, role, rows, fields, pkField, fieldMap}]
-let _imxOutSoc = [];  // résultat sociétés mergées
-let _imxOutCon = [];  // résultat contacts mergées
-let _imxOutCr = [];   // résultat comptes-rendus mergés
+let _imxFiles = [];   // [{id, filename, role, rows, fields, pkField}]
+let _imxOutSoc = [];  // sociétés mergées (colonnes XML brutes + jointures)
+let _imxOutCon = [];  // contacts mergées (colonnes XML brutes + jointures)
+let _imxOutCr = [];   // comptes-rendus mergés (colonnes XML brutes + jointures)
+let _imxColMap = { soc: {}, con: {}, cr: {} }; // mapping CSV→CRM, défini APRÈS construction
 let _imxNextId = 1;
 
 const CRM_FIELDS_SOC = ['name','code','code_codial','raison_sociale','siren','siret','ape','forme_juridique','adresse_ligne1','adresse_ligne2','code_postal','city','departement','region','pays','phone','telephone2','fax','mobile','email','site_web','lat','lng','sector','contact','notes','habitudes_techniques','habitudes_geotechniques','effectif','ca','status','mk_categorie','mk_sous_categorie','mk_categorie_pro','mk_secteur','mk_type','mk_groupe','mk_origine','legacy_id'];
@@ -6222,9 +6223,7 @@ async function imxParseFile(file) {
         const fields = rows.length ? Object.keys(rows[0]) : [];
         const role = imxAutoDetectRole(file.name);
         const pkField = imxAutoPK(fields);
-        const fieldMap = {};
-        for (const f of fields) fieldMap[f] = imxAutoMapField(f, role);
-        resolve({ id: 'f' + (_imxNextId++), filename: file.name, role, rows, fields, pkField, fieldMap });
+        resolve({ id: 'f' + (_imxNextId++), filename: file.name, role, rows, fields, pkField });
       } catch (err) { reject(err); }
     };
     reader.onerror = () => reject(new Error('Lecture impossible'));
@@ -6247,7 +6246,7 @@ function imxMerge() {
   const masters_con = _imxFiles.filter(f => f.role === 'master_contacts');
   const masters_cr = _imxFiles.filter(f => f.role === 'master_cr');
   const lookups = _imxFiles.filter(f => f.role === 'lookup');
-  // Index lookups par PK
+  // Index lookups par PK pour résoudre master.FK → lookup row
   const byPk = {};
   for (const f of lookups) {
     if (!f.pkField) continue;
@@ -6271,51 +6270,47 @@ function imxMerge() {
         return { file: L, byFk: idx };
       });
       for (const row of M.rows) {
-        const newRow = {};
-        // 1) Master mapping
+        // Copier toutes les colonnes XML d'origine du master
+        const newRow = { ...row };
+        // 1) Résolution des FKs du master via lookups standalone (ex: ID_CIVILITE → TXT_CIVILITE)
         for (const f of M.fields) {
-          const t = M.fieldMap[f];
-          if (t) newRow[t] = row[f];
-        }
-        // 2) Résolution des FKs présents dans master via lookups standalone
-        for (const f of M.fields) {
-          if (!/^ID_/.test(f)) continue;
+          if (!/^ID_/.test(f) || f === pk) continue;
           const v = row[f]; if (!v) continue;
           const lkup = byPk[f]; if (!lkup || !lkup[v]) continue;
           const { row: lr, file: lF } = lkup[v];
           for (const lf of lF.fields) {
-            const t = lF.fieldMap[lf]; if (!t) continue;
-            newRow[t] = newRow[t] ? (newRow[t] + ', ' + lr[lf]) : lr[lf];
+            if (lf === lF.pkField) continue;
+            if (!(lf in newRow)) newRow[lf] = lr[lf]; // ne pas écraser
           }
         }
-        // 3) Enrichissement depuis lookups avec FK = master.PK
+        // 2) Enrichissement depuis lookups avec FK = master.PK (ex: FIC_SOCIETEMETIER pour ID_SOCIETE)
         const pkVal = row[pk];
         for (const { file: L, byFk } of lookupsByFk) {
           const matches = byFk[pkVal] || [];
-          for (const lr of matches) {
-            for (const lf of L.fields) {
-              const t = L.fieldMap[lf]; if (!t) continue;
-              newRow[t] = newRow[t] ? (newRow[t] + ', ' + lr[lf]) : lr[lf];
-            }
-            // Résolution chaînée : si lr a un autre ID_X mappé à un lookup standalone
-            for (const lf of L.fields) {
-              if (!/^ID_/.test(lf) || lf === pk) continue;
-              const v = lr[lf]; if (!v) continue;
-              const lkup = byPk[lf]; if (!lkup || !lkup[v]) continue;
-              const { row: lr2, file: lF2 } = lkup[v];
-              for (const llf of lF2.fields) {
-                const t = lF2.fieldMap[llf]; if (!t) continue;
-                newRow[t] = newRow[t] ? (newRow[t] + ', ' + lr2[llf]) : lr2[llf];
-              }
+          if (!matches.length) continue;
+          for (const lf of L.fields) {
+            if (lf === pk) continue;
+            const vals = matches.map(m => m[lf]).filter(v => v && String(v).trim());
+            if (!vals.length) continue;
+            // Résolution chaînée : si lf est ID_X et qu'on a un lookup pour X, remplace par les libellés
+            if (/^ID_/.test(lf) && byPk[lf]) {
+              const resolved = vals.map(v => {
+                const lk = byPk[lf][v]; if (!lk) return v;
+                for (const f2 of lk.file.fields) {
+                  if (f2 === lk.file.pkField) continue;
+                  if (!/^ID_/.test(f2) && lk.row[f2]) return lk.row[f2];
+                }
+                return v;
+              });
+              const colName = 'resolved_' + lf;
+              const existing = newRow[colName] ? String(newRow[colName]).split(', ') : [];
+              newRow[colName] = [...new Set([...existing, ...resolved])].join(', ');
+            } else {
+              const existing = newRow[lf] ? String(newRow[lf]).split(', ') : [];
+              newRow[lf] = [...new Set([...existing, ...vals])].join(', ');
             }
           }
         }
-        // 4) Split nom_prenom
-        if (newRow.nom_prenom && !newRow.nom) {
-          const sp = imxSplitNomPrenom(newRow.nom_prenom);
-          newRow.nom = sp.nom; newRow.prenom = sp.prenom;
-        }
-        delete newRow.nom_prenom;
         out.push(newRow);
       }
     }
@@ -6324,15 +6319,8 @@ function imxMerge() {
   _imxOutSoc = processMasters(masters_soc);
   _imxOutCon = processMasters(masters_con);
   _imxOutCr = processMasters(masters_cr);
-  // Lookup nom de société pour les contacts
-  if (_imxOutCon.length && _imxOutSoc.length) {
-    const socByLegacy = {};
-    for (const s of _imxOutSoc) if (s.legacy_id) socByLegacy[s.legacy_id] = s.name || '';
-    for (const c of _imxOutCon) if (c.legacy_societe_id) c.client_name_legacy = socByLegacy[c.legacy_societe_id] || '';
-  }
   // CR : résolution des liens via fichier de jonction (FIC_TACHESCOMMERCIALESCONTACTS)
   if (_imxOutCr.length) {
-    // Trouver une jonction qui contient ID_TACHESCOMMERCIALES + ID_SOCIETE + ID_CONTACTS
     const junction = lookups.find(f =>
       f.fields.includes('ID_TACHESCOMMERCIALES') &&
       (f.fields.includes('ID_SOCIETE') || f.fields.includes('ID_CONTACTS'))
@@ -6347,34 +6335,59 @@ function imxMerge() {
         if (r['ID_CONTACTS'] && !byCr[k].con) byCr[k].con = r['ID_CONTACTS'];
       }
       for (const cr of _imxOutCr) {
-        const j = byCr[cr.legacy_id];
+        const k = cr['ID_TACHESCOMMERCIALES'];
+        const j = byCr[k];
         if (j) {
-          if (j.soc && !cr.legacy_societe_id) cr.legacy_societe_id = j.soc;
-          if (j.con && !cr.legacy_contact_id) cr.legacy_contact_id = j.con;
+          if (j.soc && !cr['ID_SOCIETE']) cr['ID_SOCIETE'] = j.soc;
+          if (j.con && !cr['ID_CONTACTS']) cr['ID_CONTACTS'] = j.con;
         }
       }
     }
-    // Résolution noms : société et contact depuis _imxOutSoc / _imxOutCon
-    const socByLegacy2 = {};
-    for (const s of _imxOutSoc) if (s.legacy_id) socByLegacy2[s.legacy_id] = s.name || '';
-    const conByLegacy = {};
-    for (const c of _imxOutCon) if (c.legacy_id) conByLegacy[c.legacy_id] = ((c.prenom||'') + ' ' + (c.nom||'')).trim();
-    for (const cr of _imxOutCr) {
-      if (cr.legacy_societe_id && !cr.client_name) cr.client_name = socByLegacy2[cr.legacy_societe_id] || '';
-      if (cr.legacy_contact_id && !cr.contact_name) cr.contact_name = conByLegacy[cr.legacy_contact_id] || '';
-    }
   }
+  imxAutoMapColumns();
+}
+
+// Auto-mapping des colonnes CSV → champs CRM (heuristique appliquée après la construction)
+function imxAutoMapColumns() {
+  _imxColMap.soc = {};
+  _imxColMap.con = {};
+  _imxColMap.cr  = {};
+  const apply = (cols, dict, target) => { for (const c of cols) if (dict[c]) target[c] = dict[c]; };
+  if (_imxOutSoc.length) apply([...new Set(_imxOutSoc.flatMap(r => Object.keys(r)))], AUTOMAP_SOC, _imxColMap.soc);
+  if (_imxOutCon.length) apply([...new Set(_imxOutCon.flatMap(r => Object.keys(r)))], AUTOMAP_CON, _imxColMap.con);
+  if (_imxOutCr.length)  apply([...new Set(_imxOutCr.flatMap(r => Object.keys(r)))],  AUTOMAP_CR,  _imxColMap.cr);
+}
+
+function imxSetColumnMap(kind, csvCol, crmField) {
+  if (!_imxColMap[kind]) _imxColMap[kind] = {};
+  if (crmField) _imxColMap[kind][csvCol] = crmField;
+  else delete _imxColMap[kind][csvCol];
+}
+
+// Applique le mapping CSV→CRM sur une ligne brute → produit un objet {crmField: valeur}
+function imxApplyMapping(kind, row) {
+  const map = _imxColMap[kind] || {};
+  const out = {};
+  for (const [csvCol, crmField] of Object.entries(map)) {
+    if (!crmField) continue;
+    const v = row[csvCol];
+    if (v == null || v === '') continue;
+    if (out[crmField] != null && out[crmField] !== '') out[crmField] = out[crmField] + ', ' + v;
+    else out[crmField] = v;
+  }
+  // Cas spécial : nom_prenom → split en nom + prenom
+  if (out.nom_prenom && !out.nom) {
+    const sp = imxSplitNomPrenom(out.nom_prenom);
+    out.nom = sp.nom; out.prenom = sp.prenom;
+  }
+  delete out.nom_prenom;
+  return out;
 }
 
 function imxSetRole(fileId, role) {
   const f = _imxFiles.find(x => x.id === fileId); if (!f) return;
   f.role = role;
-  for (const field of f.fields) f.fieldMap[field] = imxAutoMapField(field, role);
   renderPage('import-xml');
-}
-function imxSetMap(fileId, field, target) {
-  const f = _imxFiles.find(x => x.id === fileId); if (!f) return;
-  f.fieldMap[field] = target || '';
 }
 function imxRemoveFile(fileId) {
   _imxFiles = _imxFiles.filter(x => x.id !== fileId);
@@ -6449,37 +6462,21 @@ function imxLoadCsv(kind, file) {
 
 function imxRenderFileCard(f) {
   const sample = f.rows[0] || {};
-  const targets = (f.role === 'master_contacts') ? CRM_FIELDS_CON
-                : (f.role === 'master_cr') ? CRM_FIELDS_CR
-                : CRM_FIELDS_SOC;
-  return `<div class="card" style="margin-bottom:10px">
-    <div class="card-header" style="flex-wrap:wrap;gap:8px;align-items:center">
-      <div class="card-title" style="font-size:13px;flex:1;min-width:200px">📄 ${f.filename}</div>
-      <div style="font-size:11px;color:var(--t3)">${f.rows.length} lignes · PK: <code>${f.pkField || '?'}</code></div>
-      <select onchange="imxSetRole('${f.id}',this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
-        <option value="master_societes" ${f.role==='master_societes'?'selected':''}>🏢 Master Sociétés</option>
-        <option value="master_contacts" ${f.role==='master_contacts'?'selected':''}>👤 Master Contacts</option>
-        <option value="master_cr" ${f.role==='master_cr'?'selected':''}>📝 Master Comptes-rendus</option>
-        <option value="lookup" ${f.role==='lookup'?'selected':''}>🔗 Lookup / Jonction</option>
-        <option value="ignore" ${f.role==='ignore'?'selected':''}>⚙️ Ignorer</option>
-      </select>
-      <button class="btn" onclick="imxRemoveFile('${f.id}')" style="font-size:11px;color:var(--red)">✕</button>
+  const fieldsList = f.fields.slice(0, 8).map(fl => `<code style="font-size:10px;background:var(--bg-3);padding:1px 5px;border-radius:3px;margin:0 2px">${fl}</code>`).join(' ');
+  const more = f.fields.length > 8 ? ` +${f.fields.length - 8}` : '';
+  return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;background:var(--card)">
+    <div style="flex:1;min-width:240px">
+      <div style="font-weight:600;font-size:12px">📄 ${f.filename}</div>
+      <div style="font-size:10px;color:var(--t3);margin-top:2px">${f.rows.length} lignes · PK: <code>${f.pkField || '?'}</code> · ${fieldsList}${more}</div>
     </div>
-    ${f.role === 'ignore' ? '' : `<div class="card-body" style="padding:0">
-      <div class="table-wrap" style="max-height:280px;overflow:auto">
-        <table style="font-size:12px">
-          <thead style="position:sticky;top:0;background:var(--card);z-index:1"><tr><th>Champ XML</th><th>Exemple</th><th>Mapping CRM</th></tr></thead>
-          <tbody>${f.fields.map(field => `<tr>
-            <td class="mono" style="font-size:11px">${field}</td>
-            <td style="font-size:11px;color:var(--t3);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(sample[field]||'').toString().substring(0,60)}</td>
-            <td><select onchange="imxSetMap('${f.id}','${field}',this.value)" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:var(--card);color:var(--t1);width:200px">
-              <option value="">— ignorer —</option>
-              ${targets.map(t => `<option value="${t}"${f.fieldMap[field]===t?' selected':''}>${t}</option>`).join('')}
-            </select></td>
-          </tr>`).join('')}</tbody>
-        </table>
-      </div>
-    </div>`}
+    <select onchange="imxSetRole('${f.id}',this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+      <option value="master_societes" ${f.role==='master_societes'?'selected':''}>🏢 Master Sociétés</option>
+      <option value="master_contacts" ${f.role==='master_contacts'?'selected':''}>👤 Master Contacts</option>
+      <option value="master_cr" ${f.role==='master_cr'?'selected':''}>📝 Master CR</option>
+      <option value="lookup" ${f.role==='lookup'?'selected':''}>🔗 Lookup / Jonction</option>
+      <option value="ignore" ${f.role==='ignore'?'selected':''}>⚙️ Ignorer</option>
+    </select>
+    <button class="btn" onclick="imxRemoveFile('${f.id}')" style="font-size:11px;color:var(--red)">✕</button>
   </div>`;
 }
 
@@ -6658,10 +6655,12 @@ function imxBuildCard(kind, label, emoji, count, requiredOk) {
 function renderImportXml() {
   return `
   <div style="background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.05));border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
-    <div style="font-weight:700;font-size:14px;color:var(--t1);margin-bottom:4px">📥 Import XML CODIAL — workflow en 4 étapes</div>
+    <div style="font-weight:700;font-size:14px;color:var(--t1);margin-bottom:4px">📥 Import XML CODIAL — workflow en 5 étapes</div>
     <div style="font-size:12px;color:var(--t3);max-width:920px;line-height:1.6">
-      <strong>1️⃣ Charger les XML</strong> → <strong>2️⃣ Construire les 3 CSV</strong> (sociétés, contacts, CR croisés via les ID) →
-      <strong>3️⃣ Modifier les données</strong> (grille intégrée ou CSV externe Excel) → <strong>4️⃣ Importer dans le CRM</strong>.
+      <strong>1️⃣ Charger les XML</strong> → <strong>2️⃣ Définir le rôle</strong> de chaque fichier (Master / Lookup) →
+      <strong>3️⃣ Construire les 3 CSV bruts</strong> (sociétés, contacts, CR — colonnes XML d'origine, croisées via les ID) →
+      <strong>4️⃣ Modifier les CSV</strong> (grille éditable ou CSV externe Excel) →
+      <strong>5️⃣ Mapper les colonnes CSV → champs CRM</strong> et importer.
       <br><strong>⚠️ SQL préalable</strong> : <code>add_missing_columns.sql</code> dans Supabase (colonne <code>legacy_id</code>).
     </div>
   </div>
@@ -6705,13 +6704,59 @@ function renderImportXml() {
   <div id="imxSirenProgress" style="display:none;font-size:12px;color:var(--t2);margin-bottom:8px"></div>
 
   ${(_imxOutSoc.length || _imxOutCon.length || _imxOutCr.length) ? `
-  <div style="font-size:12px;color:var(--t3);font-weight:600;margin-bottom:6px">4️⃣ Vérifier et modifier les données avant l'import (les modifications sont prises en compte au moment de l'import)</div>
+  <div style="font-size:12px;color:var(--t3);font-weight:600;margin-bottom:6px">4️⃣ Vérifier et modifier les données dans les CSV (cellules éditables, ajout/suppression de lignes, ou modification dans Excel via téléchargement / re-import)</div>
   <div id="imxPreviewSoc"></div>
   <div id="imxPreviewCon"></div>
   <div id="imxPreviewCr"></div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-header"><div class="card-title">5️⃣ Mapper les colonnes CSV → champs CRM</div></div>
+    <div class="card-body">
+      <div style="font-size:12px;color:var(--t3);margin-bottom:10px">
+        Pour chaque colonne de chaque CSV, choisissez vers quel champ du CRM elle doit être envoyée. Les colonnes non mappées sont ignorées à l'import.
+        Le mapping est pré-rempli automatiquement quand un nom de colonne est reconnu.
+      </div>
+      ${_imxOutSoc.length ? imxRenderColMappingSection('soc', _imxOutSoc, '🏢 Sociétés', CRM_FIELDS_SOC) : ''}
+      ${_imxOutCon.length ? imxRenderColMappingSection('con', _imxOutCon, '👤 Contacts', CRM_FIELDS_CON) : ''}
+      ${_imxOutCr.length  ? imxRenderColMappingSection('cr',  _imxOutCr,  '📝 Comptes-rendus', CRM_FIELDS_CR) : ''}
+    </div>
+  </div>
   ` : '<div style="text-align:center;color:var(--t3);padding:20px;font-size:13px">Cliquez "🔄 Construire" pour générer les 3 CSV à partir des XML chargés.</div>'}
   ` : ''}
   `;
+}
+
+function imxRenderColMappingSection(kind, rows, title, crmFields) {
+  const cols = [...new Set(rows.flatMap(r => Object.keys(r)))];
+  const map = _imxColMap[kind] || {};
+  const mappedCount = Object.values(map).filter(v => v).length;
+  return `<details ${mappedCount === 0 ? 'open' : ''} style="margin-bottom:10px">
+    <summary style="cursor:pointer;font-weight:600;font-size:13px;padding:8px;background:var(--bg-3);border-radius:6px">
+      ${title} — ${cols.length} colonnes CSV · <span style="color:${mappedCount?'#22c55e':'var(--amber)'}">${mappedCount} mappées</span>
+    </summary>
+    <div style="margin-top:8px;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+      <table style="font-size:12px;width:100%">
+        <thead><tr style="background:var(--bg-3);border-bottom:1px solid var(--border)">
+          <th style="padding:6px 10px;text-align:left">Colonne CSV</th>
+          <th style="padding:6px 10px;text-align:left;width:30%">Exemple</th>
+          <th style="padding:6px 10px;text-align:left;width:30%">→ Champ CRM</th>
+        </tr></thead>
+        <tbody>${cols.map(c => {
+          const sample = (rows.find(r => r[c] != null && r[c] !== '') || {})[c] || '';
+          return `<tr style="border-bottom:1px solid var(--border-light)">
+            <td style="padding:5px 10px"><code style="font-size:11px">${c}</code></td>
+            <td style="padding:5px 10px;color:var(--t3);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${String(sample).substring(0,60)}</td>
+            <td style="padding:5px 10px">
+              <select onchange="imxSetColumnMap('${kind}','${c.replace(/'/g,"\\'")}',this.value)" style="padding:3px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:var(--card);color:var(--t1);width:100%">
+                <option value="">— ignorer —</option>
+                ${crmFields.map(t => `<option value="${t}"${map[c]===t?' selected':''}>${t}</option>`).join('')}
+              </select>
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>
+  </details>`;
 }
 
 function imxDownloadCsv(kind) {
@@ -6766,11 +6811,18 @@ async function imxEnrichSirene() {
 }
 
 async function imxImportSocietes() {
-  if (!_imxOutSoc.length) { toast('Recalculez le merge d\'abord', 'warn'); return; }
-  if (!confirm('Importer ' + _imxOutSoc.length + ' sociétés dans le CRM ?\nLes existants (legacy_id) seront mis à jour.')) return;
-  showSyncLoading(true); setSyncText('Import 0 / ' + _imxOutSoc.length);
+  if (!_imxOutSoc.length) { toast('Construisez d\'abord les CSV', 'warn'); return; }
+  // Vérifier que le mapping CRM est défini (au moins name)
+  if (!Object.values(_imxColMap.soc || {}).includes('name')) {
+    toast('Mappez au moins une colonne vers "name" avant l\'import', 'error');
+    return;
+  }
+  // Appliquer le mapping pour transformer les lignes brutes en lignes CRM
+  const mapped = _imxOutSoc.map(s => imxApplyMapping('soc', s));
+  if (!confirm('Importer ' + mapped.length + ' sociétés dans le CRM ?\nLes existants (legacy_id) seront mis à jour.')) return;
+  showSyncLoading(true); setSyncText('Import 0 / ' + mapped.length);
   const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
-  const legacyIds = _imxOutSoc.map(s => s.legacy_id).filter(Boolean);
+  const legacyIds = mapped.map(s => s.legacy_id).filter(Boolean);
   const existing = {};
   for (let i = 0; i < legacyIds.length; i += 200) {
     const batch = legacyIds.slice(i, i + 200);
@@ -6778,9 +6830,10 @@ async function imxImportSocietes() {
     for (const r of (data || [])) existing[r.legacy_id] = r.id;
   }
   let inserted = 0, updated = 0, errors = 0;
-  for (let i = 0; i < _imxOutSoc.length; i += 50) {
-    setSyncText('Import ' + Math.min(i + 50, _imxOutSoc.length) + ' / ' + _imxOutSoc.length);
-    for (const s of _imxOutSoc.slice(i, i + 50)) {
+  for (let i = 0; i < mapped.length; i += 50) {
+    setSyncText('Import ' + Math.min(i + 50, mapped.length) + ' / ' + mapped.length);
+    for (const s of mapped.slice(i, i + 50)) {
+      if (!s.name) { errors++; continue; }
       const ini = (s.name || '?').split(' ').map(w => (w||'')[0]).join('').substring(0, 2).toUpperCase();
       const id = (s.name || 'imp').toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 18) + '_l' + (s.legacy_id || Math.random().toString(36).slice(-4));
       const row = { ...s, ini, color: colors[Math.floor(Math.random() * colors.length)],
@@ -6791,7 +6844,6 @@ async function imxImportSocietes() {
         status: s.status || 'prospect', pays: s.pays || 'FR',
         code: s.code ? String(s.code).substring(0, 10) : null,
       };
-      // Convert lat/lng strings to numbers if needed
       if (typeof row.lat === 'string') row.lat = Number(row.lat.replace(',', '.')) || null;
       if (typeof row.lng === 'string') row.lng = Number(row.lng.replace(',', '.')) || null;
       if (typeof row.effectif === 'string') row.effectif = parseInt(row.effectif) || 0;
@@ -6812,17 +6864,23 @@ async function imxImportSocietes() {
 }
 
 async function imxImportContacts() {
-  if (!_imxOutCon.length) { toast('Recalculez le merge d\'abord', 'warn'); return; }
-  if (!confirm('Importer ' + _imxOutCon.length + ' contacts dans le CRM ?\nLes contacts dont la société n\'existe pas seront ignorés.')) return;
+  if (!_imxOutCon.length) { toast('Construisez d\'abord les CSV', 'warn'); return; }
+  if (!Object.values(_imxColMap.con || {}).includes('legacy_societe_id')) {
+    toast('Mappez une colonne vers "legacy_societe_id" pour lier les contacts à leur société', 'error');
+    return;
+  }
+  // Appliquer le mapping
+  const mapped = _imxOutCon.map(c => imxApplyMapping('con', c));
+  if (!confirm('Importer ' + mapped.length + ' contacts dans le CRM ?\nLes contacts dont la société n\'existe pas seront ignorés.')) return;
   showSyncLoading(true); setSyncText('Préparation...');
-  const legacySocIds = [...new Set(_imxOutCon.map(c => c.legacy_societe_id).filter(Boolean))];
+  const legacySocIds = [...new Set(mapped.map(c => c.legacy_societe_id).filter(Boolean))];
   const socMap = {};
   for (let i = 0; i < legacySocIds.length; i += 200) {
     const batch = legacySocIds.slice(i, i + 200);
     const { data } = await sb.from('clients').select('id,legacy_id').in('legacy_id', batch);
     for (const r of (data || [])) socMap[r.legacy_id] = r.id;
   }
-  const legacyContactIds = _imxOutCon.map(c => c.legacy_id).filter(Boolean);
+  const legacyContactIds = mapped.map(c => c.legacy_id).filter(Boolean);
   const existing = {};
   for (let i = 0; i < legacyContactIds.length; i += 200) {
     const batch = legacyContactIds.slice(i, i + 200);
@@ -6830,9 +6888,9 @@ async function imxImportContacts() {
     for (const r of (data || [])) existing[r.legacy_id] = r.id;
   }
   let inserted = 0, updated = 0, skipped = 0, errors = 0;
-  for (let i = 0; i < _imxOutCon.length; i += 50) {
-    setSyncText('Import ' + Math.min(i + 50, _imxOutCon.length) + ' / ' + _imxOutCon.length);
-    for (const c of _imxOutCon.slice(i, i + 50)) {
+  for (let i = 0; i < mapped.length; i += 50) {
+    setSyncText('Import ' + Math.min(i + 50, mapped.length) + ' / ' + mapped.length);
+    for (const c of mapped.slice(i, i + 50)) {
       const clientId = socMap[c.legacy_societe_id];
       if (!clientId) { skipped++; continue; }
       const row = {
@@ -6861,11 +6919,15 @@ async function imxImportContacts() {
 }
 
 async function imxImportCR() {
-  if (!_imxOutCr.length) { toast('Recalculez le merge d\'abord', 'warn'); return; }
-  if (!confirm('Importer ' + _imxOutCr.length + ' compte(s)-rendu(s) dans le CRM ?\nLes CR sans société matchée seront ignorés.')) return;
+  if (!_imxOutCr.length) { toast('Construisez d\'abord les CSV', 'warn'); return; }
+  if (!Object.values(_imxColMap.cr || {}).includes('legacy_societe_id')) {
+    toast('Mappez une colonne vers "legacy_societe_id" pour lier les CR à leur société', 'error');
+    return;
+  }
+  const mapped = _imxOutCr.map(c => imxApplyMapping('cr', c));
+  if (!confirm('Importer ' + mapped.length + ' compte(s)-rendu(s) dans le CRM ?\nLes CR sans société matchée seront ignorés.')) return;
   showSyncLoading(true); setSyncText('Préparation...');
-  // Mapping legacy_societe_id → client_id et client_name
-  const legacySocIds = [...new Set(_imxOutCr.map(c => c.legacy_societe_id).filter(Boolean))];
+  const legacySocIds = [...new Set(mapped.map(c => c.legacy_societe_id).filter(Boolean))];
   const socMap = {}; const socNameMap = {};
   for (let i = 0; i < legacySocIds.length; i += 200) {
     const batch = legacySocIds.slice(i, i + 200);
@@ -6873,7 +6935,7 @@ async function imxImportCR() {
     for (const r of (data || [])) { socMap[r.legacy_id] = r.id; socNameMap[r.legacy_id] = r.name; }
   }
   // Mapping legacy_contact_id → contact_name (nom + prénom)
-  const legacyConIds = [...new Set(_imxOutCr.map(c => c.legacy_contact_id).filter(Boolean))];
+  const legacyConIds = [...new Set(mapped.map(c => c.legacy_contact_id).filter(Boolean))];
   const conNameMap = {};
   for (let i = 0; i < legacyConIds.length; i += 200) {
     const batch = legacyConIds.slice(i, i + 200);
@@ -6881,14 +6943,13 @@ async function imxImportCR() {
     for (const r of (data || [])) conNameMap[r.legacy_id] = ((r.prenom||'') + ' ' + (r.nom||'')).trim();
   }
   // Index CR existants
-  const legacyCrIds = _imxOutCr.map(c => c.legacy_id).filter(Boolean);
+  const legacyCrIds = mapped.map(c => c.legacy_id).filter(Boolean);
   const existing = {};
   for (let i = 0; i < legacyCrIds.length; i += 200) {
     const batch = legacyCrIds.slice(i, i + 200);
     const { data } = await sb.from('reports').select('id,legacy_id').in('legacy_id', batch);
     for (const r of (data || [])) existing[r.legacy_id] = r.id;
   }
-  // Parsing date FR (jj/mm/aaaa ...) → ISO
   const parseDateFr = s => {
     if (!s) return null;
     const m = String(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
@@ -6897,9 +6958,9 @@ async function imxImportCR() {
     return null;
   };
   let inserted = 0, updated = 0, skipped = 0, errors = 0;
-  for (let i = 0; i < _imxOutCr.length; i += 50) {
-    setSyncText('Import ' + Math.min(i + 50, _imxOutCr.length) + ' / ' + _imxOutCr.length);
-    for (const c of _imxOutCr.slice(i, i + 50)) {
+  for (let i = 0; i < mapped.length; i += 50) {
+    setSyncText('Import ' + Math.min(i + 50, mapped.length) + ' / ' + mapped.length);
+    for (const c of mapped.slice(i, i + 50)) {
       const clientId = socMap[c.legacy_societe_id];
       if (!clientId) { skipped++; continue; }
       // Concaténer commentaires si présents
