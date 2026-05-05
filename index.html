@@ -2534,7 +2534,7 @@ tbody tr:last-child td { border-bottom: none; }
   </div>
 </div>
 
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="supabase.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════════
 //  SUPABASE — connexion à la base de données
@@ -2905,7 +2905,7 @@ async function loadDB() {
       }
     }
     async function fetchFast(table, cols, dateCol = 'date') {
-      let all = [], off = 0, pageSize = 500;
+      let all = [], off = 0, pageSize = 250;
       while (true) {
         const data = await fetchPage(table, cols, dateCol, off, off + pageSize - 1);
         if (data === null) {
