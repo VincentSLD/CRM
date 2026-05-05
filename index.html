@@ -7109,7 +7109,7 @@ async function imxImportCR() {
 let _esResults = []; // [{client, candidates, applied, rejected}]
 let _esRunning = false;
 let _esCancel = false;
-const ES_PAGE_SIZE = 100;
+const ES_PAGE_SIZE = 25;
 let _esFilters = { dept: '', page: 0, withAkuiteo: false, categorie: '', sousCategorie: '', categoriePro: '', secteur: '', type: '', groupe: '', origine: '' };
 let _esTotal = 0;
 
@@ -7324,6 +7324,50 @@ function esReject(idx) {
   if (_esResults[idx]) { _esResults[idx].rejected = true; imxRenderEsList(); }
 }
 
+// Suppression d'une fiche client/prospect depuis Enrichir SIREN.
+// Vérifie les liens (devis/commandes/factures), demande confirmation + mot de passe
+// si configuré, supprime les CR et contacts liés puis la fiche, et retire la ligne
+// de la liste sans changer de page.
+async function esDeleteClient(idx) {
+  const item = _esResults[idx];
+  if (!item) return;
+  const c = item.client;
+  // Bloquer si rattachée à des documents commerciaux
+  const linkedDevis = (DB.devis || []).filter(d => d.client_id === c.id);
+  const linkedCmd = (DB.commandes || []).filter(x => x.client_id === c.id);
+  const linkedFact = (DB.factures || []).filter(f => f.client_id === c.id);
+  if (linkedDevis.length || linkedCmd.length || linkedFact.length) {
+    const details = [];
+    if (linkedDevis.length) details.push(linkedDevis.length + ' devis');
+    if (linkedCmd.length) details.push(linkedCmd.length + ' commande(s)');
+    if (linkedFact.length) details.push(linkedFact.length + ' facture(s)');
+    toast('Impossible de supprimer "' + c.name + '" : rattachée à ' + details.join(', '), 'error');
+    return;
+  }
+  const linkedReports = (DB.reports || []).filter(r => r.client_id === c.id);
+  const confirmMsg = 'Supprimer la société "' + c.name + '" ?\n\n' +
+    (linkedReports.length ? linkedReports.length + ' compte(s)-rendu(s) seront aussi supprimés.\n\n' : '') +
+    'Cette action est irréversible.';
+  if (!confirm(confirmMsg)) return;
+  const pwd = (typeof loadDeletePassword === 'function') ? await loadDeletePassword() : '';
+  if (pwd) {
+    const input = prompt('Entrez le mot de passe de suppression :');
+    if (input !== pwd) { toast('Mot de passe incorrect', 'error'); return; }
+  }
+  if (linkedReports.length) {
+    const { error: crErr } = await sb.from('reports').delete().eq('client_id', c.id);
+    if (crErr) { toast('Erreur CR: ' + crErr.message, 'error'); return; }
+  }
+  const { error: ctErr } = await sb.from('contacts').delete().eq('client_id', c.id);
+  if (ctErr) { toast('Erreur contacts: ' + ctErr.message, 'error'); return; }
+  const { error } = await sb.from('clients').delete().eq('id', c.id);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  // Retirer la ligne de la liste et rafraîchir
+  _esResults.splice(idx, 1);
+  imxRenderEsList();
+  toast('Société "' + c.name + '" supprimée', 'success');
+}
+
 // Saisie manuelle d'un SIRET trouvé hors-API → fetch SIRENE puis apply
 async function esApplyManualSiret(idx, raw, withAkuiteo) {
   const siret = (raw || '').replace(/\D/g, '');
@@ -7393,7 +7437,8 @@ function imxRenderEsList() {
   }
   el.innerHTML = _esResults.map((item, idx) => {
     const c = item.client;
-    const openLink = `<a href="#" onclick="event.preventDefault();showClient('${c.id}')" style="color:#3b82f6;text-decoration:none;font-size:11px;margin-left:6px" title="Ouvrir la fiche">↗ Ouvrir</a>`;
+    const openLink = `<a href="#" onclick="event.preventDefault();showClient('${c.id}')" style="color:#3b82f6;text-decoration:none;font-size:11px;margin-left:6px" title="Ouvrir la fiche">↗ Ouvrir</a>` +
+      ` <a href="#" onclick="event.preventDefault();esDeleteClient(${idx})" style="color:var(--red);text-decoration:none;font-size:11px;margin-left:4px" title="Supprimer la fiche">🗑 Supprimer</a>`;
     if (item.rejected) return `<div style="padding:8px 12px;border-bottom:1px solid var(--border);opacity:.45;font-size:12px">✕ ${c.name} — rejeté ${openLink}</div>`;
     if (item.applied) {
       const cand = item.appliedCand || {};
