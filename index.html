@@ -2647,8 +2647,16 @@ let clientsFilterNovam = '';
 let clientsFilterGph = '';
 let clientsFilterStatut = '';
 let clientsFilterSync = '';
+let clientsFilterCategorie = '';
+let clientsFilterSousCategorie = '';
+let clientsFilterCategoriePro = '';
+let clientsFilterSecteur = '';
+let clientsFilterType = '';
+let clientsFilterGroupe = '';
+let clientsFilterOrigine = '';
+let clientsFilterSiret = ''; // '' | 'yes' | 'no'
 const CLIENTS_PER_PAGE = 50;
-let clientsFilterOpts = { depts: [], novam: [], gph: [] };
+let clientsFilterOpts = { depts: [], novam: [], gph: [], categorie: [], sousCategorie: [], categoriePro: [], secteur: [], type: [], groupe: [], origine: [] };
 let clientsFilterOptsLoaded = false;
 
 async function loadClientsFilterOpts() {
@@ -2666,22 +2674,36 @@ async function loadClientsFilterOpts() {
     }
     return all;
   };
-  const rows = await fetchAll('code_postal,departement,account_manager_name,salesman_name,commerciaux_associes');
-  const deptSet = new Set();
-  const novamSet = new Set();
-  const gphSet = new Set();
+  const rows = await fetchAll('code_postal,departement,account_manager_name,salesman_name,commerciaux_associes,mk_categorie,mk_sous_categorie,mk_categorie_pro,mk_secteur,mk_type,mk_groupe,mk_origine');
+  const sets = { dept: new Set(), novam: new Set(), gph: new Set(), categorie: new Set(), sousCategorie: new Set(), categoriePro: new Set(), secteur: new Set(), type: new Set(), groupe: new Set(), origine: new Set() };
+  const addIf = (set, v) => { if (v && String(v).trim()) set.add(String(v).trim()); };
   for (const r of rows) {
-    if (r.code_postal && /^\d/.test(r.code_postal)) deptSet.add(r.code_postal.slice(0, 2));
-    else if (r.departement) deptSet.add(r.departement);
-    if (r.account_manager_name) novamSet.add(r.account_manager_name.trim());
-    if (r.salesman_name) gphSet.add(r.salesman_name.trim());
+    if (r.code_postal && /^\d/.test(r.code_postal)) sets.dept.add(r.code_postal.slice(0, 2));
+    else if (r.departement) sets.dept.add(r.departement);
+    addIf(sets.novam, r.account_manager_name);
+    addIf(sets.gph, r.salesman_name);
     if (r.commerciaux_associes) {
-      r.commerciaux_associes.split(/[,;]/).map(s => s.trim()).filter(Boolean).forEach(n => gphSet.add(n));
+      r.commerciaux_associes.split(/[,;]/).map(s => s.trim()).filter(Boolean).forEach(n => sets.gph.add(n));
     }
+    addIf(sets.categorie, r.mk_categorie);
+    addIf(sets.sousCategorie, r.mk_sous_categorie);
+    addIf(sets.categoriePro, r.mk_categorie_pro);
+    addIf(sets.secteur, r.mk_secteur);
+    addIf(sets.type, r.mk_type);
+    addIf(sets.groupe, r.mk_groupe);
+    addIf(sets.origine, r.mk_origine);
   }
-  clientsFilterOpts.depts = [...deptSet].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
-  clientsFilterOpts.novam = [...novamSet].sort((a, b) => a.localeCompare(b, 'fr'));
-  clientsFilterOpts.gph = [...gphSet].sort((a, b) => a.localeCompare(b, 'fr'));
+  const sortFr = arr => [...arr].sort((a, b) => a.localeCompare(b, 'fr'));
+  clientsFilterOpts.depts = [...sets.dept].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
+  clientsFilterOpts.novam = sortFr(sets.novam);
+  clientsFilterOpts.gph = sortFr(sets.gph);
+  clientsFilterOpts.categorie = sortFr(sets.categorie);
+  clientsFilterOpts.sousCategorie = sortFr(sets.sousCategorie);
+  clientsFilterOpts.categoriePro = sortFr(sets.categoriePro);
+  clientsFilterOpts.secteur = sortFr(sets.secteur);
+  clientsFilterOpts.type = sortFr(sets.type);
+  clientsFilterOpts.groupe = sortFr(sets.groupe);
+  clientsFilterOpts.origine = sortFr(sets.origine);
   clientsFilterOptsLoaded = true;
 }
 let clientsTotalCount = 0;
@@ -3096,6 +3118,17 @@ async function loadClientsPage(page, letter, search) {
   if (clientsFilterStatut) query = query.eq('status', clientsFilterStatut);
   if (clientsFilterSync === 'yes') query = query.not('akuiteo_id', 'is', null);
   if (clientsFilterSync === 'no') query = query.is('akuiteo_id', null);
+  // Filtres Infos Entreprise (eq exact car alimentés depuis dropdowns peuplés en base)
+  if (clientsFilterCategorie) query = query.eq('mk_categorie', clientsFilterCategorie);
+  if (clientsFilterSousCategorie) query = query.eq('mk_sous_categorie', clientsFilterSousCategorie);
+  if (clientsFilterCategoriePro) query = query.eq('mk_categorie_pro', clientsFilterCategoriePro);
+  if (clientsFilterSecteur) query = query.eq('mk_secteur', clientsFilterSecteur);
+  if (clientsFilterType) query = query.eq('mk_type', clientsFilterType);
+  if (clientsFilterGroupe) query = query.eq('mk_groupe', clientsFilterGroupe);
+  if (clientsFilterOrigine) query = query.eq('mk_origine', clientsFilterOrigine);
+  // SIRET présent / absent
+  if (clientsFilterSiret === 'yes') query = query.not('siret', 'is', null).neq('siret', '');
+  if (clientsFilterSiret === 'no') query = query.or('siret.is.null,siret.eq.');
   query = query.order('name', {ascending: true}).range(from, to);
 
   const { data, count } = await query;
@@ -3112,6 +3145,14 @@ function resetClientsFilters() {
   clientsFilterGph = '';
   clientsFilterStatut = '';
   clientsFilterSync = '';
+  clientsFilterCategorie = '';
+  clientsFilterSousCategorie = '';
+  clientsFilterCategoriePro = '';
+  clientsFilterSecteur = '';
+  clientsFilterType = '';
+  clientsFilterGroupe = '';
+  clientsFilterOrigine = '';
+  clientsFilterSiret = '';
   clientsLetter = '';
   clientsSearch = '';
   loadClientsPage(0, '', '');
@@ -4707,8 +4748,43 @@ function renderClients(filter='all') {
       <option value="yes" ${clientsFilterSync==='yes'?'selected':''}>🟢 Synchronisés</option>
       <option value="no" ${clientsFilterSync==='no'?'selected':''}>🟠 Non synchro</option>
     </select>
-    ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync) ? `<button class="btn" style="font-size:12px;padding:5px 10px;color:var(--red)" onclick="resetClientsFilters()">✕ Effacer</button>` : ''}
+    ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret) ? `<button class="btn" style="font-size:12px;padding:5px 10px;color:var(--red)" onclick="resetClientsFilters()">✕ Effacer tout</button>` : ''}
     ${!clientsFilterOptsLoaded ? '<span style="font-size:11px;color:var(--t3)">⏳ chargement options...</span>' : ''}
+  </div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding:8px 10px;background:var(--bg-3);border:1px solid var(--border);border-radius:8px">
+    <span style="font-size:11px;color:var(--t3);font-weight:600">Infos Entreprise :</span>
+    <select onchange="clientsFilterCategorie=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+      <option value="">— Catégorie —</option>
+      ${clientsFilterOpts.categorie.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterCategorie===v?' selected':''}>${v}</option>`).join('')}
+    </select>
+    <select onchange="clientsFilterSousCategorie=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+      <option value="">— Sous-catégorie —</option>
+      ${clientsFilterOpts.sousCategorie.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterSousCategorie===v?' selected':''}>${v}</option>`).join('')}
+    </select>
+    <select onchange="clientsFilterCategoriePro=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+      <option value="">— Catégorie pro. —</option>
+      ${clientsFilterOpts.categoriePro.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterCategoriePro===v?' selected':''}>${v}</option>`).join('')}
+    </select>
+    <select onchange="clientsFilterSecteur=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+      <option value="">— Secteur —</option>
+      ${clientsFilterOpts.secteur.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterSecteur===v?' selected':''}>${v}</option>`).join('')}
+    </select>
+    <select onchange="clientsFilterType=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+      <option value="">— Type —</option>
+      ${clientsFilterOpts.type.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterType===v?' selected':''}>${v}</option>`).join('')}
+    </select>
+    <select onchange="clientsFilterGroupe=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+      <option value="">— Groupe —</option>
+      ${clientsFilterOpts.groupe.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterGroupe===v?' selected':''}>${v}</option>`).join('')}
+    </select>
+    <select onchange="clientsFilterOrigine=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+      <option value="">— Origine —</option>
+      ${clientsFilterOpts.origine.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterOrigine===v?' selected':''}>${v}</option>`).join('')}
+    </select>
+    <span style="font-size:11px;color:var(--t3);font-weight:600;margin-left:8px">SIRET :</span>
+    <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="radio" name="siretFilter" value="" ${!clientsFilterSiret?'checked':''} onchange="clientsFilterSiret='';loadClientsPage(0,clientsLetter,clientsSearch)"> Tous</label>
+    <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="radio" name="siretFilter" value="yes" ${clientsFilterSiret==='yes'?'checked':''} onchange="clientsFilterSiret='yes';loadClientsPage(0,clientsLetter,clientsSearch)"> ✓ Avec SIRET</label>
+    <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="radio" name="siretFilter" value="no" ${clientsFilterSiret==='no'?'checked':''} onchange="clientsFilterSiret='no';loadClientsPage(0,clientsLetter,clientsSearch)"> ✗ Sans SIRET</label>
   </div>
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
     <table><thead><tr><th>Société</th><th style="width:50px">Dpt</th><th>Ville</th><th>Commercial Novam</th><th>Commercial GPH</th><th style="width:60px;text-align:center">Pappers</th></tr></thead>
