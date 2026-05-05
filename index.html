@@ -7723,12 +7723,39 @@ async function dupScanAll() {
     }
     _dupGroups = groups.sort((a, b) => b.clients.length - a.clients.length);
     toast(_dupGroups.length + ' groupe(s) de doublons détectés sur ' + all.length + ' fiches', _dupGroups.length ? 'warn' : 'success');
+    // Précharger les compteurs de liaisons pour affichage direct
+    if (_dupGroups.length) await dupPreloadLinkCounts();
   } catch (e) {
     toast('Erreur scan: ' + e.message, 'error');
   } finally {
     _dupRunning = false;
     renderPage('duplicates');
   }
+}
+
+// Précharge les comptes de liaisons pour toutes les fiches des groupes de doublons.
+// Une seule requête par table (avec IN), comptage local. Beaucoup plus rapide que
+// 7 head-count par fiche.
+async function dupPreloadLinkCounts() {
+  const idsAll = [];
+  for (const g of _dupGroups) for (const c of g.clients) idsAll.push(c.id);
+  const ids = [...new Set(idsAll)];
+  if (!ids.length) return;
+  const tables = ['devis','commandes','factures','affaires','marches','reports','contacts'];
+  const counts = {};
+  for (const id of ids) counts[id] = {};
+  for (const t of tables) {
+    for (let i = 0; i < ids.length; i += 200) {
+      const batch = ids.slice(i, i + 200);
+      try {
+        const { data } = await sb.from(t).select('client_id').in('client_id', batch);
+        for (const r of (data || [])) {
+          counts[r.client_id][t] = (counts[r.client_id][t] || 0) + 1;
+        }
+      } catch (e) { console.warn('dupPreload ' + t, e.message); }
+    }
+  }
+  for (const g of _dupGroups) for (const c of g.clients) c._linkCounts = counts[c.id] || {};
 }
 
 // Compter les liaisons d'une fiche via Supabase (en parallèle)
@@ -7891,7 +7918,13 @@ function renderDuplicates() {
               </div>
               <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px">
                 <button class="btn" onclick="showClient('${c.id}')" style="font-size:10px">↗ Ouvrir</button>
-                <button class="btn" onclick="dupShowLinks('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" style="font-size:10px">🔗 Liaisons</button>
+                ${(() => {
+                  const lc = c._linkCounts || {};
+                  const total = Object.values(lc).reduce((a, b) => a + b, 0);
+                  const blocking = (lc.devis||0) + (lc.commandes||0) + (lc.factures||0) + (lc.affaires||0) + (lc.marches||0);
+                  const color = blocking > 0 ? '#ef4444' : (total > 0 ? '#f59e0b' : 'var(--t3)');
+                  return '<button class="btn" onclick="dupShowLinks(\''+c.id+'\',\''+(c.name||'').replace(/'/g,"\\'")+'\')" style="font-size:10px;color:'+color+';font-weight:'+(total>0?'700':'400')+'" title="Détail des liaisons">🔗 Liaisons ('+total+')</button>';
+                })()}
                 ${g.clients.filter(o => o.id !== c.id).map(other => `<button class="btn" onclick="dupMerge(${gi},'${c.id}','${other.id}')" style="font-size:10px;background:#3b82f6;color:#fff;border:none">→ Fusionner ${other.name?other.name.substring(0,15):''}… ici</button>`).join(' ')}
                 <button class="btn" onclick="dupDeleteFromGroup(${gi},'${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" style="font-size:10px;color:var(--red)">🗑 Supprimer</button>
               </div>
