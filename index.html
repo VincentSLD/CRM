@@ -4781,10 +4781,11 @@ function renderClients(filter='all') {
       <option value="">— Origine —</option>
       ${clientsFilterOpts.origine.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterOrigine===v?' selected':''}>${v}</option>`).join('')}
     </select>
-    <span style="font-size:11px;color:var(--t3);font-weight:600;margin-left:8px">SIRET :</span>
-    <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="radio" name="siretFilter" value="" ${!clientsFilterSiret?'checked':''} onchange="clientsFilterSiret='';loadClientsPage(0,clientsLetter,clientsSearch)"> Tous</label>
-    <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="radio" name="siretFilter" value="yes" ${clientsFilterSiret==='yes'?'checked':''} onchange="clientsFilterSiret='yes';loadClientsPage(0,clientsLetter,clientsSearch)"> ✓ Avec SIRET</label>
-    <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="radio" name="siretFilter" value="no" ${clientsFilterSiret==='no'?'checked':''} onchange="clientsFilterSiret='no';loadClientsPage(0,clientsLetter,clientsSearch)"> ✗ Sans SIRET</label>
+    <select onchange="clientsFilterSiret=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+      <option value="" ${!clientsFilterSiret?'selected':''}>— SIRET —</option>
+      <option value="yes" ${clientsFilterSiret==='yes'?'selected':''}>✓ Avec SIRET</option>
+      <option value="no" ${clientsFilterSiret==='no'?'selected':''}>✗ Sans SIRET</option>
+    </select>
   </div>
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
     <table><thead><tr><th>Société</th><th style="width:50px">Dpt</th><th>Ville</th><th>Commercial Novam</th><th>Commercial GPH</th><th style="width:60px;text-align:center">Pappers</th></tr></thead>
