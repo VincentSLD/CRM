@@ -1745,6 +1745,10 @@ tbody tr:last-child td { border-bottom: none; }
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
         Enrichir SIREN
       </div>
+      <div class="nav-item" data-page="duplicates" onclick="go('duplicates')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Doublons clients
+      </div>
       <div class="nav-item" data-page="admin" onclick="go('admin')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         Admin
@@ -3514,7 +3518,7 @@ function go(page) {
   if (page === 'cr') { crViewMode = 'list'; currentReport = null; }
   const navPage = page === 'client-detail' ? 'clients' : page === 'contact-detail' ? 'contacts' : page === 'marche-detail' ? 'marches' : page === 'affaire-detail' ? 'marches' : page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
-  const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'Enrichissement SIREN/SIRET',pipeline:'Pipeline commercial',carte:'Carte sociétés',
+  const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'Enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',bdnb:'BDNB — Base Nationale des Bâtiments',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
     cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA'};
@@ -3540,6 +3544,7 @@ function renderPage(page) {
     concurrence: renderConcurrence,
     'import-xml': renderImportXml,
     'enrich-siren': renderEnrichSiren,
+    duplicates: renderDuplicates,
     'contact-detail': renderContactDetail,
     'client-detail': renderClientDetail,
     pipeline: renderPipeline,
@@ -7625,6 +7630,260 @@ function renderEnrichSiren() {
   <div class="card"><div class="card-body" style="padding:0">
     <div id="esResults" style="max-height:calc(100vh - 360px);overflow-y:auto"></div>
   </div></div>`;
+}
+
+// ═══ DÉTECTION DES DOUBLONS CLIENTS ═══
+let _dupGroups = []; // [{type, key, clients: [...]}]
+let _dupCriteria = { siret: true, siren: true, name: true, phone: false };
+let _dupRunning = false;
+
+function _dupNormalize(s) {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\b(sa|sas|sasu|sarl|eurl|sci|snc|gie|société|societe)\b/g, '')
+    .replace(/[^a-z0-9]/g, '').trim();
+}
+
+async function dupFetchAll() {
+  const all = []; let off = 0;
+  while (true) {
+    const { data } = await sb.from('clients').select('id,name,code,code_codial,raison_sociale,siret,siren,ape,phone,email,city,code_postal,departement,akuiteo_id,status,ca,obj,adresse_ligne1,legacy_id').range(off, off + 999);
+    if (!data || !data.length) break;
+    all.push(...data);
+    if (data.length < 1000) break;
+    off += 1000;
+    if (off > 50000) break;
+  }
+  return all;
+}
+
+async function dupScanAll() {
+  if (_dupRunning) return;
+  _dupRunning = true;
+  document.getElementById('dupStatus') && (document.getElementById('dupStatus').innerHTML = '⏳ Chargement de toutes les fiches...');
+  try {
+    const all = await dupFetchAll();
+    const groups = [];
+    const seenPair = new Set(); // pour ne pas dupliquer (A,B) sous plusieurs critères
+    const addGroup = (type, key, clients) => {
+      // Skip si déjà présent (même paire ou ensemble)
+      const sig = clients.map(c => c.id).sort().join('|');
+      if (seenPair.has(sig)) return;
+      seenPair.add(sig);
+      groups.push({ type, key, clients });
+    };
+    if (_dupCriteria.siret) {
+      const m = {};
+      for (const c of all) {
+        const k = (c.siret || '').replace(/\D/g, '');
+        if (k.length === 14) (m[k] = m[k] || []).push(c);
+      }
+      for (const k of Object.keys(m)) if (m[k].length > 1) addGroup('SIRET', k, m[k]);
+    }
+    if (_dupCriteria.siren) {
+      const m = {};
+      for (const c of all) {
+        const k = (c.siren || '').replace(/\D/g, '');
+        if (k.length === 9) (m[k] = m[k] || []).push(c);
+      }
+      for (const k of Object.keys(m)) if (m[k].length > 1) addGroup('SIREN', k, m[k]);
+    }
+    if (_dupCriteria.name) {
+      const m = {};
+      for (const c of all) {
+        const k = _dupNormalize(c.name);
+        if (k.length >= 4) (m[k] = m[k] || []).push(c);
+      }
+      for (const k of Object.keys(m)) if (m[k].length > 1) addGroup('Nom', k, m[k]);
+    }
+    if (_dupCriteria.phone) {
+      const m = {};
+      for (const c of all) {
+        const k = (c.phone || '').replace(/\D/g, '');
+        if (k.length >= 10) (m[k] = m[k] || []).push(c);
+      }
+      for (const k of Object.keys(m)) if (m[k].length > 1) addGroup('Téléphone', k, m[k]);
+    }
+    _dupGroups = groups.sort((a, b) => b.clients.length - a.clients.length);
+    toast(_dupGroups.length + ' groupe(s) de doublons détectés sur ' + all.length + ' fiches', _dupGroups.length ? 'warn' : 'success');
+  } catch (e) {
+    toast('Erreur scan: ' + e.message, 'error');
+  } finally {
+    _dupRunning = false;
+    renderPage('duplicates');
+  }
+}
+
+// Compter les liaisons d'une fiche via Supabase (en parallèle)
+async function dupCountLinks(clientId) {
+  const tables = ['devis','commandes','factures','affaires','marches','reports','contacts'];
+  const counts = await Promise.all(tables.map(t =>
+    sb.from(t).select('id', { count: 'exact', head: true }).eq('client_id', clientId).then(r => r.count || 0).catch(() => 0)
+  ));
+  const out = {};
+  tables.forEach((t, i) => out[t] = counts[i]);
+  return out;
+}
+
+async function dupShowLinks(clientId, label) {
+  const counts = await dupCountLinks(clientId);
+  const lines = Object.entries(counts).filter(([_, n]) => n > 0).map(([t, n]) => '• ' + n + ' ' + t);
+  alert('Liaisons de "' + label + '" :\n\n' + (lines.length ? lines.join('\n') : 'Aucune liaison.'));
+}
+
+// Supprimer un client en checkant les liaisons
+async function dupDelete(clientId, clientName) {
+  const counts = await dupCountLinks(clientId);
+  const blocking = [];
+  if (counts.devis)     blocking.push(counts.devis + ' devis');
+  if (counts.commandes) blocking.push(counts.commandes + ' commande(s)');
+  if (counts.factures)  blocking.push(counts.factures + ' facture(s)');
+  if (counts.affaires)  blocking.push(counts.affaires + ' affaire(s)');
+  if (counts.marches)   blocking.push(counts.marches + ' marché(s)');
+  if (blocking.length) {
+    alert('⛔ Suppression impossible\n\n"' + clientName + '" est rattachée à :\n• ' + blocking.join('\n• ') +
+      '\n\nFusionnez plutôt cette fiche avec son doublon, ou réaffectez les documents avant de supprimer.');
+    return false;
+  }
+  const cascade = [];
+  if (counts.reports)  cascade.push(counts.reports + ' compte(s)-rendu(s)');
+  if (counts.contacts) cascade.push(counts.contacts + ' contact(s)');
+  if (!confirm('⚠ Supprimer "' + clientName + '" ?' +
+    (cascade.length ? '\n\nLes éléments suivants seront aussi supprimés :\n• ' + cascade.join('\n• ') : '\n\nAucune liaison.') +
+    '\n\nIrréversible.')) return false;
+  if (counts.reports)  await sb.from('reports').delete().eq('client_id', clientId);
+  if (counts.contacts) await sb.from('contacts').delete().eq('client_id', clientId);
+  const { error } = await sb.from('clients').delete().eq('id', clientId);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return false; }
+  toast('"' + clientName + '" supprimée', 'success');
+  return true;
+}
+
+async function dupDeleteFromGroup(groupIdx, clientId, clientName) {
+  const ok = await dupDelete(clientId, clientName);
+  if (!ok) return;
+  // Retirer la fiche du groupe et nettoyer si plus que 1
+  const g = _dupGroups[groupIdx];
+  if (!g) return;
+  g.clients = g.clients.filter(c => c.id !== clientId);
+  if (g.clients.length < 2) _dupGroups.splice(groupIdx, 1);
+  renderPage('duplicates');
+}
+
+// Fusionner removeId vers keepId : transfère toutes les FK puis supprime removeId
+async function dupMerge(groupIdx, keepId, removeId) {
+  const g = _dupGroups[groupIdx]; if (!g) return;
+  const keep = g.clients.find(c => c.id === keepId);
+  const remove = g.clients.find(c => c.id === removeId);
+  if (!keep || !remove) return;
+  if (!confirm('Fusionner "' + remove.name + '" → "' + keep.name + '" ?\n\n' +
+    'Toutes les liaisons (devis, commandes, factures, affaires, marchés, contacts, CR, objectifs, concurrents) ' +
+    'de la source seront rattachées à la cible. La source sera ensuite supprimée. Irréversible.')) return;
+  showSyncLoading(true); setSyncText('Fusion en cours...');
+  try {
+    // 1) Charger les fiches complètes des deux côtés pour fusionner les champs
+    const { data: pair } = await sb.from('clients').select('*').in('id', [keepId, removeId]);
+    if (!pair || pair.length !== 2) throw new Error('Fiches introuvables');
+    const fullKeep = pair.find(x => x.id === keepId);
+    const fullRemove = pair.find(x => x.id === removeId);
+    // 2) Fusionner : keep gagne, remove fill gaps (champs vides de keep ← non vides de remove)
+    const merged = {};
+    for (const k of Object.keys(fullKeep)) {
+      if (k === 'id' || k === 'created_at') continue;
+      const v = fullKeep[k];
+      if (v == null || v === '') merged[k] = fullRemove[k];
+      else merged[k] = v;
+    }
+    // 3) Update keep avec les champs fusionnés
+    const { error: errUp } = await sb.from('clients').update(merged).eq('id', keepId);
+    if (errUp) throw errUp;
+    // 4) Réattacher toutes les FK (client_id) vers keep
+    const tables = ['contacts','devis','commandes','factures','affaires','marches','reports','objectifs_clients','client_concurrents'];
+    for (const t of tables) {
+      try {
+        const { error: e } = await sb.from(t).update({ client_id: keepId }).eq('client_id', removeId);
+        if (e) console.warn('Réaffectation', t, e.message);
+      } catch (e) { console.warn(t, e); }
+    }
+    // 5) Supprimer la fiche source
+    const { error: errDel } = await sb.from('clients').delete().eq('id', removeId);
+    if (errDel) throw errDel;
+    toast('Fusion réussie : "' + remove.name + '" → "' + keep.name + '"', 'success');
+    // Mettre à jour le groupe
+    g.clients = g.clients.filter(c => c.id !== removeId);
+    if (g.clients.length < 2) _dupGroups.splice(groupIdx, 1);
+    renderPage('duplicates');
+  } catch (e) {
+    toast('Erreur fusion: ' + e.message, 'error');
+  } finally {
+    showSyncLoading(false);
+  }
+}
+
+function dupIgnoreGroup(idx) {
+  _dupGroups.splice(idx, 1);
+  renderPage('duplicates');
+}
+
+function renderDuplicates() {
+  return `
+  <div style="background:linear-gradient(135deg,rgba(245,158,11,.08),rgba(239,68,68,.05));border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+    <div style="font-weight:700;font-size:14px;color:var(--t1);margin-bottom:4px">🔀 Détection des doublons clients/prospects</div>
+    <div style="font-size:12px;color:var(--t3);max-width:920px;line-height:1.5">
+      Regroupe les fiches identiques selon les critères choisis (SIRET, SIREN, nom normalisé, téléphone). Pour chaque groupe,
+      tu peux <strong>fusionner</strong> deux fiches (les liaisons devis/commandes/factures/affaires/marchés/contacts/CR sont rattachées
+      à la fiche cible avant suppression de la source) ou <strong>supprimer</strong> directement (avec contrôle des liaisons).
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-header"><div class="card-title">Critères de détection</div></div>
+    <div class="card-body" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+      <label style="font-size:12px;cursor:pointer"><input type="checkbox" ${_dupCriteria.siret?'checked':''} onchange="_dupCriteria.siret=this.checked"> SIRET (14 chiffres exacts)</label>
+      <label style="font-size:12px;cursor:pointer"><input type="checkbox" ${_dupCriteria.siren?'checked':''} onchange="_dupCriteria.siren=this.checked"> SIREN (9 chiffres exacts)</label>
+      <label style="font-size:12px;cursor:pointer"><input type="checkbox" ${_dupCriteria.name?'checked':''} onchange="_dupCriteria.name=this.checked"> Nom normalisé (sans accents/forme juridique)</label>
+      <label style="font-size:12px;cursor:pointer"><input type="checkbox" ${_dupCriteria.phone?'checked':''} onchange="_dupCriteria.phone=this.checked"> Téléphone (10+ chiffres)</label>
+      <span style="flex:1"></span>
+      <button class="btn btn-primary" onclick="dupScanAll()" style="font-size:13px"${_dupRunning?' disabled':''}>${_dupRunning?'⏳ Analyse...':'🔍 Lancer l\\'analyse'}</button>
+    </div>
+    <div id="dupStatus" style="padding:0 14px 12px;font-size:11px;color:var(--t3)"></div>
+  </div>
+
+  ${_dupGroups.length ? `<div style="font-size:12px;color:var(--t3);margin-bottom:8px"><strong>${_dupGroups.length}</strong> groupe(s) de doublons</div>` : ''}
+  ${_dupGroups.map((g, gi) => `
+    <div class="card" style="margin-bottom:12px;border:2px solid #f59e0b">
+      <div class="card-header" style="background:rgba(245,158,11,.08);flex-wrap:wrap;gap:8px;align-items:center">
+        <div class="card-title" style="font-size:13px">⚠ Doublon par <strong>${g.type}</strong> : <code>${g.key}</code> — ${g.clients.length} fiches</div>
+        <span style="flex:1"></span>
+        <button class="btn" onclick="dupIgnoreGroup(${gi})" style="font-size:11px">Ignorer ce groupe</button>
+      </div>
+      <div class="card-body" style="padding:0">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;padding:12px">
+          ${g.clients.map(c => `
+            <div style="border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--card);font-size:12px">
+              <div style="font-weight:700;margin-bottom:4px">${c.name||'(sans nom)'} ${c.akuiteo_id ? '<span title="Synchro Akuiteo" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;vertical-align:middle"></span>' : ''}</div>
+              <div style="color:var(--t3);font-size:11px;line-height:1.6">
+                <strong>ID</strong> <code>${c.id}</code><br>
+                <strong>Code</strong> ${c.code||'—'} ${c.code_codial?' · CODIAL '+c.code_codial:''}<br>
+                <strong>SIREN</strong> <code>${c.siren||'—'}</code> · <strong>SIRET</strong> <code>${c.siret||'—'}</code><br>
+                <strong>Adresse</strong> ${c.adresse_ligne1||'—'}<br>
+                <strong>CP</strong> ${c.code_postal||'—'} · <strong>Ville</strong> ${c.city||'—'}<br>
+                <strong>Tél</strong> ${c.phone||'—'} · <strong>Email</strong> ${c.email||'—'}<br>
+                <strong>Statut</strong> ${c.status||'—'} · <strong>CA</strong> ${c.ca||0}€<br>
+                ${c.legacy_id?'<strong>legacy_id</strong> '+c.legacy_id+'<br>':''}
+              </div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px">
+                <button class="btn" onclick="showClient('${c.id}')" style="font-size:10px">↗ Ouvrir</button>
+                <button class="btn" onclick="dupShowLinks('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" style="font-size:10px">🔗 Liaisons</button>
+                ${g.clients.filter(o => o.id !== c.id).map(other => `<button class="btn" onclick="dupMerge(${gi},'${c.id}','${other.id}')" style="font-size:10px;background:#3b82f6;color:#fff;border:none">→ Fusionner ${other.name?other.name.substring(0,15):''}… ici</button>`).join(' ')}
+                <button class="btn" onclick="dupDeleteFromGroup(${gi},'${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" style="font-size:10px;color:var(--red)">🗑 Supprimer</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `).join('')}
+  `;
 }
 
 // ═══ BATISCOPE — Observatoire Construction & Démographie ═══
