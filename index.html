@@ -1741,6 +1741,10 @@ tbody tr:last-child td { border-bottom: none; }
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Import XML
       </div>
+      <div class="nav-item" data-page="enrich-siren" onclick="go('enrich-siren')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+        Enrichir SIREN
+      </div>
       <div class="nav-item" data-page="admin" onclick="go('admin')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         Admin
@@ -3510,7 +3514,7 @@ function go(page) {
   if (page === 'cr') { crViewMode = 'list'; currentReport = null; }
   const navPage = page === 'client-detail' ? 'clients' : page === 'contact-detail' ? 'contacts' : page === 'marche-detail' ? 'marches' : page === 'affaire-detail' ? 'marches' : page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
-  const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)',pipeline:'Pipeline commercial',carte:'Carte sociétés',
+  const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'Enrichissement SIREN/SIRET',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',bdnb:'BDNB — Base Nationale des Bâtiments',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
     cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA'};
@@ -3535,6 +3539,7 @@ function renderPage(page) {
     contacts: renderContacts,
     concurrence: renderConcurrence,
     'import-xml': renderImportXml,
+    'enrich-siren': renderEnrichSiren,
     'contact-detail': renderContactDetail,
     'client-detail': renderClientDetail,
     pipeline: renderPipeline,
@@ -3571,6 +3576,7 @@ function renderPage(page) {
   if (page === 'carte') setTimeout(initCarteMap, 50);
   if (page === 'carte-affaires') setTimeout(initCarteAffairesMap, 50);
   if (page === 'bdnb') setTimeout(initBdnbPage, 50);
+  if (page === 'enrich-siren') setTimeout(imxRenderEsList, 50);
   if (page === 'clients' && !clientsFilterOptsLoaded) {
     loadClientsFilterOpts().then(() => { if (currentPage === 'clients') renderPage('clients'); });
   }
@@ -7094,6 +7100,268 @@ async function imxImportCR() {
   }
   showSyncLoading(false);
   toast('CR : ' + inserted + ' créés · ' + updated + ' mis à jour · ' + skipped + ' ignorés (société absente) · ' + errors + ' erreurs', errors > 0 ? 'warn' : 'success');
+}
+
+// ═══ ENRICHISSEMENT SIREN/SIRET via API gouv ═══
+let _esResults = []; // [{client, candidates, applied, rejected}]
+let _esRunning = false;
+let _esCancel = false;
+let _esFilters = { dept: '', status: '', limit: 100, withAkuiteo: false };
+
+function _esLevenshtein(a, b) {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  let prev = new Array(n + 1).fill(0).map((_, i) => i);
+  let curr = new Array(n + 1).fill(0);
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i-1] === b[j-1] ? 0 : 1;
+      curr[j] = Math.min(curr[j-1] + 1, prev[j] + 1, prev[j-1] + cost);
+    }
+    [prev, curr] = [curr, prev];
+  }
+  return prev[n];
+}
+function _esNormalize(s) {
+  return (s || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // accents
+    .replace(/\b(sa|sas|sasu|sarl|eurl|sci|snc|gie|sci|société|societe)\b/g, '')
+    .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+}
+function _esSimilarity(a, b) {
+  if (!a || !b) return 0;
+  const na = _esNormalize(a), nb = _esNormalize(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1;
+  return 1 - _esLevenshtein(na, nb) / Math.max(na.length, nb.length);
+}
+function _esScore(client, candidate) {
+  const s = candidate.siege || {};
+  const candName = candidate.nom_complet || candidate.nom_raison_sociale || '';
+  let score = 0;
+  // Similarité du nom (max 60)
+  score += _esSimilarity(client.name, candName) * 60;
+  // Code postal exact (+25), ou département seul (+8)
+  const cp = client.code_postal || '';
+  if (cp && s.code_postal === cp) score += 25;
+  else if (cp && s.code_postal && cp.slice(0, 2) === s.code_postal.slice(0, 2)) score += 8;
+  // Ville (+10)
+  if (client.city && s.libelle_commune) {
+    const cityA = _esNormalize(client.city), cityB = _esNormalize(s.libelle_commune);
+    if (cityA === cityB) score += 10;
+    else if (cityA && cityB && (cityA.includes(cityB) || cityB.includes(cityA))) score += 5;
+  }
+  // État administratif active (+5)
+  if (candidate.etat_administratif === 'A') score += 5;
+  return Math.round(score);
+}
+
+async function esLaunchSearch() {
+  if (_esRunning) { _esCancel = true; return; }
+  _esRunning = true; _esCancel = false; _esResults = [];
+  imxRenderEsList();
+  let q = sb.from('clients').select('id,name,city,code_postal,departement,siren,siret,ape,akuiteo_id,status', { count: 'exact' })
+    .or('siret.is.null,siret.eq.')
+    .order('name', { ascending: true });
+  if (_esFilters.dept) q = q.ilike('code_postal', _esFilters.dept + '%');
+  if (_esFilters.status) q = q.eq('status', _esFilters.status);
+  q = q.range(0, _esFilters.limit - 1);
+  const { data: clients, error } = await q;
+  if (error) { toast('Erreur Supabase: ' + error.message, 'error'); _esRunning = false; renderPage('enrich-siren'); return; }
+  if (!clients || !clients.length) { toast('Aucune fiche sans SIRET trouvée', 'info'); _esRunning = false; renderPage('enrich-siren'); return; }
+  const status = document.getElementById('esStatus');
+  for (let i = 0; i < clients.length; i++) {
+    if (_esCancel) break;
+    const c = clients[i];
+    if (status) status.innerHTML = '🔍 ' + (i+1) + '/' + clients.length + ' — ' + c.name;
+    try {
+      const params = new URLSearchParams({ q: c.name || '', per_page: '5', etat_administratif: 'A' });
+      if (c.code_postal) params.set('code_postal', c.code_postal);
+      const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + params);
+      let candidates = [];
+      if (r.ok) {
+        const d = await r.json();
+        candidates = (d.results || []).map(x => ({ ...x, _score: _esScore(c, x) })).sort((a, b) => b._score - a._score);
+      }
+      _esResults.push({ client: c, candidates, applied: false, rejected: false });
+    } catch (e) {
+      _esResults.push({ client: c, candidates: [], applied: false, rejected: false, error: e.message });
+    }
+    imxRenderEsList();
+    await new Promise(r => setTimeout(r, 700));
+  }
+  _esRunning = false; _esCancel = false;
+  renderPage('enrich-siren');
+  toast('Recherche terminée — ' + _esResults.filter(r => r.candidates.length).length + ' fiches avec candidat(s)', 'success');
+}
+
+async function esApply(idx, candIdx, alsoAkuiteo) {
+  const item = _esResults[idx];
+  if (!item) return;
+  const cand = item.candidates[candIdx || 0];
+  if (!cand) return;
+  const siege = cand.siege || {};
+  const update = {
+    siren: cand.siren || null,
+    siret: siege.siret || null,
+    ape: siege.activite_principale || cand.activite_principale || null,
+    raison_sociale: cand.nom_raison_sociale || cand.nom_complet || null,
+    forme_juridique: cand.nature_juridique || null,
+    tva_intracommunautaire: (typeof computeTVA === 'function') ? (computeTVA(cand.siren) || null) : null,
+  };
+  // Forme juridique → préserver si existante non vide
+  if (!update.forme_juridique) delete update.forme_juridique;
+  const { error } = await sb.from('clients').update(update).eq('id', item.client.id);
+  if (error) { toast('Erreur MAJ: ' + error.message, 'error'); return; }
+  item.applied = true;
+  item.appliedCand = cand;
+  // Pousser dans Akuiteo si demandé
+  if (alsoAkuiteo && item.client.akuiteo_id) {
+    try { await pushClientToAkuiteo(item.client.id); }
+    catch (e) { toast('Akuiteo : ' + e.message, 'warn'); }
+  } else if (alsoAkuiteo) {
+    await sb.from('clients').update({ akuiteo_dirty: true }).eq('id', item.client.id);
+  }
+  imxRenderEsList();
+  toast('Mis à jour : ' + item.client.name, 'success');
+}
+
+function esReject(idx) {
+  if (_esResults[idx]) { _esResults[idx].rejected = true; imxRenderEsList(); }
+}
+
+async function esApplyAll(threshold) {
+  const todo = _esResults.filter(r => !r.applied && !r.rejected && r.candidates[0] && r.candidates[0]._score >= threshold);
+  if (!todo.length) { toast('Aucun candidat ≥ ' + threshold + '%', 'info'); return; }
+  if (!confirm('Appliquer en bloc ' + todo.length + ' enrichissement(s) avec score ≥ ' + threshold + '% ?')) return;
+  showSyncLoading(true);
+  let ok = 0;
+  for (const item of todo) {
+    setSyncText('Application en bloc...');
+    const idx = _esResults.indexOf(item);
+    await esApply(idx, 0, _esFilters.withAkuiteo);
+    if (_esResults[idx].applied) ok++;
+  }
+  showSyncLoading(false);
+  toast(ok + ' fiches enrichies en bloc', 'success');
+}
+
+function imxRenderEsList() {
+  const el = document.getElementById('esResults');
+  if (!el) return;
+  if (!_esResults.length) {
+    el.innerHTML = _esRunning
+      ? '<div style="padding:20px;text-align:center;color:var(--t3)">⏳ Recherche en cours...</div>'
+      : '<div style="padding:20px;text-align:center;color:var(--t3)">Cliquez "Lancer la recherche" pour commencer.</div>';
+    return;
+  }
+  el.innerHTML = _esResults.map((item, idx) => {
+    const c = item.client;
+    if (item.rejected) return `<div style="padding:8px 12px;border-bottom:1px solid var(--border);opacity:.45;font-size:12px">✕ ${c.name} — rejeté</div>`;
+    if (item.applied) {
+      const cand = item.appliedCand || {};
+      return `<div style="padding:10px 14px;border-bottom:1px solid var(--border);background:rgba(34,197,94,.08)">
+        <div style="font-size:13px"><span style="color:#22c55e">✓ Appliqué</span> · <strong>${c.name}</strong> ${c.code_postal||''} ${c.city||''}</div>
+        <div style="font-size:11px;color:var(--t3);margin-top:2px">SIREN ${cand.siren||''} · SIRET ${cand.siege?.siret||''} · ${cand.nom_raison_sociale||cand.nom_complet||''}</div>
+      </div>`;
+    }
+    if (!item.candidates.length) return `<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px">⚠ <strong>${c.name}</strong> ${c.code_postal||''} ${c.city||''} — aucun résultat SIRENE</div>`;
+    const cand = item.candidates[0];
+    const s = cand.siege || {};
+    const scoreColor = cand._score >= 80 ? '#22c55e' : cand._score >= 60 ? '#f59e0b' : '#ef4444';
+    const altCands = item.candidates.slice(1, 3).map((alt, ai) => {
+      const altS = alt.siege || {};
+      return `<div style="padding:6px 10px;border-top:1px dashed var(--border);font-size:11px;display:flex;justify-content:space-between;gap:8px;align-items:center">
+        <div style="flex:1">
+          <span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(107,114,128,.15);font-size:10px">${alt._score}%</span>
+          ${alt.nom_raison_sociale || alt.nom_complet || ''} <span class="mono" style="color:var(--t3)">${alt.siren||''}</span>
+          <span style="color:var(--t3)">${altS.code_postal||''} ${altS.libelle_commune||''}</span>
+        </div>
+        <button class="btn" onclick="esApply(${idx},${ai+1},${_esFilters.withAkuiteo})" style="font-size:10px;padding:2px 6px">Choisir</button>
+      </div>`;
+    }).join('');
+    return `<div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
+        <div style="flex:1;min-width:240px">
+          <div style="font-weight:600;font-size:13px">${c.name} ${c.akuiteo_id ? '<span title="Synchro Akuiteo" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;vertical-align:middle"></span>' : ''}</div>
+          <div style="font-size:11px;color:var(--t3)">${c.code_postal||''} ${c.city||''} · ${c.status||''}</div>
+        </div>
+        <div style="flex:2;min-width:280px;background:var(--bg-3);border:1px solid var(--border);border-radius:6px;padding:8px">
+          <div style="display:flex;gap:8px;align-items:baseline">
+            <span style="display:inline-block;padding:2px 8px;border-radius:4px;background:${scoreColor};color:#fff;font-weight:700;font-size:11px">${cand._score}%</span>
+            <strong style="font-size:13px">${cand.nom_raison_sociale || cand.nom_complet || ''}</strong>
+          </div>
+          <div style="font-size:11px;color:var(--t3);margin-top:4px">
+            SIREN <span class="mono" style="color:var(--t1)">${cand.siren||''}</span> ·
+            SIRET <span class="mono" style="color:var(--t1)">${s.siret||''}</span> ·
+            APE ${s.activite_principale||'—'} ·
+            ${cand.nature_juridique||''} ·
+            ${s.code_postal||''} ${s.libelle_commune||''}
+            ${cand.siren ? ' · <a href="https://www.pappers.fr/entreprise/'+cand.siren+'" target="_blank" rel="noopener" style="color:#3b82f6">Pappers</a>' : ''}
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <button class="btn btn-primary" onclick="esApply(${idx},0,${_esFilters.withAkuiteo})" style="font-size:11px">✓ Appliquer</button>
+          <button class="btn" onclick="esReject(${idx})" style="font-size:11px;color:var(--red)">✕ Rejeter</button>
+        </div>
+      </div>
+      ${altCands}
+    </div>`;
+  }).join('');
+}
+
+function renderEnrichSiren() {
+  const total = _esResults.length;
+  const applied = _esResults.filter(r => r.applied).length;
+  const rejected = _esResults.filter(r => r.rejected).length;
+  const high = _esResults.filter(r => !r.applied && !r.rejected && r.candidates[0] && r.candidates[0]._score >= 80).length;
+  return `
+  <div style="background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.05));border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+    <div style="font-weight:700;font-size:14px;color:var(--t1);margin-bottom:4px">🔎 Enrichissement SIREN / SIRET</div>
+    <div style="font-size:12px;color:var(--t3);max-width:920px;line-height:1.5">
+      Cherche dans <a href="https://recherche-entreprises.api.gouv.fr" target="_blank" style="color:#6366f1">recherche-entreprises.api.gouv.fr</a>
+      les fiches clients/prospects qui n'ont pas de SIRET. Pour chaque match, calcule un score de confiance basé sur le nom, le code
+      postal et la ville. Tu valides ou rejettes chaque proposition (et tu peux pousser à Akuiteo dans la foulée).
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-header"><div class="card-title">Filtres et lancement</div></div>
+    <div class="card-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <div><label class="fl">Département</label>
+        <input class="fi" placeholder="Ex: 85" value="${_esFilters.dept}" oninput="_esFilters.dept=this.value" style="width:80px;font-size:12px"></div>
+      <div><label class="fl">Statut</label>
+        <select class="fi" onchange="_esFilters.status=this.value" style="font-size:12px">
+          <option value="" ${!_esFilters.status?'selected':''}>— Tous —</option>
+          <option value="client" ${_esFilters.status==='client'?'selected':''}>Client</option>
+          <option value="prospect" ${_esFilters.status==='prospect'?'selected':''}>Prospect</option>
+          <option value="objectif" ${_esFilters.status==='objectif'?'selected':''}>Objectif</option>
+          <option value="dormant" ${_esFilters.status==='dormant'?'selected':''}>Dormant</option>
+        </select></div>
+      <div><label class="fl">Max fiches à analyser</label>
+        <input class="fi" type="number" value="${_esFilters.limit}" oninput="_esFilters.limit=Math.max(1,parseInt(this.value)||100)" style="width:90px;font-size:12px"></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-left:6px">
+        <input type="checkbox" ${_esFilters.withAkuiteo?'checked':''} onchange="_esFilters.withAkuiteo=this.checked"> Pousser aussi dans Akuiteo
+      </label>
+      <span style="flex:1"></span>
+      <button class="btn btn-primary" onclick="esLaunchSearch()" style="font-size:13px">${_esRunning?'⏹ Arrêter':'🔍 Lancer la recherche'}</button>
+      ${high > 0 ? `<button class="btn" onclick="esApplyAll(80)" style="font-size:12px;background:#22c55e;color:#fff;border:none">✓ Tout appliquer ≥ 80% (${high})</button>` : ''}
+    </div>
+  </div>
+
+  ${total > 0 ? `<div style="display:flex;gap:14px;font-size:12px;color:var(--t3);margin-bottom:8px">
+    <span>${total} analysées</span>
+    <span style="color:#22c55e">${applied} appliquées</span>
+    <span style="color:var(--t2)">${rejected} rejetées</span>
+    <span style="color:#22c55e">≥80% : ${high}</span>
+    <span id="esStatus" style="margin-left:auto"></span>
+  </div>` : '<div id="esStatus" style="font-size:12px;color:var(--t3);margin-bottom:8px"></div>'}
+
+  <div class="card"><div class="card-body" style="padding:0">
+    <div id="esResults" style="max-height:calc(100vh - 360px);overflow-y:auto"></div>
+  </div></div>`;
 }
 
 // ═══ BATISCOPE — Observatoire Construction & Démographie ═══
