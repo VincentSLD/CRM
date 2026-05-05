@@ -6388,7 +6388,63 @@ function imxClearAll() {
 function imxRecalculate() {
   imxMerge();
   imxRenderPreview();
-  toast(_imxOutSoc.length + ' sociétés · ' + _imxOutCon.length + ' contacts · ' + _imxOutCr.length + ' CR mergés', 'success');
+  renderPage('import-xml');
+  toast(_imxOutSoc.length + ' sociétés · ' + _imxOutCon.length + ' contacts · ' + _imxOutCr.length + ' CR construits', 'success');
+}
+
+// Parse un CSV (séparateur ; ou ,) avec gestion des guillemets et de l'échappement ""
+function imxParseCsv(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const firstLine = (text.split('\n')[0] || '');
+  const sep = (firstLine.split(';').length > firstLine.split(',').length) ? ';' : ',';
+  const rows = []; let cell = ''; let row = []; let inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"' && text[i+1] === '"') { cell += '"'; i++; continue; }
+      if (c === '"') { inQ = false; continue; }
+      cell += c; continue;
+    }
+    if (c === '"') { inQ = true; continue; }
+    if (c === sep) { row.push(cell); cell = ''; continue; }
+    if (c === '\r') continue;
+    if (c === '\n') { row.push(cell); rows.push(row); cell = ''; row = []; continue; }
+    cell += c;
+  }
+  if (cell.length || row.length) { row.push(cell); rows.push(row); }
+  if (!rows.length) return [];
+  const headers = rows[0].map(h => (h || '').trim());
+  return rows.slice(1).filter(r => r.some(v => v && v.trim())).map(r => {
+    const obj = {};
+    for (let j = 0; j < headers.length; j++) obj[headers[j]] = r[j] !== undefined ? r[j] : '';
+    return obj;
+  });
+}
+
+// Charger un CSV externe (modifié dans Excel) à la place du résultat construit
+function imxLoadCsv(kind, file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const rows = imxParseCsv(e.target.result);
+      if (!rows.length) { toast('CSV vide ou illisible', 'warn'); return; }
+      if (kind === 'soc') _imxOutSoc = rows;
+      else if (kind === 'con') _imxOutCon = rows;
+      else _imxOutCr = rows;
+      // Refaire les liens contact↔société et CR↔société/contact si possible
+      if (kind === 'soc' && _imxOutCon.length) {
+        const socByLegacy = {};
+        for (const s of _imxOutSoc) if (s.legacy_id) socByLegacy[s.legacy_id] = s.name || '';
+        for (const c of _imxOutCon) if (c.legacy_societe_id) c.client_name_legacy = socByLegacy[c.legacy_societe_id] || c.client_name_legacy || '';
+      }
+      imxRenderPreview();
+      renderPage('import-xml');
+      toast(rows.length + ' lignes chargées depuis le CSV', 'success');
+    } catch (err) { toast('Erreur parsing CSV: ' + err.message, 'error'); }
+  };
+  reader.onerror = () => toast('Erreur lecture fichier', 'error');
+  reader.readAsText(file, 'UTF-8');
 }
 
 function imxRenderFileCard(f) {
@@ -6576,54 +6632,84 @@ function imxRenderPreview() {
   if (elR) elR.innerHTML = imxRenderGrid('cr', _imxOutCr, '📝 Comptes-rendus', IMX_REQUIRED_CR);
 }
 
+function imxBuildCard(kind, label, emoji, count, requiredOk) {
+  const builtBadge = count > 0
+    ? `<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:rgba(34,197,94,.15);color:#22c55e;font-size:11px;font-weight:700">✓ ${count} ligne(s)</span>`
+    : `<span style="display:inline-block;padding:2px 8px;border-radius:4px;background:rgba(107,114,128,.15);color:#6b7280;font-size:11px;font-weight:700">— vide —</span>`;
+  const importLabel = (kind === 'soc') ? 'sociétés' : (kind === 'con') ? 'contacts' : 'CR';
+  const importFn = (kind === 'soc') ? 'imxImportSocietes()' : (kind === 'con') ? 'imxImportContacts()' : 'imxImportCR()';
+  const csvKind = (kind === 'soc') ? 'societes' : (kind === 'con') ? 'contacts' : 'cr';
+  return `<div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--card);flex:1;min-width:260px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-weight:700;font-size:13px">${emoji} ${label}</div>
+      ${builtBadge}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <label class="btn" style="font-size:11px;cursor:pointer;text-align:center">
+        📤 Charger un CSV externe
+        <input type="file" accept=".csv,text/csv" onchange="imxLoadCsv('${kind}',this.files[0]);this.value=''" style="display:none">
+      </label>
+      <button class="btn" onclick="imxDownloadCsv('${csvKind}')" style="font-size:11px"${count===0?' disabled':''}>📥 Télécharger CSV</button>
+      <button class="btn" onclick="${importFn}" style="font-size:11px;background:#22c55e;color:#fff;border:none"${count===0?' disabled':''}>⬆️ Importer ${importLabel} dans le CRM</button>
+    </div>
+  </div>`;
+}
+
 function renderImportXml() {
   return `
   <div style="background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.05));border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
-    <div style="font-weight:700;font-size:14px;color:var(--t1);margin-bottom:4px">📥 Import XML CODIAL — multi-fichiers avec mapping flexible</div>
-    <div style="font-size:12px;color:var(--t3);max-width:920px;line-height:1.5">
-      Glissez plusieurs fichiers XML simultanément (sociétés, contacts, comptes-rendus, métiers, civilités, statuts, etc.).
-      L'outil détecte le rôle de chaque fichier (Master Sociétés / Master Contacts / Master CR / Lookup), propose un mapping
-      pour chaque champ, et fusionne tout en croisant les ID. Résultat : <strong>1 jeu sociétés + 1 jeu contacts + 1 jeu CR</strong>.
-      <br><strong>⚠️ SQL préalable</strong> : exécuter <code>add_missing_columns.sql</code> dans Supabase
-      (ajoute la colonne <code>legacy_id</code> sur clients, contacts, reports).
+    <div style="font-weight:700;font-size:14px;color:var(--t1);margin-bottom:4px">📥 Import XML CODIAL — workflow en 4 étapes</div>
+    <div style="font-size:12px;color:var(--t3);max-width:920px;line-height:1.6">
+      <strong>1️⃣ Charger les XML</strong> → <strong>2️⃣ Construire les 3 CSV</strong> (sociétés, contacts, CR croisés via les ID) →
+      <strong>3️⃣ Modifier les données</strong> (grille intégrée ou CSV externe Excel) → <strong>4️⃣ Importer dans le CRM</strong>.
+      <br><strong>⚠️ SQL préalable</strong> : <code>add_missing_columns.sql</code> dans Supabase (colonne <code>legacy_id</code>).
     </div>
   </div>
 
   <div class="card" style="margin-bottom:14px">
-    <div class="card-header"><div class="card-title">1️⃣ Charger les XML</div></div>
+    <div class="card-header"><div class="card-title">1️⃣ Charger les XML CODIAL</div></div>
     <div class="card-body" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <input type="file" accept=".xml" multiple id="imxMultiFile" onchange="imxLoadMultiple(this.files);this.value=''" style="font-size:13px">
-      <span id="imxLoadStatus" style="font-size:12px;color:var(--t3)">${_imxFiles.length ? _imxFiles.length+' fichier(s) chargé(s)' : 'Sélectionnez plusieurs fichiers à la fois (Ctrl+clic)'}</span>
+      <span id="imxLoadStatus" style="font-size:12px;color:var(--t3)">${_imxFiles.length ? _imxFiles.length+' fichier(s) chargé(s)' : 'Glissez plusieurs fichiers à la fois (Ctrl+clic)'}</span>
       ${_imxFiles.length ? '<button class="btn" onclick="imxClearAll()" style="font-size:12px;color:var(--red)">✕ Tout vider</button>' : ''}
     </div>
   </div>
 
   ${_imxFiles.length ? `
-  <div style="font-size:12px;color:var(--t3);font-weight:600;margin-bottom:6px">2️⃣ Vérifier le rôle et le mapping de chaque fichier</div>
-  ${_imxFiles.map(f => imxRenderFileCard(f)).join('')}
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-header"><div class="card-title">2️⃣ Configurer le rôle et le mapping de chaque XML</div></div>
+    <div class="card-body" style="padding:12px">
+      ${_imxFiles.map(f => imxRenderFileCard(f)).join('')}
+    </div>
+  </div>
 
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0;padding:10px;background:var(--bg-3);border:1px solid var(--border);border-radius:8px;align-items:center">
-    <span style="font-size:12px;color:var(--t3);font-weight:600">3️⃣</span>
-    <button class="btn btn-primary" onclick="imxRecalculate()" style="font-size:13px">🔄 Recalculer le merge</button>
-    <span style="font-size:11px;color:var(--t3)">${_imxOutSoc.length} sociétés · ${_imxOutCon.length} contacts · ${_imxOutCr.length} CR</span>
-    <span style="flex:1"></span>
-    <button class="btn" onclick="imxEnrichSirene()" style="font-size:12px">🔍 Enrichir SIRENE</button>
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-header" style="flex-wrap:wrap;gap:10px;align-items:center">
+      <div class="card-title">3️⃣ Construire les 3 CSV cibles</div>
+      <button class="btn btn-primary" onclick="imxRecalculate()" style="font-size:13px">🔄 Construire / Reconstruire</button>
+      <button class="btn" onclick="imxEnrichSirene()" style="font-size:12px"${_imxOutSoc.length===0?' disabled':''}>🔍 Enrichir SIRENE (sociétés)</button>
+    </div>
+    <div class="card-body">
+      <div style="font-size:12px;color:var(--t3);margin-bottom:10px">
+        Le bouton ci-dessus croise les XML chargés et produit 3 CSV : sociétés, contacts (liés à leur société), CR (liés à leur société + contact).
+        Vous pouvez aussi <strong>charger un CSV modifié dans Excel</strong> via le bouton "📤 Charger un CSV externe" — il remplacera le fichier construit.
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${imxBuildCard('soc', 'Sociétés', '🏢', _imxOutSoc.length)}
+        ${imxBuildCard('con', 'Contacts', '👤', _imxOutCon.length)}
+        ${imxBuildCard('cr', 'Comptes-rendus', '📝', _imxOutCr.length)}
+      </div>
+    </div>
   </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;padding:10px;background:var(--bg-3);border:1px solid var(--border);border-radius:8px;align-items:center">
-    <span style="font-size:11px;color:var(--t3);font-weight:600">CSV :</span>
-    <button class="btn" onclick="imxDownloadCsv('societes')" style="font-size:12px">📥 sociétés</button>
-    <button class="btn" onclick="imxDownloadCsv('contacts')" style="font-size:12px">📥 contacts</button>
-    <button class="btn" onclick="imxDownloadCsv('cr')" style="font-size:12px">📥 CR</button>
-    <span style="flex:1"></span>
-    <span style="font-size:11px;color:var(--t3);font-weight:600">Import CRM :</span>
-    <button class="btn" onclick="imxImportSocietes()" style="font-size:12px;background:#22c55e;color:#fff;border:none">⬆️ sociétés</button>
-    <button class="btn" onclick="imxImportContacts()" style="font-size:12px;background:#22c55e;color:#fff;border:none">⬆️ contacts</button>
-    <button class="btn" onclick="imxImportCR()" style="font-size:12px;background:#22c55e;color:#fff;border:none">⬆️ CR</button>
-  </div>
+
   <div id="imxSirenProgress" style="display:none;font-size:12px;color:var(--t2);margin-bottom:8px"></div>
+
+  ${(_imxOutSoc.length || _imxOutCon.length || _imxOutCr.length) ? `
+  <div style="font-size:12px;color:var(--t3);font-weight:600;margin-bottom:6px">4️⃣ Vérifier et modifier les données avant l'import (les modifications sont prises en compte au moment de l'import)</div>
   <div id="imxPreviewSoc"></div>
   <div id="imxPreviewCon"></div>
   <div id="imxPreviewCr"></div>
+  ` : '<div style="text-align:center;color:var(--t3);padding:20px;font-size:13px">Cliquez "🔄 Construire" pour générer les 3 CSV à partir des XML chargés.</div>'}
   ` : ''}
   `;
 }
