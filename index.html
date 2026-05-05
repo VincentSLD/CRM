@@ -7843,7 +7843,7 @@ function renderDuplicates() {
       <label style="font-size:12px;cursor:pointer"><input type="checkbox" ${_dupCriteria.name?'checked':''} onchange="_dupCriteria.name=this.checked"> Nom normalisé (sans accents/forme juridique)</label>
       <label style="font-size:12px;cursor:pointer"><input type="checkbox" ${_dupCriteria.phone?'checked':''} onchange="_dupCriteria.phone=this.checked"> Téléphone (10+ chiffres)</label>
       <span style="flex:1"></span>
-      <button class="btn btn-primary" onclick="dupScanAll()" style="font-size:13px"${_dupRunning?' disabled':''}>${_dupRunning?'⏳ Analyse...':'🔍 Lancer l\\'analyse'}</button>
+      <button class="btn btn-primary" onclick="dupScanAll()" style="font-size:13px"${_dupRunning?' disabled':''}>${_dupRunning ? '⏳ Analyse...' : "🔍 Lancer l'analyse"}</button>
     </div>
     <div id="dupStatus" style="padding:0 14px 12px;font-size:11px;color:var(--t3)"></div>
   </div>
