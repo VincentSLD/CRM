@@ -7374,18 +7374,19 @@ function imxRenderEsList() {
   }
   el.innerHTML = _esResults.map((item, idx) => {
     const c = item.client;
-    if (item.rejected) return `<div style="padding:8px 12px;border-bottom:1px solid var(--border);opacity:.45;font-size:12px">✕ ${c.name} — rejeté</div>`;
+    const openLink = `<a href="#" onclick="event.preventDefault();showClient('${c.id}')" style="color:#3b82f6;text-decoration:none;font-size:11px;margin-left:6px" title="Ouvrir la fiche">↗ Ouvrir</a>`;
+    if (item.rejected) return `<div style="padding:8px 12px;border-bottom:1px solid var(--border);opacity:.45;font-size:12px">✕ ${c.name} — rejeté ${openLink}</div>`;
     if (item.applied) {
       const cand = item.appliedCand || {};
       return `<div style="padding:10px 14px;border-bottom:1px solid var(--border);background:rgba(34,197,94,.08)">
-        <div style="font-size:13px"><span style="color:#22c55e">✓ Appliqué</span> · <strong>${c.name}</strong> ${c.code_postal||''} ${c.city||''}</div>
+        <div style="font-size:13px"><span style="color:#22c55e">✓ Appliqué</span> · <strong>${c.name}</strong> ${c.code_postal||''} ${c.city||''} ${openLink}</div>
         <div style="font-size:11px;color:var(--t3);margin-top:2px">SIREN ${cand.siren||''} · SIRET ${cand.siege?.siret||''} · ${cand.nom_raison_sociale||cand.nom_complet||''}</div>
       </div>`;
     }
     if (!item.candidates.length) {
       const gQuery = encodeURIComponent([c.name, c.code_postal, c.city, 'pappers'].filter(Boolean).join(' '));
       return `<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <div>⚠ <strong>${c.name}</strong> ${c.code_postal||''} ${c.city||''} — aucun résultat SIRENE</div>
+        <div>⚠ <strong>${c.name}</strong> ${c.code_postal||''} ${c.city||''} — aucun résultat SIRENE ${openLink}</div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <a href="https://www.google.com/search?q=${gQuery}" target="_blank" rel="noopener" class="btn" style="font-size:11px;text-decoration:none;color:#4285f4">🔎 Chercher sur Google</a>
           <input type="text" id="esSiret_${idx}" placeholder="Coller SIRET (14 chiffres)" maxlength="20"
@@ -7431,7 +7432,7 @@ function imxRenderEsList() {
     return `<div style="padding:10px 14px;border-bottom:1px solid var(--border)">
       <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
         <div style="flex:1;min-width:240px">
-          <div style="font-weight:600;font-size:13px">${c.name} ${c.akuiteo_id ? '<span title="Synchro Akuiteo" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;vertical-align:middle"></span>' : ''}</div>
+          <div style="font-weight:600;font-size:13px">${c.name} ${c.akuiteo_id ? '<span title="Synchro Akuiteo" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;vertical-align:middle"></span>' : ''} ${openLink}</div>
           <div style="font-size:11px;color:var(--t3);margin-top:2px">📍 ${crmAdr || "<em>pas d'adresse</em>"}</div>
           <div style="font-size:11px;color:var(--t3)">${c.code_postal||''} ${c.city||''} · ${c.status||''}</div>
           ${crmMetier ? `<div style="font-size:11px;color:var(--t3);margin-top:2px">🏷 ${crmMetier}</div>` : ''}
