@@ -142,6 +142,22 @@ CREATE POLICY "client_concurrents_all" ON client_concurrents FOR ALL USING (true
 CREATE INDEX IF NOT EXISTS idx_client_concurrents_client ON client_concurrents(client_id);
 CREATE INDEX IF NOT EXISTS idx_client_concurrents_concurrent ON client_concurrents(concurrent_id);
 
+-- ═══ Campagnes marketing (ciblage emails) ═══
+CREATE TABLE IF NOT EXISTS campagnes (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  nom TEXT NOT NULL,
+  description TEXT,
+  criteria JSONB DEFAULT '{}'::jsonb,
+  emails JSONB DEFAULT '[]'::jsonb,
+  emails_count INT DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE campagnes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "campagnes_all" ON campagnes;
+CREATE POLICY "campagnes_all" ON campagnes FOR ALL USING (true) WITH CHECK (true);
+CREATE INDEX IF NOT EXISTS idx_campagnes_updated_at ON campagnes(updated_at DESC);
+
 -- ═══ Import XML (CODIAL legacy) — colonnes pour traçabilité et matching ═══
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS legacy_id TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS code_codial TEXT;

@@ -1728,6 +1728,10 @@ tbody tr:last-child td { border-bottom: none; }
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         Alertes <span class="nav-badge" id="navBadgeAlertes" style="background:var(--amber)"></span>
       </div>
+      <div class="nav-item" data-page="campagnes" onclick="go('campagnes')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M2 10l3 3"/><path d="M22 10l-3 3"/></svg>
+        Campagnes
+      </div>
     </div>
     <div class="nav-section">
       <details class="nav-accordion" open>
@@ -3522,7 +3526,7 @@ function go(page) {
   if (page === 'cr') { crViewMode = 'list'; currentReport = null; }
   const navPage = page === 'client-detail' ? 'clients' : page === 'contact-detail' ? 'contacts' : page === 'marche-detail' ? 'marches' : page === 'affaire-detail' ? 'marches' : page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
-  const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',pipeline:'Pipeline commercial',carte:'Carte sociétés',
+  const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',bdnb:'BDNB — Base Nationale des Bâtiments',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
     cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA'};
@@ -3549,6 +3553,7 @@ function renderPage(page) {
     'import-xml': renderImportXml,
     'enrich-siren': renderEnrichSiren,
     duplicates: renderDuplicates,
+    campagnes: renderCampagnes,
     'contact-detail': renderContactDetail,
     'client-detail': renderClientDetail,
     pipeline: renderPipeline,
@@ -3588,6 +3593,10 @@ function renderPage(page) {
   if (page === 'enrich-siren') {
     setTimeout(imxRenderEsList, 50);
     if (!clientsFilterOptsLoaded) loadClientsFilterOpts().then(() => { if (currentPage === 'enrich-siren') renderPage('enrich-siren'); });
+  }
+  if (page === 'campagnes') {
+    if (!clientsFilterOptsLoaded) loadClientsFilterOpts().then(() => { if (currentPage === 'campagnes') renderPage('campagnes'); });
+    campLoadList();
   }
   if (page === 'clients' && !clientsFilterOptsLoaded) {
     loadClientsFilterOpts().then(() => { if (currentPage === 'clients') renderPage('clients'); });
@@ -7963,6 +7972,363 @@ function renderDuplicates() {
     </div>
   `).join('')}
   `;
+}
+
+// ═══ CAMPAGNES MARKETING (ciblage emails) ═══
+let _campList = [];        // toutes les campagnes
+let _campCurrent = null;   // campagne en édition (null = vue liste)
+let _campPreview = { rows: [], emails: [], count: 0, loading: false };
+const _campDefaultFilters = {
+  statut: [],
+  mk_categorie: [], mk_sous_categorie: [], mk_categorie_pro: [],
+  mk_secteur: [], mk_type: [], mk_groupe: [], mk_origine: [],
+  dept: '', city: '', withSiret: '', // '' | 'yes' | 'no'
+  contactFonction: [], contactTitre: [],
+  emailSources: 'both', // 'client' | 'contact' | 'both'
+};
+
+async function campLoadList() {
+  try {
+    const { data } = await sb.from('campagnes').select('*').order('updated_at', { ascending: false });
+    _campList = data || [];
+    if (currentPage === 'campagnes' && !_campCurrent) renderPage('campagnes');
+  } catch (e) { console.warn('campLoadList', e.message); }
+}
+
+function campNew() {
+  _campCurrent = { id: null, nom: '', description: '', criteria: { ..._campDefaultFilters }, emails: [] };
+  _campPreview = { rows: [], emails: [], count: 0, loading: false };
+  renderPage('campagnes');
+}
+
+function campOpen(id) {
+  const c = _campList.find(x => x.id === id);
+  if (!c) return;
+  _campCurrent = { ...c, criteria: { ..._campDefaultFilters, ...(c.criteria || {}) }, emails: c.emails || [] };
+  _campPreview = { rows: [], emails: c.emails || [], count: (c.emails || []).length, loading: false };
+  renderPage('campagnes');
+  setTimeout(campRefreshPreview, 50);
+}
+
+function campClose() {
+  _campCurrent = null;
+  campLoadList();
+  renderPage('campagnes');
+}
+
+function campSetFilter(key, value) {
+  if (!_campCurrent) return;
+  _campCurrent.criteria[key] = value;
+}
+function campToggleMulti(key, value) {
+  if (!_campCurrent) return;
+  const arr = _campCurrent.criteria[key] || [];
+  const i = arr.indexOf(value);
+  if (i >= 0) arr.splice(i, 1); else arr.push(value);
+  _campCurrent.criteria[key] = arr;
+}
+
+async function campRefreshPreview() {
+  if (!_campCurrent) return;
+  const f = _campCurrent.criteria;
+  _campPreview.loading = true;
+  campRenderPreviewArea();
+  try {
+    // 1) Construire la requête clients avec les filtres
+    let q = sb.from('clients').select('id,name,city,code_postal,departement,email,phone,status,siren,siret,mk_categorie,mk_sous_categorie,mk_categorie_pro,mk_secteur,mk_type,mk_groupe,mk_origine');
+    if (f.statut && f.statut.length) q = q.in('status', f.statut);
+    if (f.mk_categorie?.length)      q = q.in('mk_categorie', f.mk_categorie);
+    if (f.mk_sous_categorie?.length) q = q.in('mk_sous_categorie', f.mk_sous_categorie);
+    if (f.mk_categorie_pro?.length)  q = q.in('mk_categorie_pro', f.mk_categorie_pro);
+    if (f.mk_secteur?.length)        q = q.in('mk_secteur', f.mk_secteur);
+    if (f.mk_type?.length)           q = q.in('mk_type', f.mk_type);
+    if (f.mk_groupe?.length)         q = q.in('mk_groupe', f.mk_groupe);
+    if (f.mk_origine?.length)        q = q.in('mk_origine', f.mk_origine);
+    if (f.dept) q = q.ilike('code_postal', f.dept + '%');
+    if (f.city) q = q.ilike('city', '%' + f.city + '%');
+    if (f.withSiret === 'yes') q = q.not('siret', 'is', null).neq('siret', '');
+    if (f.withSiret === 'no')  q = q.or('siret.is.null,siret.eq.');
+    // Pagination
+    let allClients = []; let off = 0;
+    while (true) {
+      const { data, error } = await q.range(off, off + 999);
+      if (error) throw error;
+      if (!data || !data.length) break;
+      allClients = allClients.concat(data);
+      if (data.length < 1000) break;
+      off += 1000;
+      if (off > 50000) break;
+    }
+    // 2) Charger les contacts liés selon les filtres
+    let contacts = [];
+    if (f.emailSources === 'contact' || f.emailSources === 'both') {
+      const cIds = allClients.map(c => c.id);
+      for (let i = 0; i < cIds.length; i += 200) {
+        let cq = sb.from('contacts').select('id,client_id,nom,prenom,titre,fonction,email').in('client_id', cIds.slice(i, i + 200));
+        if (f.contactFonction?.length) cq = cq.in('fonction', f.contactFonction);
+        if (f.contactTitre?.length)    cq = cq.in('titre', f.contactTitre);
+        const { data } = await cq;
+        if (data) contacts = contacts.concat(data);
+      }
+    }
+    // 3) Construire la liste rows + emails dédupliquée
+    const rows = [];
+    const emailSet = new Set();
+    const norm = e => (e || '').trim().toLowerCase();
+    const validEmail = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e || '');
+    if (f.emailSources === 'client' || f.emailSources === 'both') {
+      for (const c of allClients) {
+        const e = norm(c.email);
+        if (validEmail(e) && !emailSet.has(e)) {
+          emailSet.add(e);
+          rows.push({ source: 'client', email: c.email, societe: c.name, ville: c.city || '', cp: c.code_postal || '', contact: '', fonction: '', client_id: c.id });
+        }
+      }
+    }
+    if (f.emailSources === 'contact' || f.emailSources === 'both') {
+      const byClient = {};
+      for (const c of allClients) byClient[c.id] = c;
+      for (const ct of contacts) {
+        const e = norm(ct.email);
+        if (!validEmail(e) || emailSet.has(e)) continue;
+        emailSet.add(e);
+        const cl = byClient[ct.client_id];
+        if (!cl) continue; // contact lié à un client filtré-out
+        rows.push({ source: 'contact', email: ct.email, societe: cl.name, ville: cl.city || '', cp: cl.code_postal || '', contact: ((ct.prenom||'')+' '+(ct.nom||'')).trim(), fonction: ct.fonction || '', client_id: cl.id, contact_id: ct.id });
+      }
+    }
+    _campPreview = { rows, emails: rows.map(r => r.email), count: rows.length, loading: false };
+  } catch (e) {
+    console.warn('campRefreshPreview', e);
+    toast('Erreur preview: ' + e.message, 'error');
+    _campPreview.loading = false;
+  }
+  campRenderPreviewArea();
+}
+
+async function campSave() {
+  if (!_campCurrent) return;
+  if (!_campCurrent.nom.trim()) { toast('Donnez un nom à la campagne', 'error'); return; }
+  // Capturer les emails actuels
+  const row = {
+    nom: _campCurrent.nom.trim(),
+    description: _campCurrent.description?.trim() || null,
+    criteria: _campCurrent.criteria,
+    emails: _campPreview.emails,
+    emails_count: _campPreview.count,
+    updated_at: new Date().toISOString(),
+  };
+  if (_campCurrent.id) {
+    const { error } = await sb.from('campagnes').update(row).eq('id', _campCurrent.id);
+    if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+    toast('Campagne mise à jour', 'success');
+  } else {
+    const { data, error } = await sb.from('campagnes').insert(row).select().single();
+    if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+    if (data) _campCurrent.id = data.id;
+    toast('Campagne créée', 'success');
+  }
+  await campLoadList();
+}
+
+async function campDelete(id) {
+  if (!confirm('Supprimer définitivement cette campagne ?')) return;
+  const { error } = await sb.from('campagnes').delete().eq('id', id);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  toast('Campagne supprimée', 'success');
+  if (_campCurrent && _campCurrent.id === id) _campCurrent = null;
+  await campLoadList();
+  renderPage('campagnes');
+}
+
+function campCopyEmails() {
+  const emails = _campPreview.emails.join(', ');
+  if (!emails) { toast('Aucun email à copier', 'warn'); return; }
+  navigator.clipboard.writeText(emails).then(() => toast(_campPreview.count + ' email(s) copiés', 'success'));
+}
+function campMailto() {
+  if (!_campPreview.emails.length) { toast('Aucun email', 'warn'); return; }
+  const subject = encodeURIComponent(_campCurrent?.nom || 'Campagne');
+  // mailto: avec BCC pour ne pas exposer les destinataires entre eux
+  const bcc = _campPreview.emails.join(',');
+  if (bcc.length > 1900) { toast('Trop d\'emails pour mailto: — utilisez Copier puis collez dans votre client mail', 'warn'); return; }
+  window.location.href = 'mailto:?bcc=' + bcc + '&subject=' + subject;
+}
+function campExportCsv() {
+  if (!_campPreview.rows.length) { toast('Aucune donnée à exporter', 'warn'); return; }
+  const cols = ['source','email','societe','ville','cp','contact','fonction'];
+  const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const csv = [cols.join(';'), ..._campPreview.rows.map(r => cols.map(c => esc(r[c])).join(';'))].join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'campagne_' + (_campCurrent?.nom || 'export').replace(/\W+/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(_campPreview.rows.length + ' lignes exportées', 'success');
+}
+
+// === RENDERING ===
+function renderCampagnes() {
+  return _campCurrent ? renderCampagneEdit() : renderCampagnesList();
+}
+
+function renderCampagnesList() {
+  return `
+  <div style="background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.05));border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+    <div style="font-weight:700;font-size:14px;color:var(--t1);margin-bottom:4px">📧 Campagnes marketing</div>
+    <div style="font-size:12px;color:var(--t3);max-width:920px;line-height:1.5">
+      Crée des campagnes ciblées pour extraire des listes d'emails (clients/prospects + contacts).
+      Multi-filtres : statut, infos entreprise (catégorie, secteur…), géographie, fonction du contact.
+      Chaque campagne sauvegarde ses critères + un snapshot des emails capturés.
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+    <span style="font-size:13px;color:var(--t2)"><strong>${_campList.length}</strong> campagne(s)</span>
+    <button class="btn btn-primary" onclick="campNew()" style="font-size:12px">+ Nouvelle campagne</button>
+  </div>
+  ${_campList.length === 0
+    ? '<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--t3);font-size:13px">Aucune campagne pour l\'instant — cliquez "+ Nouvelle campagne" pour commencer.</div></div>'
+    : '<div class="card"><div class="card-body" style="padding:0"><div class="table-wrap"><table>' +
+      '<thead><tr><th>Nom</th><th>Description</th><th style="text-align:right">Emails capturés</th><th>Mise à jour</th><th style="text-align:right">Actions</th></tr></thead><tbody>' +
+      _campList.map(c => `<tr style="cursor:pointer" onclick="campOpen('${c.id}')">
+        <td><strong>${c.nom||''}</strong></td>
+        <td style="font-size:12px;color:var(--t2);max-width:400px">${c.description || '—'}</td>
+        <td style="text-align:right;font-weight:700">${c.emails_count || 0}</td>
+        <td style="font-size:12px;color:var(--t3)">${c.updated_at ? new Date(c.updated_at).toLocaleDateString('fr-FR') + ' ' + new Date(c.updated_at).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) : '—'}</td>
+        <td style="text-align:right" onclick="event.stopPropagation()">
+          <button class="btn" onclick="campOpen('${c.id}')" style="font-size:11px">Ouvrir</button>
+          <button class="btn" onclick="campDelete('${c.id}')" style="font-size:11px;color:var(--red)">✕</button>
+        </td>
+      </tr>`).join('') +
+      '</tbody></table></div></div></div>'
+  }`;
+}
+
+function _campMultiSelect(label, key, options) {
+  const sel = _campCurrent.criteria[key] || [];
+  return `<div style="position:relative">
+    <label style="font-size:11px;color:var(--t3);font-weight:600;display:block;margin-bottom:3px">${label}${sel.length ? ' <span style="background:#3b82f6;color:#fff;border-radius:8px;padding:0 6px;font-size:10px">'+sel.length+'</span>' : ''}</label>
+    <details style="position:relative">
+      <summary style="cursor:pointer;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);list-style:none">
+        ${sel.length ? sel.slice(0,2).join(', ') + (sel.length > 2 ? ' +' + (sel.length-2) : '') : '— Tous —'}
+      </summary>
+      <div style="position:absolute;top:100%;left:0;right:0;z-index:10;background:#fff;border:1px solid var(--border);border-radius:6px;max-height:240px;overflow-y:auto;box-shadow:0 6px 16px rgba(0,0,0,.15);margin-top:2px">
+        ${(options||[]).length === 0 ? '<div style="padding:8px;color:#888;font-size:11px">Aucune option</div>' :
+          options.map(o => `<label style="display:flex;align-items:center;gap:6px;padding:5px 10px;cursor:pointer;font-size:12px;color:#1a1a1a;border-bottom:1px solid #eee" onclick="event.stopPropagation()">
+            <input type="checkbox" ${sel.includes(o)?'checked':''} onchange="campToggleMulti('${key}','${o.replace(/'/g,"\\'")}');campRefreshPreview()"> ${o}
+          </label>`).join('')
+        }
+      </div>
+    </details>
+  </div>`;
+}
+
+function renderCampagneEdit() {
+  const c = _campCurrent;
+  const f = c.criteria;
+  // Liste des fonctions distinctes des contacts (lazy load à la 1ère ouverture)
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+    <button class="btn" onclick="campClose()" style="font-size:12px">← Retour aux campagnes</button>
+    <div style="display:flex;gap:6px;align-items:center">
+      ${c.id ? '<button class="btn" onclick="campDelete(\''+c.id+'\')" style="font-size:12px;color:var(--red)">✕ Supprimer</button>' : ''}
+      <button class="btn btn-primary" onclick="campSave()" style="font-size:12px">💾 ${c.id?'Mettre à jour':'Enregistrer'}</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-body" style="display:grid;grid-template-columns:1fr 2fr;gap:12px">
+      <div class="fg">
+        <label class="fl">Nom de la campagne *</label>
+        <input class="fi" id="campNom" value="${(c.nom||'').replace(/"/g,'&quot;')}" oninput="_campCurrent.nom=this.value" placeholder="Ex: Newsletter Q2 BTP Vendée">
+      </div>
+      <div class="fg">
+        <label class="fl">Description / objet</label>
+        <input class="fi" id="campDesc" value="${(c.description||'').replace(/"/g,'&quot;')}" oninput="_campCurrent.description=this.value" placeholder="Mailing trimestriel pour clients du secteur BTP">
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-header"><div class="card-title">🎯 Filtres de ciblage</div></div>
+    <div class="card-body">
+      <div style="font-size:11px;color:var(--t3);font-weight:600;margin-bottom:6px">Sociétés</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-bottom:14px">
+        ${_campMultiSelect('Statut', 'statut', ['client','prospect','objectif','dormant'])}
+        ${_campMultiSelect('Catégorie', 'mk_categorie', clientsFilterOpts.categorie || [])}
+        ${_campMultiSelect('Sous-cat.', 'mk_sous_categorie', clientsFilterOpts.sousCategorie || [])}
+        ${_campMultiSelect('Cat. pro.', 'mk_categorie_pro', clientsFilterOpts.categoriePro || [])}
+        ${_campMultiSelect('Secteur', 'mk_secteur', clientsFilterOpts.secteur || [])}
+        ${_campMultiSelect('Type', 'mk_type', clientsFilterOpts.type || [])}
+        ${_campMultiSelect('Groupe', 'mk_groupe', clientsFilterOpts.groupe || [])}
+        ${_campMultiSelect('Origine', 'mk_origine', clientsFilterOpts.origine || [])}
+        <div><label style="font-size:11px;color:var(--t3);font-weight:600;display:block;margin-bottom:3px">Département (CP)</label>
+          <input class="fi" value="${f.dept||''}" oninput="_campCurrent.criteria.dept=this.value;clearTimeout(window._cprev);window._cprev=setTimeout(campRefreshPreview,400)" placeholder="Ex: 85" style="font-size:12px;padding:6px 10px"></div>
+        <div><label style="font-size:11px;color:var(--t3);font-weight:600;display:block;margin-bottom:3px">Ville (contient)</label>
+          <input class="fi" value="${f.city||''}" oninput="_campCurrent.criteria.city=this.value;clearTimeout(window._cprev);window._cprev=setTimeout(campRefreshPreview,400)" placeholder="Ex: Nantes" style="font-size:12px;padding:6px 10px"></div>
+        <div><label style="font-size:11px;color:var(--t3);font-weight:600;display:block;margin-bottom:3px">SIRET</label>
+          <select onchange="_campCurrent.criteria.withSiret=this.value;campRefreshPreview()" style="font-size:12px;padding:6px 10px;width:100%;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--t1)">
+            <option value="" ${f.withSiret===''?'selected':''}>— Tous —</option>
+            <option value="yes" ${f.withSiret==='yes'?'selected':''}>Avec SIRET</option>
+            <option value="no" ${f.withSiret==='no'?'selected':''}>Sans SIRET</option>
+          </select></div>
+      </div>
+
+      <div style="font-size:11px;color:var(--t3);font-weight:600;margin-bottom:6px">Contacts</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-bottom:14px">
+        ${_campMultiSelect('Civilité', 'contactTitre', ['M.','Mme','Dr','Mr','Mrs'])}
+        <div><label style="font-size:11px;color:var(--t3);font-weight:600;display:block;margin-bottom:3px">Fonction (contient)</label>
+          <input class="fi" placeholder="Sera filtré côté résultats" disabled style="font-size:12px;padding:6px 10px;opacity:.5"></div>
+      </div>
+
+      <div style="font-size:11px;color:var(--t3);font-weight:600;margin-bottom:6px">Sources d'emails</div>
+      <div style="display:flex;gap:14px;font-size:12px">
+        <label style="cursor:pointer"><input type="radio" name="emailSrc" ${f.emailSources==='client'?'checked':''} onchange="_campCurrent.criteria.emailSources='client';campRefreshPreview()"> Email principal de la société</label>
+        <label style="cursor:pointer"><input type="radio" name="emailSrc" ${f.emailSources==='contact'?'checked':''} onchange="_campCurrent.criteria.emailSources='contact';campRefreshPreview()"> Emails des contacts liés</label>
+        <label style="cursor:pointer"><input type="radio" name="emailSrc" ${f.emailSources==='both'?'checked':''} onchange="_campCurrent.criteria.emailSources='both';campRefreshPreview()"> Les deux (déduplication)</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px;align-items:center">
+      <div class="card-title">📋 Liste des emails capturés</div>
+      <span id="campCountLabel" style="font-size:13px;color:var(--t2);font-weight:700">${_campPreview.count} emails</span>
+      <span style="flex:1"></span>
+      <button class="btn" onclick="campRefreshPreview()" style="font-size:11px">🔄 Recalculer</button>
+      <button class="btn" onclick="campCopyEmails()" style="font-size:11px">📋 Copier</button>
+      <button class="btn" onclick="campMailto()" style="font-size:11px">📧 mailto:</button>
+      <button class="btn" onclick="campExportCsv()" style="font-size:11px">📥 CSV</button>
+    </div>
+    <div class="card-body" style="padding:0">
+      <div id="campPreview" style="max-height:500px;overflow:auto"></div>
+    </div>
+  </div>
+  `;
+}
+
+function campRenderPreviewArea() {
+  const el = document.getElementById('campPreview');
+  const lbl = document.getElementById('campCountLabel');
+  if (lbl) lbl.textContent = _campPreview.loading ? '⏳ Calcul...' : (_campPreview.count + ' emails');
+  if (!el) return;
+  if (_campPreview.loading) { el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t3)">⏳ Calcul en cours…</div>'; return; }
+  if (!_campPreview.rows.length) { el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--t3);font-size:13px">Aucun email — ajustez les filtres ou cliquez 🔄 Recalculer.</div>'; return; }
+  const rows = _campPreview.rows.slice(0, 200);
+  el.innerHTML = '<table style="font-size:12px"><thead style="position:sticky;top:0;background:var(--card);z-index:1"><tr>' +
+    '<th>Source</th><th>Email</th><th>Société</th><th>Ville</th><th>CP</th><th>Contact</th><th>Fonction</th></tr></thead><tbody>' +
+    rows.map(r => `<tr>
+      <td>${r.source==='client'?'🏢':'👤'}</td>
+      <td><a href="mailto:${r.email}" style="color:#3b82f6;text-decoration:none">${r.email}</a></td>
+      <td><strong>${r.societe||''}</strong></td>
+      <td>${r.ville||''}</td>
+      <td class="mono">${r.cp||''}</td>
+      <td>${r.contact||''}</td>
+      <td style="font-size:11px;color:var(--t3)">${r.fonction||''}</td>
+    </tr>`).join('') +
+    '</tbody></table>' +
+    (_campPreview.rows.length > 200 ? '<div style="padding:6px;font-size:11px;color:var(--t3);text-align:center">200 / ' + _campPreview.rows.length + ' affichés (l\'export CSV contient toutes les lignes)</div>' : '');
 }
 
 // ═══ BATISCOPE — Observatoire Construction & Démographie ═══
