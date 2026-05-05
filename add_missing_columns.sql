@@ -142,6 +142,14 @@ CREATE POLICY "client_concurrents_all" ON client_concurrents FOR ALL USING (true
 CREATE INDEX IF NOT EXISTS idx_client_concurrents_client ON client_concurrents(client_id);
 CREATE INDEX IF NOT EXISTS idx_client_concurrents_concurrent ON client_concurrents(concurrent_id);
 
+-- ═══ Procédures collectives (BODACC) ═══
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS procedure_collective    TEXT;     -- type court (RJ, LJ, Sauvegarde, Plan, ...)
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS procedure_nature        TEXT;     -- libellé exact BODACC (jugement.nature)
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS procedure_date          DATE;     -- date du jugement
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS procedure_url           TEXT;     -- lien BODACC
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS procedure_checked_at    TIMESTAMPTZ; -- horodatage du dernier check
+CREATE INDEX IF NOT EXISTS idx_clients_procedure_collective ON clients(procedure_collective) WHERE procedure_collective IS NOT NULL;
+
 -- ═══ Campagnes marketing (ciblage emails) ═══
 CREATE TABLE IF NOT EXISTS campagnes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
