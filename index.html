@@ -6120,10 +6120,12 @@ async function initCarteAffairesMap() {
 let _imxFiles = [];   // [{id, filename, role, rows, fields, pkField, fieldMap}]
 let _imxOutSoc = [];  // résultat sociétés mergées
 let _imxOutCon = [];  // résultat contacts mergées
+let _imxOutCr = [];   // résultat comptes-rendus mergés
 let _imxNextId = 1;
 
 const CRM_FIELDS_SOC = ['name','code','raison_sociale','siren','siret','ape','forme_juridique','adresse_ligne1','adresse_ligne2','code_postal','city','departement','region','pays','phone','telephone2','fax','mobile','email','site_web','lat','lng','sector','contact','notes','habitudes_techniques','habitudes_geotechniques','effectif','ca','status','mk_categorie','mk_sous_categorie','mk_categorie_pro','mk_secteur','mk_type','mk_groupe','mk_origine','legacy_id'];
 const CRM_FIELDS_CON = ['nom','prenom','nom_prenom','titre','fonction','telephone','mobile','email','email2','adresse','code_postal','commentaire','legacy_id','legacy_societe_id'];
+const CRM_FIELDS_CR = ['ref','titre','date','date_creation','prochain_rdv','contenu','type_cr','statut_cr','agence','redacteur_name','client_name','contact_name','commentaire_qualite','commentaire_technique','commentaire_support','legacy_id','legacy_societe_id','legacy_contact_id'];
 
 const AUTOMAP_SOC = {
   'TXT_Societe':'name','TXT_Nom':'name','TXT_Denomination':'name',
@@ -6151,18 +6153,31 @@ const AUTOMAP_CON = {
   'TXT_CIVILITE':'titre',
   'ID_CONTACTS':'legacy_id','ID_SOCIETE':'legacy_societe_id',
 };
+const AUTOMAP_CR = {
+  'COD_TacheCommerciale':'ref','TXT_TitreTache':'titre',
+  'DTH_DateHeureRdv':'date','DTH_CreationTache':'date_creation','DTH_ProchainRDV':'prochain_rdv',
+  'TXT_CommentaireCR':'contenu','TXT_CommentaireQUALITE':'commentaire_qualite',
+  'TXT_CommentaireTECHNIQUE':'commentaire_technique','TXT_CommentaireSUPPORT':'commentaire_support',
+  'TXT_TacheCommercialeType':'type_cr','TXT_StatutTache':'statut_cr','TXT_Agence':'agence',
+  'TXT_NomCollaborateur':'redacteur_name','TXT_Collaborateur':'redacteur_name',
+  'ID_TACHESCOMMERCIALES':'legacy_id','ID_SOCIETE':'legacy_societe_id','ID_CONTACTS':'legacy_contact_id',
+};
 
 function imxAutoDetectRole(filename) {
   const fn = filename.toUpperCase();
-  if (/CONTACT/.test(fn) && !/SOCIETE/.test(fn)) return 'master_contacts';
+  // CR : tâches commerciales / rapports / comptes-rendus
+  if (/TACHESCOMMERCIALES(?!CONTACT|PJ|TYPE)|RAPPORT|COMPTERENDU|^CR_|_CR\.|VISITE/.test(fn)) return 'master_cr';
+  if (/CONTACT/.test(fn) && !/SOCIETE/.test(fn) && !/TACHESCOMMERCIALES/.test(fn)) return 'master_contacts';
   if (/SOCIETE|FIRME|ENTREPRISE/.test(fn) && !/SOCIETEMETIER|SOCIETETYPOLOGIE|CONTACT/.test(fn)) return 'master_societes';
   return 'lookup';
 }
 function imxAutoMapField(field, role) {
-  if (role === 'master_societes' || role === 'lookup') {
-    if (AUTOMAP_SOC[field]) return AUTOMAP_SOC[field];
-  }
-  if (role === 'master_contacts') {
+  if (role === 'master_cr') { if (AUTOMAP_CR[field]) return AUTOMAP_CR[field]; }
+  if (role === 'master_contacts') { if (AUTOMAP_CON[field]) return AUTOMAP_CON[field]; }
+  if (role === 'master_societes' || role === 'lookup') { if (AUTOMAP_SOC[field]) return AUTOMAP_SOC[field]; }
+  // En lookup, propose aussi les mappings CR/Contact si reconnus
+  if (role === 'lookup') {
+    if (AUTOMAP_CR[field]) return AUTOMAP_CR[field];
     if (AUTOMAP_CON[field]) return AUTOMAP_CON[field];
   }
   return '';
@@ -6227,6 +6242,7 @@ function imxSplitNomPrenom(s) {
 function imxMerge() {
   const masters_soc = _imxFiles.filter(f => f.role === 'master_societes');
   const masters_con = _imxFiles.filter(f => f.role === 'master_contacts');
+  const masters_cr = _imxFiles.filter(f => f.role === 'master_cr');
   const lookups = _imxFiles.filter(f => f.role === 'lookup');
   // Index lookups par PK
   const byPk = {};
@@ -6304,11 +6320,46 @@ function imxMerge() {
   }
   _imxOutSoc = processMasters(masters_soc);
   _imxOutCon = processMasters(masters_con);
+  _imxOutCr = processMasters(masters_cr);
   // Lookup nom de société pour les contacts
   if (_imxOutCon.length && _imxOutSoc.length) {
     const socByLegacy = {};
     for (const s of _imxOutSoc) if (s.legacy_id) socByLegacy[s.legacy_id] = s.name || '';
     for (const c of _imxOutCon) if (c.legacy_societe_id) c.client_name_legacy = socByLegacy[c.legacy_societe_id] || '';
+  }
+  // CR : résolution des liens via fichier de jonction (FIC_TACHESCOMMERCIALESCONTACTS)
+  if (_imxOutCr.length) {
+    // Trouver une jonction qui contient ID_TACHESCOMMERCIALES + ID_SOCIETE + ID_CONTACTS
+    const junction = lookups.find(f =>
+      f.fields.includes('ID_TACHESCOMMERCIALES') &&
+      (f.fields.includes('ID_SOCIETE') || f.fields.includes('ID_CONTACTS'))
+    );
+    if (junction) {
+      const byCr = {};
+      for (const r of junction.rows) {
+        const k = r['ID_TACHESCOMMERCIALES'];
+        if (!k) continue;
+        if (!byCr[k]) byCr[k] = { soc: null, con: null };
+        if (r['ID_SOCIETE'] && !byCr[k].soc) byCr[k].soc = r['ID_SOCIETE'];
+        if (r['ID_CONTACTS'] && !byCr[k].con) byCr[k].con = r['ID_CONTACTS'];
+      }
+      for (const cr of _imxOutCr) {
+        const j = byCr[cr.legacy_id];
+        if (j) {
+          if (j.soc && !cr.legacy_societe_id) cr.legacy_societe_id = j.soc;
+          if (j.con && !cr.legacy_contact_id) cr.legacy_contact_id = j.con;
+        }
+      }
+    }
+    // Résolution noms : société et contact depuis _imxOutSoc / _imxOutCon
+    const socByLegacy2 = {};
+    for (const s of _imxOutSoc) if (s.legacy_id) socByLegacy2[s.legacy_id] = s.name || '';
+    const conByLegacy = {};
+    for (const c of _imxOutCon) if (c.legacy_id) conByLegacy[c.legacy_id] = ((c.prenom||'') + ' ' + (c.nom||'')).trim();
+    for (const cr of _imxOutCr) {
+      if (cr.legacy_societe_id && !cr.client_name) cr.client_name = socByLegacy2[cr.legacy_societe_id] || '';
+      if (cr.legacy_contact_id && !cr.contact_name) cr.contact_name = conByLegacy[cr.legacy_contact_id] || '';
+    }
   }
 }
 
@@ -6328,18 +6379,20 @@ function imxRemoveFile(fileId) {
 }
 function imxClearAll() {
   if (!confirm('Vider tous les fichiers chargés ?')) return;
-  _imxFiles = []; _imxOutSoc = []; _imxOutCon = [];
+  _imxFiles = []; _imxOutSoc = []; _imxOutCon = []; _imxOutCr = [];
   renderPage('import-xml');
 }
 function imxRecalculate() {
   imxMerge();
   imxRenderPreview();
-  toast(_imxOutSoc.length + ' sociétés · ' + _imxOutCon.length + ' contacts mergés', 'success');
+  toast(_imxOutSoc.length + ' sociétés · ' + _imxOutCon.length + ' contacts · ' + _imxOutCr.length + ' CR mergés', 'success');
 }
 
 function imxRenderFileCard(f) {
   const sample = f.rows[0] || {};
-  const targets = (f.role === 'master_contacts') ? CRM_FIELDS_CON : CRM_FIELDS_SOC;
+  const targets = (f.role === 'master_contacts') ? CRM_FIELDS_CON
+                : (f.role === 'master_cr') ? CRM_FIELDS_CR
+                : CRM_FIELDS_SOC;
   return `<div class="card" style="margin-bottom:10px">
     <div class="card-header" style="flex-wrap:wrap;gap:8px;align-items:center">
       <div class="card-title" style="font-size:13px;flex:1;min-width:200px">📄 ${f.filename}</div>
@@ -6347,6 +6400,7 @@ function imxRenderFileCard(f) {
       <select onchange="imxSetRole('${f.id}',this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
         <option value="master_societes" ${f.role==='master_societes'?'selected':''}>🏢 Master Sociétés</option>
         <option value="master_contacts" ${f.role==='master_contacts'?'selected':''}>👤 Master Contacts</option>
+        <option value="master_cr" ${f.role==='master_cr'?'selected':''}>📝 Master Comptes-rendus</option>
         <option value="lookup" ${f.role==='lookup'?'selected':''}>🔗 Lookup / Jonction</option>
         <option value="ignore" ${f.role==='ignore'?'selected':''}>⚙️ Ignorer</option>
       </select>
@@ -6371,25 +6425,34 @@ function imxRenderFileCard(f) {
 }
 
 // État éditeur tableur
-let _imxGridFilter = { soc: '', con: '' };
-let _imxGridSort = { soc: { col: '', dir: 'asc' }, con: { col: '', dir: 'asc' } };
+let _imxGridFilter = { soc: '', con: '', cr: '' };
+let _imxGridSort = { soc: { col: '', dir: 'asc' }, con: { col: '', dir: 'asc' }, cr: { col: '', dir: 'asc' } };
 const IMX_REQUIRED_SOC = ['name'];
 const IMX_REQUIRED_CON = ['nom'];
+const IMX_REQUIRED_CR = ['titre','date'];
 
+function imxKindArr(kind) {
+  return (kind === 'soc') ? _imxOutSoc : (kind === 'con') ? _imxOutCon : _imxOutCr;
+}
 function imxUpdateCell(kind, idx, col, value) {
-  const arr = (kind === 'soc') ? _imxOutSoc : _imxOutCon;
+  const arr = imxKindArr(kind);
   if (!arr[idx]) return;
   arr[idx][col] = value;
 }
 function imxDeleteRow(kind, idx) {
-  const arr = (kind === 'soc') ? _imxOutSoc : _imxOutCon;
+  const arr = imxKindArr(kind);
   if (!confirm('Supprimer cette ligne ?')) return;
   arr.splice(idx, 1);
   imxRenderPreview();
 }
 function imxAddRow(kind) {
-  const arr = (kind === 'soc') ? _imxOutSoc : _imxOutCon;
-  const cols = arr.length ? [...new Set(arr.flatMap(r => Object.keys(r)))] : (kind === 'soc' ? ['name','code_postal','city','phone','email','legacy_id'] : ['nom','prenom','fonction','email','legacy_id','legacy_societe_id']);
+  const arr = imxKindArr(kind);
+  const defaults = {
+    soc: ['name','code_postal','city','phone','email','legacy_id'],
+    con: ['nom','prenom','fonction','email','legacy_id','legacy_societe_id'],
+    cr: ['titre','date','contenu','client_name','contact_name','legacy_id','legacy_societe_id'],
+  };
+  const cols = arr.length ? [...new Set(arr.flatMap(r => Object.keys(r)))] : defaults[kind];
   const newRow = {};
   for (const c of cols) newRow[c] = '';
   arr.push(newRow);
@@ -6438,21 +6501,18 @@ function imxRenderGrid(kind, rows, title, requiredFields) {
       return sort.dir === 'asc' ? cmp : -cmp;
     });
   }
-  // Détecter doublons (par siren/siret pour soc, par email+nom pour con)
+  // Détecter doublons
   const dups = new Set();
-  if (kind === 'soc') {
-    const seen = {};
-    rows.forEach((r, i) => {
-      const key = r.siret || r.siren;
-      if (key) { if (seen[key] != null) { dups.add(seen[key]); dups.add(i); } else seen[key] = i; }
-    });
-  } else {
-    const seen = {};
-    rows.forEach((r, i) => {
-      const key = (r.email || '').toLowerCase() + '|' + (r.nom || '').toLowerCase();
-      if (key !== '|') { if (seen[key] != null) { dups.add(seen[key]); dups.add(i); } else seen[key] = i; }
-    });
-  }
+  const seen = {};
+  rows.forEach((r, i) => {
+    let key = '';
+    if (kind === 'soc') key = r.siret || r.siren || '';
+    else if (kind === 'con') key = (r.email || '').toLowerCase() + '|' + (r.nom || '').toLowerCase();
+    else key = (r.legacy_id || '') + '|' + (r.titre || '') + '|' + (r.date || '');
+    if (key && key !== '|' && key !== '||') {
+      if (seen[key] != null) { dups.add(seen[key]); dups.add(i); } else seen[key] = i;
+    }
+  });
   // Compter incomplets (champs requis manquants)
   let incomplete = 0;
   rows.forEach(r => { if (requiredFields.some(f => !r[f] || !String(r[f]).trim())) incomplete++; });
@@ -6507,8 +6567,10 @@ function imxRenderGrid(kind, rows, title, requiredFields) {
 function imxRenderPreview() {
   const elS = document.getElementById('imxPreviewSoc');
   const elC = document.getElementById('imxPreviewCon');
+  const elR = document.getElementById('imxPreviewCr');
   if (elS) elS.innerHTML = imxRenderGrid('soc', _imxOutSoc, '🏢 Sociétés', IMX_REQUIRED_SOC);
   if (elC) elC.innerHTML = imxRenderGrid('con', _imxOutCon, '👤 Contacts', IMX_REQUIRED_CON);
+  if (elR) elR.innerHTML = imxRenderGrid('cr', _imxOutCr, '📝 Comptes-rendus', IMX_REQUIRED_CR);
 }
 
 function renderImportXml() {
@@ -6516,10 +6578,11 @@ function renderImportXml() {
   <div style="background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.05));border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
     <div style="font-weight:700;font-size:14px;color:var(--t1);margin-bottom:4px">📥 Import XML CODIAL — multi-fichiers avec mapping flexible</div>
     <div style="font-size:12px;color:var(--t3);max-width:920px;line-height:1.5">
-      Glissez plusieurs fichiers XML simultanément (sociétés, contacts, métiers, civilités, statuts, etc.).
-      L'outil détecte le rôle de chaque fichier (Master ou Lookup), propose un mapping pour chaque champ,
-      et fusionne tout en croisant les ID. Résultat : <strong>1 jeu sociétés + 1 jeu contacts</strong>.
-      <br><strong>⚠️ SQL préalable</strong> : exécuter <code>add_missing_columns.sql</code> dans Supabase.
+      Glissez plusieurs fichiers XML simultanément (sociétés, contacts, comptes-rendus, métiers, civilités, statuts, etc.).
+      L'outil détecte le rôle de chaque fichier (Master Sociétés / Master Contacts / Master CR / Lookup), propose un mapping
+      pour chaque champ, et fusionne tout en croisant les ID. Résultat : <strong>1 jeu sociétés + 1 jeu contacts + 1 jeu CR</strong>.
+      <br><strong>⚠️ SQL préalable</strong> : exécuter <code>add_missing_columns.sql</code> dans Supabase
+      (ajoute la colonne <code>legacy_id</code> sur clients, contacts, reports).
     </div>
   </div>
 
@@ -6539,23 +6602,31 @@ function renderImportXml() {
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0;padding:10px;background:var(--bg-3);border:1px solid var(--border);border-radius:8px;align-items:center">
     <span style="font-size:12px;color:var(--t3);font-weight:600">3️⃣</span>
     <button class="btn btn-primary" onclick="imxRecalculate()" style="font-size:13px">🔄 Recalculer le merge</button>
-    <span style="font-size:11px;color:var(--t3)">${_imxOutSoc.length} sociétés · ${_imxOutCon.length} contacts</span>
+    <span style="font-size:11px;color:var(--t3)">${_imxOutSoc.length} sociétés · ${_imxOutCon.length} contacts · ${_imxOutCr.length} CR</span>
     <span style="flex:1"></span>
     <button class="btn" onclick="imxEnrichSirene()" style="font-size:12px">🔍 Enrichir SIRENE</button>
-    <button class="btn" onclick="imxDownloadCsv('societes')" style="font-size:12px">📥 CSV sociétés</button>
-    <button class="btn" onclick="imxDownloadCsv('contacts')" style="font-size:12px">📥 CSV contacts</button>
-    <button class="btn" onclick="imxImportSocietes()" style="font-size:12px;background:#22c55e;color:#fff;border:none">⬆️ Importer sociétés</button>
-    <button class="btn" onclick="imxImportContacts()" style="font-size:12px;background:#22c55e;color:#fff;border:none">⬆️ Importer contacts</button>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;padding:10px;background:var(--bg-3);border:1px solid var(--border);border-radius:8px;align-items:center">
+    <span style="font-size:11px;color:var(--t3);font-weight:600">CSV :</span>
+    <button class="btn" onclick="imxDownloadCsv('societes')" style="font-size:12px">📥 sociétés</button>
+    <button class="btn" onclick="imxDownloadCsv('contacts')" style="font-size:12px">📥 contacts</button>
+    <button class="btn" onclick="imxDownloadCsv('cr')" style="font-size:12px">📥 CR</button>
+    <span style="flex:1"></span>
+    <span style="font-size:11px;color:var(--t3);font-weight:600">Import CRM :</span>
+    <button class="btn" onclick="imxImportSocietes()" style="font-size:12px;background:#22c55e;color:#fff;border:none">⬆️ sociétés</button>
+    <button class="btn" onclick="imxImportContacts()" style="font-size:12px;background:#22c55e;color:#fff;border:none">⬆️ contacts</button>
+    <button class="btn" onclick="imxImportCR()" style="font-size:12px;background:#22c55e;color:#fff;border:none">⬆️ CR</button>
   </div>
   <div id="imxSirenProgress" style="display:none;font-size:12px;color:var(--t2);margin-bottom:8px"></div>
   <div id="imxPreviewSoc"></div>
   <div id="imxPreviewCon"></div>
+  <div id="imxPreviewCr"></div>
   ` : ''}
   `;
 }
 
 function imxDownloadCsv(kind) {
-  const rows = (kind === 'societes') ? _imxOutSoc : _imxOutCon;
+  const rows = (kind === 'societes') ? _imxOutSoc : (kind === 'contacts') ? _imxOutCon : _imxOutCr;
   if (!rows.length) { toast('Aucune donnée — recalculez le merge d\'abord', 'warn'); return; }
   const cols = [...new Set(rows.flatMap(r => Object.keys(r)))];
   const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
@@ -6698,6 +6769,79 @@ async function imxImportContacts() {
   }
   showSyncLoading(false);
   toast('Contacts : ' + inserted + ' créés · ' + updated + ' mis à jour · ' + skipped + ' ignorés (société absente) · ' + errors + ' erreurs', errors > 0 ? 'warn' : 'success');
+}
+
+async function imxImportCR() {
+  if (!_imxOutCr.length) { toast('Recalculez le merge d\'abord', 'warn'); return; }
+  if (!confirm('Importer ' + _imxOutCr.length + ' compte(s)-rendu(s) dans le CRM ?\nLes CR sans société matchée seront ignorés.')) return;
+  showSyncLoading(true); setSyncText('Préparation...');
+  // Mapping legacy_societe_id → client_id et client_name
+  const legacySocIds = [...new Set(_imxOutCr.map(c => c.legacy_societe_id).filter(Boolean))];
+  const socMap = {}; const socNameMap = {};
+  for (let i = 0; i < legacySocIds.length; i += 200) {
+    const batch = legacySocIds.slice(i, i + 200);
+    const { data } = await sb.from('clients').select('id,name,legacy_id').in('legacy_id', batch);
+    for (const r of (data || [])) { socMap[r.legacy_id] = r.id; socNameMap[r.legacy_id] = r.name; }
+  }
+  // Mapping legacy_contact_id → contact_name (nom + prénom)
+  const legacyConIds = [...new Set(_imxOutCr.map(c => c.legacy_contact_id).filter(Boolean))];
+  const conNameMap = {};
+  for (let i = 0; i < legacyConIds.length; i += 200) {
+    const batch = legacyConIds.slice(i, i + 200);
+    const { data } = await sb.from('contacts').select('id,nom,prenom,legacy_id').in('legacy_id', batch);
+    for (const r of (data || [])) conNameMap[r.legacy_id] = ((r.prenom||'') + ' ' + (r.nom||'')).trim();
+  }
+  // Index CR existants
+  const legacyCrIds = _imxOutCr.map(c => c.legacy_id).filter(Boolean);
+  const existing = {};
+  for (let i = 0; i < legacyCrIds.length; i += 200) {
+    const batch = legacyCrIds.slice(i, i + 200);
+    const { data } = await sb.from('reports').select('id,legacy_id').in('legacy_id', batch);
+    for (const r of (data || [])) existing[r.legacy_id] = r.id;
+  }
+  // Parsing date FR (jj/mm/aaaa ...) → ISO
+  const parseDateFr = s => {
+    if (!s) return null;
+    const m = String(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) return m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+    return null;
+  };
+  let inserted = 0, updated = 0, skipped = 0, errors = 0;
+  for (let i = 0; i < _imxOutCr.length; i += 50) {
+    setSyncText('Import ' + Math.min(i + 50, _imxOutCr.length) + ' / ' + _imxOutCr.length);
+    for (const c of _imxOutCr.slice(i, i + 50)) {
+      const clientId = socMap[c.legacy_societe_id];
+      if (!clientId) { skipped++; continue; }
+      // Concaténer commentaires si présents
+      let contenu = c.contenu || '';
+      if (c.commentaire_qualite) contenu += '\n\n[QUALITÉ]\n' + c.commentaire_qualite;
+      if (c.commentaire_technique) contenu += '\n\n[TECHNIQUE]\n' + c.commentaire_technique;
+      if (c.commentaire_support) contenu += '\n\n[SUPPORT]\n' + c.commentaire_support;
+      const row = {
+        legacy_id: c.legacy_id || null,
+        client_id: clientId,
+        client_name: socNameMap[c.legacy_societe_id] || c.client_name || null,
+        contact_name: conNameMap[c.legacy_contact_id] || c.contact_name || null,
+        date: parseDateFr(c.date) || parseDateFr(c.date_creation) || null,
+        titre: c.titre || c.ref || '(Sans titre)',
+        type_cr: c.type_cr || null,
+        statut_cr: c.statut_cr || null,
+        contenu: contenu || null,
+      };
+      try {
+        if (existing[c.legacy_id]) {
+          const { error } = await sb.from('reports').update(row).eq('id', existing[c.legacy_id]);
+          if (error) errors++; else updated++;
+        } else {
+          const { error } = await sb.from('reports').insert(row);
+          if (error) { errors++; console.warn('Insert CR', row.titre, error.message); } else inserted++;
+        }
+      } catch (e) { errors++; }
+    }
+  }
+  showSyncLoading(false);
+  toast('CR : ' + inserted + ' créés · ' + updated + ' mis à jour · ' + skipped + ' ignorés (société absente) · ' + errors + ' erreurs', errors > 0 ? 'warn' : 'success');
 }
 
 // ═══ BATISCOPE — Observatoire Construction & Démographie ═══

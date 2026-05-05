@@ -145,5 +145,7 @@ CREATE INDEX IF NOT EXISTS idx_client_concurrents_concurrent ON client_concurren
 -- ═══ Import XML (CODIAL legacy) — colonnes pour traçabilité et matching ═══
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS legacy_id TEXT;
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS legacy_id TEXT;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS legacy_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_clients_legacy_id ON clients(legacy_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_legacy_id ON contacts(legacy_id);
+CREATE INDEX IF NOT EXISTS idx_reports_legacy_id ON reports(legacy_id);
