@@ -1743,7 +1743,7 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
       <div class="nav-item" data-page="enrich-siren" onclick="go('enrich-siren')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-        Enrichir SIREN
+        SIRETAGE
       </div>
       <div class="nav-item" data-page="duplicates" onclick="go('duplicates')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -3518,7 +3518,7 @@ function go(page) {
   if (page === 'cr') { crViewMode = 'list'; currentReport = null; }
   const navPage = page === 'client-detail' ? 'clients' : page === 'contact-detail' ? 'contacts' : page === 'marche-detail' ? 'marches' : page === 'affaire-detail' ? 'marches' : page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
-  const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'Enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',pipeline:'Pipeline commercial',carte:'Carte sociétés',
+  const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',bdnb:'BDNB — Base Nationale des Bâtiments',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
     cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA'};
@@ -7556,7 +7556,7 @@ function renderEnrichSiren() {
   const high = _esResults.filter(r => !r.applied && !r.rejected && r.candidates[0] && r.candidates[0]._score >= 80).length;
   return `
   <div style="background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.05));border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
-    <div style="font-weight:700;font-size:14px;color:var(--t1);margin-bottom:4px">🔎 Enrichissement SIREN / SIRET</div>
+    <div style="font-weight:700;font-size:14px;color:var(--t1);margin-bottom:4px">🔎 SIRETAGE — Enrichissement SIREN / SIRET</div>
     <div style="font-size:12px;color:var(--t3);max-width:920px;line-height:1.5">
       Cherche dans <a href="https://recherche-entreprises.api.gouv.fr" target="_blank" style="color:#6366f1">recherche-entreprises.api.gouv.fr</a>
       les fiches clients/prospects qui n'ont pas de SIRET. Pour chaque match, calcule un score de confiance basé sur le nom, le code
