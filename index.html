@@ -7323,7 +7323,16 @@ function imxRenderEsList() {
         <div style="font-size:11px;color:var(--t3);margin-top:2px">SIREN ${cand.siren||''} · SIRET ${cand.siege?.siret||''} · ${cand.nom_raison_sociale||cand.nom_complet||''}</div>
       </div>`;
     }
-    if (!item.candidates.length) return `<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px">⚠ <strong>${c.name}</strong> ${c.code_postal||''} ${c.city||''} — aucun résultat SIRENE</div>`;
+    if (!item.candidates.length) {
+      const gQuery = encodeURIComponent([c.name, c.code_postal, c.city, 'pappers'].filter(Boolean).join(' '));
+      return `<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div>⚠ <strong>${c.name}</strong> ${c.code_postal||''} ${c.city||''} — aucun résultat SIRENE</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <a href="https://www.google.com/search?q=${gQuery}" target="_blank" rel="noopener" class="btn" style="font-size:11px;text-decoration:none;color:#4285f4">🔎 Chercher sur Google</a>
+          <button class="btn" onclick="esReject(${idx})" style="font-size:11px;color:var(--red)">✕ Rejeter</button>
+        </div>
+      </div>`;
+    }
     const cand = item.candidates[0];
     const s = cand.siege || {};
     const scoreColor = cand._score >= 80 ? '#22c55e' : cand._score >= 60 ? '#f59e0b' : '#ef4444';
