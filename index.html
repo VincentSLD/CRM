@@ -1681,6 +1681,10 @@ tbody tr:last-child td { border-bottom: none; }
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Pipeline
       </div>
+      <div class="nav-item" data-page="marches-publics" onclick="go('marches-publics')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/><path d="M9 21V12h6v9"/></svg>
+        Marchés publics
+      </div>
       <div class="nav-item" data-page="marches" onclick="go('marches')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2z"/></svg>
         Marchés
@@ -3522,7 +3526,7 @@ function go(page) {
   if (page === 'cr') { crViewMode = 'list'; currentReport = null; }
   const navPage = page === 'client-detail' ? 'clients' : page === 'contact-detail' ? 'contacts' : page === 'marche-detail' ? 'marches' : page === 'affaire-detail' ? 'marches' : page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
-  const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing',pipeline:'Pipeline commercial',carte:'Carte sociétés',
+  const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing','marches-publics':'Veille marchés publics',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
     cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA'};
@@ -3550,6 +3554,7 @@ function renderPage(page) {
     'enrich-siren': renderEnrichSiren,
     duplicates: renderDuplicates,
     campagnes: renderCampagnes,
+    'marches-publics': renderMarchesPublics,
     'contact-detail': renderContactDetail,
     'client-detail': renderClientDetail,
     pipeline: renderPipeline,
@@ -8348,6 +8353,221 @@ function campRenderPreviewArea() {
     </tr>`).join('') +
     '</tbody></table>' +
     (_campPreview.rows.length > 200 ? '<div style="padding:6px;font-size:11px;color:var(--t3);text-align:center">200 / ' + _campPreview.rows.length + ' affichés (l\'export CSV contient toutes les lignes)</div>' : '');
+}
+
+// ═══ VEILLE MARCHÉS PUBLICS (DECP / BOAMP / MEF) ═══
+// 3 sources OpenDataSoft :
+// - DECP : data.economie.gouv.fr (marchés ATTRIBUÉS, montant + titulaire SIRET)
+// - BOAMP : boamp-datadila.opendatasoft.com (avis EN COURS, deadline réponse)
+// - MEF : data.economie.gouv.fr (marchés conclus plateforme achats État)
+const MP_SOURCES = {
+  decp: {
+    label: '🏆 DECP — Marchés attribués',
+    url: 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/decp-v3-marches-valides/records',
+    avisUrl: null,
+    fields: { objet: 'objet', acheteur: 'acheteur_nom', dept: 'lieuexecution_code', date: 'datenotification', montant: 'montant', titulaire: 'titulaire_denominationsociale_1', titulaireSiret: 'titulaire_id_1', cpv: 'codecpv', desc: 'There is no description' },
+    qFields: ['objet', 'acheteur_nom', 'titulaire_denominationsociale_1'],
+  },
+  boamp: {
+    label: '📢 BOAMP — Avis en cours',
+    url: 'https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records',
+    fields: { objet: 'objet', acheteur: 'nomacheteur', dept: 'code_departement', date: 'dateparution', deadline: 'datelimitereponse', desc: 'descripteur_libelle', avisUrl: 'url_avis', procedure: 'procedure_libelle', typeAvis: 'nature_libelle', typeMarche: 'type_marche' },
+    qFields: ['objet', 'nomacheteur', 'descripteur_libelle'],
+  },
+  mef: {
+    label: '🏛 MEF — Plateforme État',
+    url: 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/marches-publics-conclus-recenses-sur-la-plateforme-des-achats-de-letat-/records',
+    fields: { objet: 'objetmarche', acheteur: 'serviceachat', dept: 'departement', date: 'datenotification', montant: 'montantnotifie', titulaire: 'titulaire' },
+    qFields: ['objetmarche', 'serviceachat', 'titulaire'],
+  },
+};
+
+let _mpFilters = { tab: 'decp', q: '', dept: '', montantMin: '', dateMin: '' };
+let _mpResults = [];
+let _mpTotal = 0;
+let _mpPage = 0;
+let _mpRunning = false;
+const MP_PAGE_SIZE = 50;
+
+function mpSetTab(t) {
+  _mpFilters.tab = t;
+  _mpPage = 0; _mpResults = []; _mpTotal = 0;
+  renderPage('marches-publics');
+}
+
+function mpBuildQuery() {
+  const src = MP_SOURCES[_mpFilters.tab];
+  const params = new URLSearchParams();
+  // Recherche full-text dans les champs principaux
+  if (_mpFilters.q) {
+    const qlow = _mpFilters.q.replace(/"/g, '');
+    const where = src.qFields.map(f => `search(${f},"${qlow}")`).join(' or ');
+    params.set('where', where);
+  }
+  // Département (préfixe sur le champ correspondant)
+  const wheres = [];
+  if (_mpFilters.q) wheres.push(src.qFields.map(f => `search(${f},"${_mpFilters.q.replace(/"/g, '')}")`).join(' or '));
+  if (_mpFilters.dept) {
+    const f = src.fields.dept;
+    wheres.push(`startswith(${f},"${_mpFilters.dept}")`);
+  }
+  if (_mpFilters.montantMin && src.fields.montant) {
+    wheres.push(`${src.fields.montant} > ${parseFloat(_mpFilters.montantMin) || 0}`);
+  }
+  if (_mpFilters.dateMin) {
+    wheres.push(`${src.fields.date} >= "${_mpFilters.dateMin}"`);
+  }
+  if (wheres.length) params.set('where', wheres.join(' and '));
+  params.set('limit', String(MP_PAGE_SIZE));
+  params.set('offset', String(_mpPage * MP_PAGE_SIZE));
+  params.set('order_by', src.fields.date + ' desc');
+  return params;
+}
+
+async function mpSearch(page) {
+  _mpRunning = true;
+  if (typeof page === 'number') _mpPage = page;
+  mpRenderResults();
+  try {
+    const src = MP_SOURCES[_mpFilters.tab];
+    const params = mpBuildQuery();
+    const r = await fetch(src.url + '?' + params.toString());
+    if (!r.ok) throw new Error('API ' + r.status);
+    const d = await r.json();
+    _mpResults = d.results || [];
+    _mpTotal = d.total_count || 0;
+  } catch (e) {
+    toast('Erreur API: ' + e.message, 'error');
+    _mpResults = []; _mpTotal = 0;
+  } finally {
+    _mpRunning = false;
+    mpRenderResults();
+  }
+}
+
+function mpFmt(v) { if (v == null || v === '') return '—'; if (typeof v === 'number') return v.toLocaleString('fr-FR'); return String(v); }
+function mpFmtMoney(v) { if (v == null || v === '' || isNaN(Number(v))) return '—'; const n = Number(v); return (n >= 1000 ? (n/1000).toFixed(1) + ' k€' : n.toFixed(0) + ' €'); }
+function mpFmtDate(s) { if (!s) return '—'; const d = String(s).substring(0, 10); return d.split('-').reverse().join('/'); }
+function mpFmtDept(v) { if (!v) return '—'; if (Array.isArray(v)) return v.join(', '); return String(v).substring(0, 5); }
+
+async function mpAddTitulaireConcurrent(siret, nom) {
+  if (!siret || !nom) return;
+  const siren = siret.replace(/\D/g, '').substring(0, 9);
+  // Vérifier si déjà présent
+  const { data: ex } = await sb.from('concurrents').select('id').eq('siren', siren).limit(1);
+  if (ex && ex.length) { toast('"' + nom + '" est déjà dans les concurrents', 'info'); return; }
+  if (!confirm('Ajouter "' + nom + '" (SIREN ' + siren + ') aux concurrents ?')) return;
+  const { error } = await sb.from('concurrents').insert({ nom, siren, siret });
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  toast('"' + nom + '" ajouté aux concurrents', 'success');
+}
+
+function mpExportCsv() {
+  if (!_mpResults.length) { toast('Aucun résultat à exporter', 'warn'); return; }
+  const cols = [...new Set(_mpResults.flatMap(r => Object.keys(r)))];
+  const esc = v => '"' + (v == null ? '' : String(typeof v === 'object' ? JSON.stringify(v) : v)).replace(/"/g, '""') + '"';
+  const csv = [cols.join(';'), ..._mpResults.map(r => cols.map(c => esc(r[c])).join(';'))].join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'marches_' + _mpFilters.tab + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(_mpResults.length + ' lignes exportées', 'success');
+}
+
+function renderMarchesPublics() {
+  const src = MP_SOURCES[_mpFilters.tab];
+  const totalPages = Math.max(1, Math.ceil(_mpTotal / MP_PAGE_SIZE));
+  return `
+  <div style="background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.05));border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+    <div style="font-weight:700;font-size:14px;color:var(--t1);margin-bottom:4px">📰 Veille marchés publics</div>
+    <div style="font-size:12px;color:var(--t3);max-width:920px;line-height:1.5">
+      Trois sources data.gouv croisées : <strong>DECP</strong> (marchés attribués, voir qui gagne et à quel prix),
+      <strong>BOAMP</strong> (avis en cours, deadlines de réponse), <strong>MEF</strong> (plateforme achats de l'État).
+      Filtres : mots-clés (BET, géotechnique, sondage, etc.), département, montant min, date.
+    </div>
+  </div>
+
+  <div style="display:flex;gap:6px;margin-bottom:12px;border-bottom:1px solid var(--border)">
+    ${Object.keys(MP_SOURCES).map(k => `<button class="btn ${k===_mpFilters.tab?'btn-primary':''}" onclick="mpSetTab('${k}')" style="font-size:13px;border-radius:6px 6px 0 0;border-bottom:none">${MP_SOURCES[k].label}</button>`).join('')}
+  </div>
+
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input type="text" placeholder="Mots-clés (ex: géotechnique, BET, étude de sol...)" value="${(_mpFilters.q||'').replace(/"/g,'&quot;')}" oninput="_mpFilters.q=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="flex:1;min-width:240px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+      <input type="text" placeholder="Dpt (ex: 85)" value="${_mpFilters.dept||''}" oninput="_mpFilters.dept=this.value" style="width:90px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+      <input type="number" placeholder="Montant min €" value="${_mpFilters.montantMin||''}" oninput="_mpFilters.montantMin=this.value" style="width:130px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+      <input type="date" value="${_mpFilters.dateMin||''}" oninput="_mpFilters.dateMin=this.value" title="Date min (publié/notifié après)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+      <button class="btn btn-primary" onclick="mpSearch(0)" style="font-size:12px">${_mpRunning?'⏳':'🔍 Rechercher'}</button>
+      <button class="btn" onclick="mpExportCsv()" style="font-size:12px"${_mpResults.length===0?' disabled':''}>📥 CSV</button>
+    </div>
+  </div>
+
+  <div id="mpResults"></div>
+
+  ${_mpTotal > MP_PAGE_SIZE ? `
+  <div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:12px">
+    <button class="btn" ${_mpPage===0?'disabled':''} onclick="mpSearch(${_mpPage-1})">← Précédent</button>
+    <span style="font-size:13px;color:var(--t2)">Page ${_mpPage+1} / ${totalPages} (${_mpTotal.toLocaleString('fr-FR')} résultats)</span>
+    <button class="btn" ${(_mpPage+1)>=totalPages?'disabled':''} onclick="mpSearch(${_mpPage+1})">Suivant →</button>
+  </div>` : ''}
+  `;
+}
+
+function mpRenderResults() {
+  const el = document.getElementById('mpResults');
+  if (!el) return;
+  if (_mpRunning) { el.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--t3)">⏳ Recherche…</div></div>'; return; }
+  if (!_mpResults.length) { el.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--t3);font-size:13px">Aucun résultat — ajustez les filtres puis cliquez Rechercher.</div></div>'; return; }
+  const tab = _mpFilters.tab;
+  const f = MP_SOURCES[tab].fields;
+  let head = '', rows = '';
+  if (tab === 'decp') {
+    head = '<tr><th>Date</th><th>Dpt</th><th>Acheteur</th><th>Objet</th><th>Titulaire</th><th style="text-align:right">Montant</th><th>Actions</th></tr>';
+    rows = _mpResults.map(r => {
+      const titulaireNom = r[f.titulaire] || '—';
+      const titulaireSiret = r[f.titulaireSiret] || '';
+      const sirenLink = titulaireSiret ? '<a href="https://www.pappers.fr/entreprise/' + String(titulaireSiret).substring(0,9) + '" target="_blank" rel="noopener" style="color:#3b82f6;margin-right:4px;text-decoration:none">📋</a>' : '';
+      const addBtn = titulaireSiret ? `<button class="btn" onclick="mpAddTitulaireConcurrent('${titulaireSiret}','${(titulaireNom||'').replace(/'/g,"\\'")}')" style="font-size:10px;padding:2px 6px" title="Ajouter aux concurrents">+ concurrent</button>` : '';
+      return `<tr>
+        <td style="font-size:11px;white-space:nowrap">${mpFmtDate(r[f.date])}</td>
+        <td class="mono">${mpFmtDept(r[f.dept])}</td>
+        <td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis"><strong>${r[f.acheteur]||'—'}</strong></td>
+        <td style="font-size:12px;max-width:340px">${r[f.objet]||'—'}</td>
+        <td style="font-size:11px">${sirenLink}${titulaireNom}</td>
+        <td style="text-align:right;font-weight:700;white-space:nowrap">${mpFmtMoney(r[f.montant])}</td>
+        <td>${addBtn}</td>
+      </tr>`;
+    }).join('');
+  } else if (tab === 'boamp') {
+    head = '<tr><th>Parution</th><th>Deadline</th><th>Dpt</th><th>Acheteur</th><th>Objet</th><th>Type</th><th>Lien</th></tr>';
+    rows = _mpResults.map(r => {
+      const url = r[f.avisUrl] || '';
+      return `<tr>
+        <td style="font-size:11px;white-space:nowrap">${mpFmtDate(r[f.date])}</td>
+        <td style="font-size:11px;white-space:nowrap;color:var(--amber);font-weight:600">${mpFmtDate(r[f.deadline])}</td>
+        <td class="mono">${mpFmtDept(r[f.dept])}</td>
+        <td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis"><strong>${r[f.acheteur]||'—'}</strong></td>
+        <td style="font-size:12px;max-width:340px">${r[f.objet]||'—'}</td>
+        <td style="font-size:11px">${(Array.isArray(r[f.typeMarche]) ? r[f.typeMarche].join(', ') : r[f.typeMarche]||'')} ${r[f.procedure]||''}</td>
+        <td>${url ? '<a href="'+url+'" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:none;font-size:11px">↗ avis</a>' : '—'}</td>
+      </tr>`;
+    }).join('');
+  } else { // mef
+    head = '<tr><th>Date</th><th>Dpt</th><th>Acheteur</th><th>Objet</th><th>Titulaire</th><th style="text-align:right">Montant</th></tr>';
+    rows = _mpResults.map(r => `<tr>
+      <td style="font-size:11px;white-space:nowrap">${mpFmtDate(r[f.date])}</td>
+      <td class="mono">${mpFmtDept(r[f.dept])}</td>
+      <td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis"><strong>${r[f.acheteur]||'—'}</strong></td>
+      <td style="font-size:12px;max-width:340px">${r[f.objet]||'—'}</td>
+      <td style="font-size:11px">${r[f.titulaire]||'—'}</td>
+      <td style="text-align:right;font-weight:700;white-space:nowrap">${mpFmtMoney(r[f.montant])}</td>
+    </tr>`).join('');
+  }
+  el.innerHTML = `<div class="card"><div class="card-body" style="padding:0"><div class="table-wrap" style="max-height:calc(100vh - 380px);overflow:auto">
+    <table style="font-size:12px"><thead style="position:sticky;top:0;background:var(--card);z-index:1">${head}</thead><tbody>${rows}</tbody></table>
+  </div></div></div>`;
 }
 
 // ═══ BATISCOPE — Observatoire Construction & Démographie ═══
