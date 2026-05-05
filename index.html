@@ -8651,7 +8651,6 @@ function _pcIsClosing(nature) {
 
 async function pcFetchSiren(siren) {
   if (!siren || siren.length !== 9) return null;
-  // Recherche full-text sur le SIREN (le champ registre est parfois null mais le SIREN apparaît dans listepersonnes)
   const params = new URLSearchParams({
     where: `familleavis_lib = "Procédures collectives"`,
     'q.q': siren,
@@ -8663,6 +8662,23 @@ async function pcFetchSiren(siren) {
     if (!r.ok) return null;
     const d = await r.json();
     return (d.results || []);
+  } catch { return null; }
+}
+
+// Récupère l'état INSEE depuis recherche-entreprises (Active / Cessée + date de fermeture)
+async function pcFetchInsee(siren) {
+  if (!siren || siren.length !== 9) return null;
+  try {
+    const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + siren + '&per_page=1');
+    if (!r.ok) return null;
+    const d = await r.json();
+    const e = (d.results || [])[0];
+    if (!e) return null;
+    return {
+      etat: e.etat_administratif || null, // 'A' ou 'C'
+      date_fermeture: e.date_fermeture || (e.siege && e.siege.date_fermeture) || null,
+      nom_complet: e.nom_complet || e.nom_raison_sociale || null,
+    };
   } catch { return null; }
 }
 
@@ -8687,10 +8703,17 @@ async function pcLaunchSearch() {
     if (_pcCancel) break;
     const c = clients[i];
     if (status) status.innerHTML = '🔍 ' + (i+1) + '/' + clients.length + ' — ' + c.name;
-    const annonces = await pcFetchSiren(c.siren);
-    if (annonces && annonces.length) {
-      const last = annonces[0];
-      _pcResults.push({ client: c, last, all: annonces });
+    // 2 fetchs en parallèle : BODACC + SIRENE
+    const [annonces, insee] = await Promise.all([pcFetchSiren(c.siren), pcFetchInsee(c.siren)]);
+    const hasBodacc = annonces && annonces.length;
+    const isClosed = insee && insee.etat === 'C';
+    if (hasBodacc || isClosed) {
+      _pcResults.push({
+        client: c,
+        last: hasBodacc ? annonces[0] : null,
+        all: hasBodacc ? annonces : [],
+        insee: insee || null,
+      });
     }
     pcRenderList();
     await new Promise(r => setTimeout(r, 700));
@@ -8705,15 +8728,20 @@ async function pcApply(idx) {
   if (!item) return;
   const last = item.last || {};
   const j = last.jugement || {};
-  const dept = last.numerodepartement || '';
-  const url = last.parution ? ('https://www.bodacc.fr/pages/annonces-commerciales-detail/?q.id=id:' + last.id) : null;
+  const url = last.id ? ('https://www.bodacc.fr/pages/annonces-commerciales-detail/?q.id=id:' + last.id) : null;
   const update = {
-    procedure_collective: _pcShortType(j.nature),
-    procedure_nature: j.nature || null,
-    procedure_date: j.date || last.dateparution || null,
-    procedure_url: url,
     procedure_checked_at: new Date().toISOString(),
   };
+  if (last.id) {
+    update.procedure_collective = _pcShortType(j.nature);
+    update.procedure_nature = j.nature || null;
+    update.procedure_date = j.date || last.dateparution || null;
+    update.procedure_url = url;
+  }
+  if (item.insee) {
+    update.etat_insee = item.insee.etat || null;
+    update.date_fermeture_insee = item.insee.date_fermeture || null;
+  }
   const { error } = await sb.from('clients').update(update).eq('id', item.client.id);
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
   item.applied = true;
@@ -8732,37 +8760,53 @@ function pcRenderList() {
   }
   el.innerHTML = _pcResults.map((item, idx) => {
     const c = item.client;
-    const last = item.last || {};
-    const j = last.jugement || {};
-    const shortType = _pcShortType(j.nature);
-    const isClose = _pcIsClosing(j.nature);
-    const color = isClose ? '#22c55e' : (shortType === 'LJ' ? '#dc2626' : (shortType === 'RJ' ? '#ef4444' : (shortType === 'Sauvegarde' ? '#f59e0b' : '#6b7280')));
-    const url = last.parution ? ('https://www.bodacc.fr/pages/annonces-commerciales-detail/?q.id=id:' + last.id) : null;
-    const others = item.all.slice(1).map(a => {
-      const aj = a.jugement || {};
-      return '<span style="display:inline-block;margin-right:6px;font-size:10px;color:var(--t3)" title="' + (aj.nature||'') + '">📄 ' + (a.dateparution||'?') + ' · ' + _pcShortType(aj.nature) + '</span>';
-    }).join('');
+    const last = item.last || null;
+    const insee = item.insee || null;
+    const isRadiated = insee && insee.etat === 'C';
+    // Badge RADIÉE prioritaire
+    const radiatedBadge = isRadiated
+      ? '<div style="background:#dc2626;color:#fff;padding:6px 10px;border-radius:6px;display:flex;align-items:center;gap:8px;margin-bottom:6px"><strong style="font-size:12px">❌ RADIÉE INSEE</strong>' + (insee.date_fermeture ? '<span style="font-size:11px;opacity:.9">— fermée le ' + insee.date_fermeture + '</span>' : '') + '</div>'
+      : '';
+    // Bloc BODACC (si annonce trouvée)
+    let bodaccBlock = '';
+    if (last) {
+      const j = last.jugement || {};
+      const shortType = _pcShortType(j.nature);
+      const isClose = _pcIsClosing(j.nature);
+      const color = isClose ? '#22c55e' : (shortType === 'LJ' ? '#dc2626' : (shortType === 'RJ' ? '#ef4444' : (shortType === 'Sauvegarde' ? '#f59e0b' : '#6b7280')));
+      const url = last.id ? ('https://www.bodacc.fr/pages/annonces-commerciales-detail/?q.id=id:' + last.id) : null;
+      const others = item.all.slice(1).map(a => {
+        const aj = a.jugement || {};
+        return '<span style="display:inline-block;margin-right:6px;font-size:10px;color:var(--t3)" title="' + (aj.nature||'') + '">📄 ' + (a.dateparution||'?') + ' · ' + _pcShortType(aj.nature) + '</span>';
+      }).join('');
+      bodaccBlock = `<div style="background:var(--bg-3);border:1px solid var(--border);border-left:4px solid ${color};border-radius:6px;padding:8px">
+        <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
+          <span style="display:inline-block;padding:2px 8px;border-radius:4px;background:${color};color:#fff;font-weight:700;font-size:11px">${shortType}</span>
+          <strong style="font-size:13px">${j.nature || j.famille || 'Procédure'}</strong>
+          <span style="font-size:11px;color:var(--t3);margin-left:auto">${j.date || last.dateparution || ''}</span>
+        </div>
+        <div style="font-size:11px;color:var(--t3);margin-top:4px">
+          ${last.tribunal || ''} · Dpt ${last.numerodepartement || '—'}
+          ${last.commercant ? ' · <em>' + last.commercant + '</em>' : ''}
+          ${url ? ' · <a href="'+url+'" target="_blank" rel="noopener" style="color:#3b82f6">↗ BODACC</a>' : ''}
+        </div>
+        ${others ? '<div style="margin-top:6px;font-size:10px;color:var(--t3)">Antériorité : ' + others + '</div>' : ''}
+      </div>`;
+    } else if (isRadiated) {
+      bodaccBlock = '<div style="font-size:11px;color:var(--t3);font-style:italic;padding:8px">Aucune annonce BODACC trouvée — radiation enregistrée par l\'INSEE (causes possibles : LJ ancienne, fusion, transfert, cessation simple).</div>';
+    }
     return `<div style="padding:10px 14px;border-bottom:1px solid var(--border)${item.applied?';background:rgba(34,197,94,.08)':''}">
       <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
         <div style="flex:1;min-width:240px">
           <div style="font-weight:600;font-size:13px"><a href="#" onclick="event.preventDefault();showClient('${c.id}')" style="color:var(--t1);text-decoration:none">${c.name}</a> ${c.akuiteo_id ? '<span title="Synchro Akuiteo" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;vertical-align:middle"></span>' : ''}</div>
           <div style="font-size:11px;color:var(--t3);margin-top:2px">SIREN ${c.siren} · ${c.code_postal||''} ${c.city||''} · ${c.status||''}</div>
         </div>
-        <div style="flex:2;min-width:280px;background:var(--bg-3);border:1px solid var(--border);border-left:4px solid ${color};border-radius:6px;padding:8px">
-          <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
-            <span style="display:inline-block;padding:2px 8px;border-radius:4px;background:${color};color:#fff;font-weight:700;font-size:11px">${shortType}</span>
-            <strong style="font-size:13px">${j.nature || j.famille || 'Procédure'}</strong>
-            <span style="font-size:11px;color:var(--t3);margin-left:auto">${j.date || last.dateparution || ''}</span>
-          </div>
-          <div style="font-size:11px;color:var(--t3);margin-top:4px">
-            ${last.tribunal || ''} · Dpt ${last.numerodepartement || '—'}
-            ${last.commercant ? ' · <em>' + last.commercant + '</em>' : ''}
-            ${url ? ' · <a href="'+url+'" target="_blank" rel="noopener" style="color:#3b82f6">↗ BODACC</a>' : ''}
-          </div>
-          ${others ? '<div style="margin-top:6px;font-size:10px;color:var(--t3)">Antériorité : ' + others + '</div>' : ''}
+        <div style="flex:2;min-width:280px">
+          ${radiatedBadge}
+          ${bodaccBlock}
         </div>
         <div style="display:flex;flex-direction:column;gap:4px">
-          ${item.applied ? '<span style="font-size:11px;color:#22c55e">✓ Enregistré</span>' : '<button class="btn btn-primary" onclick="pcApply('+idx+')" style="font-size:11px">📝 Enregistrer sur la fiche</button>'}
+          ${item.applied ? '<span style="font-size:11px;color:#22c55e">✓ Enregistré</span>' : '<button class="btn btn-primary" onclick="pcApply('+idx+')" style="font-size:11px">📝 Enregistrer</button>'}
         </div>
       </div>
     </div>`;
@@ -8773,12 +8817,13 @@ function renderProceduresColl() {
   const totalPages = Math.max(1, Math.ceil(_pcTotal / PC_PAGE_SIZE));
   return `
   <div style="background:linear-gradient(135deg,rgba(239,68,68,.08),rgba(245,158,11,.05));border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
-    <div style="font-weight:700;font-size:14px;color:var(--t1);margin-bottom:4px">⚠ Veille procédures collectives (BODACC)</div>
+    <div style="font-weight:700;font-size:14px;color:var(--t1);margin-bottom:4px">⚠ Veille procédures collectives + état INSEE</div>
     <div style="font-size:12px;color:var(--t3);max-width:920px;line-height:1.5">
-      Pour chaque client/prospect avec SIREN, l'outil interroge le <a href="https://bodacc-datadila.opendatasoft.com" target="_blank" style="color:#6366f1">Bulletin Officiel des Annonces Civiles et Commerciales (BODACC)</a>
-      à la recherche d'annonces de procédures collectives (sauvegarde, redressement judiciaire, liquidation, plan…).
-      Les fiches concernées sont listées ; tu peux enregistrer le statut sur la fiche client. Throttle ~1.5 req/s.
-      <br><strong>⚠️ SQL préalable</strong> : exécuter <code>add_missing_columns.sql</code> (colonnes <code>procedure_collective</code>, <code>procedure_date</code>, etc.).
+      Pour chaque client/prospect avec SIREN, l'outil interroge en parallèle :
+      <br>• <strong>BODACC</strong> (<a href="https://bodacc-datadila.opendatasoft.com" target="_blank" style="color:#6366f1">annonces officielles</a>) — détecte sauvegarde, RJ, liquidation, plans, jugements de clôture
+      <br>• <strong>INSEE</strong> (<a href="https://recherche-entreprises.api.gouv.fr" target="_blank" style="color:#6366f1">recherche-entreprises</a>) — détecte les fiches <strong>radiées</strong> (état "C") avec date de fermeture
+      <br>Toute fiche avec annonce BODACC OU radiée INSEE est listée. Throttle ~1.5 req/s par source.
+      <br><strong>⚠️ SQL préalable</strong> : <code>add_missing_columns.sql</code> (colonnes <code>procedure_*</code>, <code>etat_insee</code>, <code>date_fermeture_insee</code>).
     </div>
   </div>
 
