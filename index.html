@@ -7325,29 +7325,47 @@ function esReject(idx) {
 }
 
 // Suppression d'une fiche client/prospect depuis Enrichir SIREN.
-// Vérifie les liens (devis/commandes/factures), demande confirmation + mot de passe
-// si configuré, supprime les CR et contacts liés puis la fiche, et retire la ligne
-// de la liste sans changer de page.
+// Vérifie TOUTES les liaisons (devis, commandes, factures, affaires, marchés,
+// contacts, comptes-rendus) et avertit en détail. Bloque si liaisons
+// commerciales (documents factures), warning seulement pour CR/contacts.
 async function esDeleteClient(idx) {
   const item = _esResults[idx];
   if (!item) return;
   const c = item.client;
-  // Bloquer si rattachée à des documents commerciaux
-  const linkedDevis = (DB.devis || []).filter(d => d.client_id === c.id);
-  const linkedCmd = (DB.commandes || []).filter(x => x.client_id === c.id);
-  const linkedFact = (DB.factures || []).filter(f => f.client_id === c.id);
-  if (linkedDevis.length || linkedCmd.length || linkedFact.length) {
-    const details = [];
-    if (linkedDevis.length) details.push(linkedDevis.length + ' devis');
-    if (linkedCmd.length) details.push(linkedCmd.length + ' commande(s)');
-    if (linkedFact.length) details.push(linkedFact.length + ' facture(s)');
-    toast('Impossible de supprimer "' + c.name + '" : rattachée à ' + details.join(', '), 'error');
+  // Liaisons en mémoire (DB.* déjà chargé)
+  const linkedDevis    = (DB.devis     || []).filter(d => d.client_id === c.id);
+  const linkedCmd      = (DB.commandes || []).filter(x => x.client_id === c.id);
+  const linkedFact     = (DB.factures  || []).filter(f => f.client_id === c.id);
+  const linkedAffaires = (DB.affaires  || []).filter(a => a.client_id === c.id);
+  const linkedMarches  = (DB.marches   || []).filter(m => m.client_id === c.id);
+  const linkedReports  = (DB.reports   || []).filter(r => r.client_id === c.id);
+  // Contacts : on interroge Supabase au cas où (pas tous chargés en mémoire)
+  let linkedContactsCount = 0;
+  try {
+    const { count } = await sb.from('contacts').select('id', { count: 'exact', head: true }).eq('client_id', c.id);
+    linkedContactsCount = count || 0;
+  } catch {}
+
+  // Blocage si données commerciales liées (intouchables sans cascade)
+  const blocking = [];
+  if (linkedDevis.length)    blocking.push(linkedDevis.length + ' devis');
+  if (linkedCmd.length)      blocking.push(linkedCmd.length + ' commande(s)');
+  if (linkedFact.length)     blocking.push(linkedFact.length + ' facture(s)');
+  if (linkedAffaires.length) blocking.push(linkedAffaires.length + ' affaire(s)');
+  if (linkedMarches.length)  blocking.push(linkedMarches.length + ' marché(s)');
+  if (blocking.length) {
+    alert('⛔ Suppression impossible\n\n"' + c.name + '" est rattachée à :\n• ' + blocking.join('\n• ') +
+      '\n\nVeuillez d\'abord supprimer ou réaffecter ces documents.');
     return;
   }
-  const linkedReports = (DB.reports || []).filter(r => r.client_id === c.id);
-  const confirmMsg = 'Supprimer la société "' + c.name + '" ?\n\n' +
-    (linkedReports.length ? linkedReports.length + ' compte(s)-rendu(s) seront aussi supprimés.\n\n' : '') +
-    'Cette action est irréversible.';
+
+  // Warning si CR ou contacts liés (sera supprimé en cascade)
+  const cascade = [];
+  if (linkedReports.length)    cascade.push(linkedReports.length + ' compte(s)-rendu(s)');
+  if (linkedContactsCount > 0) cascade.push(linkedContactsCount + ' contact(s)');
+  const confirmMsg = '⚠ Supprimer la société "' + c.name + '" ?' +
+    (cascade.length ? '\n\nLes éléments suivants seront aussi supprimés :\n• ' + cascade.join('\n• ') : '\n\nAucune liaison détectée.') +
+    '\n\nCette action est irréversible.';
   if (!confirm(confirmMsg)) return;
   const pwd = (typeof loadDeletePassword === 'function') ? await loadDeletePassword() : '';
   if (pwd) {
