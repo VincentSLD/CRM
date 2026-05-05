@@ -7106,7 +7106,9 @@ async function imxImportCR() {
 let _esResults = []; // [{client, candidates, applied, rejected}]
 let _esRunning = false;
 let _esCancel = false;
-let _esFilters = { dept: '', status: '', limit: 100, withAkuiteo: false };
+const ES_PAGE_SIZE = 100;
+let _esFilters = { dept: '', page: 0, withAkuiteo: false };
+let _esTotal = 0;
 
 function _esLevenshtein(a, b) {
   if (a === b) return 0;
@@ -7162,15 +7164,17 @@ async function esLaunchSearch() {
   if (_esRunning) { _esCancel = true; return; }
   _esRunning = true; _esCancel = false; _esResults = [];
   imxRenderEsList();
+  const from = _esFilters.page * ES_PAGE_SIZE;
+  const to = from + ES_PAGE_SIZE - 1;
   let q = sb.from('clients').select('id,name,city,code_postal,departement,siren,siret,ape,akuiteo_id,status', { count: 'exact' })
     .or('siret.is.null,siret.eq.')
     .order('name', { ascending: true });
   if (_esFilters.dept) q = q.ilike('code_postal', _esFilters.dept + '%');
-  if (_esFilters.status) q = q.eq('status', _esFilters.status);
-  q = q.range(0, _esFilters.limit - 1);
-  const { data: clients, error } = await q;
+  q = q.range(from, to);
+  const { data: clients, count, error } = await q;
+  _esTotal = count || 0;
   if (error) { toast('Erreur Supabase: ' + error.message, 'error'); _esRunning = false; renderPage('enrich-siren'); return; }
-  if (!clients || !clients.length) { toast('Aucune fiche sans SIRET trouvée', 'info'); _esRunning = false; renderPage('enrich-siren'); return; }
+  if (!clients || !clients.length) { toast('Aucune fiche sans SIRET sur cette page', 'info'); _esRunning = false; renderPage('enrich-siren'); return; }
   const status = document.getElementById('esStatus');
   for (let i = 0; i < clients.length; i++) {
     if (_esCancel) break;
@@ -7331,17 +7335,7 @@ function renderEnrichSiren() {
     <div class="card-header"><div class="card-title">Filtres et lancement</div></div>
     <div class="card-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <div><label class="fl">Département</label>
-        <input class="fi" placeholder="Ex: 85" value="${_esFilters.dept}" oninput="_esFilters.dept=this.value" style="width:80px;font-size:12px"></div>
-      <div><label class="fl">Statut</label>
-        <select class="fi" onchange="_esFilters.status=this.value" style="font-size:12px">
-          <option value="" ${!_esFilters.status?'selected':''}>— Tous —</option>
-          <option value="client" ${_esFilters.status==='client'?'selected':''}>Client</option>
-          <option value="prospect" ${_esFilters.status==='prospect'?'selected':''}>Prospect</option>
-          <option value="objectif" ${_esFilters.status==='objectif'?'selected':''}>Objectif</option>
-          <option value="dormant" ${_esFilters.status==='dormant'?'selected':''}>Dormant</option>
-        </select></div>
-      <div><label class="fl">Max fiches à analyser</label>
-        <input class="fi" type="number" value="${_esFilters.limit}" oninput="_esFilters.limit=Math.max(1,parseInt(this.value)||100)" style="width:90px;font-size:12px"></div>
+        <input class="fi" placeholder="Ex: 85" value="${_esFilters.dept}" oninput="_esFilters.dept=this.value;_esFilters.page=0" style="width:80px;font-size:12px"></div>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-left:6px">
         <input type="checkbox" ${_esFilters.withAkuiteo?'checked':''} onchange="_esFilters.withAkuiteo=this.checked"> Pousser aussi dans Akuiteo
       </label>
@@ -7349,6 +7343,12 @@ function renderEnrichSiren() {
       <button class="btn btn-primary" onclick="esLaunchSearch()" style="font-size:13px">${_esRunning?'⏹ Arrêter':'🔍 Lancer la recherche'}</button>
       ${high > 0 ? `<button class="btn" onclick="esApplyAll(80)" style="font-size:12px;background:#22c55e;color:#fff;border:none">✓ Tout appliquer ≥ 80% (${high})</button>` : ''}
     </div>
+    ${_esTotal > 0 ? `<div style="padding:0 14px 12px;display:flex;gap:8px;align-items:center;font-size:12px;color:var(--t3);flex-wrap:wrap">
+      <span>Page <strong>${_esFilters.page + 1}</strong> / ${Math.max(1, Math.ceil(_esTotal / ES_PAGE_SIZE))} (${_esTotal} fiches sans SIRET au total)</span>
+      <span style="flex:1"></span>
+      <button class="btn" ${_esFilters.page===0||_esRunning?'disabled':''} onclick="_esFilters.page=Math.max(0,_esFilters.page-1);esLaunchSearch()" style="font-size:11px">← Page précédente</button>
+      <button class="btn" ${(_esFilters.page+1)*ES_PAGE_SIZE>=_esTotal||_esRunning?'disabled':''} onclick="_esFilters.page=_esFilters.page+1;esLaunchSearch()" style="font-size:11px">Page suivante →</button>
+    </div>` : ''}
   </div>
 
   ${total > 0 ? `<div style="display:flex;gap:14px;font-size:12px;color:var(--t3);margin-bottom:8px">
