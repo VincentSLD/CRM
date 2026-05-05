@@ -7687,13 +7687,28 @@ async function dupScanAll() {
       }
       for (const k of Object.keys(m)) if (m[k].length > 1) addGroup('SIREN', k, m[k]);
     }
+    // Pour 'Nom' et 'Téléphone' on sous-partitionne par code_postal ou ville
+    // afin de ne pas considérer comme doublons des fiches de villes différentes
+    const splitByLocation = (clients) => {
+      const subs = {};
+      for (const c of clients) {
+        const cp = (c.code_postal || '').trim();
+        const ville = _dupNormalize(c.city || '');
+        const key = cp || ville || '__noloc__';
+        (subs[key] = subs[key] || []).push(c);
+      }
+      return Object.values(subs).filter(arr => arr.length >= 2);
+    };
     if (_dupCriteria.name) {
       const m = {};
       for (const c of all) {
         const k = _dupNormalize(c.name);
         if (k.length >= 4) (m[k] = m[k] || []).push(c);
       }
-      for (const k of Object.keys(m)) if (m[k].length > 1) addGroup('Nom', k, m[k]);
+      for (const k of Object.keys(m)) {
+        if (m[k].length < 2) continue;
+        for (const sub of splitByLocation(m[k])) addGroup('Nom', k, sub);
+      }
     }
     if (_dupCriteria.phone) {
       const m = {};
@@ -7701,7 +7716,10 @@ async function dupScanAll() {
         const k = (c.phone || '').replace(/\D/g, '');
         if (k.length >= 10) (m[k] = m[k] || []).push(c);
       }
-      for (const k of Object.keys(m)) if (m[k].length > 1) addGroup('Téléphone', k, m[k]);
+      for (const k of Object.keys(m)) {
+        if (m[k].length < 2) continue;
+        for (const sub of splitByLocation(m[k])) addGroup('Téléphone', k, sub);
+      }
     }
     _dupGroups = groups.sort((a, b) => b.clients.length - a.clients.length);
     toast(_dupGroups.length + ' groupe(s) de doublons détectés sur ' + all.length + ' fiches', _dupGroups.length ? 'warn' : 'success');
