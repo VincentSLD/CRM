@@ -6451,11 +6451,37 @@ function imxParseCsv(text) {
   if (cell.length || row.length) { row.push(cell); rows.push(row); }
   if (!rows.length) return [];
   const headers = rows[0].map(h => (h || '').trim());
-  return rows.slice(1).filter(r => r.some(v => v && v.trim())).map(r => {
-    const obj = {};
-    for (let j = 0; j < headers.length; j++) obj[headers[j]] = r[j] !== undefined ? r[j] : '';
-    return obj;
-  });
+  return rows.slice(1)
+    .filter(r => r.some(v => v && v.trim()) && !((r[0] || '').trim().startsWith('#'))) // ignore lignes vides + lignes commentaires
+    .map(r => {
+      const obj = {};
+      for (let j = 0; j < headers.length; j++) obj[headers[j]] = r[j] !== undefined ? r[j] : '';
+      return obj;
+    });
+}
+
+// Templates CSV — colonnes 1:1 attendues par l'import CRM (déjà mappées)
+const IMX_TPL_SOC = ['legacy_id','name','code','code_codial','raison_sociale','siren','siret','ape','forme_juridique','adresse_ligne1','adresse_ligne2','code_postal','city','departement','region','pays','phone','telephone2','fax','mobile','email','site_web','lat','lng','sector','contact','notes','habitudes_techniques','habitudes_geotechniques','effectif','ca','status','account_manager_name','salesman_name','commerciaux_associes','mk_categorie','mk_sous_categorie','mk_categorie_pro','mk_secteur','mk_type','mk_groupe','mk_origine'];
+const IMX_TPL_CON = ['legacy_id','legacy_societe_id','nom','prenom','titre','fonction','telephone','mobile','email','email2','adresse','code_postal','commentaire'];
+const IMX_TPL_CR  = ['legacy_id','legacy_societe_id','legacy_contact_id','titre','ref','date','date_creation','prochain_rdv','type_cr','statut_cr','agence','redacteur_name','client_name','contact_name','contenu','commentaire_qualite','commentaire_technique','commentaire_support'];
+
+function imxDownloadTemplate(kind) {
+  const tpl = (kind === 'soc') ? IMX_TPL_SOC : (kind === 'con') ? IMX_TPL_CON : IMX_TPL_CR;
+  const name = (kind === 'soc') ? 'modele_societes' : (kind === 'con') ? 'modele_contacts' : 'modele_comptes_rendus';
+  // Ligne 1 : en-têtes ; ligne 2 : commentaire de guide (sera ignoré à l'import car commence par #)
+  const guide = {
+    soc: 'Une ligne par société. legacy_id obligatoire pour upsert. name obligatoire. status = prospect|client|objectif|dormant. code limité à 10 chars (Akuiteo).',
+    con: 'Une ligne par contact. legacy_societe_id doit pointer vers clients.legacy_id (déjà importé). nom obligatoire.',
+    cr:  'Une ligne par CR. legacy_societe_id doit pointer vers clients.legacy_id. date au format aaaa-mm-jj ou jj/mm/aaaa. contenu = corps texte/HTML.'
+  }[kind];
+  const csv = tpl.join(';') + '\r\n# ' + guide.replace(/;/g, ',') + '\r\n';
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name + '_template.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('Modèle CSV téléchargé : ' + tpl.length + ' colonnes', 'success');
 }
 
 // Charger un CSV externe (modifié dans Excel) à la place du résultat construit
@@ -6686,6 +6712,23 @@ function renderImportXml() {
       <strong>4️⃣ Modifier les CSV</strong> (grille éditable ou CSV externe Excel) →
       <strong>5️⃣ Mapper les colonnes CSV → champs CRM</strong> et importer.
       <br><strong>⚠️ SQL préalable</strong> : <code>add_missing_columns.sql</code> dans Supabase (colonne <code>legacy_id</code>).
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-header"><div class="card-title">📋 Modèles CSV vierges (à remplir dans Excel puis ré-importer)</div></div>
+    <div class="card-body">
+      <div style="font-size:12px;color:var(--t3);margin-bottom:10px">
+        Si vous voulez créer manuellement vos données ou si la conversion XML est trop complexe, téléchargez un modèle vierge,
+        remplissez-le dans Excel (séparateur <code>;</code>, encodage UTF-8), puis chargez-le via <strong>"📤 Charger un CSV externe"</strong>
+        dans la card correspondante (étape 3). Les colonnes des modèles correspondent <strong>directement aux champs du CRM</strong>
+        — aucun mapping supplémentaire n'est nécessaire à l'étape 5.
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn" onclick="imxDownloadTemplate('soc')" style="font-size:12px">🏢 Modèle Sociétés (${IMX_TPL_SOC.length} colonnes)</button>
+        <button class="btn" onclick="imxDownloadTemplate('con')" style="font-size:12px">👤 Modèle Contacts (${IMX_TPL_CON.length} colonnes)</button>
+        <button class="btn" onclick="imxDownloadTemplate('cr')"  style="font-size:12px">📝 Modèle CR (${IMX_TPL_CR.length} colonnes)</button>
+      </div>
     </div>
   </div>
 
