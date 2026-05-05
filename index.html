@@ -7976,6 +7976,8 @@ function renderDuplicates() {
 
 // ═══ CAMPAGNES MARKETING (ciblage emails) ═══
 let _campList = [];        // toutes les campagnes
+let _campListLoaded = false;
+let _campLoading = false;
 let _campCurrent = null;   // campagne en édition (null = vue liste)
 let _campPreview = { rows: [], emails: [], count: 0, loading: false };
 const _campDefaultFilters = {
@@ -7987,12 +7989,35 @@ const _campDefaultFilters = {
   emailSources: 'both', // 'client' | 'contact' | 'both'
 };
 
-async function campLoadList() {
+async function campLoadList(force) {
+  if (_campLoading) return;
+  if (_campListLoaded && !force) return;
+  _campLoading = true;
   try {
-    const { data } = await sb.from('campagnes').select('*').order('updated_at', { ascending: false });
+    const { data, error } = await sb.from('campagnes').select('*').order('updated_at', { ascending: false });
+    if (error) {
+      // Table absente probablement (404). On ne re-render pas pour éviter la boucle.
+      console.warn('campLoadList', error.message);
+      _campListLoaded = true; // marqué chargé pour stopper les retries
+      _campList = [];
+      if (currentPage === 'campagnes' && !_campCurrent) {
+        const el = document.getElementById('contentArea');
+        if (el && !el.dataset.campErrShown) {
+          el.dataset.campErrShown = '1';
+          toast('Table "campagnes" absente — exécutez add_missing_columns.sql', 'error');
+        }
+      }
+      return;
+    }
     _campList = data || [];
+    _campListLoaded = true;
     if (currentPage === 'campagnes' && !_campCurrent) renderPage('campagnes');
-  } catch (e) { console.warn('campLoadList', e.message); }
+  } catch (e) {
+    console.warn('campLoadList', e.message);
+    _campListLoaded = true;
+  } finally {
+    _campLoading = false;
+  }
 }
 
 function campNew() {
@@ -8012,7 +8037,7 @@ function campOpen(id) {
 
 function campClose() {
   _campCurrent = null;
-  campLoadList();
+  campLoadList(true); // force refresh à la fermeture pour voir les changements
   renderPage('campagnes');
 }
 
@@ -8128,7 +8153,7 @@ async function campSave() {
     if (data) _campCurrent.id = data.id;
     toast('Campagne créée', 'success');
   }
-  await campLoadList();
+  await campLoadList(true);
 }
 
 async function campDelete(id) {
@@ -8137,7 +8162,7 @@ async function campDelete(id) {
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
   toast('Campagne supprimée', 'success');
   if (_campCurrent && _campCurrent.id === id) _campCurrent = null;
-  await campLoadList();
+  await campLoadList(true);
   renderPage('campagnes');
 }
 
