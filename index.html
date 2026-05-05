@@ -2642,6 +2642,11 @@ function fmtDateFR(dateStr) {
 let clientsPage = 0;
 let clientsLetter = '';
 let clientsSearch = '';
+let clientsFilterDept = '';
+let clientsFilterNovam = '';
+let clientsFilterGph = '';
+let clientsFilterStatut = '';
+let clientsFilterSync = '';
 const CLIENTS_PER_PAGE = 50;
 let clientsTotalCount = 0;
 
@@ -3044,6 +3049,17 @@ async function loadClientsPage(page, letter, search) {
   if (search) {
     query = query.or(`name.ilike.%${search}%,code.ilike.%${search}%,city.ilike.%${search}%,sector.ilike.%${search}%,email.ilike.%${search}%`);
   }
+  // Filtres complémentaires (server-side)
+  if (clientsFilterDept) {
+    const d = clientsFilterDept.trim();
+    if (/^\d{1,3}[A-B]?$/i.test(d)) query = query.ilike('code_postal', d + '%');
+    else query = query.ilike('departement', '%' + d + '%');
+  }
+  if (clientsFilterNovam) query = query.ilike('account_manager_name', '%' + clientsFilterNovam + '%');
+  if (clientsFilterGph) query = query.or(`salesman_name.ilike.%${clientsFilterGph}%,commerciaux_associes.ilike.%${clientsFilterGph}%`);
+  if (clientsFilterStatut) query = query.eq('status', clientsFilterStatut);
+  if (clientsFilterSync === 'yes') query = query.not('akuiteo_id', 'is', null);
+  if (clientsFilterSync === 'no') query = query.is('akuiteo_id', null);
   query = query.order('name', {ascending: true}).range(from, to);
 
   const { data, count } = await query;
@@ -3052,6 +3068,17 @@ async function loadClientsPage(page, letter, search) {
   // Compter les devis par client
   DB.clients.forEach(c => { c.devis = DB.devis.filter(d => d.client_id === c.id).length; });
   renderPage('clients');
+}
+
+function resetClientsFilters() {
+  clientsFilterDept = '';
+  clientsFilterNovam = '';
+  clientsFilterGph = '';
+  clientsFilterStatut = '';
+  clientsFilterSync = '';
+  clientsLetter = '';
+  clientsSearch = '';
+  loadClientsPage(0, '', '');
 }
 
 // État pagination contacts
@@ -4611,9 +4638,29 @@ function renderClients(filter='all') {
       ${clientsSearch ? `<button class="btn" onclick="document.getElementById('clientSearchInput').value='';loadClientsPage(0,'','')">Effacer</button>` : ''}
     </div>
   </div>
-  <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:12px">
+  <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:8px">
     <button class="btn ${!clientsLetter?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'','')">Tous</button>
     ${letters.map(l => `<button class="btn ${clientsLetter===l?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'${l}','')">${l}</button>`).join('')}
+  </div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding:8px 10px;background:var(--bg-3);border:1px solid var(--border);border-radius:8px">
+    <span style="font-size:11px;color:var(--t3);font-weight:600">Filtres :</span>
+    <input type="text" placeholder="Dpt (ex: 85)" value="${clientsFilterDept}" oninput="clientsFilterDept=this.value" onkeydown="if(event.key==='Enter')loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:90px;background:var(--card);color:var(--t1)">
+    <input type="text" placeholder="Commercial Novam" value="${clientsFilterNovam}" oninput="clientsFilterNovam=this.value" onkeydown="if(event.key==='Enter')loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:160px;background:var(--card);color:var(--t1)">
+    <input type="text" placeholder="Commercial GPH" value="${clientsFilterGph}" oninput="clientsFilterGph=this.value" onkeydown="if(event.key==='Enter')loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:160px;background:var(--card);color:var(--t1)">
+    <select onchange="clientsFilterStatut=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+      <option value="" ${!clientsFilterStatut?'selected':''}>— Tous statuts —</option>
+      <option value="client" ${clientsFilterStatut==='client'?'selected':''}>Client</option>
+      <option value="prospect" ${clientsFilterStatut==='prospect'?'selected':''}>Prospect</option>
+      <option value="objectif" ${clientsFilterStatut==='objectif'?'selected':''}>Objectif</option>
+      <option value="dormant" ${clientsFilterStatut==='dormant'?'selected':''}>Dormant</option>
+    </select>
+    <select onchange="clientsFilterSync=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+      <option value="" ${!clientsFilterSync?'selected':''}>— Akuiteo —</option>
+      <option value="yes" ${clientsFilterSync==='yes'?'selected':''}>🟢 Synchronisés</option>
+      <option value="no" ${clientsFilterSync==='no'?'selected':''}>🟠 Non synchro</option>
+    </select>
+    <button class="btn btn-primary" style="font-size:12px;padding:5px 10px" onclick="loadClientsPage(0,clientsLetter,clientsSearch)">Appliquer</button>
+    ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync) ? `<button class="btn" style="font-size:12px;padding:5px 10px;color:var(--red)" onclick="resetClientsFilters()">✕ Effacer</button>` : ''}
   </div>
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
     <table><thead><tr><th>Société</th><th style="width:50px">Dpt</th><th>Ville</th><th>Commercial Novam</th><th>Commercial GPH</th><th style="width:60px;text-align:center">Pappers</th></tr></thead>
