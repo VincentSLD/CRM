@@ -6668,7 +6668,7 @@ function renderImportXml() {
   <div class="card" style="margin-bottom:14px">
     <div class="card-header"><div class="card-title">1️⃣ Charger les XML CODIAL</div></div>
     <div class="card-body" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <input type="file" accept=".xml" multiple id="imxMultiFile" onchange="imxLoadMultiple(this.files);this.value=''" style="font-size:13px">
+      <input type="file" accept=".xml" multiple id="imxMultiFile" onchange="const f=Array.from(this.files);this.value='';imxLoadMultiple(f)" style="font-size:13px">
       <span id="imxLoadStatus" style="font-size:12px;color:var(--t3)">${_imxFiles.length ? _imxFiles.length+' fichier(s) chargé(s)' : 'Glissez plusieurs fichiers à la fois (Ctrl+clic)'}</span>
       ${_imxFiles.length ? '<button class="btn" onclick="imxClearAll()" style="font-size:12px;color:var(--red)">✕ Tout vider</button>' : ''}
     </div>
