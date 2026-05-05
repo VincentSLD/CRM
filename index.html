@@ -7276,14 +7276,33 @@ async function esApply(idx, candIdx, alsoAkuiteo) {
   // Vérification doublon
   const ok = await esCheckDuplicate(siege.siret, cand.siren, item.client.id);
   if (!ok) return;
+  // Recompose adresse depuis les sous-champs SIRENE
+  const adrLignes = [siege.numero_voie, siege.indice_repetition, siege.type_voie, siege.libelle_voie].filter(Boolean).join(' ');
+  const adresseFull = siege.adresse || adrLignes || null;
+  const officialName = cand.nom_complet || cand.nom_raison_sociale || null;
   const update = {
+    name: officialName || item.client.name,
     siren: cand.siren || null,
     siret: siege.siret || null,
     ape: siege.activite_principale || cand.activite_principale || null,
     raison_sociale: cand.nom_raison_sociale || cand.nom_complet || null,
     forme_juridique: cand.nature_juridique || null,
     tva_intracommunautaire: (typeof computeTVA === 'function') ? (computeTVA(cand.siren) || null) : null,
+    adresse_ligne1: adresseFull,
+    adresse_ligne2: siege.complement_adresse || null,
+    code_postal: siege.code_postal || null,
+    city: siege.libelle_commune || null,
+    departement: (typeof deptName === 'function' && siege.departement) ? (deptName(siege.departement) || null) : null,
+    region: (typeof regionFromDept === 'function' && siege.departement) ? (regionFromDept(siege.departement) || null) : null,
   };
+  // Recalcule les initiales à partir du nouveau nom
+  if (officialName) {
+    update.ini = officialName.split(/\s+/).map(w => (w||'')[0]).filter(Boolean).join('').substring(0, 2).toUpperCase();
+  }
+  // Ne pas écraser un champ existant avec null/vide
+  for (const k of Object.keys(update)) {
+    if (update[k] == null || update[k] === '') delete update[k];
+  }
   // Forme juridique → préserver si existante non vide
   if (!update.forme_juridique) delete update.forme_juridique;
   const { error } = await sb.from('clients').update(update).eq('id', item.client.id);
