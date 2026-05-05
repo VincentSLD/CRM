@@ -7132,6 +7132,23 @@ function _esNormalize(s) {
     .replace(/\b(sa|sas|sasu|sarl|eurl|sci|snc|gie|sci|société|societe)\b/g, '')
     .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
 }
+// Normalisation spécifique aux noms de villes :
+// - tirets → espaces, accents enlevés, casse uniforme
+// - st/ste/sts/stes → saint/sainte/saints/saintes (et inverse)
+function _esNormalizeCity(s) {
+  let t = (s || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/['']/g, ' ')
+    .replace(/-/g, ' ')
+    .replace(/[^a-z0-9 ]/g, '')
+    .replace(/\s+/g, ' ').trim();
+  // st(s) / ste(s) → forme longue
+  t = t.replace(/\bst\b/g, 'saint')
+       .replace(/\bste\b/g, 'sainte')
+       .replace(/\bsts\b/g, 'saints')
+       .replace(/\bstes\b/g, 'saintes');
+  return t;
+}
 function _esSimilarity(a, b) {
   if (!a || !b) return 0;
   const na = _esNormalize(a), nb = _esNormalize(b);
@@ -7149,9 +7166,9 @@ function _esScore(client, candidate) {
   const cp = client.code_postal || '';
   if (cp && s.code_postal === cp) score += 25;
   else if (cp && s.code_postal && cp.slice(0, 2) === s.code_postal.slice(0, 2)) score += 8;
-  // Ville (+10)
+  // Ville (+10) — tolère - vs espace et st/saint, ste/sainte
   if (client.city && s.libelle_commune) {
-    const cityA = _esNormalize(client.city), cityB = _esNormalize(s.libelle_commune);
+    const cityA = _esNormalizeCity(client.city), cityB = _esNormalizeCity(s.libelle_commune);
     if (cityA === cityB) score += 10;
     else if (cityA && cityB && (cityA.includes(cityB) || cityB.includes(cityA))) score += 5;
   }
