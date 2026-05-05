@@ -6204,23 +6204,47 @@ async function imxLoadMultiple(fileList) {
   renderPage('import-xml');
 }
 
+// Parser streaming WINDEV (XML plat <Table_Contenu><tag>val</tag>...</Table_Contenu>)
+// Plus rapide et économe en mémoire que DOMParser, supporte les fichiers > 30 Mo.
+function imxParseWindevXml(text) {
+  const rows = [];
+  // Décodeur entités XML
+  const decode = s => s.replace(/&#(\d+);/g, (_, d) => String.fromCharCode(parseInt(d, 10)))
+                        .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+                        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+                        .replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+  // Regex pour trouver chaque bloc Table_Contenu (compatible avec gros fichiers grâce au flag g + while)
+  const blockRe = /<Table_Contenu>([\s\S]*?)<\/Table_Contenu>/g;
+  // Regex pour extraire tag + valeur ou self-closing tag
+  const fieldRe = /<([A-Za-z_][\w.-]*)(?:\s[^>]*)?(?:\/>|>([\s\S]*?)<\/\1>)/g;
+  let blockMatch;
+  while ((blockMatch = blockRe.exec(text)) !== null) {
+    const body = blockMatch[1];
+    const obj = {};
+    fieldRe.lastIndex = 0;
+    let fm;
+    while ((fm = fieldRe.exec(body)) !== null) {
+      const tag = fm[1];
+      if (tag === 'N__Enr.') continue;
+      let val = fm[2] != null ? decode(fm[2]).trim() : '';
+      if (val === 'NULL' || val === 'null') val = '';
+      obj[tag] = val;
+    }
+    rows.push(obj);
+  }
+  return rows;
+}
+
 async function imxParseFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = e => {
       try {
-        const doc = new DOMParser().parseFromString(e.target.result, 'text/xml');
-        if (doc.querySelector('parsererror')) return reject(new Error('XML invalide'));
-        const rows = [...doc.querySelectorAll('Table_Contenu')].map(node => {
-          const obj = {};
-          for (const child of node.children) {
-            if (child.tagName === 'N__Enr.') continue;
-            const t = (child.textContent || '').trim();
-            obj[child.tagName] = (t === 'NULL' || t === 'null') ? '' : t;
-          }
-          return obj;
-        });
-        const fields = rows.length ? Object.keys(rows[0]) : [];
+        let text = e.target.result;
+        if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // strip BOM
+        const rows = imxParseWindevXml(text);
+        if (!rows.length) return reject(new Error('Aucune ligne <Table_Contenu> trouvée'));
+        const fields = [...new Set(rows.flatMap(r => Object.keys(r)))];
         const role = imxAutoDetectRole(file.name);
         const pkField = imxAutoPK(fields);
         resolve({ id: 'f' + (_imxNextId++), filename: file.name, role, rows, fields, pkField });
