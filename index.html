@@ -6370,21 +6370,145 @@ function imxRenderFileCard(f) {
   </div>`;
 }
 
+// État éditeur tableur
+let _imxGridFilter = { soc: '', con: '' };
+let _imxGridSort = { soc: { col: '', dir: 'asc' }, con: { col: '', dir: 'asc' } };
+const IMX_REQUIRED_SOC = ['name'];
+const IMX_REQUIRED_CON = ['nom'];
+
+function imxUpdateCell(kind, idx, col, value) {
+  const arr = (kind === 'soc') ? _imxOutSoc : _imxOutCon;
+  if (!arr[idx]) return;
+  arr[idx][col] = value;
+}
+function imxDeleteRow(kind, idx) {
+  const arr = (kind === 'soc') ? _imxOutSoc : _imxOutCon;
+  if (!confirm('Supprimer cette ligne ?')) return;
+  arr.splice(idx, 1);
+  imxRenderPreview();
+}
+function imxAddRow(kind) {
+  const arr = (kind === 'soc') ? _imxOutSoc : _imxOutCon;
+  const cols = arr.length ? [...new Set(arr.flatMap(r => Object.keys(r)))] : (kind === 'soc' ? ['name','code_postal','city','phone','email','legacy_id'] : ['nom','prenom','fonction','email','legacy_id','legacy_societe_id']);
+  const newRow = {};
+  for (const c of cols) newRow[c] = '';
+  arr.push(newRow);
+  imxRenderPreview();
+  // Scroll to new row
+  setTimeout(() => {
+    const tbl = document.getElementById('imxGrid_' + kind);
+    if (tbl) tbl.scrollTop = tbl.scrollHeight;
+  }, 50);
+}
+function imxSetGridFilter(kind, q) {
+  _imxGridFilter[kind] = q;
+  imxRenderPreview();
+}
+function imxSetGridSort(kind, col) {
+  const s = _imxGridSort[kind];
+  if (s.col === col) s.dir = (s.dir === 'asc') ? 'desc' : 'asc';
+  else { s.col = col; s.dir = 'asc'; }
+  imxRenderPreview();
+}
+
+function imxRenderGrid(kind, rows, title, requiredFields) {
+  if (!rows.length) {
+    return `<div class="card" style="margin-bottom:14px"><div class="card-header"><div class="card-title">${title}</div></div>
+      <div class="card-body" style="padding:14px;text-align:center;color:var(--t3);font-size:13px">
+        Aucune ligne — recalculez le merge ou ajoutez une ligne manuellement.
+        <div style="margin-top:8px"><button class="btn" onclick="imxAddRow('${kind}')" style="font-size:12px">+ Ajouter une ligne</button></div>
+      </div></div>`;
+  }
+  const cols = [...new Set(rows.flatMap(r => Object.keys(r)))];
+  const filter = (_imxGridFilter[kind] || '').toLowerCase();
+  // Filtrer
+  let displayRows = rows.map((r, idx) => ({ r, idx }));
+  if (filter) {
+    displayRows = displayRows.filter(({ r }) =>
+      Object.values(r).some(v => (v == null ? '' : String(v)).toLowerCase().includes(filter))
+    );
+  }
+  // Trier (par dataset, sans toucher l'array source)
+  const sort = _imxGridSort[kind];
+  if (sort.col) {
+    displayRows = [...displayRows].sort((a, b) => {
+      const va = (a.r[sort.col] == null ? '' : String(a.r[sort.col])).toLowerCase();
+      const vb = (b.r[sort.col] == null ? '' : String(b.r[sort.col])).toLowerCase();
+      const cmp = va.localeCompare(vb, 'fr', { numeric: true });
+      return sort.dir === 'asc' ? cmp : -cmp;
+    });
+  }
+  // Détecter doublons (par siren/siret pour soc, par email+nom pour con)
+  const dups = new Set();
+  if (kind === 'soc') {
+    const seen = {};
+    rows.forEach((r, i) => {
+      const key = r.siret || r.siren;
+      if (key) { if (seen[key] != null) { dups.add(seen[key]); dups.add(i); } else seen[key] = i; }
+    });
+  } else {
+    const seen = {};
+    rows.forEach((r, i) => {
+      const key = (r.email || '').toLowerCase() + '|' + (r.nom || '').toLowerCase();
+      if (key !== '|') { if (seen[key] != null) { dups.add(seen[key]); dups.add(i); } else seen[key] = i; }
+    });
+  }
+  // Compter incomplets (champs requis manquants)
+  let incomplete = 0;
+  rows.forEach(r => { if (requiredFields.some(f => !r[f] || !String(r[f]).trim())) incomplete++; });
+
+  const headerCells = cols.map(c => {
+    const arrow = sort.col === c ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+    const reqMark = requiredFields.includes(c) ? ' <span style="color:#ef4444">*</span>' : '';
+    return `<th style="cursor:pointer;user-select:none;padding:6px 8px;text-align:left;background:var(--card);border-bottom:2px solid var(--border);position:sticky;top:0;z-index:2" onclick="imxSetGridSort('${kind}','${c}')">${c}${reqMark}${arrow}</th>`;
+  }).join('');
+
+  const bodyHtml = displayRows.map(({ r, idx }) => {
+    const isDup = dups.has(idx);
+    const isIncomplete = requiredFields.some(f => !r[f] || !String(r[f]).trim());
+    const rowBg = isDup ? 'background:rgba(245,158,11,.08)' : (isIncomplete ? 'background:rgba(239,68,68,.05)' : '');
+    const cellsHtml = cols.map(c => {
+      const v = r[c] == null ? '' : String(r[c]);
+      const isReqEmpty = requiredFields.includes(c) && !v.trim();
+      const cellStyle = 'min-width:100px;max-width:280px;padding:4px 8px;border-bottom:1px solid var(--border-light);border-right:1px solid var(--border-light);' + (isReqEmpty ? 'background:rgba(239,68,68,.12)' : '');
+      // Encoder pour attribute (escape quotes)
+      const escAttr = v.replace(/"/g, '&quot;').replace(/\n/g, '&#10;');
+      return `<td contenteditable="true" data-idx="${idx}" data-col="${c}" style="${cellStyle}" onblur="imxUpdateCell('${kind}',${idx},'${c}',this.innerText.trim())" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.blur();const n=this.parentElement.nextElementSibling;if(n)n.firstElementChild.focus()}">${v.length > 200 ? v.substring(0,200) + '…' : v.replace(/</g,'&lt;')}</td>`;
+    }).join('');
+    return `<tr style="${rowBg}">
+      <td style="padding:4px 6px;text-align:center;border-bottom:1px solid var(--border-light);background:var(--bg-3);position:sticky;left:0;z-index:1;font-size:10px;color:var(--t3);min-width:50px">
+        <span title="Ligne ${idx+1}">${idx+1}</span>
+        <button onclick="imxDeleteRow('${kind}',${idx})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0 2px" title="Supprimer">✕</button>
+      </td>
+      ${cellsHtml}
+    </tr>`;
+  }).join('');
+
+  return `<div class="card" style="margin-bottom:14px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px;align-items:center">
+      <div class="card-title">${title} <span style="font-weight:400;color:var(--t3);font-size:12px">— ${rows.length} ligne(s)${displayRows.length !== rows.length ? ', ' + displayRows.length + ' affichée(s)' : ''}${incomplete > 0 ? ' · <span style="color:#ef4444">'+incomplete+' incomplète(s)</span>' : ''}${dups.size > 0 ? ' · <span style="color:#f59e0b">'+dups.size+' doublon(s)</span>' : ''}</span></div>
+      <input type="text" placeholder="🔎 Filtrer..." value="${(_imxGridFilter[kind]||'').replace(/"/g,'&quot;')}" oninput="imxSetGridFilter('${kind}',this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);width:200px">
+      <button class="btn" onclick="imxAddRow('${kind}')" style="font-size:11px">+ Ligne</button>
+    </div>
+    <div class="card-body" style="padding:0">
+      <div id="imxGrid_${kind}" style="max-height:500px;overflow:auto;border-top:1px solid var(--border)">
+        <table style="font-size:11px;border-collapse:separate;border-spacing:0;width:100%">
+          <thead><tr><th style="position:sticky;top:0;left:0;z-index:3;background:var(--card);border-bottom:2px solid var(--border);min-width:50px">#</th>${headerCells}</tr></thead>
+          <tbody>${bodyHtml}</tbody>
+        </table>
+      </div>
+    </div>
+    <div style="padding:6px 14px;font-size:10px;color:var(--t3);border-top:1px solid var(--border)">
+      💡 Cliquez une cellule pour éditer · Entrée pour valider · Tab pour passer à la suivante · Cliquez un en-tête pour trier · <span style="color:#ef4444">*</span> requis · <span style="background:rgba(245,158,11,.2);padding:0 4px">jaune</span> = doublon · <span style="background:rgba(239,68,68,.12);padding:0 4px">rouge</span> = champ manquant
+    </div>
+  </div>`;
+}
+
 function imxRenderPreview() {
   const elS = document.getElementById('imxPreviewSoc');
   const elC = document.getElementById('imxPreviewCon');
-  const renderTable = (rows, title) => {
-    if (!rows.length) return '';
-    const cols = [...new Set(rows.flatMap(r => Object.keys(r)))];
-    const subset = rows.slice(0, 50);
-    return `<div class="card" style="margin-bottom:14px"><div class="card-header"><div class="card-title">${title} (${rows.length}, 50 affichées)</div></div>
-      <div class="card-body" style="padding:0"><div class="table-wrap" style="max-height:400px;overflow:auto">
-        <table style="font-size:11px"><thead style="position:sticky;top:0;background:var(--card);z-index:1"><tr>${cols.map(c => '<th>'+c+'</th>').join('')}</tr></thead>
-        <tbody>${subset.map(r => '<tr>'+cols.map(c => '<td>'+((r[c]==null?'':r[c]).toString().substring(0,80))+'</td>').join('')+'</tr>').join('')}</tbody></table>
-      </div></div></div>`;
-  };
-  if (elS) elS.innerHTML = renderTable(_imxOutSoc, '🏢 Aperçu sociétés');
-  if (elC) elC.innerHTML = renderTable(_imxOutCon, '👤 Aperçu contacts');
+  if (elS) elS.innerHTML = imxRenderGrid('soc', _imxOutSoc, '🏢 Sociétés', IMX_REQUIRED_SOC);
+  if (elC) elC.innerHTML = imxRenderGrid('con', _imxOutCon, '👤 Contacts', IMX_REQUIRED_CON);
 }
 
 function renderImportXml() {
