@@ -8377,8 +8377,9 @@ const MP_SOURCES = {
   mef: {
     label: '🏛 MEF — Plateforme État',
     url: 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/marches-publics-conclus-recenses-sur-la-plateforme-des-achats-de-letat-/records',
-    fields: { objet: 'objetmarche', acheteur: 'serviceachat', dept: 'departement', date: 'datenotification', montant: 'montantnotifie', titulaire: 'titulaire' },
-    qFields: ['objetmarche', 'serviceachat', 'titulaire'],
+    // Champs réels de ce dataset (cf. structure renvoyée par l'API)
+    fields: { objet: 'objet_du_marche', acheteur: 'entite_d_achat', dept: 'code_postal_entite_d_achat', date: 'date_de_notification', montant: 'montant', titulaire: 'nom_attributaire', titulaireSiret: 'siret_attributaire' },
+    qFields: ['objet_du_marche', 'entite_d_achat', 'nom_attributaire'],
   },
 };
 
