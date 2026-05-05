@@ -7349,7 +7349,7 @@ function imxRenderEsList() {
       <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
         <div style="flex:1;min-width:240px">
           <div style="font-weight:600;font-size:13px">${c.name} ${c.akuiteo_id ? '<span title="Synchro Akuiteo" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;vertical-align:middle"></span>' : ''}</div>
-          <div style="font-size:11px;color:var(--t3);margin-top:2px">📍 ${crmAdr || '<em>pas d\\'adresse</em>'}</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:2px">📍 ${crmAdr || "<em>pas d'adresse</em>"}</div>
           <div style="font-size:11px;color:var(--t3)">${c.code_postal||''} ${c.city||''} · ${c.status||''}</div>
           ${crmMetier ? `<div style="font-size:11px;color:var(--t3);margin-top:2px">🏷 ${crmMetier}</div>` : ''}
         </div>
