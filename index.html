@@ -2705,7 +2705,7 @@ async function toggleViewMyData() {
 }
 
 async function reloadClientsForView() {
-  let clientQuery = sb.from('clients').select('*', { count: 'exact' }).order('ca', {ascending:false}).range(0, CLIENTS_PER_PAGE - 1);
+  let clientQuery = sb.from('clients').select('*', { count: 'exact' }).order('name', {ascending: true}).range(0, CLIENTS_PER_PAGE - 1);
   if (viewMyData && currentCommercial && currentCommercial.akuiteo_manager_id) {
     clientQuery = clientQuery.eq('account_manager_id', currentCommercial.akuiteo_manager_id);
   }
@@ -2871,7 +2871,7 @@ function mapClient(c) {
 async function loadDB() {
   try {
     // Charger devis/commandes/factures/reports/notifications/commerciaux + top 50 clients
-    let clientQuery = sb.from('clients').select('*', { count: 'exact' }).order('ca', {ascending:false}).range(0, CLIENTS_PER_PAGE - 1);
+    let clientQuery = sb.from('clients').select('*', { count: 'exact' }).order('name', {ascending: true}).range(0, CLIENTS_PER_PAGE - 1);
     if (viewMyData && currentCommercial && currentCommercial.akuiteo_manager_id) {
       clientQuery = clientQuery.eq('account_manager_id', currentCommercial.akuiteo_manager_id);
     }
