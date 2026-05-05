@@ -7288,6 +7288,45 @@ function esReject(idx) {
   if (_esResults[idx]) { _esResults[idx].rejected = true; imxRenderEsList(); }
 }
 
+// Saisie manuelle d'un SIRET trouvé hors-API → fetch SIRENE puis apply
+async function esApplyManualSiret(idx, raw, withAkuiteo) {
+  const siret = (raw || '').replace(/\D/g, '');
+  if (siret.length !== 14) { toast('Saisissez un SIRET de 14 chiffres', 'error'); return; }
+  const item = _esResults[idx];
+  if (!item) return;
+  toast('🔍 Récupération via SIRENE...', 'info');
+  try {
+    // L'API recherche-entreprises accepte le SIRET en q
+    const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + siret + '&per_page=1');
+    if (!r.ok) throw new Error('API ' + r.status);
+    const d = await r.json();
+    let cand = (d.results || []).find(e => (e.siege?.siret === siret) || (e.matching_etablissements||[]).some(m => m.siret === siret));
+    if (!cand) cand = (d.results || [])[0];
+    if (!cand) {
+      // Fallback minimal : on ne stocke que le SIRET / SIREN dérivé
+      const update = { siret, siren: siret.slice(0, 9) };
+      const { error } = await sb.from('clients').update(update).eq('id', item.client.id);
+      if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+      item.applied = true; item.appliedCand = { siren: update.siren, siege: { siret } };
+      imxRenderEsList();
+      toast('SIRET enregistré (aucune fiche SIRENE pour récupérer plus d\'infos)', 'warn');
+      return;
+    }
+    // Forcer le SIRET saisi (au cas où le résultat retourne un autre établissement)
+    cand._score = _esScore(item.client, cand);
+    if (cand.siege && cand.siege.siret !== siret) {
+      // Chercher l'établissement correspondant dans matching_etablissements ou créer un objet siege custom
+      const m = (cand.matching_etablissements || []).find(x => x.siret === siret);
+      if (m) cand.siege = { ...cand.siege, ...m };
+      else cand.siege = { ...cand.siege, siret };
+    }
+    item.candidates = [cand, ...item.candidates];
+    await esApply(idx, 0, withAkuiteo);
+  } catch (e) {
+    toast('Erreur SIRENE : ' + e.message, 'error');
+  }
+}
+
 async function esApplyAll(threshold) {
   const todo = _esResults.filter(r => !r.applied && !r.rejected && r.candidates[0] && r.candidates[0]._score >= threshold);
   if (!todo.length) { toast('Aucun candidat ≥ ' + threshold + '%', 'info'); return; }
@@ -7327,8 +7366,12 @@ function imxRenderEsList() {
       const gQuery = encodeURIComponent([c.name, c.code_postal, c.city, 'pappers'].filter(Boolean).join(' '));
       return `<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
         <div>⚠ <strong>${c.name}</strong> ${c.code_postal||''} ${c.city||''} — aucun résultat SIRENE</div>
-        <div style="display:flex;gap:6px;align-items:center">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <a href="https://www.google.com/search?q=${gQuery}" target="_blank" rel="noopener" class="btn" style="font-size:11px;text-decoration:none;color:#4285f4">🔎 Chercher sur Google</a>
+          <input type="text" id="esSiret_${idx}" placeholder="Coller SIRET (14 chiffres)" maxlength="20"
+            onkeydown="if(event.key==='Enter')esApplyManualSiret(${idx},this.value,${_esFilters.withAkuiteo})"
+            style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;width:170px;background:var(--card);color:var(--t1)">
+          <button class="btn" onclick="esApplyManualSiret(${idx},document.getElementById('esSiret_${idx}').value,${_esFilters.withAkuiteo})" style="font-size:11px;background:#22c55e;color:#fff;border:none">✓ Saisir SIRET</button>
           <button class="btn" onclick="esReject(${idx})" style="font-size:11px;color:var(--red)">✕ Rejeter</button>
         </div>
       </div>`;
