@@ -4894,7 +4894,7 @@ function renderClientDetail() {
     if (c.procedure_collective) items.push('<strong>⚠ ' + (c.procedure_nature || c.procedure_collective) + '</strong>' + (c.procedure_date ? ' (jugement du ' + fmtDateFR(c.procedure_date) + ')' : ''));
     alertBanner = `<div style="background:${bgColor};color:#fff;padding:12px 16px;border-radius:8px;margin-bottom:14px;display:flex;flex-wrap:wrap;align-items:center;gap:12px;box-shadow:0 2px 8px rgba(220,38,38,.25)">
       <div style="flex:1">${items.join(' · ')}</div>
-      ${c.procedure_url ? '<a href="'+c.procedure_url+'" target="_blank" rel="noopener" style="color:#fff;text-decoration:underline;font-size:12px">↗ Voir l\\'annonce BODACC</a>' : ''}
+      ${c.procedure_url ? '<a href="'+c.procedure_url+'" target="_blank" rel="noopener" style="color:#fff;text-decoration:underline;font-size:12px">↗ Voir l&#39;annonce BODACC</a>' : ''}
       ${c.procedure_checked_at ? '<span style="font-size:11px;opacity:.85">Vérifié le ' + new Date(c.procedure_checked_at).toLocaleDateString('fr-FR') + '</span>' : ''}
     </div>`;
   }
