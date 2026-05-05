@@ -4884,9 +4884,23 @@ function renderClientDetail() {
   const c = currentClient;
   if(!c) return '<p>Société non trouvée</p>';
   const s = statusMap[c.status] || statusMap['objectif'];
-
+  // Bandeau d'alerte si procédure collective ou radiation INSEE détectée
+  let alertBanner = '';
+  if (c.etat_insee === 'C' || c.procedure_collective) {
+    const isRadie = c.etat_insee === 'C';
+    const bgColor = isRadie ? '#dc2626' : (c.procedure_collective === 'LJ' ? '#dc2626' : c.procedure_collective === 'RJ' ? '#ef4444' : c.procedure_collective === 'Sauvegarde' ? '#f59e0b' : '#6b7280');
+    const items = [];
+    if (isRadie) items.push('<strong>❌ ENTREPRISE RADIÉE INSEE</strong>' + (c.date_fermeture_insee ? ' — fermée le ' + fmtDateFR(c.date_fermeture_insee) : ''));
+    if (c.procedure_collective) items.push('<strong>⚠ ' + (c.procedure_nature || c.procedure_collective) + '</strong>' + (c.procedure_date ? ' (jugement du ' + fmtDateFR(c.procedure_date) + ')' : ''));
+    alertBanner = `<div style="background:${bgColor};color:#fff;padding:12px 16px;border-radius:8px;margin-bottom:14px;display:flex;flex-wrap:wrap;align-items:center;gap:12px;box-shadow:0 2px 8px rgba(220,38,38,.25)">
+      <div style="flex:1">${items.join(' · ')}</div>
+      ${c.procedure_url ? '<a href="'+c.procedure_url+'" target="_blank" rel="noopener" style="color:#fff;text-decoration:underline;font-size:12px">↗ Voir l\\'annonce BODACC</a>' : ''}
+      ${c.procedure_checked_at ? '<span style="font-size:11px;opacity:.85">Vérifié le ' + new Date(c.procedure_checked_at).toLocaleDateString('fr-FR') + '</span>' : ''}
+    </div>`;
+  }
   return `
   <button class="btn" onclick="go('clients')" style="margin-bottom:14px">← Retour aux clients/prospects</button>
+  ${alertBanner}
   <div class="client-hero">
     <div class="client-big-av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div>
     <div class="client-info">
@@ -4955,6 +4969,12 @@ function renderClientDetail() {
       detailRow('Métier (APE)', apeLabel(c.ape) || '—'),
       detailRow('Forme juridique', c.forme_juridique || '—'),
       detailRow('Réf. externe', c.reference_externe || '—'),
+      detailRow('État INSEE', c.etat_insee === 'C'
+        ? '<strong style="color:#dc2626">❌ Radiée</strong>' + (c.date_fermeture_insee ? ' <span style="color:var(--t3);font-size:11px">— ' + fmtDateFR(c.date_fermeture_insee) + '</span>' : '')
+        : c.etat_insee === 'A' ? '<span style="color:var(--green)">✓ Active</span>' : '—'),
+      detailRow('Procédure collective', c.procedure_collective
+        ? '<strong style="color:' + (c.procedure_collective==='LJ'?'#dc2626':c.procedure_collective==='RJ'?'#ef4444':c.procedure_collective==='Sauvegarde'?'#f59e0b':'#6b7280') + '">' + (c.procedure_nature || c.procedure_collective) + '</strong>' + (c.procedure_date ? '<br><span style="color:var(--t3);font-size:11px">Jugement ' + fmtDateFR(c.procedure_date) + '</span>' : '') + (c.procedure_url ? ' <a href="'+c.procedure_url+'" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:none;font-size:11px">↗ BODACC</a>' : '')
+        : '—'),
     ])}
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
@@ -8744,6 +8764,15 @@ async function pcApply(idx) {
   }
   const { error } = await sb.from('clients').update(update).eq('id', item.client.id);
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  // Mettre à jour le cache local DB.clients si la fiche y est
+  if (DB && DB.clients) {
+    const idx = DB.clients.findIndex(x => x.id === item.client.id);
+    if (idx >= 0) Object.assign(DB.clients[idx], update);
+  }
+  // Si la fiche est ouverte en détail, rafraîchir aussi currentClient
+  if (typeof currentClient !== 'undefined' && currentClient && currentClient.id === item.client.id) {
+    Object.assign(currentClient, update);
+  }
   item.applied = true;
   toast('Fiche "' + item.client.name + '" mise à jour', 'success');
   pcRenderList();
