@@ -7636,6 +7636,7 @@ function renderEnrichSiren() {
 let _dupGroups = []; // [{type, key, clients: [...]}]
 let _dupCriteria = { siret: true, siren: true, name: true, phone: false };
 let _dupRunning = false;
+let _dupPushAkuiteo = true; // après fusion, pousser la fiche cible mise à jour vers Akuiteo
 
 function _dupNormalize(s) {
   return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -7820,9 +7821,20 @@ async function dupMerge(groupIdx, keepId, removeId) {
   const keep = g.clients.find(c => c.id === keepId);
   const remove = g.clients.find(c => c.id === removeId);
   if (!keep || !remove) return;
+  // Avertir si la source a son propre akuiteo_id différent de la cible :
+  // les documents Akuiteo (devis/cmd/fact) restent attachés à la source côté Akuiteo
+  // (l'API Akuiteo ne permet pas de migrer ces documents entre clients).
+  let warn = '';
+  if (remove.akuiteo_id && remove.akuiteo_id !== keep.akuiteo_id) {
+    warn = '\n\n⚠ La fiche source a son propre ID Akuiteo (' + remove.akuiteo_id + ').\n' +
+      'Les devis, commandes et factures côté Akuiteo NE seront PAS migrés (l\'API Akuiteo ne le permet pas).\n' +
+      'Ils resteront attachés à la fiche Akuiteo source que vous devrez gérer manuellement (suppression / fusion / archivage côté ERP).';
+  }
   if (!confirm('Fusionner "' + remove.name + '" → "' + keep.name + '" ?\n\n' +
-    'Toutes les liaisons (devis, commandes, factures, affaires, marchés, contacts, CR, objectifs, concurrents) ' +
-    'de la source seront rattachées à la cible. La source sera ensuite supprimée. Irréversible.')) return;
+    'Côté CRM : toutes les liaisons (devis, commandes, factures, affaires, marchés, contacts, CR, objectifs, concurrents) ' +
+    'de la source seront rattachées à la cible, puis la source sera supprimée.' +
+    (_dupPushAkuiteo && keep.akuiteo_id ? '\nCôté Akuiteo : la fiche cible (' + keep.akuiteo_id + ') sera mise à jour avec les champs fusionnés.' : '') +
+    warn + '\n\nIrréversible.')) return;
   showSyncLoading(true); setSyncText('Fusion en cours...');
   try {
     // 1) Charger les fiches complètes des deux côtés pour fusionner les champs
@@ -7852,6 +7864,16 @@ async function dupMerge(groupIdx, keepId, removeId) {
     // 5) Supprimer la fiche source
     const { error: errDel } = await sb.from('clients').delete().eq('id', removeId);
     if (errDel) throw errDel;
+    // 6) Pousser la fiche cible mise à jour vers Akuiteo si elle est synchronisée
+    if (_dupPushAkuiteo && keep.akuiteo_id) {
+      try {
+        setSyncText('Mise à jour Akuiteo...');
+        await pushClientToAkuiteo(keepId);
+      } catch (e) {
+        console.warn('Push Akuiteo après fusion:', e);
+        toast('Fusion CRM OK, mais erreur push Akuiteo : ' + e.message, 'warn');
+      }
+    }
     toast('Fusion réussie : "' + remove.name + '" → "' + keep.name + '"', 'success');
     // Mettre à jour le groupe
     g.clients = g.clients.filter(c => c.id !== removeId);
@@ -7887,6 +7909,8 @@ function renderDuplicates() {
       <label style="font-size:12px;cursor:pointer"><input type="checkbox" ${_dupCriteria.siren?'checked':''} onchange="_dupCriteria.siren=this.checked"> SIREN (9 chiffres exacts)</label>
       <label style="font-size:12px;cursor:pointer"><input type="checkbox" ${_dupCriteria.name?'checked':''} onchange="_dupCriteria.name=this.checked"> Nom normalisé (sans accents/forme juridique)</label>
       <label style="font-size:12px;cursor:pointer"><input type="checkbox" ${_dupCriteria.phone?'checked':''} onchange="_dupCriteria.phone=this.checked"> Téléphone (10+ chiffres)</label>
+      <span style="flex:1"></span>
+      <label style="font-size:12px;cursor:pointer;color:#3b82f6;font-weight:600"><input type="checkbox" ${_dupPushAkuiteo?'checked':''} onchange="_dupPushAkuiteo=this.checked"> Pousser la fusion vers Akuiteo</label>
       <span style="flex:1"></span>
       <button class="btn btn-primary" onclick="dupScanAll()" style="font-size:13px"${_dupRunning?' disabled':''}>${_dupRunning ? '⏳ Analyse...' : "🔍 Lancer l'analyse"}</button>
     </div>
