@@ -141,3 +141,9 @@ DROP POLICY IF EXISTS "client_concurrents_all" ON client_concurrents;
 CREATE POLICY "client_concurrents_all" ON client_concurrents FOR ALL USING (true) WITH CHECK (true);
 CREATE INDEX IF NOT EXISTS idx_client_concurrents_client ON client_concurrents(client_id);
 CREATE INDEX IF NOT EXISTS idx_client_concurrents_concurrent ON client_concurrents(concurrent_id);
+
+-- ═══ Import XML (CODIAL legacy) — colonnes pour traçabilité et matching ═══
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS legacy_id TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS legacy_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_clients_legacy_id ON clients(legacy_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_legacy_id ON contacts(legacy_id);
