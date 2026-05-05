@@ -3576,7 +3576,10 @@ function renderPage(page) {
   if (page === 'carte') setTimeout(initCarteMap, 50);
   if (page === 'carte-affaires') setTimeout(initCarteAffairesMap, 50);
   if (page === 'bdnb') setTimeout(initBdnbPage, 50);
-  if (page === 'enrich-siren') setTimeout(imxRenderEsList, 50);
+  if (page === 'enrich-siren') {
+    setTimeout(imxRenderEsList, 50);
+    if (!clientsFilterOptsLoaded) loadClientsFilterOpts().then(() => { if (currentPage === 'enrich-siren') renderPage('enrich-siren'); });
+  }
   if (page === 'clients' && !clientsFilterOptsLoaded) {
     loadClientsFilterOpts().then(() => { if (currentPage === 'clients') renderPage('clients'); });
   }
@@ -7107,7 +7110,7 @@ let _esResults = []; // [{client, candidates, applied, rejected}]
 let _esRunning = false;
 let _esCancel = false;
 const ES_PAGE_SIZE = 100;
-let _esFilters = { dept: '', page: 0, withAkuiteo: false };
+let _esFilters = { dept: '', page: 0, withAkuiteo: false, categorie: '', sousCategorie: '', categoriePro: '', secteur: '', type: '', groupe: '', origine: '' };
 let _esTotal = 0;
 
 function _esLevenshtein(a, b) {
@@ -7212,6 +7215,13 @@ async function esLaunchSearch() {
     .or('siret.is.null,siret.eq.')
     .order('name', { ascending: true });
   if (_esFilters.dept) q = q.ilike('code_postal', _esFilters.dept + '%');
+  if (_esFilters.categorie) q = q.eq('mk_categorie', _esFilters.categorie);
+  if (_esFilters.sousCategorie) q = q.eq('mk_sous_categorie', _esFilters.sousCategorie);
+  if (_esFilters.categoriePro) q = q.eq('mk_categorie_pro', _esFilters.categoriePro);
+  if (_esFilters.secteur) q = q.eq('mk_secteur', _esFilters.secteur);
+  if (_esFilters.type) q = q.eq('mk_type', _esFilters.type);
+  if (_esFilters.groupe) q = q.eq('mk_groupe', _esFilters.groupe);
+  if (_esFilters.origine) q = q.eq('mk_origine', _esFilters.origine);
   q = q.range(from, to);
   const { data: clients, count, error } = await q;
   _esTotal = count || 0;
@@ -7395,15 +7405,50 @@ function renderEnrichSiren() {
 
   <div class="card" style="margin-bottom:14px">
     <div class="card-header"><div class="card-title">Filtres et lancement</div></div>
-    <div class="card-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-      <div><label class="fl">Département</label>
-        <input class="fi" placeholder="Ex: 85" value="${_esFilters.dept}" oninput="_esFilters.dept=this.value;_esFilters.page=0" style="width:80px;font-size:12px"></div>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-left:6px">
-        <input type="checkbox" ${_esFilters.withAkuiteo?'checked':''} onchange="_esFilters.withAkuiteo=this.checked"> Pousser aussi dans Akuiteo
-      </label>
-      <span style="flex:1"></span>
-      <button class="btn btn-primary" onclick="esLaunchSearch()" style="font-size:13px">${_esRunning?'⏹ Arrêter':'🔍 Lancer la recherche'}</button>
-      ${high > 0 ? `<button class="btn" onclick="esApplyAll(80)" style="font-size:12px;background:#22c55e;color:#fff;border:none">✓ Tout appliquer ≥ 80% (${high})</button>` : ''}
+    <div class="card-body" style="padding:14px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <div><label class="fl">Département</label>
+          <input class="fi" placeholder="Ex: 85" value="${_esFilters.dept}" oninput="_esFilters.dept=this.value;_esFilters.page=0" style="width:80px;font-size:12px"></div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-left:6px">
+          <input type="checkbox" ${_esFilters.withAkuiteo?'checked':''} onchange="_esFilters.withAkuiteo=this.checked"> Pousser aussi dans Akuiteo
+        </label>
+        <span style="flex:1"></span>
+        <button class="btn btn-primary" onclick="esLaunchSearch()" style="font-size:13px">${_esRunning?'⏹ Arrêter':'🔍 Lancer la recherche'}</button>
+        ${high > 0 ? `<button class="btn" onclick="esApplyAll(80)" style="font-size:12px;background:#22c55e;color:#fff;border:none">✓ Tout appliquer ≥ 80% (${high})</button>` : ''}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;background:var(--bg-3);border:1px solid var(--border);border-radius:6px">
+        <span style="font-size:11px;color:var(--t3);font-weight:600">Infos Entreprise :</span>
+        <select onchange="_esFilters.categorie=this.value;_esFilters.page=0" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:var(--card);color:var(--t1);min-width:130px;max-width:180px">
+          <option value="">— Catégorie —</option>
+          ${(clientsFilterOpts.categorie||[]).map(v => `<option value="${v.replace(/"/g,'&quot;')}"${_esFilters.categorie===v?' selected':''}>${v}</option>`).join('')}
+        </select>
+        <select onchange="_esFilters.sousCategorie=this.value;_esFilters.page=0" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:var(--card);color:var(--t1);min-width:130px;max-width:180px">
+          <option value="">— Sous-catégorie —</option>
+          ${(clientsFilterOpts.sousCategorie||[]).map(v => `<option value="${v.replace(/"/g,'&quot;')}"${_esFilters.sousCategorie===v?' selected':''}>${v}</option>`).join('')}
+        </select>
+        <select onchange="_esFilters.categoriePro=this.value;_esFilters.page=0" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:var(--card);color:var(--t1);min-width:130px;max-width:180px">
+          <option value="">— Catégorie pro. —</option>
+          ${(clientsFilterOpts.categoriePro||[]).map(v => `<option value="${v.replace(/"/g,'&quot;')}"${_esFilters.categoriePro===v?' selected':''}>${v}</option>`).join('')}
+        </select>
+        <select onchange="_esFilters.secteur=this.value;_esFilters.page=0" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:var(--card);color:var(--t1);min-width:130px;max-width:180px">
+          <option value="">— Secteur —</option>
+          ${(clientsFilterOpts.secteur||[]).map(v => `<option value="${v.replace(/"/g,'&quot;')}"${_esFilters.secteur===v?' selected':''}>${v}</option>`).join('')}
+        </select>
+        <select onchange="_esFilters.type=this.value;_esFilters.page=0" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:var(--card);color:var(--t1);min-width:130px;max-width:180px">
+          <option value="">— Type —</option>
+          ${(clientsFilterOpts.type||[]).map(v => `<option value="${v.replace(/"/g,'&quot;')}"${_esFilters.type===v?' selected':''}>${v}</option>`).join('')}
+        </select>
+        <select onchange="_esFilters.groupe=this.value;_esFilters.page=0" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:var(--card);color:var(--t1);min-width:130px;max-width:180px">
+          <option value="">— Groupe —</option>
+          ${(clientsFilterOpts.groupe||[]).map(v => `<option value="${v.replace(/"/g,'&quot;')}"${_esFilters.groupe===v?' selected':''}>${v}</option>`).join('')}
+        </select>
+        <select onchange="_esFilters.origine=this.value;_esFilters.page=0" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:var(--card);color:var(--t1);min-width:130px;max-width:180px">
+          <option value="">— Origine —</option>
+          ${(clientsFilterOpts.origine||[]).map(v => `<option value="${v.replace(/"/g,'&quot;')}"${_esFilters.origine===v?' selected':''}>${v}</option>`).join('')}
+        </select>
+        ${(_esFilters.categorie||_esFilters.sousCategorie||_esFilters.categoriePro||_esFilters.secteur||_esFilters.type||_esFilters.groupe||_esFilters.origine) ? `<button class="btn" onclick="_esFilters.categorie='';_esFilters.sousCategorie='';_esFilters.categoriePro='';_esFilters.secteur='';_esFilters.type='';_esFilters.groupe='';_esFilters.origine='';_esFilters.page=0;renderPage('enrich-siren')" style="font-size:11px;padding:3px 8px;color:var(--red)">✕ Effacer</button>` : ''}
+        ${!clientsFilterOptsLoaded ? '<span style="font-size:11px;color:var(--t3)">⏳ chargement options...</span>' : ''}
+      </div>
     </div>
     ${_esTotal > 0 ? `<div style="padding:0 14px 12px;display:flex;gap:8px;align-items:center;font-size:12px;color:var(--t3);flex-wrap:wrap">
       <span>Page <strong>${_esFilters.page + 1}</strong> / ${Math.max(1, Math.ceil(_esTotal / ES_PAGE_SIZE))} (${_esTotal} fiches sans SIRET au total)</span>
