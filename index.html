@@ -1713,10 +1713,6 @@ tbody tr:last-child td { border-bottom: none; }
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
         Carte des Affaires
       </div>
-      <div class="nav-item" data-page="bdnb" onclick="go('bdnb')">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 9h.01"/><path d="M9 13h.01"/><path d="M9 17h.01"/><path d="M15 9h.01"/><path d="M15 13h.01"/><path d="M15 17h.01"/></svg>
-        BDNB
-      </div>
     </div>
     <div class="nav-section">
       <div class="nav-section-title">Communication</div>
@@ -3527,7 +3523,7 @@ function go(page) {
   const navPage = page === 'client-detail' ? 'clients' : page === 'contact-detail' ? 'contacts' : page === 'marche-detail' ? 'marches' : page === 'affaire-detail' ? 'marches' : page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
   const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing',pipeline:'Pipeline commercial',carte:'Carte sociétés',
-    marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',bdnb:'BDNB — Base Nationale des Bâtiments',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
+    marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
     cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA'};
   document.getElementById('pageTitle').textContent = titles[page]||page;
@@ -3566,7 +3562,6 @@ function renderPage(page) {
     commandes: renderCommandes,
     factures: renderFactures,
     'carte-affaires': renderCarteAffaires,
-    bdnb: renderBdnb,
     objectifs: renderObjectifs,
     batiscope: renderBatiscope,
     cr: renderCR,
@@ -3589,7 +3584,6 @@ function renderPage(page) {
   if (page === 'cr') initEditor();
   if (page === 'carte') setTimeout(initCarteMap, 50);
   if (page === 'carte-affaires') setTimeout(initCarteAffairesMap, 50);
-  if (page === 'bdnb') setTimeout(initBdnbPage, 50);
   if (page === 'enrich-siren') {
     setTimeout(imxRenderEsList, 50);
     if (!clientsFilterOptsLoaded) loadClientsFilterOpts().then(() => { if (currentPage === 'enrich-siren') renderPage('enrich-siren'); });
@@ -8361,310 +8355,6 @@ function renderBatiscope() {
   return `<div style="margin:-20px -20px;height:calc(100vh - 60px);overflow:hidden">
     <iframe src="batiscope.html" style="width:100%;height:100%;border:0;display:block" title="BatiScop'"></iframe>
   </div>`;
-}
-
-// ═══ BDNB — Base de Données Nationale des Bâtiments ═══
-let bdnbMap = null;
-let _bdnbResults = [];
-let _bdnbCommune = null; // {code, nom, codePostal}
-
-const DPE_COLORS = { A:'#00a651', B:'#52b948', C:'#bfd732', D:'#fff200', E:'#fdb913', F:'#f37021', G:'#ed1c24' };
-
-function renderBdnb() {
-  return `
-  <div style="background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.05));border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
-      <div>
-        <div style="font-weight:700;font-size:14px;color:var(--t1);margin-bottom:4px">🏗️ Base Nationale des Bâtiments (BDNB)</div>
-        <div style="font-size:12px;color:var(--t3);max-width:780px;line-height:1.5">
-          Ciblage des bâtiments par commune avec données DPE, année construction, surface, type d'usage et propriétaire.
-          Idéal pour identifier des prospects de rénovation énergétique (passoires thermiques DPE F/G) ou des bâtiments anciens.
-          <a href="https://bdnb.io" target="_blank" style="color:#6366f1">Doc BDNB →</a>
-        </div>
-      </div>
-      <div id="bdnbQuotaInfo" style="font-size:11px;color:var(--t3);text-align:right">10 000 requêtes/mois</div>
-    </div>
-  </div>
-
-  <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
-    <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:10px">Filtres</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:10px">
-      <div class="fg" style="grid-column:span 2"><label class="fl">Commune *</label>
-        <input class="fi" id="bdnbCommuneInput" style="font-size:12px" placeholder="Ex: Nantes, La Roche-sur-Yon..." oninput="bdnbCommuneSearch(this.value)" autocomplete="off">
-        <div id="bdnbCommuneSuggest" style="position:absolute;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:280px;overflow-y:auto;box-shadow:0 6px 16px rgba(0,0,0,.15);display:none;z-index:200;min-width:300px"></div>
-        <div id="bdnbCommuneSelected" style="font-size:11px;color:var(--t3);margin-top:4px"></div>
-      </div>
-      <div class="fg"><label class="fl">Classe DPE</label>
-        <select class="fi" id="bdnbDpe" style="font-size:12px" multiple size="4">
-          <option value="A">A — Très performant</option>
-          <option value="B">B</option>
-          <option value="C">C</option>
-          <option value="D">D</option>
-          <option value="E">E</option>
-          <option value="F" selected>F — Passoire</option>
-          <option value="G" selected>G — Passoire</option>
-        </select>
-        <div style="font-size:10px;color:var(--t3);margin-top:2px">Ctrl+clic pour multi-sélection</div>
-      </div>
-      <div class="fg"><label class="fl">Année construction</label>
-        <div style="display:flex;gap:4px">
-          <input class="fi" id="bdnbAnneeMin" type="number" placeholder="Min" style="font-size:12px;width:50%">
-          <input class="fi" id="bdnbAnneeMax" type="number" placeholder="Max" style="font-size:12px;width:50%">
-        </div></div>
-      <div class="fg"><label class="fl">Type d'usage</label>
-        <select class="fi" id="bdnbUsage" style="font-size:12px">
-          <option value="">— Tous —</option>
-          <option value="résidentiel">Résidentiel</option>
-          <option value="tertiaire">Tertiaire</option>
-        </select></div>
-      <div class="fg"><label class="fl">Surface min (m²)</label>
-        <input class="fi" id="bdnbSurfMin" type="number" placeholder="Ex: 200" style="font-size:12px"></div>
-      <div class="fg"><label class="fl">Limite résultats</label>
-        <select class="fi" id="bdnbLimit" style="font-size:12px">
-          <option value="50">50</option>
-          <option value="100" selected>100</option>
-          <option value="200">200</option>
-          <option value="500">500</option>
-        </select></div>
-    </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center">
-      <span id="bdnbStatus" style="font-size:11px;color:var(--t3);margin-right:auto"></span>
-      <button class="btn" onclick="bdnbExportCsv()" id="bdnbExportBtn" style="font-size:12px" disabled>📥 Export CSV</button>
-      <button class="btn btn-primary" onclick="bdnbSearch()" style="font-size:12px">🔍 Rechercher</button>
-    </div>
-  </div>
-
-  <div class="map-container" style="height:400px"><div id="bdnbMap"></div></div>
-
-  <div class="card" style="margin-top:14px">
-    <div class="card-header"><div class="card-title">Bâtiments trouvés</div></div>
-    <div class="card-body" style="padding:0"><div class="table-wrap" id="bdnbTable">
-      <div style="padding:30px;text-align:center;color:var(--t3);font-size:13px">Renseignez une commune et cliquez "Rechercher".</div>
-    </div></div>
-  </div>`;
-}
-
-function initBdnbPage() {
-  // Init carte vide
-  if (bdnbMap) { bdnbMap.remove(); bdnbMap = null; }
-  const el = document.getElementById('bdnbMap');
-  if (!el) return;
-  bdnbMap = L.map('bdnbMap', { zoomControl: true }).setView([46.8, 2.5], 6);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap © CARTO',
-    maxZoom: 19
-  }).addTo(bdnbMap);
-}
-
-// Autocomplete commune via geo.api.gouv.fr
-let _bdnbCommuneTimer = null;
-async function bdnbCommuneSearch(q) {
-  clearTimeout(_bdnbCommuneTimer);
-  const sug = document.getElementById('bdnbCommuneSuggest');
-  if (!sug) return;
-  if (!q || q.length < 2) { sug.style.display = 'none'; return; }
-  _bdnbCommuneTimer = setTimeout(async () => {
-    try {
-      const r = await fetch('https://geo.api.gouv.fr/communes?nom=' + encodeURIComponent(q) + '&fields=nom,code,codesPostaux,centre&limit=10&boost=population');
-      const data = await r.json();
-      if (!data.length) { sug.style.display = 'none'; return; }
-      sug.innerHTML = data.map(c => {
-        const cp = (c.codesPostaux && c.codesPostaux[0]) || '';
-        return `<div class="bdnb-sug" onclick="bdnbSelectCommune('${c.code}','${c.nom.replace(/'/g, "\\'")}','${cp}',${c.centre?.coordinates?.[1]||0},${c.centre?.coordinates?.[0]||0})" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #eee;font-size:13px;color:#1a1a1a;background:#fff" onmouseover="this.style.background='#f5f7fa'" onmouseout="this.style.background='#fff'">
-          <strong>${c.nom}</strong> <span style="color:#888">— ${cp} (${c.code})</span>
-        </div>`;
-      }).join('');
-      sug.style.display = 'block';
-    } catch (e) { sug.style.display = 'none'; }
-  }, 250);
-}
-
-function bdnbSelectCommune(code, nom, cp, lat, lng) {
-  _bdnbCommune = { code, nom, codePostal: cp, lat, lng };
-  document.getElementById('bdnbCommuneInput').value = nom + ' (' + cp + ')';
-  document.getElementById('bdnbCommuneSelected').innerHTML = `<span style="color:var(--green)">✓</span> Code INSEE : <span class="mono">${code}</span>`;
-  document.getElementById('bdnbCommuneSuggest').style.display = 'none';
-  if (bdnbMap && lat && lng) bdnbMap.setView([lat, lng], 13);
-}
-
-document.addEventListener('click', e => {
-  if (!e.target.closest('#bdnbCommuneSuggest') && !e.target.closest('#bdnbCommuneInput')) {
-    const s = document.getElementById('bdnbCommuneSuggest'); if (s) s.style.display = 'none';
-  }
-});
-
-async function bdnbSearch() {
-  if (!_bdnbCommune) { toast('Sélectionnez une commune', 'warn'); return; }
-  const dpeSel = document.getElementById('bdnbDpe');
-  const dpe = [...dpeSel.selectedOptions].map(o => o.value);
-  const anneeMin = document.getElementById('bdnbAnneeMin').value.trim();
-  const anneeMax = document.getElementById('bdnbAnneeMax').value.trim();
-  const usage = document.getElementById('bdnbUsage').value;
-  const surfMin = document.getElementById('bdnbSurfMin').value.trim();
-  const limit = document.getElementById('bdnbLimit').value || '100';
-
-  const status = document.getElementById('bdnbStatus');
-  status.textContent = '🔍 Interrogation BDNB...';
-  document.getElementById('bdnbExportBtn').disabled = true;
-
-  // Construction des filtres (PostgREST)
-  const params = new URLSearchParams();
-  params.set('path', 'donnees/batiment_groupe_complet');
-  params.set('code_commune_insee', 'eq.' + _bdnbCommune.code);
-  if (dpe.length) params.set('classe_bilan_dpe', 'in.(' + dpe.join(',') + ')');
-  if (anneeMin) params.set('annee_construction', 'gte.' + anneeMin);
-  if (anneeMax) params.append('annee_construction', 'lte.' + anneeMax);
-  if (usage === 'résidentiel') params.set('usage_principal_bdnb_open', 'ilike.*résidentiel*');
-  if (usage === 'tertiaire') params.set('usage_principal_bdnb_open', 'ilike.*tertiaire*');
-  if (surfMin) params.set('surface_emprise_sol', 'gte.' + surfMin);
-  params.set('limit', limit);
-  // Sélectionner les colonnes utiles pour limiter la charge
-  params.set('select', [
-    'batiment_groupe_id','code_commune_insee','libelle_adr_principale_ban','code_postal',
-    'classe_bilan_dpe','classe_emission_ges','conso_5_usages_ep_m2','annee_construction',
-    'usage_principal_bdnb_open','nb_log','s_geom_groupe','geom_groupe',
-    'nom_proprietaire','siren_proprietaire','denomination_proprietaire','nature_proprietaire'
-  ].join(','));
-
-  try {
-    const r = await fetch('/api/bdnb?' + params.toString());
-    const text = await r.text();
-    let data;
-    try { data = JSON.parse(text); } catch { data = null; }
-    if (!r.ok) {
-      status.innerHTML = '<span style="color:var(--red)">Erreur ' + r.status + '</span> — ' + (data?.error || text.substring(0,200));
-      const tbl = document.getElementById('bdnbTable');
-      if (tbl) tbl.innerHTML = '<div style="padding:20px;color:var(--red);font-size:12px">Vérifiez que la variable d\'env <code>BDNB_API_KEY</code> est définie sur Vercel. Obtenez une clé sur <a href="https://api-portail.bdnb.io" target="_blank" style="color:#6366f1">api-portail.bdnb.io</a> (gratuit, 10 000 req/mois).</div>';
-      return;
-    }
-    _bdnbResults = Array.isArray(data) ? data : (data?.results || data?.features || []);
-    status.textContent = _bdnbResults.length + ' bâtiment(s) trouvé(s)';
-    document.getElementById('bdnbExportBtn').disabled = _bdnbResults.length === 0;
-    bdnbRenderResults();
-  } catch (e) {
-    status.innerHTML = '<span style="color:var(--red)">Erreur réseau</span> — ' + e.message;
-  }
-}
-
-function bdnbRenderResults() {
-  const list = _bdnbResults;
-  // Carte
-  if (bdnbMap) {
-    bdnbMap.eachLayer(l => { if (l instanceof L.CircleMarker || l instanceof L.GeoJSON) bdnbMap.removeLayer(l); });
-    const bounds = [];
-    for (const b of list) {
-      let lat, lng;
-      if (b.geom_groupe?.coordinates) {
-        // GeoJSON Point/Polygon
-        const g = b.geom_groupe;
-        if (g.type === 'Point') { lng = g.coordinates[0]; lat = g.coordinates[1]; }
-        else if (g.coordinates?.[0]?.[0]) {
-          // Polygon -> centroid grossier
-          const ring = g.coordinates[0];
-          const cx = ring.reduce((s,p) => s+p[0], 0) / ring.length;
-          const cy = ring.reduce((s,p) => s+p[1], 0) / ring.length;
-          lng = cx; lat = cy;
-        }
-      }
-      if (!lat || !lng) continue;
-      const dpe = (b.classe_bilan_dpe || '').toUpperCase();
-      const color = DPE_COLORS[dpe] || '#888';
-      const m = L.circleMarker([lat, lng], { radius: 7, fillColor: color, color: '#fff', weight: 1.5, fillOpacity: 0.85 }).addTo(bdnbMap);
-      m.bindPopup(bdnbBuildingPopup(b), { maxWidth: 320 });
-      bounds.push([lat, lng]);
-    }
-    if (bounds.length) bdnbMap.fitBounds(bounds, { padding: [30, 30] });
-    else if (_bdnbCommune) bdnbMap.setView([_bdnbCommune.lat, _bdnbCommune.lng], 13);
-  }
-  // Tableau
-  const tbl = document.getElementById('bdnbTable');
-  if (!tbl) return;
-  if (!list.length) {
-    tbl.innerHTML = '<div style="padding:30px;text-align:center;color:var(--t3)">Aucun bâtiment trouvé avec ces filtres.</div>';
-    return;
-  }
-  tbl.innerHTML = `<table><thead><tr>
-    <th>Adresse</th><th>DPE</th><th>GES</th><th>Conso</th><th>Année</th><th>Usage</th><th>Logts</th><th>Surface</th><th>Propriétaire</th><th>Actions</th>
-  </tr></thead><tbody>${list.map(b => {
-    const dpe = (b.classe_bilan_dpe || '').toUpperCase();
-    const ges = (b.classe_emission_ges || '').toUpperCase();
-    const dpeBadge = dpe ? `<span style="display:inline-block;padding:1px 7px;border-radius:3px;background:${DPE_COLORS[dpe]||'#888'};color:#000;font-weight:700;font-size:11px">${dpe}</span>` : '—';
-    const gesBadge = ges ? `<span style="display:inline-block;padding:1px 7px;border-radius:3px;background:${DPE_COLORS[ges]||'#888'};color:#000;font-weight:700;font-size:11px">${ges}</span>` : '—';
-    const propName = b.denomination_proprietaire || b.nom_proprietaire || '—';
-    const siren = b.siren_proprietaire || '';
-    const sirenLink = siren ? ` <a href="https://www.pappers.fr/entreprise/${siren}" target="_blank" rel="noopener" title="Pappers" style="color:#3b82f6;text-decoration:none">📋</a>` : '';
-    return `<tr>
-      <td style="font-size:12px"><strong>${b.libelle_adr_principale_ban || '—'}</strong><br><span style="color:var(--t3);font-size:11px">${b.code_postal || ''} · ${b.batiment_groupe_id || ''}</span></td>
-      <td style="text-align:center">${dpeBadge}</td>
-      <td style="text-align:center">${gesBadge}</td>
-      <td class="mono" style="font-size:12px">${b.conso_5_usages_ep_m2 != null ? Math.round(b.conso_5_usages_ep_m2) + ' kWhep/m²' : '—'}</td>
-      <td class="mono" style="font-size:12px">${b.annee_construction || '—'}</td>
-      <td style="font-size:11px">${b.usage_principal_bdnb_open || '—'}</td>
-      <td style="text-align:right">${b.nb_log || '—'}</td>
-      <td class="mono" style="font-size:12px">${b.s_geom_groupe ? Math.round(b.s_geom_groupe) + ' m²' : '—'}</td>
-      <td style="font-size:11px">${propName}${sirenLink}<br><span style="color:var(--t3);font-size:10px">${b.nature_proprietaire || ''}</span></td>
-      <td style="white-space:nowrap">${siren ? `<button class="btn" onclick="bdnbAddProspect('${siren}','${(propName||'').replace(/'/g,"\\'")}','${(b.libelle_adr_principale_ban||'').replace(/'/g,"\\'")}','${b.code_postal||''}','${(_bdnbCommune?.nom||'').replace(/'/g,"\\'")}')" style="font-size:11px">+ Prospect</button>` : ''}</td>
-    </tr>`;
-  }).join('')}</tbody></table>`;
-}
-
-function bdnbBuildingPopup(b) {
-  const dpe = (b.classe_bilan_dpe || '').toUpperCase();
-  const dpeColor = DPE_COLORS[dpe] || '#888';
-  return `<div class="map-popup">
-    <h4>${b.libelle_adr_principale_ban || 'Bâtiment'}</h4>
-    <div class="map-popup-city">${b.code_postal || ''} · ${b.batiment_groupe_id || ''}</div>
-    <div style="display:flex;gap:6px;margin:6px 0;flex-wrap:wrap">
-      ${dpe ? `<span style="padding:2px 8px;border-radius:4px;background:${dpeColor};color:#000;font-weight:700;font-size:11px">DPE ${dpe}</span>` : ''}
-      ${b.annee_construction ? `<span style="padding:2px 8px;border-radius:4px;background:#eee;font-size:11px">${b.annee_construction}</span>` : ''}
-      ${b.nb_log ? `<span style="padding:2px 8px;border-radius:4px;background:#eee;font-size:11px">${b.nb_log} log.</span>` : ''}
-    </div>
-    <div style="font-size:11px;line-height:1.5">
-      ${b.usage_principal_bdnb_open ? '<strong>Usage :</strong> ' + b.usage_principal_bdnb_open + '<br>' : ''}
-      ${b.conso_5_usages_ep_m2 != null ? '<strong>Conso :</strong> ' + Math.round(b.conso_5_usages_ep_m2) + ' kWhep/m²/an<br>' : ''}
-      ${b.s_geom_groupe ? '<strong>Emprise :</strong> ' + Math.round(b.s_geom_groupe) + ' m²<br>' : ''}
-      ${b.denomination_proprietaire || b.nom_proprietaire ? '<strong>Propriétaire :</strong> ' + (b.denomination_proprietaire || b.nom_proprietaire) : ''}
-      ${b.siren_proprietaire ? ' · <a href="https://www.pappers.fr/entreprise/' + b.siren_proprietaire + '" target="_blank">📋 Pappers</a>' : ''}
-    </div>
-  </div>`;
-}
-
-function bdnbExportCsv() {
-  if (!_bdnbResults.length) return;
-  const cols = ['batiment_groupe_id','libelle_adr_principale_ban','code_postal','code_commune_insee','classe_bilan_dpe','classe_emission_ges','conso_5_usages_ep_m2','annee_construction','usage_principal_bdnb_open','nb_log','s_geom_groupe','denomination_proprietaire','siren_proprietaire','nature_proprietaire'];
-  const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-  const csv = [cols.join(';'), ..._bdnbResults.map(r => cols.map(c => esc(r[c])).join(';'))].join('\r\n');
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'bdnb_' + (_bdnbCommune?.code || 'export') + '_' + new Date().toISOString().slice(0,10) + '.csv';
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-async function bdnbAddProspect(siren, nom, adresse, cp, ville) {
-  if (!siren || !nom) return;
-  if (!confirm('Créer un prospect "' + nom + '" dans le CRM ?')) return;
-  const id = nom.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 18) + '_' + siren.slice(-6);
-  const ini = nom.split(' ').map(w => (w||'')[0]).join('').substring(0, 2).toUpperCase();
-  const row = {
-    id, name: nom, code: ('BD' + siren.slice(-6)).substring(0, 10),
-    raison_sociale: nom, siren,
-    adresse_ligne1: adresse || null,
-    code_postal: cp || null,
-    city: ville || '',
-    pays: 'FR',
-    sector: '', email: '', phone: '',
-    effectif: 0, ini,
-    color: '#8b5cf6,#6366f1',
-    ca: 0, obj: 0, margin: 0, dso: 0, score: 50,
-    status: 'objectif',
-    sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15,
-    last_contact: new Date().toISOString().slice(0, 10),
-  };
-  const { error } = await sb.from('clients').insert(row);
-  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
-  toast('Prospect créé : ' + nom, 'success');
 }
 
 // ═══ DEVIS / COMMANDES / FACTURES / OBJECTIFS ═══
