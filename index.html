@@ -6459,11 +6459,20 @@ function imxParseCsv(text) {
   if (cell.length || row.length) { row.push(cell); rows.push(row); }
   if (!rows.length) return [];
   const headers = rows[0].map(h => (h || '').trim());
+  // Défait le wrapper Excel ="..." utilisé pour préserver les longs IDs
+  const unwrap = s => {
+    if (typeof s !== 'string') return s;
+    const m = s.match(/^="(.*)"$/);
+    if (m) return m[1].replace(/""/g, '"');
+    // Et l'apostrophe de début (autre convention Excel pour forcer texte)
+    if (s.startsWith("'")) return s.slice(1);
+    return s;
+  };
   return rows.slice(1)
     .filter(r => r.some(v => v && v.trim()) && !((r[0] || '').trim().startsWith('#'))) // ignore lignes vides + lignes commentaires
     .map(r => {
       const obj = {};
-      for (let j = 0; j < headers.length; j++) obj[headers[j]] = r[j] !== undefined ? r[j] : '';
+      for (let j = 0; j < headers.length; j++) obj[headers[j]] = r[j] !== undefined ? unwrap(r[j]) : '';
       return obj;
     });
 }
@@ -6830,12 +6839,34 @@ function imxRenderColMappingSection(kind, rows, title, crmFields) {
   </details>`;
 }
 
+// Colonnes à forcer en texte (anti-arrondi Excel pour les longs IDs / codes)
+const IMX_TEXT_COLS = new Set([
+  'legacy_id','legacy_societe_id','legacy_contact_id','ID_SOCIETE','ID_CONTACTS','ID_TACHESCOMMERCIALES','ID_COLLABORATEUR','ID_AGENCES','ID_CIVILITE','ID_FONCTIONCONTACT','ID_METIERS','ID_FILIALE','ID_STATUTSOCIETE','ID_CATEGORIESOCIETE','ID_SOCIETETYPECLIENT','ID_CONVENTION_TYPE','ID_PROJET','ID_CANDIDATURE','ID_TACHESCOMMERCIALESTYPE',
+  'siren','siret','code','code_codial','code_postal','ape','TXT_CP','COD_CODIAL_Client','TXT_SIREN','TXT_SIRET','TXT_APE',
+  'phone','telephone','telephone2','mobile','fax','TXT_Telephone','TXT_Telephone2','TXT_TelFixe','TXT_TelPort','TXT_Fax',
+  'TXT_OutlookID',
+]);
+// Toute valeur purement numérique ≥ 12 chiffres est aussi forcée en texte
+function imxIsLongNumber(v) {
+  return typeof v === 'string' && /^\d{12,}$/.test(v);
+}
+// Wrapping CSV pour préserver les valeurs : ="..." que Excel interprète comme texte
+function imxCsvCell(col, v) {
+  const s = (v == null ? '' : String(v));
+  if (s === '') return '""';
+  const forceText = IMX_TEXT_COLS.has(col) || imxIsLongNumber(s) || s.startsWith('0');
+  if (forceText) {
+    // ="value" avec échappement des "
+    return '"=""' + s.replace(/"/g, '""') + '"""';
+  }
+  return '"' + s.replace(/"/g, '""') + '"';
+}
+
 function imxDownloadCsv(kind) {
   const rows = (kind === 'societes') ? _imxOutSoc : (kind === 'contacts') ? _imxOutCon : _imxOutCr;
   if (!rows.length) { toast('Aucune donnée — recalculez le merge d\'abord', 'warn'); return; }
   const cols = [...new Set(rows.flatMap(r => Object.keys(r)))];
-  const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-  const csv = [cols.join(';'), ...rows.map(r => cols.map(c => esc(r[c])).join(';'))].join('\r\n');
+  const csv = [cols.join(';'), ...rows.map(r => cols.map(c => imxCsvCell(c, r[c])).join(';'))].join('\r\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
