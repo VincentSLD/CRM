@@ -6216,7 +6216,7 @@ async function bdnbAddProspect(siren, nom, adresse, cp, ville) {
   const id = nom.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 18) + '_' + siren.slice(-6);
   const ini = nom.split(' ').map(w => (w||'')[0]).join('').substring(0, 2).toUpperCase();
   const row = {
-    id, name: nom, code: 'BDNB-' + siren.slice(-6),
+    id, name: nom, code: ('BD' + siren.slice(-6)).substring(0, 10),
     raison_sociale: nom, siren,
     adresse_ligne1: adresse || null,
     code_postal: cp || null,
@@ -11827,7 +11827,7 @@ async function addSelectedProspects() {
       const dept = s.departement || '';
       const row = {
         id, name,
-        code: 'PROSPECT-' + (s.siret||'').slice(-6),
+        code: ('PR' + (s.siret||'').slice(-6)).substring(0, 10),
         raison_sociale: e.nom_raison_sociale || name,
         siret: s.siret || null, siren: e.siren || null,
         ape: s.activite_principale || e.activite_principale || null,
@@ -12284,6 +12284,9 @@ async function pushClientToAkuiteo(clientId) {
       if (full.mk_origine) akData.level2grouping = full.mk_origine;
     }
 
+    // Akuiteo limite le code à 10 caractères : on tronque pour éviter T9RuntimeException
+    if (akData.code && akData.code.length > 10) akData.code = akData.code.substring(0, 10);
+
     if (full.akuiteo_id) {
       // Update : id dans le body + Accept text/plain obligatoires
       akData.id = full.akuiteo_id;
@@ -12291,7 +12294,7 @@ async function pushClientToAkuiteo(clientId) {
       toast('Client mis à jour dans Akuiteo', 'success');
     } else {
       // Création : code + type obligatoires + Accept text/plain
-      akData.code = full.code || null;
+      akData.code = (full.code || '').substring(0, 10) || null;
       akData.type = 'CUSTOMER';
       let result;
       try {
