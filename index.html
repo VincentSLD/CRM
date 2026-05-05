@@ -7183,7 +7183,7 @@ async function esLaunchSearch() {
   imxRenderEsList();
   const from = _esFilters.page * ES_PAGE_SIZE;
   const to = from + ES_PAGE_SIZE - 1;
-  let q = sb.from('clients').select('id,name,city,code_postal,departement,siren,siret,ape,akuiteo_id,status', { count: 'exact' })
+  let q = sb.from('clients').select('id,name,city,code_postal,departement,adresse_ligne1,adresse_ligne2,siren,siret,ape,akuiteo_id,status', { count: 'exact' })
     .or('siret.is.null,siret.eq.')
     .order('name', { ascending: true });
   if (_esFilters.dept) q = q.ilike('code_postal', _esFilters.dept + '%');
@@ -7292,13 +7292,22 @@ function imxRenderEsList() {
     const cand = item.candidates[0];
     const s = cand.siege || {};
     const scoreColor = cand._score >= 80 ? '#22c55e' : cand._score >= 60 ? '#f59e0b' : '#ef4444';
+    // Adresse SIRENE : préférer s.adresse complète, sinon recompose à partir des sous-champs
+    const sireneAdr = (siege) => {
+      if (!siege) return '';
+      if (siege.adresse) return siege.adresse;
+      const parts = [siege.numero_voie, siege.indice_repetition, siege.type_voie, siege.libelle_voie].filter(Boolean).join(' ');
+      const cmpl = [siege.complement_adresse, siege.distribution_speciale].filter(Boolean).join(' ');
+      return [parts, cmpl].filter(Boolean).join(' · ');
+    };
+    const crmAdr = [c.adresse_ligne1, c.adresse_ligne2].filter(Boolean).join(' · ');
     const altCands = item.candidates.slice(1, 3).map((alt, ai) => {
       const altS = alt.siege || {};
       return `<div style="padding:6px 10px;border-top:1px dashed var(--border);font-size:11px;display:flex;justify-content:space-between;gap:8px;align-items:center">
         <div style="flex:1">
           <span style="display:inline-block;padding:1px 6px;border-radius:4px;background:rgba(107,114,128,.15);font-size:10px">${alt._score}%</span>
           ${alt.nom_raison_sociale || alt.nom_complet || ''} <span class="mono" style="color:var(--t3)">${alt.siren||''}</span>
-          <span style="color:var(--t3)">${altS.code_postal||''} ${altS.libelle_commune||''}</span>
+          <div style="color:var(--t3);font-size:10px;margin-top:2px">📍 ${sireneAdr(altS)} ${altS.code_postal||''} ${altS.libelle_commune||''}</div>
         </div>
         <button class="btn" onclick="esApply(${idx},${ai+1},${_esFilters.withAkuiteo})" style="font-size:10px;padding:2px 6px">Choisir</button>
       </div>`;
@@ -7307,6 +7316,7 @@ function imxRenderEsList() {
       <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
         <div style="flex:1;min-width:240px">
           <div style="font-weight:600;font-size:13px">${c.name} ${c.akuiteo_id ? '<span title="Synchro Akuiteo" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;vertical-align:middle"></span>' : ''}</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:2px">📍 ${crmAdr || '<em>pas d\\'adresse</em>'}</div>
           <div style="font-size:11px;color:var(--t3)">${c.code_postal||''} ${c.city||''} · ${c.status||''}</div>
         </div>
         <div style="flex:2;min-width:280px;background:var(--bg-3);border:1px solid var(--border);border-radius:6px;padding:8px">
@@ -7314,12 +7324,13 @@ function imxRenderEsList() {
             <span style="display:inline-block;padding:2px 8px;border-radius:4px;background:${scoreColor};color:#fff;font-weight:700;font-size:11px">${cand._score}%</span>
             <strong style="font-size:13px">${cand.nom_raison_sociale || cand.nom_complet || ''}</strong>
           </div>
+          <div style="font-size:11px;color:var(--t3);margin-top:4px">📍 ${sireneAdr(s) || '<em>—</em>'}</div>
+          <div style="font-size:11px;color:var(--t3)">${s.code_postal||''} ${s.libelle_commune||''}</div>
           <div style="font-size:11px;color:var(--t3);margin-top:4px">
             SIREN <span class="mono" style="color:var(--t1)">${cand.siren||''}</span> ·
             SIRET <span class="mono" style="color:var(--t1)">${s.siret||''}</span> ·
             APE ${s.activite_principale||'—'} ·
-            ${cand.nature_juridique||''} ·
-            ${s.code_postal||''} ${s.libelle_commune||''}
+            ${cand.nature_juridique||''}
             ${cand.siren ? ' · <a href="https://www.pappers.fr/entreprise/'+cand.siren+'" target="_blank" rel="noopener" style="color:#3b82f6">Pappers</a>' : ''}
           </div>
         </div>
