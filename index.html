@@ -4810,8 +4810,8 @@ function renderClients(filter='all') {
     </select>
   </div>
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Société</th><th style="width:50px">Dpt</th><th>Ville</th><th>Commercial Novam</th><th>Commercial GPH</th><th style="width:60px;text-align:center">Pappers</th></tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--t3)">Aucun client/prospect trouvé</td></tr>' : filtered.map(c => {
+    <table><thead><tr><th>Société</th><th style="width:50px">Dpt</th><th>Ville</th><th>Commercial Novam</th><th>Commercial GPH</th><th style="width:60px;text-align:center">Pappers</th><th style="width:130px;text-align:center">Statut juridique</th></tr></thead>
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--t3)">Aucun client/prospect trouvé</td></tr>' : filtered.map(c => {
       const pappersRef = c.siren || c.siret;
       const pappersLink = pappersRef ? '<a href="https://www.pappers.fr/entreprise/'+pappersRef+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Voir sur Pappers" style="color:#3b82f6;text-decoration:none;font-size:14px">📋</a>' : '<span style="color:var(--t3);font-size:11px">—</span>';
       const dept = c.code_postal ? c.code_postal.slice(0,2) : (c.departement || '');
@@ -4820,6 +4820,18 @@ function renderClients(filter='all') {
       const color = c.color || '#888,#666';
       const ini = c.ini || (c.name||'?').substring(0,2).toUpperCase();
       const code = c.code || '';
+      // Statut juridique : badge coloré si radiée ou procédure
+      let statusBadge = '<span style="color:var(--t3);font-size:11px">—</span>';
+      const badges = [];
+      if (c.etat_insee === 'C') {
+        badges.push('<span style="display:inline-block;padding:2px 6px;border-radius:4px;background:#dc2626;color:#fff;font-size:10px;font-weight:700" title="Radiée INSEE'+(c.date_fermeture_insee?' le '+c.date_fermeture_insee:'')+'">❌ RADIÉE</span>');
+      }
+      if (c.procedure_collective) {
+        const pc = c.procedure_collective;
+        const pColor = pc==='LJ'?'#dc2626':pc==='RJ'?'#ef4444':pc==='Sauvegarde'?'#f59e0b':pc==='Plan'||pc==='Cession'?'#6b7280':pc==='Clôture'||pc==='Résolution'?'#22c55e':'#6b7280';
+        badges.push('<span style="display:inline-block;padding:2px 6px;border-radius:4px;background:'+pColor+';color:#fff;font-size:10px;font-weight:700" title="'+(c.procedure_nature||pc)+(c.procedure_date?' — '+c.procedure_date:'')+'">⚠ '+pc+'</span>');
+      }
+      if (badges.length) statusBadge = badges.join(' ');
       return `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
         <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${color})">${ini}</div><div><div class="cell-name">${c.name||''} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'};margin-left:4px;vertical-align:middle" title="${c.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span></div><div class="cell-code">${code}</div></div></div></td>
         <td class="mono" style="font-size:12px">${dept}</td>
@@ -4827,6 +4839,7 @@ function renderClients(filter='all') {
         <td style="font-size:12px">${novam}</td>
         <td style="font-size:12px">${gph}</td>
         <td style="text-align:center">${pappersLink}</td>
+        <td style="text-align:center;white-space:nowrap">${statusBadge}</td>
       </tr>`;
     }).join('')}</tbody></table>
   </div></div></div>
