@@ -8715,6 +8715,99 @@ async function pcFetchInsee(siren) {
   } catch { return null; }
 }
 
+// Synchronisation automatique : scanne TOUTES les fiches avec SIREN et applique
+// directement les résultats (BODACC + INSEE) sans validation manuelle.
+async function pcSyncAll(skipRecent) {
+  if (_pcRunning) { _pcCancel = true; return; }
+  // Compter d'abord les fiches concernées
+  let countQ = sb.from('clients').select('id', { count: 'exact', head: true })
+    .not('siren', 'is', null).neq('siren', '');
+  if (_pcFilters.dept) countQ = countQ.ilike('code_postal', _pcFilters.dept + '%');
+  if (skipRecent) {
+    // Skip celles vérifiées il y a moins de 7 jours
+    const cutoff = new Date(Date.now() - 7 * 86400000).toISOString();
+    countQ = countQ.or('procedure_checked_at.is.null,procedure_checked_at.lt.' + cutoff);
+  }
+  const { count: totalCount } = await countQ;
+  if (!totalCount) { toast('Aucune fiche à synchroniser', 'info'); return; }
+  const estimSec = Math.round(totalCount * 0.8);
+  const estim = estimSec >= 60 ? Math.round(estimSec / 60) + ' min' : estimSec + ' s';
+  if (!confirm(`Synchroniser ${totalCount} fiche(s) avec SIREN${_pcFilters.dept?' (dpt '+_pcFilters.dept+')':''}${skipRecent?' (vérifiées il y a >7j)':''} ?\n\n` +
+    `Pour chaque fiche, l'outil interroge BODACC + INSEE et enregistre automatiquement le résultat sur la fiche client.\n\n` +
+    `Durée estimée : ~${estim} (throttle 1 fiche/s).\n\nVous pouvez stopper à tout moment.`)) return;
+  _pcRunning = true; _pcCancel = false; _pcResults = [];
+  _pcTotal = totalCount;
+  pcRenderList();
+  renderPage('procedures-coll');
+
+  let processed = 0, found = 0, errors = 0, off = 0;
+  const BATCH = 100;
+  while (off < totalCount) {
+    if (_pcCancel) break;
+    let q = sb.from('clients').select('id,name,city,code_postal,siren,siret,akuiteo_id,status,procedure_collective,procedure_date,procedure_checked_at')
+      .not('siren', 'is', null).neq('siren', '')
+      .order('name', { ascending: true });
+    if (_pcFilters.dept) q = q.ilike('code_postal', _pcFilters.dept + '%');
+    if (skipRecent) {
+      const cutoff = new Date(Date.now() - 7 * 86400000).toISOString();
+      q = q.or('procedure_checked_at.is.null,procedure_checked_at.lt.' + cutoff);
+    }
+    q = q.range(off, off + BATCH - 1);
+    const { data: clients, error } = await q;
+    if (error) { toast('Erreur batch: ' + error.message, 'error'); break; }
+    if (!clients || !clients.length) break;
+    for (const c of clients) {
+      if (_pcCancel) break;
+      processed++;
+      const status = document.getElementById('pcStatus');
+      if (status) status.innerHTML = `🔄 ${processed}/${totalCount} — ${c.name} <span style="color:var(--green)">✓ ${found} trouvés</span>${errors?' <span style="color:var(--red)">⚠ '+errors+' erreurs</span>':''}`;
+      try {
+        const [annonces, insee] = await Promise.all([pcFetchSiren(c.siren), pcFetchInsee(c.siren)]);
+        const hasBodacc = annonces && annonces.length;
+        const isClosed = insee && insee.etat === 'C';
+        if (hasBodacc || isClosed) {
+          // Construire l'update et l'appliquer directement
+          const last = hasBodacc ? annonces[0] : null;
+          const j = last ? (last.jugement || {}) : {};
+          const url = (last && last.id) ? ('https://www.bodacc.fr/pages/annonces-commerciales-detail/?q.id=id:' + last.id) : null;
+          const update = { procedure_checked_at: new Date().toISOString() };
+          if (last) {
+            update.procedure_collective = _pcShortType(j.nature);
+            update.procedure_nature = j.nature || null;
+            update.procedure_date = j.date || last.dateparution || null;
+            update.procedure_url = url;
+          }
+          if (insee) {
+            update.etat_insee = insee.etat || null;
+            update.date_fermeture_insee = insee.date_fermeture || null;
+          }
+          const { error: upErr } = await sb.from('clients').update(update).eq('id', c.id);
+          if (upErr) errors++;
+          else {
+            found++;
+            // Ajouter au listing pour visualisation
+            _pcResults.push({ client: c, last, all: hasBodacc ? annonces : [], insee, applied: true });
+            // Maj cache local
+            if (DB && DB.clients) {
+              const idx = DB.clients.findIndex(x => x.id === c.id);
+              if (idx >= 0) Object.assign(DB.clients[idx], update);
+            }
+            pcRenderList();
+          }
+        } else {
+          // Marquer juste comme vérifié pour ne pas re-scanner trop tôt
+          await sb.from('clients').update({ procedure_checked_at: new Date().toISOString() }).eq('id', c.id);
+        }
+      } catch (e) { errors++; }
+      await new Promise(r => setTimeout(r, 700));
+    }
+    off += BATCH;
+  }
+  _pcRunning = false; _pcCancel = false;
+  toast(`Sync terminée — ${processed} fiche(s) analysées, ${found} avec procédure/radiation, ${errors} erreurs`, found ? 'warn' : 'success');
+  renderPage('procedures-coll');
+}
+
 async function pcLaunchSearch() {
   if (_pcRunning) { _pcCancel = true; return; }
   _pcRunning = true; _pcCancel = false; _pcResults = [];
@@ -8864,7 +8957,10 @@ function renderProceduresColl() {
       Pour chaque client/prospect avec SIREN, l'outil interroge en parallèle :
       <br>• <strong>BODACC</strong> (<a href="https://bodacc-datadila.opendatasoft.com" target="_blank" style="color:#6366f1">annonces officielles</a>) — détecte sauvegarde, RJ, liquidation, plans, jugements de clôture
       <br>• <strong>INSEE</strong> (<a href="https://recherche-entreprises.api.gouv.fr" target="_blank" style="color:#6366f1">recherche-entreprises</a>) — détecte les fiches <strong>radiées</strong> (état "C") avec date de fermeture
-      <br>Toute fiche avec annonce BODACC OU radiée INSEE est listée. Throttle ~1.5 req/s par source.
+      <br><br><strong>3 modes</strong> :
+      <br>🔍 <strong>Veille (page courante)</strong> : analyse 25 fiches puis demande validation manuelle pour chaque (bouton "📝 Enregistrer")
+      <br>🔄 <strong>Sync auto (>7j)</strong> : analyse + enregistre automatiquement toutes les fiches non vérifiées depuis 7 jours (mode incrémental, idéal pour usage régulier)
+      <br>🔄 <strong>Sync tout</strong> : analyse + enregistre toutes les fiches, même celles déjà vérifiées (force un refresh complet)
       <br><strong>⚠️ SQL préalable</strong> : <code>add_missing_columns.sql</code> (colonnes <code>procedure_*</code>, <code>etat_insee</code>, <code>date_fermeture_insee</code>).
     </div>
   </div>
@@ -8875,7 +8971,10 @@ function renderProceduresColl() {
       <div><label class="fl">Département</label>
         <input class="fi" placeholder="Ex: 85" value="${_pcFilters.dept||''}" oninput="_pcFilters.dept=this.value;_pcFilters.page=0" style="width:80px;font-size:12px"></div>
       <span style="flex:1"></span>
-      <button class="btn btn-primary" onclick="pcLaunchSearch()" style="font-size:13px">${_pcRunning?'⏹ Arrêter':'🔍 Lancer la veille'}</button>
+      <button class="btn btn-primary" onclick="pcLaunchSearch()" style="font-size:13px"${_pcRunning?' disabled':''}>🔍 Veille (page courante)</button>
+      <button class="btn" onclick="pcSyncAll(true)" style="font-size:13px;background:#22c55e;color:#fff;border:none"${_pcRunning?' disabled':''} title="Sync toutes les fiches non vérifiées depuis plus de 7 jours">🔄 Sync auto (>7j)</button>
+      <button class="btn" onclick="pcSyncAll(false)" style="font-size:13px;background:#3b82f6;color:#fff;border:none"${_pcRunning?' disabled':''} title="Sync toutes les fiches avec SIREN, même celles déjà vérifiées récemment">🔄 Sync tout</button>
+      ${_pcRunning ? '<button class="btn" onclick="_pcCancel=true" style="font-size:12px;color:var(--red);border:1px solid var(--red)">⏹ Arrêter</button>' : ''}
     </div>
     ${_pcTotal > 0 ? `<div style="padding:0 14px 12px;display:flex;gap:8px;align-items:center;font-size:12px;color:var(--t3);flex-wrap:wrap">
       <span>Page <strong>${_pcFilters.page + 1}</strong> / ${totalPages} (${_pcTotal} fiches avec SIREN au total · ${_pcResults.length} avec procédures détectées)</span>
