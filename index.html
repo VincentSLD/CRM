@@ -8794,8 +8794,19 @@ async function pcSyncAll(skipRecent) {
             pcRenderList();
           }
         } else {
-          // Marquer juste comme vérifié pour ne pas re-scanner trop tôt
-          await sb.from('clients').update({ procedure_checked_at: new Date().toISOString() }).eq('id', c.id);
+          // Aucune procédure trouvée → nettoyer les éventuelles fausses données + marquer comme vérifié
+          await sb.from('clients').update({
+            procedure_checked_at: new Date().toISOString(),
+            procedure_collective: null,
+            procedure_nature: null,
+            procedure_date: null,
+            procedure_url: null,
+          }).eq('id', c.id);
+          // Maj cache local
+          if (DB && DB.clients) {
+            const idx2 = DB.clients.findIndex(x => x.id === c.id);
+            if (idx2 >= 0) Object.assign(DB.clients[idx2], { procedure_collective: null, procedure_nature: null, procedure_date: null, procedure_url: null });
+          }
         }
       } catch (e) { errors++; }
       await new Promise(r => setTimeout(r, 700));
