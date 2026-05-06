@@ -8685,8 +8685,7 @@ function _pcIsClosing(nature) {
 async function pcFetchSiren(siren) {
   if (!siren || siren.length !== 9) return null;
   const params = new URLSearchParams({
-    where: `familleavis_lib = "Procédures collectives"`,
-    'q.q': siren,
+    where: `familleavis_lib = "Procédures collectives" AND registre = "${siren}"`,
     limit: '5',
     order_by: 'dateparution desc',
   });
