@@ -15166,19 +15166,12 @@ async function pushContactToAkuiteo(contactId) {
   }
   if (!customerAkId) { toast('Le client parent n\'a pas d\'ID Akuiteo. Synchronisez d\'abord le client.', 'error'); return; }
 
+  // Données identité (coordonnées personnelles)
   const akData = {
     name: ct.nom || '',
     firstName: ct.prenom || null,
     title: ct.titre || null,
-    position: ct.fonction || null,
-    service: ct.service || null,
-    // Email envoyé dans les 2 champs Akuiteo (pro + perso)
     email: ct.email || null,
-    email2: ct.email || ct.email2 || null,
-    phone: ct.telephone || null,
-    mobilePhone: ct.mobile || null,
-    comment: ct.commentaire || null,
-    // Marquer comme contact professionnel (apparaît dans Coordonnées générales)
     recipientOfSalesOrder: true,
     recipientOfQuotation: true,
     recipientOfSalesInvoice: true,
@@ -15196,24 +15189,48 @@ async function pushContactToAkuiteo(contactId) {
   Object.keys(akData.address).forEach(k => { if (akData.address[k] == null) delete akData.address[k]; });
   if (!akData.address.country) akData.address.country = 'FR';
 
+  // Données générales (onglet général = sitesRelatedInformation)
+  const siteInfo = {
+    phone: ct.telephone || null,
+    mobilePhone: ct.mobile || null,
+    email: ct.email2 || ct.email || null,
+    position: ct.fonction || null,
+    service: ct.service || null,
+    notes: ct.commentaire || null,
+  };
+
   toast('Envoi du contact vers Akuiteo...', 'info');
   try {
+    // Récupérer le site principal du client
+    let mainSiteId = customerAkId;
+    try {
+      const sites = await akuiteoFetch('GET', `/crm/customers/${customerAkId}/sites`);
+      if (Array.isArray(sites) && sites.length > 0) {
+        const main = sites.find(s => s.main) || sites[0];
+        mainSiteId = String(main.id);
+      }
+    } catch (e) { console.warn('[Akuiteo] Impossible de charger les sites, utilisation ID client:', e.message); }
+
     if (ct.akuiteo_id) {
       akData.id = ct.akuiteo_id;
+      // Récupérer l'ID de la relation site existante pour la mettre à jour
+      try {
+        const existing = await akuiteoFetch('GET', `/crm/customers/${customerAkId}/contacts/${ct.akuiteo_id}`);
+        if (existing?.sitesRelatedInformation?.length) {
+          const existingSite = existing.sitesRelatedInformation.find(s => String(s.siteId) === mainSiteId) || existing.sitesRelatedInformation[0];
+          siteInfo.id = existingSite.id;
+          siteInfo.siteId = String(existingSite.siteId);
+        } else {
+          siteInfo.siteId = mainSiteId;
+        }
+      } catch (e) { siteInfo.siteId = mainSiteId; }
+      akData.sitesRelatedInformation = [siteInfo];
       await akuiteoFetch('POST', `/crm/customers/${customerAkId}/contacts/${ct.akuiteo_id}`, akData, { accept: 'text/plain' });
       toast('Contact mis à jour dans Akuiteo', 'success');
     } else {
       akData.code = ct.code || null;
-      // Akuiteo exige qu'un contact soit rattaché à un site — on récupère le site principal du client
-      let mainSiteId = customerAkId; // par défaut, le site principal a souvent le même ID que le client
-      try {
-        const sites = await akuiteoFetch('GET', `/crm/customers/${customerAkId}/sites`);
-        if (Array.isArray(sites) && sites.length > 0) {
-          const main = sites.find(s => s.main) || sites[0];
-          mainSiteId = String(main.id);
-        }
-      } catch (e) { console.warn('[Akuiteo] Impossible de charger les sites, utilisation ID client:', e.message); }
-      akData.sitesRelatedInformation = [{ siteId: mainSiteId }];
+      siteInfo.siteId = mainSiteId;
+      akData.sitesRelatedInformation = [siteInfo];
       const result = await akuiteoFetch('PUT', `/crm/customers/${customerAkId}/contacts/`, akData, { accept: 'text/plain' });
       if (result) {
         const newAkId = String(typeof result === 'object' ? result.id || result : result);
