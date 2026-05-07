@@ -2298,19 +2298,74 @@ tbody tr:last-child td { border-bottom: none; }
   </div>
 </div>
 
-<!-- ═══ MODAL: EDIT CLIENT ═══ -->
+<!-- ═══ MODAL: RECHERCHE SIRENE (pour SIRET manquant) ═══ -->
 <div class="modal-overlay" id="modal-sirene">
-  <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto">
+  <div class="modal" style="max-width:900px;max-height:90vh;overflow-y:auto">
     <div class="modal-head">
       <h3>Recherche SIRENE</h3>
       <button class="modal-close" onclick="closeModal('sirene')">×</button>
     </div>
     <div class="modal-body">
-      <div style="display:flex;gap:8px;margin-bottom:16px">
-        <input type="text" id="sirene-query" class="fi" placeholder="Nom de l'entreprise, SIRET, SIREN..." style="flex:1;padding:8px 12px;font-size:13px" onkeydown="if(event.key==='Enter')doSearchSirene()">
-        <button class="btn btn-primary" onclick="doSearchSirene()">Rechercher</button>
+      <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px">
+        <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:8px">Rechercher une entreprise (SIRENE) — filtres avancés</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-bottom:8px">
+          <div class="fg" style="margin:0"><label class="fl" style="font-size:10px">Nom / SIRET / SIREN</label>
+            <input class="fi" id="sirene-query" placeholder="Nom ou numéro SIRET" style="font-size:12px"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();doSearchSirene()}"></div>
+          <div class="fg" style="margin:0"><label class="fl" style="font-size:10px">Département</label>
+            <select class="fi" id="sm-sirene-dept" style="font-size:12px" onchange="loadCommunesForDept('sm-sirene-dept','sm-sirene-ville')">
+              <option value="">— Tous —</option>
+            </select></div>
+          <div class="fg" style="margin:0"><label class="fl" style="font-size:10px">Ville</label>
+            <select class="fi" id="sm-sirene-ville" style="font-size:12px" disabled>
+              <option value="">— Choisir un département —</option>
+            </select></div>
+          <div class="fg" style="margin:0;position:relative"><label class="fl" style="font-size:10px">Codes APE (multi)</label>
+            <button type="button" class="fi" id="sm-sirene-ape-btn" onclick="toggleSmApeDropdown()" style="font-size:12px;text-align:left;cursor:pointer;background:var(--card);width:100%">— Tous —</button>
+            <input type="hidden" id="sm-sirene-ape">
+            <div id="sm-sirene-ape-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:300px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25);margin-top:2px;min-width:280px">
+              <div style="padding:6px 8px;border-bottom:1px solid var(--border);background:#f5f5f5;position:sticky;top:0;z-index:1">
+                <input type="text" id="sm-sirene-ape-search" placeholder="Rechercher..." style="width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;background:#fff;color:#1a1a1a" oninput="filterSmApeList(this.value)">
+                <div style="display:flex;gap:4px;margin-top:4px">
+                  <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllSmApe(true)">Tout cocher</button>
+                  <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllSmApe(false)">Tout décocher (Tous)</button>
+                </div>
+              </div>
+              <div id="sm-sirene-ape-list" style="padding:4px 0;background:#fff"></div>
+            </div>
+          </div>
+          <div class="fg" style="margin:0;position:relative"><label class="fl" style="font-size:10px">Effectifs (multi)</label>
+            <button type="button" class="fi" id="sm-sirene-eff-btn" onclick="toggleSmEffDropdown()" style="font-size:12px;text-align:left;cursor:pointer;background:var(--card);width:100%">— Tous —</button>
+            <input type="hidden" id="sm-sirene-eff">
+            <div id="sm-sirene-eff-dd" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25);margin-top:2px">
+              <div style="padding:6px 8px;border-bottom:1px solid var(--border);background:#f5f5f5;position:sticky;top:0;z-index:1;display:flex;gap:4px">
+                <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllSmEff(true)">Tout cocher</button>
+                <button type="button" class="btn" style="font-size:10px;padding:3px 8px;flex:1" onclick="toggleAllSmEff(false)">Tout décocher (Tous)</button>
+              </div>
+              <div id="sm-sirene-eff-list" style="padding:4px 0;background:#fff"></div>
+            </div>
+          </div>
+          <div class="fg" style="margin:0"><label class="fl" style="font-size:10px">Catégorie</label>
+            <select class="fi" id="sm-sirene-cat" style="font-size:12px">
+              <option value="">— Toutes —</option>
+              <option value="PME">PME</option>
+              <option value="ETI">ETI</option>
+              <option value="GE">Grande entreprise</option>
+            </select></div>
+          <div class="fg" style="margin:0"><label class="fl" style="font-size:10px">État</label>
+            <select class="fi" id="sm-sirene-etat" style="font-size:12px">
+              <option value="A">Active uniquement</option>
+              <option value="">Toutes</option>
+              <option value="C">Cessée</option>
+            </select></div>
+        </div>
+        <div style="display:flex;gap:6px;justify-content:flex-end;align-items:center">
+          <span id="sm-sirene-count" style="font-size:11px;color:var(--t3);margin-right:auto"></span>
+          <button class="btn" onclick="resetSireneSmFilters()" style="font-size:12px">Réinitialiser</button>
+          <button class="btn btn-primary" onclick="doSearchSirene()" style="font-size:12px;white-space:nowrap">🔍 Rechercher</button>
+        </div>
       </div>
-      <div id="sirene-results" style="font-size:13px;color:var(--t3);text-align:center">Saisissez un nom ou un numéro SIRET</div>
+      <div id="sirene-results" style="font-size:13px;color:var(--t3);text-align:center;max-height:50vh;overflow-y:auto">Saisissez un nom ou un numéro SIRET</div>
     </div>
   </div>
 </div>
@@ -13977,10 +14032,136 @@ async function analyseCAClient(clientId) {
 let sireneClientId = null;
 let sireneResultsCache = [];
 
+// ═══ Filtres avancés de la modale SIRENE (préfixe sm-) ═══
+let _smSelectedApe = new Set();
+let _smSelectedEff = new Set();
+
+function initSmSireneFilters() {
+  // Dropdown départements
+  const sel = document.getElementById('sm-sirene-dept');
+  if (sel && sel.options.length <= 1) {
+    const opts = Object.entries(DEPT_NAMES).sort((a,b) => a[0].localeCompare(b[0]));
+    sel.innerHTML = '<option value="">— Tous —</option>' + opts.map(([code, name]) => `<option value="${code}">${code} — ${name}</option>`).join('');
+  }
+  // Liste APE
+  const apeList = document.getElementById('sm-sirene-ape-list');
+  if (apeList && !apeList.dataset.built) {
+    apeList.innerHTML = APE_LIST.map(g => `
+      <div class="sm-ape-grp" data-group="${g.group.toLowerCase()}">
+        <div style="padding:6px 10px;font-size:10px;font-weight:700;color:#666;text-transform:uppercase;background:#eef0f3;border-bottom:1px solid var(--border)">${g.group}</div>
+        ${g.codes.map(([code, lib]) => `
+          <label class="sm-ape-item" data-search="${(code+' '+lib).toLowerCase()}" style="display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #eee;background:#fff;color:#1a1a1a" onmouseover="this.style.background='#f5f7fa'" onmouseout="this.style.background='#fff'">
+            <input type="checkbox" value="${code}" onchange="toggleSmApe('${code}', this.checked)">
+            <span class="mono" style="font-weight:600;min-width:54px">${code}</span>
+            <span style="color:#444">${lib}</span>
+          </label>
+        `).join('')}
+      </div>
+    `).join('');
+    apeList.dataset.built = '1';
+  }
+  // Liste effectifs
+  const effList = document.getElementById('sm-sirene-eff-list');
+  if (effList && !effList.dataset.built) {
+    effList.innerHTML = EFFECTIF_LIST.map(([code, lib]) => `
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #eee;background:#fff;color:#1a1a1a" onmouseover="this.style.background='#f5f7fa'" onmouseout="this.style.background='#fff'">
+        <input type="checkbox" value="${code}" onchange="toggleSmEff('${code}', this.checked)">
+        <span class="mono" style="font-weight:600;min-width:32px">${code}</span>
+        <span>${lib}</span>
+      </label>
+    `).join('');
+    effList.dataset.built = '1';
+  }
+  _smSelectedApe.clear(); _smSelectedEff.clear();
+}
+function toggleSmApeDropdown() {
+  const e = document.getElementById('sm-sirene-eff-dd'); if (e) e.style.display = 'none';
+  const el = document.getElementById('sm-sirene-ape-dd');
+  if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block';
+}
+function toggleSmEffDropdown() {
+  const e = document.getElementById('sm-sirene-ape-dd'); if (e) e.style.display = 'none';
+  const el = document.getElementById('sm-sirene-eff-dd');
+  if (el) el.style.display = el.style.display === 'block' ? 'none' : 'block';
+}
+function filterSmApeList(q) {
+  q = (q || '').toLowerCase().trim();
+  document.querySelectorAll('#sm-sirene-ape-list .sm-ape-item').forEach(el => {
+    el.style.display = !q || el.dataset.search.includes(q) ? 'flex' : 'none';
+  });
+  document.querySelectorAll('#sm-sirene-ape-list .sm-ape-grp').forEach(g => {
+    const visible = [...g.querySelectorAll('.sm-ape-item')].some(it => it.style.display !== 'none');
+    g.style.display = visible ? 'block' : 'none';
+  });
+}
+function toggleSmApe(code, checked) {
+  if (checked) _smSelectedApe.add(code); else _smSelectedApe.delete(code);
+  updateSmApeButton();
+}
+function toggleSmEff(code, checked) {
+  if (checked) _smSelectedEff.add(code); else _smSelectedEff.delete(code);
+  updateSmEffButton();
+}
+function toggleAllSmApe(checked) {
+  document.querySelectorAll('#sm-sirene-ape-list .sm-ape-item').forEach(item => {
+    if (item.style.display === 'none') return;
+    const cb = item.querySelector('input[type=checkbox]');
+    if (!cb) return;
+    cb.checked = checked;
+    if (checked) _smSelectedApe.add(cb.value); else _smSelectedApe.delete(cb.value);
+  });
+  updateSmApeButton();
+}
+function toggleAllSmEff(checked) {
+  document.querySelectorAll('#sm-sirene-eff-list input[type=checkbox]').forEach(cb => {
+    cb.checked = checked;
+    if (checked) _smSelectedEff.add(cb.value); else _smSelectedEff.delete(cb.value);
+  });
+  updateSmEffButton();
+}
+function updateSmApeButton() {
+  const btn = document.getElementById('sm-sirene-ape-btn');
+  const hidden = document.getElementById('sm-sirene-ape');
+  if (!btn || !hidden) return;
+  btn.textContent = _smSelectedApe.size === 0 ? '— Tous —' : _smSelectedApe.size + ' code(s)';
+  hidden.value = [..._smSelectedApe].join(',');
+}
+function updateSmEffButton() {
+  const btn = document.getElementById('sm-sirene-eff-btn');
+  const hidden = document.getElementById('sm-sirene-eff');
+  if (!btn || !hidden) return;
+  btn.textContent = _smSelectedEff.size === 0 ? '— Tous —' : _smSelectedEff.size + ' tranche(s)';
+  hidden.value = [..._smSelectedEff].join(',');
+}
+function resetSireneSmFilters() {
+  document.getElementById('sirene-query').value = '';
+  document.getElementById('sm-sirene-dept').value = '';
+  const ville = document.getElementById('sm-sirene-ville');
+  if (ville) { ville.innerHTML = '<option value="">— Choisir un département —</option>'; ville.disabled = true; }
+  document.getElementById('sm-sirene-cat').value = '';
+  document.getElementById('sm-sirene-etat').value = 'A';
+  _smSelectedApe.clear(); _smSelectedEff.clear();
+  document.querySelectorAll('#sm-sirene-ape-list input[type=checkbox]').forEach(cb => cb.checked = false);
+  document.querySelectorAll('#sm-sirene-eff-list input[type=checkbox]').forEach(cb => cb.checked = false);
+  updateSmApeButton(); updateSmEffButton();
+  document.getElementById('sirene-results').innerHTML = '<div style="color:var(--t3);text-align:center">Saisissez un nom ou un numéro SIRET</div>';
+  const cnt = document.getElementById('sm-sirene-count'); if (cnt) cnt.textContent = '';
+}
+// Fermer dropdowns SM au clic extérieur
+document.addEventListener('click', e => {
+  if (!e.target.closest('#sm-sirene-ape-dd') && !e.target.closest('#sm-sirene-ape-btn')) {
+    const d = document.getElementById('sm-sirene-ape-dd'); if (d) d.style.display = 'none';
+  }
+  if (!e.target.closest('#sm-sirene-eff-dd') && !e.target.closest('#sm-sirene-eff-btn')) {
+    const d = document.getElementById('sm-sirene-eff-dd'); if (d) d.style.display = 'none';
+  }
+});
+
 function openSireneModal(clientId, clientName) {
   sireneClientId = clientId;
+  initSmSireneFilters();
+  resetSireneSmFilters();
   document.getElementById('sirene-query').value = clientName || '';
-  document.getElementById('sirene-results').innerHTML = '<div style="color:var(--t3);text-align:center">Saisissez un nom ou un numéro SIRET</div>';
   openModal('sirene');
   setTimeout(() => { document.getElementById('sirene-query').focus(); doSearchSirene(); }, 100);
 }
@@ -14015,18 +14196,50 @@ function regionFromDept(deptCode) {
 
 async function doSearchSirene() {
   const q = document.getElementById('sirene-query').value.trim();
-  if (!q) return;
+  const dept = document.getElementById('sm-sirene-dept')?.value || '';
+  const cp = document.getElementById('sm-sirene-ville')?.value?.trim() || '';
+  const ape = document.getElementById('sm-sirene-ape')?.value?.trim() || '';
+  const eff = document.getElementById('sm-sirene-eff')?.value?.trim() || '';
+  const cat = document.getElementById('sm-sirene-cat')?.value || '';
+  const etat = document.getElementById('sm-sirene-etat')?.value || '';
+
   const el = document.getElementById('sirene-results');
+  const countEl = document.getElementById('sm-sirene-count');
+
+  const params = new URLSearchParams();
+  const cleanQ = q.replace(/\s/g, '');
+  const isNum = /^\d+$/.test(cleanQ);
+  if (isNum && (cleanQ.length === 9 || cleanQ.length === 14)) {
+    params.set('q', cleanQ);
+  } else if (q) {
+    params.set('q', q);
+  }
+  if (dept) params.set('departement', dept);
+  if (cp) params.set('code_postal', cp);
+  if (ape) params.set('activite_principale', ape);
+  if (eff) params.set('tranche_effectif_salarie', eff);
+  if (cat) params.set('categorie_entreprise', cat);
+  if (etat) params.set('etat_administratif', etat);
+  params.set('per_page', '25');
+
+  if ([...params.keys()].filter(k => !['per_page','etat_administratif'].includes(k)).length === 0) {
+    el.innerHTML = '<div style="padding:12px;text-align:center;color:var(--t3);font-size:12px">Renseignez au moins un filtre.</div>';
+    return;
+  }
+
   el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t3)">Recherche en cours...</div>';
   try {
-    const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + encodeURIComponent(q) + '&page=1&per_page=8');
+    const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + params.toString());
     const data = await r.json();
-    if (!data.results || data.results.length === 0) {
+    const results = data.results || [];
+    if (countEl) countEl.textContent = (data.total_results || 0) + ' résultats au total (' + results.length + ' affichés)';
+
+    if (results.length === 0) {
       el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t3)">Aucun résultat</div>';
       return;
     }
     const nj = { '1000':'EI','5410':'SARL','5499':'SARL','5505':'SA','5710':'SAS','5720':'SASU','6540':'SCI' };
-    sireneResultsCache = data.results.map(e => {
+    sireneResultsCache = results.map(e => {
       const s = e.siege || {};
       return {
         name: e.nom_complet,
