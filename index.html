@@ -1953,6 +1953,7 @@ tbody tr:last-child td { border-bottom: none; }
           <button class="btn" onclick="resetSireneNcFilters()" style="font-size:12px">Réinitialiser</button>
           <button class="btn" onclick="clearNewClientForm()" style="font-size:12px;color:var(--t3)">Effacer formulaire</button>
           <button class="btn btn-primary" onclick="searchSirene()" style="font-size:12px;white-space:nowrap">🔍 Rechercher</button>
+          <button class="btn" onclick="webSearchPappers(document.getElementById('nc-sirene-search')?.value || document.getElementById('nc-name')?.value, document.getElementById('nc-cp')?.value, document.getElementById('nc-city')?.value)" style="font-size:12px;white-space:nowrap" title="Rechercher sur le web via Google + Pappers">🌐 Recherche web</button>
         </div>
         <div id="nc-sirene-results" style="display:none;margin-top:10px;max-height:50vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
       </div>
@@ -2367,6 +2368,7 @@ tbody tr:last-child td { border-bottom: none; }
           <span id="sm-sirene-count" style="font-size:11px;color:var(--t3);margin-right:auto"></span>
           <button class="btn" onclick="resetSireneSmFilters()" style="font-size:12px">Réinitialiser</button>
           <button class="btn btn-primary" onclick="doSearchSirene()" style="font-size:12px;white-space:nowrap">🔍 Rechercher</button>
+          <button class="btn" onclick="webSearchPappers(document.getElementById('sirene-query')?.value, currentClient?.code_postal, currentClient?.city)" style="font-size:12px;white-space:nowrap" title="Rechercher sur le web via Google + Pappers">🌐 Recherche web</button>
         </div>
       </div>
       <div id="sirene-results" style="font-size:13px;color:var(--t3);text-align:center;max-height:50vh;overflow-y:auto">Saisissez un nom ou un numéro SIRET</div>
@@ -14166,6 +14168,12 @@ document.addEventListener('click', e => {
     const d = document.getElementById('sm-sirene-eff-dd'); if (d) d.style.display = 'none';
   }
 });
+
+function webSearchPappers(nom, cp, ville) {
+  const parts = [nom, cp, ville, 'Pappers'].filter(Boolean).map(s => s.trim()).filter(Boolean);
+  if (parts.length <= 1) { toast('Renseignez au moins un nom pour lancer la recherche', 'warn'); return; }
+  window.open('https://www.google.com/search?q=' + encodeURIComponent(parts.join(' ')), '_blank');
+}
 
 function openSireneModal(clientId, clientName) {
   sireneClientId = clientId;
