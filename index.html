@@ -3175,7 +3175,7 @@ async function loadClientsPage(page, letter, search) {
     query = query.ilike('name', letter + '%');
   }
   if (search) {
-    query = query.or(`name.ilike.%${search}%,code.ilike.%${search}%,city.ilike.%${search}%,sector.ilike.%${search}%,email.ilike.%${search}%,raison_sociale.ilike.%${search}%,raison_sociale_2.ilike.%${search}%`);
+    query = query.or(`name.ilike.%${search}%,code.ilike.%${search}%,city.ilike.%${search}%,sector.ilike.%${search}%,email.ilike.%${search}%,raison_sociale.ilike.%${search}%,raison_sociale2.ilike.%${search}%`);
   }
   // Filtres complémentaires (server-side)
   if (clientsFilterDept) {
