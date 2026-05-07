@@ -144,6 +144,10 @@ body::before {
 .nav-accordion > summary:hover { color: rgba(255,255,255,0.65); }
 .nav-accordion-arrow { font-size: 10px; transition: transform .2s ease; opacity: .6; }
 .nav-accordion[open] > summary .nav-accordion-arrow { transform: rotate(180deg); }
+/* Accordéon filtres tableau clients */
+details > summary::-webkit-details-marker { display: none; }
+details > summary::marker { display: none; content: ''; }
+details[open] > summary span:first-child { transform: rotate(90deg); }
 
 .nav-item {
   display: flex;
@@ -4799,71 +4803,77 @@ function renderClients(filter='all') {
     <button class="btn ${!clientsLetter?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'','')">Tous</button>
     ${letters.map(l => `<button class="btn ${clientsLetter===l?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'${l}','')">${l}</button>`).join('')}
   </div>
-  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding:8px 10px;background:var(--bg-3);border:1px solid var(--border);border-radius:8px">
-    <span style="font-size:11px;color:var(--t3);font-weight:600">Filtres :</span>
-    <select onchange="clientsFilterDept=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:90px">
-      <option value="">— Dpt —</option>
-      ${clientsFilterOpts.depts.map(d => `<option value="${d}"${clientsFilterDept===d?' selected':''}>${d}</option>`).join('')}
-    </select>
-    <select onchange="clientsFilterNovam=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:170px;max-width:220px">
-      <option value="">— Commercial Novam —</option>
-      ${clientsFilterOpts.novam.map(n => `<option value="${n.replace(/"/g,'&quot;')}"${clientsFilterNovam===n?' selected':''}>${n}</option>`).join('')}
-    </select>
-    <select onchange="clientsFilterGph=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:170px;max-width:220px">
-      <option value="">— Commercial GPH —</option>
-      ${clientsFilterOpts.gph.map(n => `<option value="${n.replace(/"/g,'&quot;')}"${clientsFilterGph===n?' selected':''}>${n}</option>`).join('')}
-    </select>
-    <select onchange="clientsFilterStatut=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
-      <option value="" ${!clientsFilterStatut?'selected':''}>— Tous statuts —</option>
-      <option value="client" ${clientsFilterStatut==='client'?'selected':''}>Client</option>
-      <option value="prospect" ${clientsFilterStatut==='prospect'?'selected':''}>Prospect</option>
-      <option value="objectif" ${clientsFilterStatut==='objectif'?'selected':''}>Objectif</option>
-      <option value="dormant" ${clientsFilterStatut==='dormant'?'selected':''}>Dormant</option>
-    </select>
-    <select onchange="clientsFilterSync=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
-      <option value="" ${!clientsFilterSync?'selected':''}>— Akuiteo —</option>
-      <option value="yes" ${clientsFilterSync==='yes'?'selected':''}>🟢 Synchronisés</option>
-      <option value="no" ${clientsFilterSync==='no'?'selected':''}>🟠 Non synchro</option>
-    </select>
-    ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret) ? `<button class="btn" style="font-size:12px;padding:5px 10px;color:var(--red)" onclick="resetClientsFilters()">✕ Effacer tout</button>` : ''}
-    ${!clientsFilterOptsLoaded ? '<span style="font-size:11px;color:var(--t3)">⏳ chargement options...</span>' : ''}
-  </div>
-  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding:8px 10px;background:var(--bg-3);border:1px solid var(--border);border-radius:8px">
-    <span style="font-size:11px;color:var(--t3);font-weight:600">Infos Entreprise :</span>
-    <select onchange="clientsFilterCategorie=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
-      <option value="">— Catégorie —</option>
-      ${clientsFilterOpts.categorie.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterCategorie===v?' selected':''}>${v}</option>`).join('')}
-    </select>
-    <select onchange="clientsFilterSousCategorie=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
-      <option value="">— Sous-catégorie —</option>
-      ${clientsFilterOpts.sousCategorie.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterSousCategorie===v?' selected':''}>${v}</option>`).join('')}
-    </select>
-    <select onchange="clientsFilterCategoriePro=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
-      <option value="">— Catégorie pro. —</option>
-      ${clientsFilterOpts.categoriePro.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterCategoriePro===v?' selected':''}>${v}</option>`).join('')}
-    </select>
-    <select onchange="clientsFilterSecteur=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
-      <option value="">— Secteur —</option>
-      ${clientsFilterOpts.secteur.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterSecteur===v?' selected':''}>${v}</option>`).join('')}
-    </select>
-    <select onchange="clientsFilterType=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
-      <option value="">— Type —</option>
-      ${clientsFilterOpts.type.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterType===v?' selected':''}>${v}</option>`).join('')}
-    </select>
-    <select onchange="clientsFilterGroupe=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
-      <option value="">— Groupe —</option>
-      ${clientsFilterOpts.groupe.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterGroupe===v?' selected':''}>${v}</option>`).join('')}
-    </select>
-    <select onchange="clientsFilterOrigine=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
-      <option value="">— Origine —</option>
-      ${clientsFilterOpts.origine.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterOrigine===v?' selected':''}>${v}</option>`).join('')}
-    </select>
-    <select onchange="clientsFilterSiret=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
-      <option value="" ${!clientsFilterSiret?'selected':''}>— SIRET —</option>
-      <option value="yes" ${clientsFilterSiret==='yes'?'selected':''}>✓ Avec SIRET</option>
-      <option value="no" ${clientsFilterSiret==='no'?'selected':''}>✗ Sans SIRET</option>
-    </select>
-  </div>
+  <details style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-3)"${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret) ? ' open' : ''}>
+    <summary style="padding:8px 10px;cursor:pointer;font-size:11px;font-weight:600;color:var(--t3);user-select:none;list-style:none;display:flex;align-items:center;gap:6px">
+      <span style="transition:transform .2s;display:inline-block">&#9654;</span> Filtres & Infos Entreprise
+      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret) ? '<span style="display:inline-block;padding:1px 6px;border-radius:10px;background:var(--accent);color:#fff;font-size:10px;font-weight:700">filtres actifs</span>' : ''}
+      ${!clientsFilterOptsLoaded ? '<span style="font-size:11px;color:var(--t3)">⏳ chargement options...</span>' : ''}
+    </summary>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border-top:1px solid var(--border)">
+      <span style="font-size:11px;color:var(--t3);font-weight:600">Filtres :</span>
+      <select onchange="clientsFilterDept=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:90px">
+        <option value="">— Dpt —</option>
+        ${clientsFilterOpts.depts.map(d => `<option value="${d}"${clientsFilterDept===d?' selected':''}>${d}</option>`).join('')}
+      </select>
+      <select onchange="clientsFilterNovam=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:170px;max-width:220px">
+        <option value="">— Commercial Novam —</option>
+        ${clientsFilterOpts.novam.map(n => `<option value="${n.replace(/"/g,'&quot;')}"${clientsFilterNovam===n?' selected':''}>${n}</option>`).join('')}
+      </select>
+      <select onchange="clientsFilterGph=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:170px;max-width:220px">
+        <option value="">— Commercial GPH —</option>
+        ${clientsFilterOpts.gph.map(n => `<option value="${n.replace(/"/g,'&quot;')}"${clientsFilterGph===n?' selected':''}>${n}</option>`).join('')}
+      </select>
+      <select onchange="clientsFilterStatut=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+        <option value="" ${!clientsFilterStatut?'selected':''}>— Tous statuts —</option>
+        <option value="client" ${clientsFilterStatut==='client'?'selected':''}>Client</option>
+        <option value="prospect" ${clientsFilterStatut==='prospect'?'selected':''}>Prospect</option>
+        <option value="objectif" ${clientsFilterStatut==='objectif'?'selected':''}>Objectif</option>
+        <option value="dormant" ${clientsFilterStatut==='dormant'?'selected':''}>Dormant</option>
+      </select>
+      <select onchange="clientsFilterSync=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+        <option value="" ${!clientsFilterSync?'selected':''}>— Akuiteo —</option>
+        <option value="yes" ${clientsFilterSync==='yes'?'selected':''}>🟢 Synchronisés</option>
+        <option value="no" ${clientsFilterSync==='no'?'selected':''}>🟠 Non synchro</option>
+      </select>
+      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret) ? `<button class="btn" style="font-size:12px;padding:5px 10px;color:var(--red)" onclick="resetClientsFilters()">✕ Effacer tout</button>` : ''}
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border-top:1px solid var(--border)">
+      <span style="font-size:11px;color:var(--t3);font-weight:600">Infos Entreprise :</span>
+      <select onchange="clientsFilterCategorie=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+        <option value="">— Catégorie —</option>
+        ${clientsFilterOpts.categorie.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterCategorie===v?' selected':''}>${v}</option>`).join('')}
+      </select>
+      <select onchange="clientsFilterSousCategorie=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+        <option value="">— Sous-catégorie —</option>
+        ${clientsFilterOpts.sousCategorie.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterSousCategorie===v?' selected':''}>${v}</option>`).join('')}
+      </select>
+      <select onchange="clientsFilterCategoriePro=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+        <option value="">— Catégorie pro. —</option>
+        ${clientsFilterOpts.categoriePro.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterCategoriePro===v?' selected':''}>${v}</option>`).join('')}
+      </select>
+      <select onchange="clientsFilterSecteur=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+        <option value="">— Secteur —</option>
+        ${clientsFilterOpts.secteur.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterSecteur===v?' selected':''}>${v}</option>`).join('')}
+      </select>
+      <select onchange="clientsFilterType=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+        <option value="">— Type —</option>
+        ${clientsFilterOpts.type.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterType===v?' selected':''}>${v}</option>`).join('')}
+      </select>
+      <select onchange="clientsFilterGroupe=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+        <option value="">— Groupe —</option>
+        ${clientsFilterOpts.groupe.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterGroupe===v?' selected':''}>${v}</option>`).join('')}
+      </select>
+      <select onchange="clientsFilterOrigine=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+        <option value="">— Origine —</option>
+        ${clientsFilterOpts.origine.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterOrigine===v?' selected':''}>${v}</option>`).join('')}
+      </select>
+      <select onchange="clientsFilterSiret=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+        <option value="" ${!clientsFilterSiret?'selected':''}>— SIRET —</option>
+        <option value="yes" ${clientsFilterSiret==='yes'?'selected':''}>✓ Avec SIRET</option>
+        <option value="no" ${clientsFilterSiret==='no'?'selected':''}>✗ Sans SIRET</option>
+      </select>
+    </div>
+  </details>
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
     <table><thead><tr><th>Société</th><th style="width:50px">Dpt</th><th>Ville</th><th>Commercial Novam</th><th>Commercial GPH</th><th style="width:60px;text-align:center">Pappers</th><th style="width:130px;text-align:center">Statut juridique</th></tr></thead>
     <tbody>${filtered.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--t3)">Aucun client/prospect trouvé</td></tr>' : filtered.map(c => {
