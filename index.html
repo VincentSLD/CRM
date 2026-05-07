@@ -12930,7 +12930,7 @@ async function doSearch(q) {
   // Recherche clients côté serveur (Supabase)
   const { data: serverClients } = await sb.from('clients')
     .select('id,name,code,sector,city')
-    .or(`name.ilike.%${q}%,code.ilike.%${q}%,city.ilike.%${q}%,sector.ilike.%${q}%`)
+    .or(`name.ilike.%${q}%,code.ilike.%${q}%,city.ilike.%${q}%,sector.ilike.%${q}%,raison_sociale.ilike.%${q}%,raison_sociale2.ilike.%${q}%`)
     .limit(5);
   if (serverClients) {
     serverClients.forEach(c => {
