@@ -3169,8 +3169,10 @@ async function loadClientsPage(page, letter, search) {
   clientsPage = page;
   clientsLetter = letter || '';
   clientsSearch = search || '';
-  const from = page * CLIENTS_PER_PAGE;
-  const to = from + CLIENTS_PER_PAGE - 1;
+  // Si filtre catégorie compte (post-filtrage JSONB) : charger plus de lignes côté serveur
+  const pageSize = clientsFilterCatCompte ? 500 : CLIENTS_PER_PAGE;
+  const from = page * pageSize;
+  const to = from + pageSize - 1;
 
   let query = sb.from('clients').select('*', { count: 'exact' });
   if (viewMyData && currentCommercial && currentCommercial.akuiteo_manager_id) {
@@ -3217,6 +3219,7 @@ async function loadClientsPage(page, letter, search) {
       const cc = c.categorie_compte;
       return cc && typeof cc === 'object' && Object.values(cc).includes(clientsFilterCatCompte);
     });
+    clientsTotalCount = mappedClients.length;
   }
   DB.clients = mappedClients;
   // Compter les devis par client
@@ -4798,7 +4801,8 @@ async function deleteClientConcurrent(linkId, clientId) {
 
 function renderClients(filter='all') {
   const filtered = filter==='all' ? DB.clients : DB.clients.filter(c=>c.status===filter);
-  const totalPages = Math.ceil(clientsTotalCount / CLIENTS_PER_PAGE);
+  const effectivePageSize = clientsFilterCatCompte ? clientsTotalCount : CLIENTS_PER_PAGE;
+  const totalPages = clientsFilterCatCompte ? 1 : Math.ceil(clientsTotalCount / CLIENTS_PER_PAGE);
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
   return `
