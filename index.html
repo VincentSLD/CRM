@@ -12202,6 +12202,11 @@ function buildCRMContext() {
   lines.push(`Total factures : ${factures.length}`);
   lines.push(`CA facturé ${year} : ${(caYear/1000).toFixed(0)}k€ (${factThisYear.length} factures)`);
   lines.push(`Factures en retard : ${factRetard.length} (${(caRetard/1000).toFixed(0)}k€)`);
+  // Statuts clients
+  const nbActif = clients.filter(c => c.status === 'actif').length;
+  const nbDormant = clients.filter(c => c.status === 'dormant').length;
+  const nbNouveau = clients.filter(c => c.status === 'nouveau').length;
+  lines.push(`\nStatuts clients (page courante) : ${nbActif} actifs, ${nbNouveau} nouveaux, ${nbDormant} dormants`);
   lines.push(`\nTop clients par CA facturé :`);
   topClients.forEach(([n,v]) => lines.push(`  - ${n}: ${(v/1000).toFixed(0)}k€`));
   lines.push(`\nCA par agence :`);
