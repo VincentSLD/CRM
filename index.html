@@ -10528,16 +10528,11 @@ async function loadCollaborateurs() {
 async function syncCollaborateurs() {
   toast('Chargement des collaborateurs depuis Akuiteo...', 'info');
   try {
-    let all = [], offset = 0;
-    while (true) {
-      const batch = await akuiteoFetch('POST', `/workforce/employees/search?limit=200&offset=${offset}`, {
-        code: { operator: 'LIKE', value: '%' }
-      });
-      if (!Array.isArray(batch) || batch.length === 0) break;
-      all = all.concat(batch);
-      if (batch.length < 200) break;
-      offset += 200;
-    }
+    // Charger tous les collaborateurs en une seule requête (< 500 attendus)
+    const result = await akuiteoFetch('POST', '/workforce/employees/search?limit=5000&offset=0', {
+      code: { operator: 'LIKE', value: '%' }
+    });
+    const all = Array.isArray(result) ? result : [];
     console.log(`[Akuiteo] ${all.length} collaborateurs récupérés`);
 
     const rows = all.map(e => ({
