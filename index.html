@@ -1965,6 +1965,13 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Raison sociale 2</label><input class="fi" id="nc-raison2"></div>
         <div class="fg"><label class="fl">Forme juridique</label><input class="fi" id="nc-forme"></div>
         <div class="fg"><label class="fl">Secteur</label><input class="fi" id="nc-sector" placeholder="Ex: Énergie"></div>
+        <div class="fg"><label class="fl">Catégorie du compte</label>
+          <select class="fi" id="nc-categorie-compte">
+            <option value="">— Aucune —</option>
+            <option value="A- Stratégique">A- Stratégique</option>
+            <option value="B- Tactique">B- Tactique</option>
+            <option value="C- Listé">C- Listé</option>
+          </select></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Adresse</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
@@ -2391,6 +2398,13 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Raison sociale 2</label><input class="fi" id="ec-raison2"></div>
         <div class="fg"><label class="fl">Forme juridique</label><input class="fi" id="ec-forme"></div>
         <div class="fg"><label class="fl">Secteur</label><input class="fi" id="ec-sector"></div>
+        <div class="fg"><label class="fl">Catégorie du compte</label>
+          <select class="fi" id="ec-categorie-compte">
+            <option value="">— Aucune —</option>
+            <option value="A- Stratégique">A- Stratégique</option>
+            <option value="B- Tactique">B- Tactique</option>
+            <option value="C- Listé">C- Listé</option>
+          </select></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Adresse</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
@@ -2742,6 +2756,7 @@ let clientsFilterType = '';
 let clientsFilterGroupe = '';
 let clientsFilterOrigine = '';
 let clientsFilterSiret = ''; // '' | 'yes' | 'no'
+let clientsFilterCatCompte = '';
 const CLIENTS_PER_PAGE = 50;
 let clientsFilterOpts = { depts: [], novam: [], gph: [], categorie: [], sousCategorie: [], categoriePro: [], secteur: [], type: [], groupe: [], origine: [] };
 let clientsFilterOptsLoaded = false;
@@ -3199,6 +3214,8 @@ async function loadClientsPage(page, letter, search) {
   // SIRET présent / absent
   if (clientsFilterSiret === 'yes') query = query.not('siret', 'is', null).neq('siret', '');
   if (clientsFilterSiret === 'no') query = query.or('siret.is.null,siret.eq.');
+  // Catégorie du compte
+  if (clientsFilterCatCompte) query = query.eq('categorie_compte', clientsFilterCatCompte);
   query = query.order('name', {ascending: true}).range(from, to);
 
   const { data, count } = await query;
@@ -3223,6 +3240,7 @@ function resetClientsFilters() {
   clientsFilterGroupe = '';
   clientsFilterOrigine = '';
   clientsFilterSiret = '';
+  clientsFilterCatCompte = '';
   clientsLetter = '';
   clientsSearch = '';
   loadClientsPage(0, '', '');
@@ -4805,10 +4823,10 @@ function renderClients(filter='all') {
     <button class="btn ${!clientsLetter?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'','')">Tous</button>
     ${letters.map(l => `<button class="btn ${clientsLetter===l?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'${l}','')">${l}</button>`).join('')}
   </div>
-  <details style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-3)"${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret) ? ' open' : ''}>
+  <details style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-3)"${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterCatCompte) ? ' open' : ''}>
     <summary style="padding:8px 10px;cursor:pointer;font-size:11px;font-weight:600;color:var(--t3);user-select:none;list-style:none;display:flex;align-items:center;gap:6px">
       <span style="transition:transform .2s;display:inline-block">&#9654;</span> Filtres & Infos Entreprise
-      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret) ? '<span style="display:inline-block;padding:1px 6px;border-radius:10px;background:var(--accent);color:#fff;font-size:10px;font-weight:700">filtres actifs</span>' : ''}
+      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterCatCompte) ? '<span style="display:inline-block;padding:1px 6px;border-radius:10px;background:var(--accent);color:#fff;font-size:10px;font-weight:700">filtres actifs</span>' : ''}
       ${!clientsFilterOptsLoaded ? '<span style="font-size:11px;color:var(--t3)">⏳ chargement options...</span>' : ''}
     </summary>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border-top:1px solid var(--border)">
@@ -4837,7 +4855,13 @@ function renderClients(filter='all') {
         <option value="yes" ${clientsFilterSync==='yes'?'selected':''}>🟢 Synchronisés</option>
         <option value="no" ${clientsFilterSync==='no'?'selected':''}>🟠 Non synchro</option>
       </select>
-      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret) ? `<button class="btn" style="font-size:12px;padding:5px 10px;color:var(--red)" onclick="resetClientsFilters()">✕ Effacer tout</button>` : ''}
+      <select onchange="clientsFilterCatCompte=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+        <option value="" ${!clientsFilterCatCompte?'selected':''}>— Cat. compte —</option>
+        <option value="A- Stratégique" ${clientsFilterCatCompte==='A- Stratégique'?'selected':''}>A- Stratégique</option>
+        <option value="B- Tactique" ${clientsFilterCatCompte==='B- Tactique'?'selected':''}>B- Tactique</option>
+        <option value="C- Listé" ${clientsFilterCatCompte==='C- Listé'?'selected':''}>C- Listé</option>
+      </select>
+      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterCatCompte) ? `<button class="btn" style="font-size:12px;padding:5px 10px;color:var(--red)" onclick="resetClientsFilters()">✕ Effacer tout</button>` : ''}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border-top:1px solid var(--border)">
       <span style="font-size:11px;color:var(--t3);font-weight:600">Infos Entreprise :</span>
@@ -5061,6 +5085,9 @@ function renderClientDetail() {
     ${detailSection('Commercial', [
       detailRow('Commercial Novam', c.account_manager_name ? '<strong>' + c.account_manager_name + '</strong>' : resolveManagerName(c.account_manager_id) || '—'),
       detailRow('Commercial GPH', c.salesman_name ? '<strong>' + c.salesman_name + '</strong>' + (c.commerciaux_associes && c.commerciaux_associes !== c.salesman_name ? '<br><span style="font-size:11px;color:var(--t3)">' + c.commerciaux_associes + '</span>' : '') : c.commerciaux_associes || '—'),
+      detailRow('Catégorie du compte', c.categorie_compte
+        ? '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + (c.categorie_compte.startsWith('A') ? '#3b82f6' : c.categorie_compte.startsWith('B') ? '#f59e0b' : '#6b7280') + ';color:#fff">' + c.categorie_compte + '</span>'
+        : '—'),
       detailRow('Société Akuiteo', c.code_societe || '—'),
       detailRow('Code CODIAL <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.code_codial || '—'),
     ])}
@@ -12147,6 +12174,7 @@ function openModal(id) {
     document.getElementById('ec-siret').value = c.siret||'';
     document.getElementById('ec-ape').value = c.ape||'';
     document.getElementById('ec-refext').value = c.reference_externe||'';
+    document.getElementById('ec-categorie-compte').value = c.categorie_compte||'';
     document.getElementById('ec-notes').value = c.notes||'';
     document.getElementById('ec-hab-tech').innerHTML = c.habitudes_techniques||'';
     document.getElementById('ec-hab-geo').innerHTML = c.habitudes_geotechniques||'';
@@ -12669,6 +12697,7 @@ async function submitNewClient() {
     siret: document.getElementById('nc-siret').value.trim() || null,
     ape: document.getElementById('nc-ape').value.trim() || null,
     reference_externe: document.getElementById('nc-refext').value.trim() || null,
+    categorie_compte: document.getElementById('nc-categorie-compte').value || null,
     notes: document.getElementById('nc-notes').value.trim() || null,
     habitudes_techniques: document.getElementById('nc-hab-tech').innerHTML.trim() || null,
     habitudes_geotechniques: document.getElementById('nc-hab-geo').innerHTML.trim() || null,
@@ -12772,6 +12801,7 @@ async function submitEditClient() {
     ape: document.getElementById('ec-ape').value.trim() || null,
     reference_externe: document.getElementById('ec-refext').value.trim() || null,
     tva_intracommunautaire: document.getElementById('ec-tva').value.trim() || null,
+    categorie_compte: document.getElementById('ec-categorie-compte').value || null,
     notes: document.getElementById('ec-notes').value.trim() || null,
     habitudes_techniques: document.getElementById('ec-hab-tech').innerHTML.trim() || null,
     habitudes_geotechniques: document.getElementById('ec-hab-geo').innerHTML.trim() || null,
@@ -12786,7 +12816,7 @@ async function submitEditClient() {
     const safeCols = ['name','code','sector','city','email','phone','raison_sociale','raison_sociale2','forme_juridique',
       'adresse_ligne1','adresse_ligne2','adresse_ligne3','code_postal','departement','region','pays',
       'telephone2','mobile','fax','site_web','siren','siret','ape','reference_externe',
-      'notes','habitudes_techniques','habitudes_geotechniques','code_codial'];
+      'notes','habitudes_techniques','habitudes_geotechniques','code_codial','categorie_compte'];
     toSend = {};
     for (const k of safeCols) { if (k in fields) toSend[k] = fields[k]; }
     const r2 = await sb.from('clients').update(toSend).eq('id', currentClient.id);
