@@ -6626,7 +6626,7 @@ function imxParseCsv(text) {
 }
 
 // Templates CSV — colonnes 1:1 attendues par l'import CRM (déjà mappées)
-const IMX_TPL_SOC = ['legacy_id','name','code','code_codial','raison_sociale','siren','siret','ape','forme_juridique','adresse_ligne1','adresse_ligne2','code_postal','city','departement','region','pays','phone','telephone2','fax','mobile','email','site_web','lat','lng','sector','contact','notes','habitudes_techniques','habitudes_geotechniques','effectif','ca','status','account_manager_name','salesman_name','commerciaux_associes','mk_categorie','mk_sous_categorie','mk_categorie_pro','mk_secteur','mk_type','mk_groupe','mk_origine'];
+const IMX_TPL_SOC = ['legacy_id','name','code','code_codial','raison_sociale','siren','siret','ape','forme_juridique','adresse_ligne1','adresse_ligne2','code_postal','city','departement','region','pays','phone','telephone2','fax','mobile','email','site_web','lat','lng','sector','contact','notes','habitudes_techniques','habitudes_geotechniques','effectif','ca','status','categorie_compte','account_manager_name','salesman_name','commerciaux_associes','mk_categorie','mk_sous_categorie','mk_categorie_pro','mk_secteur','mk_type','mk_groupe','mk_origine'];
 const IMX_TPL_CON = ['legacy_id','legacy_societe_id','nom','prenom','titre','fonction','telephone','mobile','email','email2','adresse','code_postal','commentaire'];
 const IMX_TPL_CR  = ['legacy_id','legacy_societe_id','legacy_contact_id','titre','ref','date','date_creation','prochain_rdv','type_cr','statut_cr','agence','redacteur_name','client_name','contact_name','contenu','commentaire_qualite','commentaire_technique','commentaire_support'];
 
@@ -6635,7 +6635,7 @@ function imxDownloadTemplate(kind) {
   const name = (kind === 'soc') ? 'modele_societes' : (kind === 'con') ? 'modele_contacts' : 'modele_comptes_rendus';
   // Ligne 1 : en-têtes ; ligne 2 : commentaire de guide (sera ignoré à l'import car commence par #)
   const guide = {
-    soc: 'Une ligne par société. legacy_id obligatoire pour upsert. name obligatoire. status = actif|dormant|nouveau. code limité à 10 chars (Akuiteo).',
+    soc: 'Une ligne par société. legacy_id obligatoire pour upsert. name obligatoire. status = actif|dormant|nouveau. categorie_compte = JSON ex: {"GPH85":"A- Stratégique"}. code limité à 10 chars (Akuiteo).',
     con: 'Une ligne par contact. legacy_societe_id doit pointer vers clients.legacy_id (déjà importé). nom obligatoire.',
     cr:  'Une ligne par CR. legacy_societe_id doit pointer vers clients.legacy_id. date au format aaaa-mm-jj ou jj/mm/aaaa. contenu = corps texte/HTML.'
   }[kind];
@@ -7093,6 +7093,7 @@ async function imxImportSocietes() {
         sector: s.sector || '', contact: s.contact || '',
         status: s.status || 'nouveau', pays: s.pays || 'FR',
         code: s.code ? String(s.code).substring(0, 10) : null,
+        categorie_compte: s.categorie_compte ? (typeof s.categorie_compte === 'string' ? (() => { try { return JSON.parse(s.categorie_compte); } catch { return null; } })() : s.categorie_compte) : null,
       };
       if (typeof row.lat === 'string') row.lat = Number(row.lat.replace(',', '.')) || null;
       if (typeof row.lng === 'string') row.lng = Number(row.lng.replace(',', '.')) || null;
@@ -13237,8 +13238,8 @@ async function deleteRecord(table, id) {
 function exportCSV(table) {
   let rows = [], headers = [];
   if (table==='clients') {
-    headers = ['Nom','Code','Secteur','Ville','CA','Objectif','Marge','DSO','Score','Statut','Contact','Email','Téléphone'];
-    rows = DB.clients.map(c=>[c.name,c.code,c.sector,c.city,c.ca,c.obj,c.margin,c.dso,c.score,c.status,c.contact,c.email,c.phone]);
+    headers = ['Nom','Code','Secteur','Ville','CA','Objectif','Marge','DSO','Score','Statut','Catégorie compte','Contact','Email','Téléphone'];
+    rows = DB.clients.map(c=>[c.name,c.code,c.sector,c.city,c.ca,c.obj,c.margin,c.dso,c.score,c.status,c.categorie_compte ? JSON.stringify(c.categorie_compte) : '',c.contact,c.email,c.phone]);
   } else if (table==='contacts') {
     headers = ['Nom','Prénom','Titre','Fonction','Service','Email','Téléphone','Mobile','Ville','Code'];
     rows = contactsList.map(c=>[c.nom,c.prenom,c.titre,c.fonction,c.service,c.email,c.telephone,c.mobile,c.ville,c.code]);
