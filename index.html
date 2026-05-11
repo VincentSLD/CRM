@@ -1965,14 +1965,9 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Raison sociale 2</label><input class="fi" id="nc-raison2"></div>
         <div class="fg"><label class="fl">Forme juridique</label><input class="fi" id="nc-forme"></div>
         <div class="fg"><label class="fl">Secteur</label><input class="fi" id="nc-sector" placeholder="Ex: Énergie"></div>
-        <div class="fg"><label class="fl">Catégorie du compte</label>
-          <select class="fi" id="nc-categorie-compte">
-            <option value="">— Aucune —</option>
-            <option value="A- Stratégique">A- Stratégique</option>
-            <option value="B- Tactique">B- Tactique</option>
-            <option value="C- Listé">C- Listé</option>
-          </select></div>
       </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Catégorie du compte <span style="font-weight:400;font-size:11px">(par agence)</span></div>
+      <div id="nc-categorie-compte" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Adresse</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
         <div class="fg" style="grid-column:1/-1"><label class="fl">Ligne 1</label><input class="fi" id="nc-addr1"></div>
@@ -2398,14 +2393,9 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Raison sociale 2</label><input class="fi" id="ec-raison2"></div>
         <div class="fg"><label class="fl">Forme juridique</label><input class="fi" id="ec-forme"></div>
         <div class="fg"><label class="fl">Secteur</label><input class="fi" id="ec-sector"></div>
-        <div class="fg"><label class="fl">Catégorie du compte</label>
-          <select class="fi" id="ec-categorie-compte">
-            <option value="">— Aucune —</option>
-            <option value="A- Stratégique">A- Stratégique</option>
-            <option value="B- Tactique">B- Tactique</option>
-            <option value="C- Listé">C- Listé</option>
-          </select></div>
       </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Catégorie du compte <span style="font-weight:400;font-size:11px">(par agence)</span></div>
+      <div id="ec-categorie-compte" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Adresse</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
         <div class="fg" style="grid-column:1/-1"><label class="fl">Ligne 1</label><input class="fi" id="ec-addr1"></div>
@@ -3214,13 +3204,21 @@ async function loadClientsPage(page, letter, search) {
   // SIRET présent / absent
   if (clientsFilterSiret === 'yes') query = query.not('siret', 'is', null).neq('siret', '');
   if (clientsFilterSiret === 'no') query = query.or('siret.is.null,siret.eq.');
-  // Catégorie du compte
-  if (clientsFilterCatCompte) query = query.eq('categorie_compte', clientsFilterCatCompte);
+  // Catégorie du compte (JSONB — filtre côté client après requête)
+  if (clientsFilterCatCompte) query = query.not('categorie_compte', 'is', null);
   query = query.order('name', {ascending: true}).range(from, to);
 
   const { data, count } = await query;
   clientsTotalCount = count || 0;
-  DB.clients = (data || []).map(mapClient);
+  let mappedClients = (data || []).map(mapClient);
+  // Post-filtrage catégorie du compte (on vérifie si une agence a la valeur)
+  if (clientsFilterCatCompte) {
+    mappedClients = mappedClients.filter(c => {
+      const cc = c.categorie_compte;
+      return cc && typeof cc === 'object' && Object.values(cc).includes(clientsFilterCatCompte);
+    });
+  }
+  DB.clients = mappedClients;
   // Compter les devis par client
   DB.clients.forEach(c => { c.devis = DB.devis.filter(d => d.client_id === c.id).length; });
   renderPage('clients');
@@ -5085,9 +5083,14 @@ function renderClientDetail() {
     ${detailSection('Commercial', [
       detailRow('Commercial Novam', c.account_manager_name ? '<strong>' + c.account_manager_name + '</strong>' : resolveManagerName(c.account_manager_id) || '—'),
       detailRow('Commercial GPH', c.salesman_name ? '<strong>' + c.salesman_name + '</strong>' + (c.commerciaux_associes && c.commerciaux_associes !== c.salesman_name ? '<br><span style="font-size:11px;color:var(--t3)">' + c.commerciaux_associes + '</span>' : '') : c.commerciaux_associes || '—'),
-      detailRow('Catégorie du compte', c.categorie_compte
-        ? '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + (c.categorie_compte.startsWith('A') ? '#3b82f6' : c.categorie_compte.startsWith('B') ? '#f59e0b' : '#6b7280') + ';color:#fff">' + c.categorie_compte + '</span>'
-        : '—'),
+      detailRow('Catégorie du compte', (() => {
+        const cc = c.categorie_compte;
+        if (!cc || typeof cc !== 'object' || Object.keys(cc).length === 0) return '—';
+        return Object.entries(cc).map(([ag, val]) => {
+          const bg = val.startsWith('A') ? '#3b82f6' : val.startsWith('B') ? '#f59e0b' : '#6b7280';
+          return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + bg + ';color:#fff;margin:1px 4px 1px 0">' + ag + ' : ' + val + '</span>';
+        }).join('');
+      })()),
       detailRow('Société Akuiteo', c.code_societe || '—'),
       detailRow('Code CODIAL <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.code_codial || '—'),
     ])}
@@ -12174,7 +12177,6 @@ function openModal(id) {
     document.getElementById('ec-siret').value = c.siret||'';
     document.getElementById('ec-ape').value = c.ape||'';
     document.getElementById('ec-refext').value = c.reference_externe||'';
-    document.getElementById('ec-categorie-compte').value = c.categorie_compte||'';
     document.getElementById('ec-notes').value = c.notes||'';
     document.getElementById('ec-hab-tech').innerHTML = c.habitudes_techniques||'';
     document.getElementById('ec-hab-geo').innerHTML = c.habitudes_geotechniques||'';
@@ -12201,6 +12203,35 @@ async function fillAkuiteoDropdowns(prefix, client) {
   document.getElementById(prefix + '-mk-salesman').innerHTML = akRefOptions(akRef.employees, c.salesman_id, 'Commercial GPH...');
   document.getElementById(prefix + '-mk-groupe').value = c.mk_groupe || '';
   document.getElementById(prefix + '-mk-origine').value = c.mk_origine || '';
+  fillCategorieCompteDropdowns(prefix, c.categorie_compte);
+}
+function fillCategorieCompteDropdowns(prefix, catCompte) {
+  const container = document.getElementById(prefix + '-categorie-compte');
+  if (!container) return;
+  const societes = getAllSocietes();
+  if (societes.length === 0) societes.push('(défaut)');
+  const current = (catCompte && typeof catCompte === 'object') ? catCompte : {};
+  container.innerHTML = societes.map(soc => {
+    const val = current[soc] || '';
+    return `<div class="fg" style="margin:0;min-width:150px">
+      <label class="fl" style="font-size:10px">${soc}</label>
+      <select class="fi" data-societe="${soc}" style="font-size:12px">
+        <option value="">— Aucune —</option>
+        <option value="A- Stratégique"${val==='A- Stratégique'?' selected':''}>A- Stratégique</option>
+        <option value="B- Tactique"${val==='B- Tactique'?' selected':''}>B- Tactique</option>
+        <option value="C- Listé"${val==='C- Listé'?' selected':''}>C- Listé</option>
+      </select>
+    </div>`;
+  }).join('');
+}
+function readCategorieCompte(prefix) {
+  const container = document.getElementById(prefix + '-categorie-compte');
+  if (!container) return null;
+  const result = {};
+  container.querySelectorAll('select[data-societe]').forEach(sel => {
+    if (sel.value) result[sel.dataset.societe] = sel.value;
+  });
+  return Object.keys(result).length > 0 ? result : null;
 }
 function closeModal(id) { const el=document.getElementById('modal-'+id); if(el) el.classList.remove('active'); }
 // ═══ SEND REPORT ═══
@@ -12697,7 +12728,7 @@ async function submitNewClient() {
     siret: document.getElementById('nc-siret').value.trim() || null,
     ape: document.getElementById('nc-ape').value.trim() || null,
     reference_externe: document.getElementById('nc-refext').value.trim() || null,
-    categorie_compte: document.getElementById('nc-categorie-compte').value || null,
+    categorie_compte: readCategorieCompte('nc'),
     notes: document.getElementById('nc-notes').value.trim() || null,
     habitudes_techniques: document.getElementById('nc-hab-tech').innerHTML.trim() || null,
     habitudes_geotechniques: document.getElementById('nc-hab-geo').innerHTML.trim() || null,
@@ -12801,7 +12832,7 @@ async function submitEditClient() {
     ape: document.getElementById('ec-ape').value.trim() || null,
     reference_externe: document.getElementById('ec-refext').value.trim() || null,
     tva_intracommunautaire: document.getElementById('ec-tva').value.trim() || null,
-    categorie_compte: document.getElementById('ec-categorie-compte').value || null,
+    categorie_compte: readCategorieCompte('ec'),
     notes: document.getElementById('ec-notes').value.trim() || null,
     habitudes_techniques: document.getElementById('ec-hab-tech').innerHTML.trim() || null,
     habitudes_geotechniques: document.getElementById('ec-hab-geo').innerHTML.trim() || null,
