@@ -12862,6 +12862,11 @@ async function deleteClient(clientId, clientName) {
     const input = prompt('Entrez le mot de passe de suppression :');
     if (input !== pwd) { toast('Mot de passe incorrect', 'error'); return; }
   }
+  // Si le client a un akuiteo_id, l'exclure de la synchro pour éviter la re-création
+  const clientToDelete = DB.clients.find(c => c.id === clientId) || currentClient;
+  if (clientToDelete?.akuiteo_id) {
+    await sb.from('sync_exclusions').upsert({ akuiteo_id: clientToDelete.akuiteo_id, client_name: clientName, excluded_at: new Date().toISOString() }, { onConflict: 'akuiteo_id' });
+  }
   // Supprimer les comptes-rendus liés
   if (linkedReports.length) {
     const { error: crErr } = await sb.from('reports').delete().eq('client_id', clientId);
@@ -13088,6 +13093,12 @@ async function syncAkuiteoQuick() {
     const existingMap = {};
     for (const ec of (existingClients || [])) { if (ec.akuiteo_id) existingMap[ec.akuiteo_id] = ec.id; }
     const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626'];
+
+    // Charger les exclusions (clients supprimés du CRM à ne pas re-créer)
+    const { data: excRows } = await sb.from('sync_exclusions').select('akuiteo_id');
+    const excludedIds = new Set((excRows || []).map(r => r.akuiteo_id));
+    akCustomers = akCustomers.filter(ak => !excludedIds.has(String(ak.id || ak.code)));
+    console.log(`[IncSync] ${excludedIds.size} exclusion(s), ${akCustomers.length} société(s) à traiter`);
 
     if (akCustomers.length > 0) {
       // Charger les refs Akuiteo pour résoudre les noms (catégories, secteurs, etc.)
@@ -13388,9 +13399,15 @@ async function syncAkuiteo() {
     const existingMap = {};
     for (const ec of (existingClients || [])) { if (ec.akuiteo_id) existingMap[ec.akuiteo_id] = ec.id; }
 
+    // Charger les exclusions (clients supprimés du CRM à ne pas re-créer)
+    const { data: excRows } = await sb.from('sync_exclusions').select('akuiteo_id');
+    const excludedIds = new Set((excRows || []).map(r => r.akuiteo_id));
+    console.log(`[Akuiteo] ${excludedIds.size} exclusion(s) chargées`);
+
     // Tout mettre dans un seul tableau, dédupliqué par akuiteo_id
     const allClientsMap = {};
     for (const ak of akCustomers) {
+      if (excludedIds.has(String(ak.id || ak.code))) continue;
       const akId = String(ak.id || ak.code);
       const id = existingMap[akId] || ('ak_' + akId.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20));
       const isNew = !existingMap[akId];

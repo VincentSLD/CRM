@@ -15,8 +15,13 @@ async function syncClients() {
   const existingMap = {};
   (existingClients || []).forEach(c => { if (c.akuiteo_id) existingMap[c.akuiteo_id] = c; });
 
+  // Charger les exclusions (clients supprimés du CRM à ne pas re-créer)
+  const { data: excRows } = await sb.from('sync_exclusions').select('akuiteo_id');
+  const excludedIds = new Set((excRows || []).map(r => r.akuiteo_id));
+  log(`${excludedIds.size} exclusion(s) chargées`);
+
   let created = 0, updated = 0;
-  const batch = akCustomers.map(ak => {
+  const batch = akCustomers.filter(ak => !excludedIds.has(String(ak.id || ak.code))).map(ak => {
     const akId = String(ak.id || ak.code);
     const existing = existingMap[akId];
     const name = ak.name || ak.legalName || ak.code || 'Sans nom';
