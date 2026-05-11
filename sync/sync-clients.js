@@ -76,7 +76,7 @@ async function syncClients() {
       row.ini = ini || '??';
       row.color = colors[Math.floor(Math.random() * colors.length)];
       row.ca = 0; row.obj = 0; row.margin = 0; row.dso = 0;
-      row.score = 50; row.status = 'objectif';
+      row.score = 50; row.status = 'nouveau';
       row.sentiment_pos = 50; row.sentiment_neu = 35; row.sentiment_neg = 15;
       created++;
     } else {
