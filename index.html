@@ -4833,30 +4833,30 @@ function renderClients(filter='all') {
     </summary>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border-top:1px solid var(--border)">
       <span style="font-size:11px;color:var(--t3);font-weight:600">Filtres :</span>
-      <select onchange="clientsFilterDept=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:90px">
+      <select onchange="clientsFilterDept=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterDept?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterDept?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:90px">
         <option value="">— Dpt —</option>
         ${clientsFilterOpts.depts.map(d => `<option value="${d}"${clientsFilterDept===d?' selected':''}>${d}</option>`).join('')}
       </select>
-      <select onchange="clientsFilterNovam=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:170px;max-width:220px">
+      <select onchange="clientsFilterNovam=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterNovam?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterNovam?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:170px;max-width:220px">
         <option value="">— Commercial Novam —</option>
         ${clientsFilterOpts.novam.map(n => `<option value="${n.replace(/"/g,'&quot;')}"${clientsFilterNovam===n?' selected':''}>${n}</option>`).join('')}
       </select>
-      <select onchange="clientsFilterGph=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:170px;max-width:220px">
+      <select onchange="clientsFilterGph=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterGph?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterGph?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:170px;max-width:220px">
         <option value="">— Commercial GPH —</option>
         ${clientsFilterOpts.gph.map(n => `<option value="${n.replace(/"/g,'&quot;')}"${clientsFilterGph===n?' selected':''}>${n}</option>`).join('')}
       </select>
-      <select onchange="clientsFilterStatut=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+      <select onchange="clientsFilterStatut=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterStatut?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterStatut?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
         <option value="" ${!clientsFilterStatut?'selected':''}>— Tous statuts —</option>
         <option value="actif" ${clientsFilterStatut==='actif'?'selected':''}>Actif</option>
         <option value="dormant" ${clientsFilterStatut==='dormant'?'selected':''}>Dormant</option>
         <option value="nouveau" ${clientsFilterStatut==='nouveau'?'selected':''}>Nouveau</option>
       </select>
-      <select onchange="clientsFilterSync=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+      <select onchange="clientsFilterSync=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterSync?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterSync?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
         <option value="" ${!clientsFilterSync?'selected':''}>— Akuiteo —</option>
         <option value="yes" ${clientsFilterSync==='yes'?'selected':''}>🟢 Synchronisés</option>
         <option value="no" ${clientsFilterSync==='no'?'selected':''}>🟠 Non synchro</option>
       </select>
-      <select onchange="clientsFilterCatCompte=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+      <select onchange="clientsFilterCatCompte=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterCatCompte?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterCatCompte?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
         <option value="" ${!clientsFilterCatCompte?'selected':''}>— Cat. compte —</option>
         <option value="A- Stratégique" ${clientsFilterCatCompte==='A- Stratégique'?'selected':''}>A- Stratégique</option>
         <option value="B- Tactique" ${clientsFilterCatCompte==='B- Tactique'?'selected':''}>B- Tactique</option>
@@ -4866,35 +4866,35 @@ function renderClients(filter='all') {
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border-top:1px solid var(--border)">
       <span style="font-size:11px;color:var(--t3);font-weight:600">Infos Entreprise :</span>
-      <select onchange="clientsFilterCategorie=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+      <select onchange="clientsFilterCategorie=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterCategorie?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterCategorie?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:140px;max-width:200px">
         <option value="">— Catégorie —</option>
         ${clientsFilterOpts.categorie.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterCategorie===v?' selected':''}>${v}</option>`).join('')}
       </select>
-      <select onchange="clientsFilterSousCategorie=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+      <select onchange="clientsFilterSousCategorie=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterSousCategorie?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterSousCategorie?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:140px;max-width:200px">
         <option value="">— Sous-catégorie —</option>
         ${clientsFilterOpts.sousCategorie.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterSousCategorie===v?' selected':''}>${v}</option>`).join('')}
       </select>
-      <select onchange="clientsFilterCategoriePro=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+      <select onchange="clientsFilterCategoriePro=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterCategoriePro?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterCategoriePro?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:140px;max-width:200px">
         <option value="">— Catégorie pro. —</option>
         ${clientsFilterOpts.categoriePro.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterCategoriePro===v?' selected':''}>${v}</option>`).join('')}
       </select>
-      <select onchange="clientsFilterSecteur=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+      <select onchange="clientsFilterSecteur=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterSecteur?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterSecteur?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:140px;max-width:200px">
         <option value="">— Secteur —</option>
         ${clientsFilterOpts.secteur.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterSecteur===v?' selected':''}>${v}</option>`).join('')}
       </select>
-      <select onchange="clientsFilterType=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+      <select onchange="clientsFilterType=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterType?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterType?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:140px;max-width:200px">
         <option value="">— Type —</option>
         ${clientsFilterOpts.type.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterType===v?' selected':''}>${v}</option>`).join('')}
       </select>
-      <select onchange="clientsFilterGroupe=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+      <select onchange="clientsFilterGroupe=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterGroupe?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterGroupe?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:140px;max-width:200px">
         <option value="">— Groupe —</option>
         ${clientsFilterOpts.groupe.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterGroupe===v?' selected':''}>${v}</option>`).join('')}
       </select>
-      <select onchange="clientsFilterOrigine=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);min-width:140px;max-width:200px">
+      <select onchange="clientsFilterOrigine=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterOrigine?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterOrigine?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:140px;max-width:200px">
         <option value="">— Origine —</option>
         ${clientsFilterOpts.origine.map(v => `<option value="${v.replace(/"/g,'&quot;')}"${clientsFilterOrigine===v?' selected':''}>${v}</option>`).join('')}
       </select>
-      <select onchange="clientsFilterSiret=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)">
+      <select onchange="clientsFilterSiret=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterSiret?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterSiret?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
         <option value="" ${!clientsFilterSiret?'selected':''}>— SIRET —</option>
         <option value="yes" ${clientsFilterSiret==='yes'?'selected':''}>✓ Avec SIRET</option>
         <option value="no" ${clientsFilterSiret==='no'?'selected':''}>✗ Sans SIRET</option>
