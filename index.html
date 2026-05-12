@@ -2048,6 +2048,22 @@ tbody tr:last-child td { border-bottom: none; }
         </div>
       </div>
     </div>
+    <!-- Panel établissements secondaires (visible si siège avec +1 établissements) -->
+    <div id="nc-etablissements-panel" style="display:none;margin:0 20px 16px;border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--bg-3)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--t1)">Établissements secondaires</div>
+          <div style="font-size:11px;color:var(--t3)" id="nc-etab-count"></div>
+        </div>
+        <button class="btn btn-primary" onclick="loadSecondaryEstablishments()" id="nc-etab-load-btn" style="font-size:12px">Charger les établissements</button>
+      </div>
+      <div id="nc-etab-list" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:var(--card)"></div>
+      <div id="nc-etab-actions" style="display:none;margin-top:8px;align-items:center;gap:6px;font-size:11px">
+        <button class="btn" onclick="ncEtabToggleAll(true)" style="font-size:11px;padding:3px 8px">Tout cocher</button>
+        <button class="btn" onclick="ncEtabToggleAll(false)" style="font-size:11px;padding:3px 8px">Tout décocher</button>
+        <span id="nc-etab-selected" style="margin-left:auto;color:var(--t3);font-size:11px"></span>
+      </div>
+    </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal('new-client')">Annuler</button>
       <button class="btn btn-primary" onclick="submitNewClient()">Créer le client/prospect</button>
@@ -12892,6 +12908,15 @@ function clearNewClientForm() {
   document.getElementById('nc-pays').value = 'FR';
   const results = document.getElementById('nc-sirene-results');
   if (results) { results.style.display = 'none'; results.innerHTML = ''; }
+  // Réinitialiser le panel établissements secondaires
+  const etabPanel = document.getElementById('nc-etablissements-panel');
+  if (etabPanel) etabPanel.style.display = 'none';
+  const etabList = document.getElementById('nc-etab-list');
+  if (etabList) etabList.innerHTML = '';
+  const etabActions = document.getElementById('nc-etab-actions');
+  if (etabActions) etabActions.style.display = 'none';
+  window._ncSelectedSireneResult = null;
+  window._ncSecondaryEstablishments = [];
 }
 
 // ═══ SIRENE search dans Nouveau client (avec filtres avancés) ═══
@@ -13168,10 +13193,140 @@ function fillFromSirene(index) {
 
   // Stocker l'info siège pour submitNewClient
   window._ncEstSiege = true; // Le résultat SIRENE principal utilise le siège
+  window._ncSelectedSireneResult = r;
+  window._ncSecondaryEstablishments = [];
+
+  // Afficher/masquer le panel établissements secondaires
+  const etabPanel = document.getElementById('nc-etablissements-panel');
+  if (etabPanel) {
+    if (r.nombre_etablissements_ouverts > 1) {
+      etabPanel.style.display = '';
+      document.getElementById('nc-etab-count').textContent = r.nombre_etablissements_ouverts + ' établissement(s) ouvert(s) pour ce SIREN';
+      document.getElementById('nc-etab-list').innerHTML = '<div style="color:var(--t3);font-size:12px;text-align:center;padding:16px">Cliquez sur « Charger les établissements » pour afficher la liste</div>';
+      document.getElementById('nc-etab-actions').style.display = 'none';
+      document.getElementById('nc-etab-load-btn').disabled = false;
+      document.getElementById('nc-etab-load-btn').textContent = 'Charger les établissements';
+    } else {
+      etabPanel.style.display = 'none';
+    }
+  }
 
   // Fermer les résultats
   document.getElementById('nc-sirene-results').style.display = 'none';
   toast('Données de l\'entreprise importées', 'success');
+}
+
+// ═══ CHARGEMENT DES ÉTABLISSEMENTS SECONDAIRES ═══
+async function loadSecondaryEstablishments() {
+  const r = window._ncSelectedSireneResult;
+  if (!r || !r.siren) return;
+
+  const btn = document.getElementById('nc-etab-load-btn');
+  const listEl = document.getElementById('nc-etab-list');
+  const actionsEl = document.getElementById('nc-etab-actions');
+  btn.disabled = true;
+  btn.textContent = 'Chargement…';
+  listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Recherche des établissements…</div>';
+
+  try {
+    // Appel API SIRENE par SIREN pour obtenir les matching_etablissements
+    let allEtabs = [];
+    const siegeSiret = (r.siege || {}).siret || '';
+
+    // Tentative 1 : recherche par SIREN
+    async function sireneCall(query) {
+      const params = new URLSearchParams();
+      params.set('q', query);
+      params.set('per_page', '25');
+      params.set('mtm_campaign', 'crm-novam');
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + params.toString());
+        if (resp.status === 429) {
+          const wait = (attempt + 1) * 3000;
+          listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Rate limit — pause ' + (wait/1000) + 's…</div>';
+          await new Promise(resolve => setTimeout(resolve, wait));
+          continue;
+        }
+        if (!resp.ok) throw new Error('API HTTP ' + resp.status);
+        return resp.json();
+      }
+      throw new Error('Rate limit persistant');
+    }
+
+    const d = await sireneCall(r.siren);
+    const enterprise = (d.results || []).find(e => e.siren === r.siren);
+    if (enterprise && enterprise.matching_etablissements) {
+      allEtabs = enterprise.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+    }
+
+    // Fallback : si aucun établissement trouvé, chercher par nom d'entreprise
+    if (allEtabs.length === 0 && r.nom_complet) {
+      const d2 = await sireneCall(r.nom_complet);
+      const ent2 = (d2.results || []).find(e => e.siren === r.siren);
+      if (ent2 && ent2.matching_etablissements) {
+        allEtabs = ent2.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+      }
+    }
+
+    if (allEtabs.length === 0) {
+      listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Aucun établissement secondaire actif trouvé via l\'API SIRENE.</div>';
+      btn.textContent = 'Aucun trouvé';
+      return;
+    }
+
+    // Vérifier lesquels existent déjà en base
+    const sirets = allEtabs.map(e => e.siret).filter(Boolean);
+    const existingByKey = {};
+    if (sirets.length) {
+      const { data: existing } = await sb.from('clients').select('id,name,siret').in('siret', sirets);
+      for (const c of (existing || [])) {
+        if (c.siret) existingByKey[c.siret] = c;
+      }
+    }
+
+    // Stocker pour submitNewClient
+    window._ncSecondaryEstablishments = allEtabs;
+
+    // Afficher les checkboxes
+    listEl.innerHTML = allEtabs.map((e, i) => {
+      const existing = existingByKey[e.siret];
+      const addr = [e.numero_voie, e.type_voie, e.libelle_voie].filter(Boolean).join(' ') || e.adresse || '';
+      const cp = e.code_postal || '';
+      const ville = e.libelle_commune || '';
+      const existingBadge = existing
+        ? '<span style="padding:1px 6px;border-radius:4px;background:rgba(245,158,11,.2);color:#f59e0b;font-size:10px;font-weight:700;margin-left:6px">Déjà en base</span>'
+        : '';
+      return '<div style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:flex-start;' + (existing ? 'opacity:0.5' : '') + '">'
+        + '<input type="checkbox" class="nc-etab-check" data-idx="' + i + '"' + (existing ? ' disabled' : '') + ' onchange="updateNcEtabSelectedCount()" style="margin-top:3px;cursor:pointer">'
+        + '<div style="flex:1;font-size:12px">'
+        + '<div style="font-weight:600;color:var(--t1)"><span style="font-family:monospace;font-size:11px">' + (e.siret || '—') + '</span>' + existingBadge + '</div>'
+        + '<div style="color:var(--t2);font-size:11px">' + addr + ' ' + cp + ' ' + ville + '</div>'
+        + (existing ? '<div style="font-size:10px;color:#f59e0b">→ ' + existing.name + '</div>' : '')
+        + '</div></div>';
+    }).join('');
+
+    actionsEl.style.display = 'flex';
+    btn.textContent = allEtabs.length + ' établissement(s) trouvé(s)';
+    updateNcEtabSelectedCount();
+
+  } catch (err) {
+    console.error('loadSecondaryEstablishments error:', err);
+    listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--red);font-size:12px">Erreur : ' + err.message + '</div>';
+    btn.textContent = 'Réessayer';
+    btn.disabled = false;
+  }
+}
+
+function ncEtabToggleAll(checked) {
+  document.querySelectorAll('.nc-etab-check:not(:disabled)').forEach(cb => { cb.checked = checked; });
+  updateNcEtabSelectedCount();
+}
+
+function updateNcEtabSelectedCount() {
+  const checked = document.querySelectorAll('.nc-etab-check:checked:not(:disabled)').length;
+  const total = document.querySelectorAll('.nc-etab-check:not(:disabled)').length;
+  const el = document.getElementById('nc-etab-selected');
+  if (el) el.textContent = checked + ' / ' + total + ' sélectionné(s)';
 }
 
 async function submitNewClient() {
@@ -13233,7 +13388,55 @@ async function submitNewClient() {
     status: 'nouveau',
     est_siege: window._ncEstSiege ?? null,
   });
+  // Créer les établissements secondaires cochés
+  const etabChecks = [...document.querySelectorAll('.nc-etab-check:checked:not(:disabled)')];
+  const secondaryEtabs = window._ncSecondaryEstablishments || [];
+  let etabAdded = 0;
+  if (etabChecks.length > 0 && secondaryEtabs.length > 0) {
+    const siren = document.getElementById('nc-siren').value.trim();
+    const raisonSociale = document.getElementById('nc-raison').value.trim() || name;
+    const raisonSociale2 = document.getElementById('nc-raison2').value.trim() || null;
+    const formeJuridique = document.getElementById('nc-forme').value.trim() || null;
+    const sector = document.getElementById('nc-sector').value.trim() || '';
+    const apeMain = document.getElementById('nc-ape').value.trim() || null;
+    const akuiteoFields = getAkuiteoFieldsFromModal('nc');
+    const categorieCompte = readCategorieCompte('nc');
+
+    for (const cb of etabChecks) {
+      const etab = secondaryEtabs[parseInt(cb.dataset.idx)];
+      if (!etab || !etab.siret) continue;
+      const dept = etab.code_postal ? etab.code_postal.substring(0, 2) : (etab.departement || '');
+      const etabId = name.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 15) + '_' + etab.siret.slice(-6) + '_' + String(Date.now()).slice(-4);
+      const etabIni = name.split(' ').map(w => (w || '')[0]).join('').substring(0, 2).toUpperCase();
+      const addr = [etab.numero_voie, etab.type_voie, etab.libelle_voie].filter(Boolean).join(' ') || etab.adresse || null;
+      const { error } = await sb.from('clients').insert({
+        id: etabId, name,
+        code: ('ETB-' + etab.siret.slice(-6)).substring(0, 10),
+        raison_sociale: raisonSociale, raison_sociale2: raisonSociale2,
+        forme_juridique: formeJuridique, sector,
+        adresse_ligne1: addr,
+        adresse_ligne2: etab.complement_adresse || null,
+        code_postal: etab.code_postal || null,
+        city: etab.libelle_commune || '',
+        departement: deptName(dept),
+        region: regionFromDept(dept),
+        pays: 'FR',
+        siren, siret: etab.siret,
+        ape: etab.activite_principale || apeMain,
+        ini: etabIni, color: colors[Math.floor(Math.random() * colors.length)],
+        status: 'nouveau', est_siege: false,
+        categorie_compte: categorieCompte,
+        ...akuiteoFields,
+      });
+      if (!error) etabAdded++;
+      else console.warn('Insert établissement secondaire err:', etab.siret, error.message);
+    }
+    if (etabAdded > 0) toast(etabAdded + ' établissement(s) secondaire(s) créé(s)', 'success');
+  }
+
   window._ncEstSiege = null;
+  window._ncSelectedSireneResult = null;
+  window._ncSecondaryEstablishments = [];
   closeModal('new-client');
   // Si on venait du formulaire CR, sélectionner le nouveau client
   if (crViewMode === 'detail') {
