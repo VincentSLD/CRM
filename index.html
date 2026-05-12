@@ -4983,12 +4983,42 @@ async function showClient(id) {
   setTimeout(() => renderClientObjectifs(currentClient.id), 120);
   // Charger les concurrents liés
   setTimeout(() => renderClientConcurrents(currentClient.id), 140);
+  // Charger les établissements liés (même SIREN)
+  if (currentClient.siren) setTimeout(() => loadEtablissementsLies(currentClient.siren, currentClient.id), 160);
+}
+
+async function loadEtablissementsLies(siren, currentClientId) {
+  const el = document.getElementById('etablissements-lies');
+  if (!el) return;
+  try {
+    const { data } = await sb.from('clients').select('id,name,siret,city,code_postal,est_siege').eq('siren', siren).neq('id', currentClientId).order('name');
+    if (!data || data.length === 0) {
+      el.innerHTML = '<div style="color:var(--t3);font-size:13px">Aucun autre établissement trouvé dans le CRM pour ce SIREN.</div>';
+      return;
+    }
+    el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:2px solid var(--border)">'
+      + '<th style="padding:6px 10px;text-align:left">Société</th>'
+      + '<th style="padding:6px 10px;text-align:left">SIRET</th>'
+      + '<th style="padding:6px 10px;text-align:left">Ville</th>'
+      + '<th style="padding:6px 10px;text-align:left">Type</th>'
+      + '</tr></thead><tbody>'
+      + data.map(r => '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="showClient(\'' + r.id + '\')" onmouseover="this.style.background=\'var(--hover)\'" onmouseout="this.style.background=\'\'">'
+        + '<td style="padding:6px 10px;font-weight:500;color:var(--accent)">' + (r.name || '—') + '</td>'
+        + '<td style="padding:6px 10px;font-family:monospace;font-size:12px">' + (r.siret || '—') + '</td>'
+        + '<td style="padding:6px 10px">' + (r.code_postal ? r.code_postal + ' ' : '') + (r.city || '—') + '</td>'
+        + '<td style="padding:6px 10px">' + (r.est_siege === true ? '<span style="color:var(--accent);font-weight:600">Siège</span>' : r.est_siege === false ? 'Établissement' : '—') + '</td>'
+        + '</tr>').join('')
+      + '</tbody></table>'
+      + '<div style="font-size:11px;color:var(--t3);margin-top:6px">' + data.length + ' autre(s) établissement(s) dans le CRM</div>';
+  } catch (err) {
+    el.innerHTML = '<div style="color:var(--red);font-size:13px">Erreur: ' + err.message + '</div>';
+  }
 }
 
 function renderClientDetail() {
   const c = currentClient;
   if(!c) return '<p>Société non trouvée</p>';
-  const s = statusMap[c.status] || statusMap['objectif'];
+  const s = statusMap[c.status] || statusMap['nouveau'];
   // Bandeau d'alerte si procédure collective ou radiation INSEE détectée
   let alertBanner = '';
   if (c.etat_insee === 'C' || c.procedure_collective) {
@@ -5069,6 +5099,7 @@ function renderClientDetail() {
       detailRow('Raison sociale 2', c.raison_sociale2 || '—'),
       detailRow('SIREN', c.siren || '—'),
       detailRow('SIRET', c.siret || '—'),
+      detailRow('Type établissement', c.est_siege === true ? '<span style="color:var(--accent);font-weight:600">Siège social</span>' : c.est_siege === false ? '<span style="color:var(--t2)">Établissement</span>' : '—'),
       detailRow('TVA intracommunautaire', c.tva_intracommunautaire || computeTVA(c.siren) || '—'),
       detailRow('Code APE', c.ape ? c.ape + (apeLabel(c.ape) ? ' <span style="color:var(--t3);font-size:11px">— ' + apeLabel(c.ape) + '</span>' : '') : '—'),
       detailRow('Métier (APE)', apeLabel(c.ape) || '—'),
@@ -5082,6 +5113,10 @@ function renderClientDetail() {
         : '—'),
     ])}
   </div>
+  ${c.siren ? `<div class="card" style="margin-bottom:16px">
+    <div class="card-header"><div class="card-title">Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ${c.siren})</span></div></div>
+    <div class="card-body" id="etablissements-lies" style="padding:12px"><div style="color:var(--t3);font-size:13px">Chargement...</div></div>
+  </div>` : ''}
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
     ${detailSection('Commercial', [
       detailRow('Commercial Novam', c.account_manager_name ? '<strong>' + c.account_manager_name + '</strong>' : resolveManagerName(c.account_manager_id) || '—'),
@@ -6126,7 +6161,7 @@ async function initCarteMap() {
       fillOpacity: 0.9
     }).addTo(carteMap);
     bounds.push([c.lat, c.lng]);
-    const s = statusMap[c.status || 'objectif'] || statusMap['objectif'];
+    const s = statusMap[c.status || 'nouveau'] || statusMap['nouveau'];
     marker.bindPopup(`
       <div class="map-popup">
         <h4>${c.name}</h4>
@@ -12963,6 +12998,9 @@ function fillFromSirene(index) {
     document.getElementById('nc-headcount').value = '';
   }
 
+  // Stocker l'info siège pour submitNewClient
+  window._ncEstSiege = true; // Le résultat SIRENE principal utilise le siège
+
   // Fermer les résultats
   document.getElementById('nc-sirene-results').style.display = 'none';
   toast('Données de l\'entreprise importées', 'success');
@@ -13025,7 +13063,9 @@ async function submitNewClient() {
     ...getAkuiteoFieldsFromModal('nc'),
     ini, color: colors[Math.floor(Math.random()*colors.length)],
     status: 'nouveau',
+    est_siege: window._ncEstSiege ?? null,
   });
+  window._ncEstSiege = null;
   closeModal('new-client');
   // Si on venait du formulaire CR, sélectionner le nouveau client
   if (crViewMode === 'detail') {
@@ -14640,6 +14680,7 @@ async function doSearchSirene() {
         departement: deptName(s.departement),
         region: regionFromDept(s.departement) || regionName(s.region),
         effectif: s.tranche_effectif_salarie,
+        est_siege: true,
         _display: { adresse: s.adresse, etat: e.etat_administratif, nj: nj[e.nature_juridique] || e.nature_juridique || '—' },
       };
     });
@@ -15252,10 +15293,11 @@ async function applySirene(index) {
     region: data.region || null,
   };
   if (data.effectif && !isNaN(data.effectif)) fields.effectif = Number(data.effectif);
+  if (data.est_siege !== undefined && data.est_siege !== null) fields.est_siege = data.est_siege;
 
   // Construire le résumé des modifications
   const labels = { raison_sociale:'Raison sociale', siren:'SIREN', siret:'SIRET', ape:'Code APE', forme_juridique:'Forme juridique',
-    adresse_ligne1:'Adresse', adresse_ligne2:'Complément', code_postal:'Code postal', city:'Ville', departement:'Département', region:'Région', effectif:'Effectif' };
+    adresse_ligne1:'Adresse', adresse_ligne2:'Complément', code_postal:'Code postal', city:'Ville', departement:'Département', region:'Région', effectif:'Effectif', est_siege:'Type établissement' };
   const summary = Object.entries(fields).filter(([,v]) => v).map(([k,v]) => `  ${labels[k] || k}: ${v}`).join('\n');
 
   if (!confirm('Mettre à jour la fiche avec ces données SIRENE ?\n\n' + summary)) return;
