@@ -2746,6 +2746,7 @@ let clientsFilterType = '';
 let clientsFilterGroupe = '';
 let clientsFilterOrigine = '';
 let clientsFilterSiret = ''; // '' | 'yes' | 'no'
+let clientsFilterSiege = ''; // '' | 'siege' | 'etablissement'
 let clientsFilterCatCompte = '';
 const CLIENTS_PER_PAGE = 50;
 let clientsFilterOpts = { depts: [], novam: [], gph: [], categorie: [], sousCategorie: [], categoriePro: [], secteur: [], type: [], groupe: [], origine: [] };
@@ -3206,6 +3207,9 @@ async function loadClientsPage(page, letter, search) {
   // SIRET présent / absent
   if (clientsFilterSiret === 'yes') query = query.not('siret', 'is', null).neq('siret', '');
   if (clientsFilterSiret === 'no') query = query.or('siret.is.null,siret.eq.');
+  // Siège / Établissement
+  if (clientsFilterSiege === 'siege') query = query.eq('est_siege', true);
+  if (clientsFilterSiege === 'etablissement') query = query.eq('est_siege', false);
   // Catégorie du compte (JSONB — filtre côté client après requête)
   if (clientsFilterCatCompte) query = query.not('categorie_compte', 'is', null);
   query = query.order('name', {ascending: true}).range(from, to);
@@ -3241,6 +3245,7 @@ function resetClientsFilters() {
   clientsFilterGroupe = '';
   clientsFilterOrigine = '';
   clientsFilterSiret = '';
+  clientsFilterSiege = '';
   clientsFilterCatCompte = '';
   clientsLetter = '';
   clientsSearch = '';
@@ -4825,10 +4830,10 @@ function renderClients(filter='all') {
     <button class="btn ${!clientsLetter?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'','')">Tous</button>
     ${letters.map(l => `<button class="btn ${clientsLetter===l?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'${l}','')">${l}</button>`).join('')}
   </div>
-  <details style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-3)"${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterCatCompte) ? ' open' : ''}>
+  <details style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-3)"${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterSiege||clientsFilterCatCompte) ? ' open' : ''}>
     <summary style="padding:8px 10px;cursor:pointer;font-size:11px;font-weight:600;color:var(--t3);user-select:none;list-style:none;display:flex;align-items:center;gap:6px">
       <span style="transition:transform .2s;display:inline-block">&#9654;</span> Filtres & Infos Entreprise
-      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterCatCompte) ? '<span style="display:inline-block;padding:1px 6px;border-radius:10px;background:var(--accent);color:#fff;font-size:10px;font-weight:700">filtres actifs</span>' : ''}
+      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterSiege||clientsFilterCatCompte) ? '<span style="display:inline-block;padding:1px 6px;border-radius:10px;background:var(--accent);color:#fff;font-size:10px;font-weight:700">filtres actifs</span>' : ''}
       ${!clientsFilterOptsLoaded ? '<span style="font-size:11px;color:var(--t3)">⏳ chargement options...</span>' : ''}
     </summary>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border-top:1px solid var(--border)">
@@ -4862,7 +4867,7 @@ function renderClients(filter='all') {
         <option value="B- Tactique" ${clientsFilterCatCompte==='B- Tactique'?'selected':''}>B- Tactique</option>
         <option value="C- Listé" ${clientsFilterCatCompte==='C- Listé'?'selected':''}>C- Listé</option>
       </select>
-      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterCatCompte) ? `<button class="btn" style="font-size:12px;padding:5px 10px;color:var(--red)" onclick="resetClientsFilters()">✕ Effacer tout</button>` : ''}
+      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterSiege||clientsFilterCatCompte) ? `<button class="btn" style="font-size:12px;padding:5px 10px;color:var(--red)" onclick="resetClientsFilters()">✕ Effacer tout</button>` : ''}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border-top:1px solid var(--border)">
       <span style="font-size:11px;color:var(--t3);font-weight:600">Infos Entreprise :</span>
@@ -4898,6 +4903,11 @@ function renderClients(filter='all') {
         <option value="" ${!clientsFilterSiret?'selected':''}>— SIRET —</option>
         <option value="yes" ${clientsFilterSiret==='yes'?'selected':''}>✓ Avec SIRET</option>
         <option value="no" ${clientsFilterSiret==='no'?'selected':''}>✗ Sans SIRET</option>
+      </select>
+      <select onchange="clientsFilterSiege=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterSiege?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterSiege?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
+        <option value="" ${!clientsFilterSiege?'selected':''}>— Établissement —</option>
+        <option value="siege" ${clientsFilterSiege==='siege'?'selected':''}>Siège social</option>
+        <option value="etablissement" ${clientsFilterSiege==='etablissement'?'selected':''}>Établissement secondaire</option>
       </select>
     </div>
   </details>
