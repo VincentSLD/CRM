@@ -11251,67 +11251,60 @@ async function calculerSiegeEtablissement() {
 
     // 3. Pour chaque SIREN, appeler l'API SIRENE pour obtenir le SIRET du siège
     let updated = 0, errors = 0, skipped = 0, siegeCount = 0, etablCount = 0;
-    const BATCH_SIZE = 5; // 5 requêtes en parallèle pour ne pas surcharger l'API
-    const DELAY_MS = 300; // pause entre chaque batch
 
-    for (let i = 0; i < sirens.length; i += BATCH_SIZE) {
-      const batch = sirens.slice(i, i + BATCH_SIZE);
-      setSyncText(`SIRENE ${Math.min(i + BATCH_SIZE, sirens.length)} / ${sirens.length} SIREN…`);
+    // Helper : fetch avec retry sur 429 (backoff exponentiel)
+    async function sireneGet(siren, attempt = 0) {
+      const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + siren + '&per_page=1&mtm_campaign=crm-novam');
+      if (resp.status === 429) {
+        if (attempt >= 4) throw new Error('429 après 4 retries');
+        const wait = (attempt + 1) * 2000; // 2s, 4s, 6s, 8s
+        setSyncText(`Rate limit — pause ${wait/1000}s puis retry…`);
+        await new Promise(r => setTimeout(r, wait));
+        return sireneGet(siren, attempt + 1);
+      }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return resp.json();
+    }
 
-      const promises = batch.map(async siren => {
-        try {
-          const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + siren + '&per_page=1&mtm_campaign=crm-novam');
-          if (!resp.ok) { skipped += sirenMap[siren].length; return; }
-          const d = await resp.json();
-          const enterprise = (d.results || []).find(e => e.siren === siren);
-          if (!enterprise || !enterprise.siege) { skipped += sirenMap[siren].length; return; }
+    // 2 requêtes max par seconde (limite API SIRENE) → batch de 2 avec pause 1.1s
+    async function processSiren(siren) {
+      try {
+        const d = await sireneGet(siren);
+        const enterprise = (d.results || []).find(e => e.siren === siren);
+        if (!enterprise || !enterprise.siege) { skipped += sirenMap[siren].length; return; }
 
-          const siegeSiret = enterprise.siege.siret;
-          if (!siegeSiret) { skipped += sirenMap[siren].length; return; }
+        const siegeSiret = enterprise.siege.siret;
+        if (!siegeSiret) { skipped += sirenMap[siren].length; return; }
 
-          // Mettre à jour chaque client de ce SIREN
-          for (const client of sirenMap[siren]) {
-            const clientSiret = (client.siret || '').trim();
-            const estSiege = clientSiret === siegeSiret;
+        for (const client of sirenMap[siren]) {
+          const clientSiret = (client.siret || '').trim();
+          const estSiege = clientSiret === siegeSiret;
+          if (client.est_siege === estSiege) { skipped++; continue; }
 
-            // Skip si déjà correct
-            if (client.est_siege === estSiege) { skipped++; continue; }
-
-            const { error } = await sb.from('clients').update({ est_siege: estSiege }).eq('id', client.id);
-            if (error) { console.warn('est_siege err', client.name, error.message); errors++; }
-            else {
-              updated++;
-              if (estSiege) siegeCount++; else etablCount++;
-            }
+          const { error } = await sb.from('clients').update({ est_siege: estSiege }).eq('id', client.id);
+          if (error) { console.warn('est_siege err', client.name, error.message); errors++; }
+          else {
+            updated++;
+            if (estSiege) siegeCount++; else etablCount++;
           }
-        } catch (err) {
-          console.warn('SIRENE API error for', siren, err.message);
-          skipped += sirenMap[siren].length;
         }
-      });
-
-      await Promise.all(promises);
-
-      // Pause entre les batches pour respecter le rate limit de l'API
-      if (i + BATCH_SIZE < sirens.length) {
-        await new Promise(r => setTimeout(r, DELAY_MS));
+      } catch (err) {
+        console.warn('SIRENE API error for', siren, err.message);
+        skipped += sirenMap[siren].length;
       }
     }
 
-    // 4. Mettre à jour le cache local
-    for (const c of DB.clients) {
-      const siren = (c.siren || '').trim();
-      if (sirenMap[siren]) {
-        const siegeClients = sirenMap[siren];
-        const match = siegeClients.find(sc => sc.id === c.id);
-        if (match && match.siret) {
-          // Recalculer depuis les données déjà obtenues
-          const others = siegeClients.filter(sc => sc.est_siege === true);
-          // Plus simple : relire la valeur depuis allClients mis à jour
-        }
+    for (let i = 0; i < sirens.length; i += 2) {
+      setSyncText(`SIRENE ${Math.min(i + 2, sirens.length)} / ${sirens.length}…`);
+      const batch = sirens.slice(i, i + 2);
+      await Promise.all(batch.map(s => processSiren(s)));
+      // Pause 1.1s pour rester sous 2 req/s
+      if (i + 2 < sirens.length) {
+        await new Promise(r => setTimeout(r, 1100));
       }
     }
-    // Recharger le cache des clients pour refléter les changements
+
+    // 4. Recharger le cache des clients pour refléter les changements
     const { data: refreshed } = await sb.from('clients').select('id,est_siege').not('siren', 'is', null);
     if (refreshed) {
       const map = {};
