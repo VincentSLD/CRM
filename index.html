@@ -12658,6 +12658,7 @@ function openModal(id) {
   if(id==='new-devis') document.getElementById('nd-client').innerHTML=clientOpts;
   if(id==='new-commande') document.getElementById('ncm-client').innerHTML=clientOpts;
   if(id==='new-facture') document.getElementById('nf-client').innerHTML=clientOpts;
+  if(id==='new-client') { window._ncEstSiege = null; window._ncSelectedSireneResult = null; window._ncSecondaryEstablishments = []; const ep = document.getElementById('nc-etablissements-panel'); if(ep) ep.style.display='none'; }
   if(id==='prospect-target') initProspectFilters();
   if(id==='edit-client' && currentClient) {
     const c = currentClient;
@@ -13151,7 +13152,7 @@ async function searchSirene() {
         onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
         onclick="fillFromSirene(${i})">
         <div style="display:flex;justify-content:space-between;gap:8px"><div style="font-weight:600;color:var(--t1)">${nom}${existingBadge}</div><div style="font-size:11px">${etatLabel}</div></div>
-        <div style="color:var(--t3);margin-top:2px;font-size:11px">SIRET: ${siret} | APE: ${activite} | Effectif: ${effFmt} | Cat: ${cat2}</div>
+        <div style="color:var(--t3);margin-top:2px;font-size:11px">SIRET: ${siret} | APE: ${activite} | Effectif: ${effFmt} | Cat: ${cat2}${r.nombre_etablissements_ouverts > 1 ? ' | <span style="color:var(--accent)">' + r.nombre_etablissements_ouverts + ' étab.</span>' : ''}</div>
         <div style="color:var(--t3);font-size:11px">📍 ${cp2} ${ville} (${dept2})</div>
         ${liensHTML}
         ${existingHint}
