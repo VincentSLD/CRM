@@ -11087,6 +11087,20 @@ function renderAdmin() {
       </p>
       <div id="statutResultsContainer"></div>
     </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <div class="card-title">Siège social / Établissement</div>
+      <button class="btn btn-primary" onclick="calculerSiegeEtablissement()" style="font-size:12px">Calculer</button>
+    </div>
+    <div class="card-body">
+      <p style="font-size:13px;color:var(--t2);margin-bottom:12px">
+        Détermine automatiquement si chaque client est un <strong>siège social</strong> ou un <strong>établissement</strong>
+        en interrogeant l'API SIRENE (recherche-entreprises.api.gouv.fr).<br>
+        Compare le SIRET du client avec le SIRET du siège retourné par l'API pour le même SIREN.
+      </p>
+      <div id="siegeResultsContainer"></div>
+    </div>
   </div>`;
 }
 
@@ -11195,6 +11209,148 @@ async function calculerStatutsClients() {
     console.error('Statut calculation error:', err);
     showSyncLoading(false);
     toast('Erreur calcul statuts : ' + err.message, 'error');
+  }
+}
+
+// ═══ SIÈGE SOCIAL / ÉTABLISSEMENT ═══
+async function calculerSiegeEtablissement() {
+  if (!confirm('Déterminer siège social / établissement pour tous les clients ayant un SIREN ?\nCela interroge l\'API SIRENE (1 requête par SIREN unique).')) return;
+
+  showSyncLoading(true);
+  setSyncText('Chargement des clients…');
+
+  try {
+    // 1. Charger tous les clients avec SIREN et SIRET
+    let allClients = [], off = 0;
+    while (true) {
+      const { data } = await sb.from('clients').select('id,name,siren,siret,est_siege').not('siren', 'is', null).range(off, off + 999);
+      if (!data || data.length === 0) break;
+      allClients = allClients.concat(data);
+      if (data.length < 1000) break;
+      off += 1000;
+    }
+
+    // Filtrer ceux qui ont un SIREN valide (9 chiffres)
+    allClients = allClients.filter(c => c.siren && /^\d{9}$/.test(c.siren.trim()));
+
+    if (allClients.length === 0) {
+      showSyncLoading(false);
+      toast('Aucun client avec un SIREN valide trouvé.', 'warn');
+      return;
+    }
+
+    // 2. Regrouper par SIREN unique
+    const sirenMap = {};
+    for (const c of allClients) {
+      const siren = c.siren.trim();
+      if (!sirenMap[siren]) sirenMap[siren] = [];
+      sirenMap[siren].push(c);
+    }
+    const sirens = Object.keys(sirenMap);
+    setSyncText(`${allClients.length} clients, ${sirens.length} SIREN uniques — Interrogation SIRENE…`);
+
+    // 3. Pour chaque SIREN, appeler l'API SIRENE pour obtenir le SIRET du siège
+    let updated = 0, errors = 0, skipped = 0, siegeCount = 0, etablCount = 0;
+    const BATCH_SIZE = 5; // 5 requêtes en parallèle pour ne pas surcharger l'API
+    const DELAY_MS = 300; // pause entre chaque batch
+
+    for (let i = 0; i < sirens.length; i += BATCH_SIZE) {
+      const batch = sirens.slice(i, i + BATCH_SIZE);
+      setSyncText(`SIRENE ${Math.min(i + BATCH_SIZE, sirens.length)} / ${sirens.length} SIREN…`);
+
+      const promises = batch.map(async siren => {
+        try {
+          const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + siren + '&per_page=1&mtm_campaign=crm-novam');
+          if (!resp.ok) { skipped += sirenMap[siren].length; return; }
+          const d = await resp.json();
+          const enterprise = (d.results || []).find(e => e.siren === siren);
+          if (!enterprise || !enterprise.siege) { skipped += sirenMap[siren].length; return; }
+
+          const siegeSiret = enterprise.siege.siret;
+          if (!siegeSiret) { skipped += sirenMap[siren].length; return; }
+
+          // Mettre à jour chaque client de ce SIREN
+          for (const client of sirenMap[siren]) {
+            const clientSiret = (client.siret || '').trim();
+            const estSiege = clientSiret === siegeSiret;
+
+            // Skip si déjà correct
+            if (client.est_siege === estSiege) { skipped++; continue; }
+
+            const { error } = await sb.from('clients').update({ est_siege: estSiege }).eq('id', client.id);
+            if (error) { console.warn('est_siege err', client.name, error.message); errors++; }
+            else {
+              updated++;
+              if (estSiege) siegeCount++; else etablCount++;
+            }
+          }
+        } catch (err) {
+          console.warn('SIRENE API error for', siren, err.message);
+          skipped += sirenMap[siren].length;
+        }
+      });
+
+      await Promise.all(promises);
+
+      // Pause entre les batches pour respecter le rate limit de l'API
+      if (i + BATCH_SIZE < sirens.length) {
+        await new Promise(r => setTimeout(r, DELAY_MS));
+      }
+    }
+
+    // 4. Mettre à jour le cache local
+    for (const c of DB.clients) {
+      const siren = (c.siren || '').trim();
+      if (sirenMap[siren]) {
+        const siegeClients = sirenMap[siren];
+        const match = siegeClients.find(sc => sc.id === c.id);
+        if (match && match.siret) {
+          // Recalculer depuis les données déjà obtenues
+          const others = siegeClients.filter(sc => sc.est_siege === true);
+          // Plus simple : relire la valeur depuis allClients mis à jour
+        }
+      }
+    }
+    // Recharger le cache des clients pour refléter les changements
+    const { data: refreshed } = await sb.from('clients').select('id,est_siege').not('siren', 'is', null);
+    if (refreshed) {
+      const map = {};
+      for (const r of refreshed) map[r.id] = r.est_siege;
+      for (const c of DB.clients) {
+        if (map[c.id] !== undefined) c.est_siege = map[c.id];
+      }
+    }
+
+    showSyncLoading(false);
+
+    // 5. Afficher résultats
+    const el = document.getElementById('siegeResultsContainer');
+    if (el) {
+      el.innerHTML = `<div style="margin-bottom:10px;font-size:13px;color:var(--green);font-weight:600">
+        ✓ ${updated} client(s) mis à jour${errors > 0 ? ', ' + errors + ' erreur(s)' : ''}${skipped > 0 ? ', ' + skipped + ' inchangé(s) ou ignoré(s)' : ''}
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div style="text-align:center;padding:12px 20px;background:var(--accent-glow);border-radius:8px;border:1px solid rgba(79,143,247,0.15)">
+          <div style="font-size:22px;font-weight:800;color:var(--accent)">${siegeCount}</div>
+          <div style="font-size:11px;color:var(--t2)">Sièges sociaux</div>
+        </div>
+        <div style="text-align:center;padding:12px 20px;background:rgba(245,158,11,0.08);border-radius:8px;border:1px solid rgba(245,158,11,0.15)">
+          <div style="font-size:22px;font-weight:800;color:#f59e0b">${etablCount}</div>
+          <div style="font-size:11px;color:var(--t2)">Établissements</div>
+        </div>
+        <div style="text-align:center;padding:12px 20px;background:var(--card);border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:22px;font-weight:800;color:var(--t1)">${sirens.length}</div>
+          <div style="font-size:11px;color:var(--t2)">SIREN interrogés</div>
+        </div>
+      </div>`;
+    }
+
+    toast('Siège/Établissement calculé : ' + updated + ' client(s) mis à jour', errors > 0 ? 'warn' : 'success');
+
+  } catch (err) {
+    console.error('Siege calculation error:', err);
+    showSyncLoading(false);
+    toast('Erreur calcul siège/établissement : ' + err.message, 'error');
   }
 }
 
