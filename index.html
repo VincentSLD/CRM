@@ -5392,6 +5392,7 @@ async function syncSitesVersAkuiteo() {
     try {
       const sites = await akuiteoFetch('GET', '/crm/customers/' + c.akuiteo_id + '/sites');
       if (Array.isArray(sites)) existingSites = sites;
+      console.log('[Akuiteo Sites] Structure complète:', JSON.stringify(existingSites[0], null, 2));
     } catch (e) { console.warn('Impossible de charger les sites Akuiteo:', e.message); }
 
     setSyncText(existingSites.length + ' site(s) existant(s) dans Akuiteo — Synchronisation…');
