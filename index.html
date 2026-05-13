@@ -5055,7 +5055,9 @@ async function loadEtablissementsLies(siren, currentClientId) {
         + (nbInsee > 0 ? '<div style="margin-top:10px"><button class="btn btn-primary" onclick="rechercherEtablissementsSirene()" style="font-size:12px">+ Ajouter des établissements depuis SIRENE (' + nbInsee + ' disponible(s))</button></div>' : '');
       return;
     }
-    el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:2px solid var(--border)">'
+    const hasFermes = data.some(r => { const ins = r.siret ? inseeBysiret[r.siret] : null; const e = ins ? ins.etat_administratif : r.etat_insee; return e === 'F' || e === 'C'; });
+    el.innerHTML = (hasFermes ? '<div style="margin-bottom:8px"><label style="font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;color:var(--t2)"><input type="checkbox" id="etab-filtre-actifs" checked onchange="filtrerEtablissementsActifs()"> Afficher uniquement les actifs</label></div>' : '')
+      + '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:2px solid var(--border)">'
       + '<th style="padding:6px 10px;text-align:left">Société</th>'
       + '<th style="padding:6px 10px;text-align:left">SIRET</th>'
       + '<th style="padding:6px 10px;text-align:left">Ville</th>'
@@ -5065,10 +5067,11 @@ async function loadEtablissementsLies(siren, currentClientId) {
       + data.map(r => {
         const insee = r.siret ? inseeBysiret[r.siret] : null;
         const etat = insee ? insee.etat_administratif : r.etat_insee;
+        const isFerme = etat === 'F' || etat === 'C';
         const etatHtml = etat === 'A' ? '<span style="color:var(--green)">● Actif</span>'
-          : etat === 'F' || etat === 'C' ? '<span style="color:var(--red)">● Fermé</span>'
+          : isFerme ? '<span style="color:var(--red)">● Fermé</span>'
           : '<span style="color:var(--t3)">—</span>';
-        return '<tr style="border-bottom:1px solid var(--border);cursor:pointer;' + (etat === 'F' || etat === 'C' ? 'opacity:0.5;' : '') + '" onclick="showClient(\'' + r.id + '\')" onmouseover="this.style.background=\'var(--hover)\'" onmouseout="this.style.background=\'\'">'
+        return '<tr class="etab-row" data-etat="' + (isFerme ? 'ferme' : 'actif') + '" style="border-bottom:1px solid var(--border);cursor:pointer;' + (isFerme ? 'opacity:0.5;display:none;' : '') + '" onclick="showClient(\'' + r.id + '\')" onmouseover="this.style.background=\'var(--hover)\'" onmouseout="this.style.background=\'\'">'
           + '<td style="padding:6px 10px;font-weight:500;color:var(--accent)">' + (r.name || '—') + '</td>'
           + '<td style="padding:6px 10px;font-family:monospace;font-size:12px">' + (r.siret || '—') + '</td>'
           + '<td style="padding:6px 10px">' + (r.code_postal ? r.code_postal + ' ' : '') + (r.city || '—') + '</td>'
@@ -5087,6 +5090,13 @@ async function loadEtablissementsLies(siren, currentClientId) {
   } catch (err) {
     el.innerHTML = '<div style="color:var(--red);font-size:13px">Erreur: ' + err.message + '</div>';
   }
+}
+
+function filtrerEtablissementsActifs() {
+  const actifOnly = document.getElementById('etab-filtre-actifs')?.checked;
+  document.querySelectorAll('.etab-row[data-etat="ferme"]').forEach(tr => {
+    tr.style.display = actifOnly ? 'none' : '';
+  });
 }
 
 // ═══ MAJ ÉTAT ÉTABLISSEMENTS DEPUIS INSEE ═══
