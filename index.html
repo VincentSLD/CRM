@@ -13188,8 +13188,9 @@ function fillFromSirene(index) {
 
   // Effectif
   const tranche = r.tranche_effectif_salarie || '';
-  if (r.nombre_etablissements_ouverts) {
-    document.getElementById('nc-headcount').value = '';
+  const headcountEl = document.getElementById('nc-headcount');
+  if (headcountEl && r.nombre_etablissements_ouverts) {
+    headcountEl.value = '';
   }
 
   // Stocker l'info siège pour submitNewClient
@@ -13207,6 +13208,7 @@ function fillFromSirene(index) {
       document.getElementById('nc-etab-actions').style.display = 'none';
       document.getElementById('nc-etab-load-btn').disabled = false;
       document.getElementById('nc-etab-load-btn').textContent = 'Charger les établissements';
+      setTimeout(() => etabPanel.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
     } else {
       etabPanel.style.display = 'none';
     }
