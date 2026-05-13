@@ -5098,7 +5098,7 @@ async function rechercherEtablissementsSirene() {
     // 1. Essayer l'API INSEE (retourne TOUS les établissements par SIREN)
     const inseeResult = await fetchInseeEtablissements(c.siren);
     if (inseeResult && inseeResult.length > 0) {
-      allEtabs = inseeResult.filter(e => e.siret !== siegeSiret && !e.est_siege);
+      allEtabs = inseeResult.filter(e => e.siret !== siegeSiret && !e.est_siege && e.etat_administratif !== 'F');
       panel.querySelector('div').textContent = allEtabs.length + ' établissement(s) trouvé(s) via INSEE…';
     }
 
@@ -13574,7 +13574,7 @@ async function loadSecondaryEstablishments() {
     // 1. Essayer l'API INSEE (retourne TOUS les établissements par SIREN)
     const inseeResult = await fetchInseeEtablissements(r.siren);
     if (inseeResult && inseeResult.length > 0) {
-      allEtabs = inseeResult.filter(e => e.siret !== siegeSiret && !e.est_siege);
+      allEtabs = inseeResult.filter(e => e.siret !== siegeSiret && !e.est_siege && e.etat_administratif !== 'F');
       listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">' + allEtabs.length + ' établissement(s) via INSEE…</div>';
     }
 
@@ -14020,7 +14020,10 @@ async function fetchInseeEtablissements(siren) {
       return null;
     }
     const data = await resp.json();
-    return (data.etablissements || []).map(e => {
+    return (data.etablissements || []).filter(e => {
+      const per = (e.periodesEtablissement || [])[0] || {};
+      return per.etatAdministratifEtablissement !== 'F';
+    }).map(e => {
       const addr = e.adresseEtablissement || {};
       const per = (e.periodesEtablissement || [])[0] || {};
       return {
