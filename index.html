@@ -5392,7 +5392,6 @@ async function syncSitesVersAkuiteo() {
     try {
       const sites = await akuiteoFetch('GET', '/crm/customers/' + c.akuiteo_id + '/sites');
       if (Array.isArray(sites)) existingSites = sites;
-      console.log('[Akuiteo Sites] Structure complète:', JSON.stringify(existingSites[0], null, 2));
     } catch (e) { console.warn('Impossible de charger les sites Akuiteo:', e.message); }
 
     setSyncText(existingSites.length + ' site(s) existant(s) dans Akuiteo — Synchronisation…');
@@ -5421,7 +5420,7 @@ async function syncSitesVersAkuiteo() {
         customerId: c.akuiteo_id,
         name: siteName,
         SIRET: etab.siret || null,
-        isClosed: etab.etat_insee === 'C',
+        closed: etab.etat_insee === 'C',
         address: {
           line1: (etab.adresse_ligne1 || '').substring(0, 38) || null,
           postalCode: (etab.code_postal || '').substring(0, 10) || null,
@@ -16719,7 +16718,7 @@ async function pushClientToAkuiteo(clientId) {
               customerId: customerAkId,
               name: siteName,
               SIRET: etab.siret || null,
-              isClosed: etab.etat_insee === 'C',
+              closed: etab.etat_insee === 'C',
               address: { line1: (etab.adresse_ligne1 || '').substring(0, 38) || null, postalCode: (etab.code_postal || '').substring(0, 10) || null, city: (etab.city || '').substring(0, 38) || null, country: 'FR' },
             };
 
