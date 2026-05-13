@@ -2013,6 +2013,15 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Commercial GPH</label><select class="fi" id="nc-mk-salesman"></select></div>
         <div class="fg"><label class="fl">Code CODIAL <span style="font-weight:400;color:var(--t3);font-size:10px">(local)</span></label><input class="fi" id="nc-code-codial" placeholder="Ex: T16-00123"></div>
       </div>
+      <div class="fg" style="margin-bottom:16px">
+        <label class="fl">Réseaux professionnels</label>
+        <div id="nc-reseaux-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px"></div>
+        <div style="position:relative">
+          <input class="fi" id="nc-reseaux-input" placeholder="Ajouter un réseau..." autocomplete="off"
+            oninput="searchReseauxPro(this.value,'nc-reseaux-dd','nc-reseaux-chips')" onfocus="searchReseauxPro(this.value,'nc-reseaux-dd','nc-reseaux-chips')">
+          <div id="nc-reseaux-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.15)"></div>
+        </div>
+      </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Administratives</div>
       <div class="fg"><textarea class="fi" id="nc-notes" rows="3" style="resize:vertical" placeholder="Habitudes administratives..."></textarea></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
@@ -2456,6 +2465,15 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Commercial Novam</label><select class="fi" id="ec-mk-manager"></select></div>
         <div class="fg"><label class="fl">Commercial GPH</label><select class="fi" id="ec-mk-salesman"></select></div>
         <div class="fg"><label class="fl">Code CODIAL <span style="font-weight:400;color:var(--t3);font-size:10px">(local)</span></label><input class="fi" id="ec-code-codial" placeholder="Ex: T16-00123"></div>
+      </div>
+      <div class="fg" style="margin-bottom:16px">
+        <label class="fl">Réseaux professionnels</label>
+        <div id="ec-reseaux-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px"></div>
+        <div style="position:relative">
+          <input class="fi" id="ec-reseaux-input" placeholder="Ajouter un réseau..." autocomplete="off"
+            oninput="searchReseauxPro(this.value,'ec-reseaux-dd','ec-reseaux-chips')" onfocus="searchReseauxPro(this.value,'ec-reseaux-dd','ec-reseaux-chips')">
+          <div id="ec-reseaux-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.15)"></div>
+        </div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Administratives</div>
       <div class="fg"><textarea class="fi" id="ec-notes" rows="3" style="resize:vertical"></textarea></div>
@@ -5582,6 +5600,11 @@ function renderClientDetail() {
       })()),
       detailRow('Société Akuiteo', c.code_societe || '—'),
       detailRow('Code CODIAL <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.code_codial || '—'),
+      detailRow('Réseaux pro', (() => {
+        const rp = c.reseaux_pro;
+        if (!rp || !Array.isArray(rp) || rp.length === 0) return '—';
+        return rp.map(r => '<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:#6366f122;color:#6366f1;margin:1px 4px 1px 0">' + r + '</span>').join('');
+      })()),
     ])}
     ${detailSection('Infos Entreprise', [
       detailRow('Catégorie', c.mk_categorie || '—'),
@@ -10761,6 +10784,12 @@ document.addEventListener('click', e => {
   if (!e.target.closest('#crContactSearch') && !e.target.closest('#crContactDropdown')) {
     const d = document.getElementById('crContactDropdown'); if(d) d.style.display='none';
   }
+  if (!e.target.closest('#ec-reseaux-input') && !e.target.closest('#ec-reseaux-dd')) {
+    const d = document.getElementById('ec-reseaux-dd'); if(d) d.style.display='none';
+  }
+  if (!e.target.closest('#nc-reseaux-input') && !e.target.closest('#nc-reseaux-dd')) {
+    const d = document.getElementById('nc-reseaux-dd'); if(d) d.style.display='none';
+  }
 });
 
 // ═══ PIÈCES JOINTES CR ═══
@@ -13083,7 +13112,7 @@ function openModal(id) {
   if(id==='new-devis') document.getElementById('nd-client').innerHTML=clientOpts;
   if(id==='new-commande') document.getElementById('ncm-client').innerHTML=clientOpts;
   if(id==='new-facture') document.getElementById('nf-client').innerHTML=clientOpts;
-  if(id==='new-client') { window._ncEstSiege = null; window._ncSelectedSireneResult = null; window._ncSecondaryEstablishments = []; const ep = document.getElementById('nc-etablissements-panel'); if(ep) ep.style.display='none'; }
+  if(id==='new-client') { window._ncEstSiege = null; window._ncSelectedSireneResult = null; window._ncSecondaryEstablishments = []; const ep = document.getElementById('nc-etablissements-panel'); if(ep) ep.style.display='none'; _rpSelected = []; renderReseauxProChips('nc-reseaux-chips'); }
   if(id==='prospect-target') initProspectFilters();
   if(id==='edit-client' && currentClient) {
     const c = currentClient;
@@ -13116,6 +13145,9 @@ function openModal(id) {
     document.getElementById('ec-hab-geo').innerHTML = c.habitudes_geotechniques||'';
     document.getElementById('ec-tva').value = c.tva_intracommunautaire || computeTVA(c.siren) || '';
     const ecCodial = document.getElementById('ec-code-codial'); if (ecCodial) ecCodial.value = c.code_codial || '';
+    // Réseaux pro
+    _rpSelected = Array.isArray(c.reseaux_pro) ? [...c.reseaux_pro] : [];
+    renderReseauxProChips('ec-reseaux-chips');
     // Remplir les dropdowns Akuiteo
     fillAkuiteoDropdowns('ec', c);
   }
@@ -13864,11 +13896,13 @@ async function submitNewClient() {
       habitudes_techniques: document.getElementById('nc-hab-tech').innerHTML.trim() || null,
       habitudes_geotechniques: document.getElementById('nc-hab-geo').innerHTML.trim() || null,
       code_codial: document.getElementById('nc-code-codial')?.value.trim() || null,
+      reseaux_pro: _rpSelected.length > 0 ? _rpSelected : null,
       ...getAkuiteoFieldsFromModal('nc'),
       ini, color: colors[Math.floor(Math.random()*colors.length)],
       status: 'nouveau',
       est_siege: window._ncEstSiege ?? null,
     });
+    invalidateReseauxProCache();
     setStep('Client « ' + name + ' » créé', 50);
 
     // 3. Créer les établissements secondaires cochés
@@ -14034,8 +14068,10 @@ async function submitEditClient() {
     habitudes_techniques: document.getElementById('ec-hab-tech').innerHTML.trim() || null,
     habitudes_geotechniques: document.getElementById('ec-hab-geo').innerHTML.trim() || null,
     code_codial: document.getElementById('ec-code-codial')?.value.trim() || null,
+    reseaux_pro: _rpSelected.length > 0 ? _rpSelected : null,
     ...getAkuiteoFieldsFromModal('ec'),
   };
+  invalidateReseauxProCache();
   // Tenter l'update complet, si 400 (colonne inexistante) retirer les champs problématiques
   let toSend = { ...fields };
   let { error } = await sb.from('clients').update(toSend).eq('id', currentClient.id);
@@ -14134,6 +14170,52 @@ async function fetchInseeEtablissements(siren) {
     console.warn('fetchInseeEtablissements error:', e.message);
     return null;
   }
+}
+
+// ═══ RÉSEAUX PROFESSIONNELS ═══
+let _reseauxProCache = null;
+async function loadReseauxPro() {
+  if (_reseauxProCache) return _reseauxProCache;
+  const { data } = await sb.from('clients').select('reseaux_pro').not('reseaux_pro', 'is', null);
+  const set = new Set();
+  (data || []).forEach(r => { if (Array.isArray(r.reseaux_pro)) r.reseaux_pro.forEach(v => set.add(v)); });
+  _reseauxProCache = [...set].sort((a, b) => a.localeCompare(b, 'fr'));
+  return _reseauxProCache;
+}
+function invalidateReseauxProCache() { _reseauxProCache = null; }
+
+let _rpSelected = [];
+function renderReseauxProChips(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = _rpSelected.map((r, i) =>
+    '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#6366f122;color:#6366f1;border:1px solid #6366f144">'
+    + r + ' <span style="cursor:pointer;opacity:0.6;font-size:14px" onclick="removeReseauPro(' + i + ',\'' + containerId + '\')">&times;</span></span>'
+  ).join('');
+}
+function removeReseauPro(idx, containerId) {
+  _rpSelected.splice(idx, 1);
+  renderReseauxProChips(containerId);
+}
+async function searchReseauxPro(q, dropdownId, containerId) {
+  const dd = document.getElementById(dropdownId);
+  if (!dd) return;
+  const all = await loadReseauxPro();
+  const filtered = q ? all.filter(r => r.toLowerCase().includes(q.toLowerCase()) && !_rpSelected.includes(r)) : all.filter(r => !_rpSelected.includes(r));
+  const hasExact = all.some(r => r.toLowerCase() === (q || '').toLowerCase());
+  dd.innerHTML = filtered.slice(0, 10).map(r =>
+    '<div style="padding:6px 12px;cursor:pointer;font-size:13px" onmouseover="this.style.background=\'var(--hover)\'" onmouseout="this.style.background=\'\'" onclick="selectReseauPro(\'' + r.replace(/'/g, "\\'") + '\',\'' + dropdownId + '\',\'' + containerId + '\')">' + r + '</div>'
+  ).join('')
+  + (q && !hasExact ? '<div style="padding:6px 12px;cursor:pointer;font-size:13px;color:var(--accent);font-weight:600;border-top:1px solid var(--border)" onmouseover="this.style.background=\'var(--hover)\'" onmouseout="this.style.background=\'\'" onclick="selectReseauPro(\'' + q.replace(/'/g, "\\'") + '\',\'' + dropdownId + '\',\'' + containerId + '\')">+ Créer "' + q + '"</div>' : '');
+  dd.style.display = filtered.length || (q && !hasExact) ? 'block' : 'none';
+}
+function selectReseauPro(val, dropdownId, containerId) {
+  if (!_rpSelected.includes(val)) _rpSelected.push(val);
+  renderReseauxProChips(containerId);
+  const dd = document.getElementById(dropdownId);
+  if (dd) dd.style.display = 'none';
+  const input = dd?.previousElementSibling;
+  if (input) input.value = '';
 }
 
 async function deleteClient(clientId, clientName) {
