@@ -5092,13 +5092,12 @@ async function rechercherEtablissementsSirene() {
   panel.innerHTML = '<div style="text-align:center;padding:16px;color:var(--t3);font-size:13px">Recherche des établissements sur SIRENE…</div>';
 
   try {
-    // Appel API SIRENE
-    const params = new URLSearchParams({ q: c.siren, per_page: '25', mtm_campaign: 'crm-novam' });
     let allEtabs = [];
     const siegeSiret = c.siret || '';
 
-    async function sireneCallEtab(query) {
-      const p = new URLSearchParams({ q: query, per_page: '25', mtm_campaign: 'crm-novam' });
+    async function sireneCallEtab(query, page) {
+      const p = new URLSearchParams({ q: query, per_page: '25', limite_matching_etablissements: '100', mtm_campaign: 'crm-novam' });
+      if (page > 1) p.set('page_etablissements', String(page));
       for (let attempt = 0; attempt < 3; attempt++) {
         const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + p.toString());
         if (resp.status === 429) {
@@ -5113,15 +5112,33 @@ async function rechercherEtablissementsSirene() {
       throw new Error('Rate limit persistant');
     }
 
-    const d = await sireneCallEtab(c.siren);
-    const enterprise = (d.results || []).find(e => e.siren === c.siren);
-    if (enterprise && enterprise.matching_etablissements) {
-      allEtabs = enterprise.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+    // Recherche par NOM (matching_etablissements est vide sur recherche par SIREN)
+    const searchName = c.raison_sociale || c.name || '';
+    if (searchName) {
+      const d = await sireneCallEtab(searchName, 1);
+      const enterprise = (d.results || []).find(e => e.siren === c.siren);
+      if (enterprise && enterprise.matching_etablissements) {
+        allEtabs = enterprise.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+        // Pagination si plus d'établissements disponibles
+        const nbTotal = (enterprise.nombre_etablissements_ouverts || 0) - 1; // -1 pour le siège
+        if (allEtabs.length < nbTotal) {
+          for (let pg = 2; pg <= Math.ceil(nbTotal / 100); pg++) {
+            await new Promise(r => setTimeout(r, 600));
+            const d2 = await sireneCallEtab(searchName, pg);
+            const ent2 = (d2.results || []).find(e => e.siren === c.siren);
+            if (ent2 && ent2.matching_etablissements) {
+              const more = ent2.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+              if (more.length === 0) break;
+              allEtabs = allEtabs.concat(more);
+            } else break;
+          }
+        }
+      }
     }
 
-    // Fallback par nom
-    if (allEtabs.length === 0 && c.name) {
-      const d2 = await sireneCallEtab(c.name);
+    // Fallback par SIREN si aucun résultat par nom
+    if (allEtabs.length === 0) {
+      const d2 = await sireneCallEtab(c.siren, 1);
       const ent2 = (d2.results || []).find(e => e.siren === c.siren);
       if (ent2 && ent2.matching_etablissements) {
         allEtabs = ent2.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
@@ -13544,16 +13561,16 @@ async function loadSecondaryEstablishments() {
   listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Recherche des établissements…</div>';
 
   try {
-    // Appel API SIRENE par SIREN pour obtenir les matching_etablissements
     let allEtabs = [];
     const siegeSiret = (r.siege || {}).siret || '';
 
-    // Tentative 1 : recherche par SIREN
-    async function sireneCall(query) {
+    async function sireneCall(query, page) {
       const params = new URLSearchParams();
       params.set('q', query);
       params.set('per_page', '25');
+      params.set('limite_matching_etablissements', '100');
       params.set('mtm_campaign', 'crm-novam');
+      if (page > 1) params.set('page_etablissements', String(page));
       for (let attempt = 0; attempt < 3; attempt++) {
         const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + params.toString());
         if (resp.status === 429) {
@@ -13568,15 +13585,33 @@ async function loadSecondaryEstablishments() {
       throw new Error('Rate limit persistant');
     }
 
-    const d = await sireneCall(r.siren);
-    const enterprise = (d.results || []).find(e => e.siren === r.siren);
-    if (enterprise && enterprise.matching_etablissements) {
-      allEtabs = enterprise.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+    // Recherche par NOM (matching_etablissements est vide sur recherche par SIREN)
+    const searchName = r.nom_complet || r.nom_raison_sociale || '';
+    if (searchName) {
+      const d = await sireneCall(searchName, 1);
+      const enterprise = (d.results || []).find(e => e.siren === r.siren);
+      if (enterprise && enterprise.matching_etablissements) {
+        allEtabs = enterprise.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+        // Pagination si plus d'établissements disponibles
+        const nbTotal = (enterprise.nombre_etablissements_ouverts || 0) - 1;
+        if (allEtabs.length < nbTotal) {
+          for (let pg = 2; pg <= Math.ceil(nbTotal / 100); pg++) {
+            await new Promise(res => setTimeout(res, 600));
+            const d2 = await sireneCall(searchName, pg);
+            const ent2 = (d2.results || []).find(e => e.siren === r.siren);
+            if (ent2 && ent2.matching_etablissements) {
+              const more = ent2.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+              if (more.length === 0) break;
+              allEtabs = allEtabs.concat(more);
+            } else break;
+          }
+        }
+      }
     }
 
-    // Fallback : si aucun établissement trouvé, chercher par nom d'entreprise
-    if (allEtabs.length === 0 && r.nom_complet) {
-      const d2 = await sireneCall(r.nom_complet);
+    // Fallback par SIREN si aucun résultat par nom
+    if (allEtabs.length === 0) {
+      const d2 = await sireneCall(r.siren, 1);
       const ent2 = (d2.results || []).find(e => e.siren === r.siren);
       if (ent2 && ent2.matching_etablissements) {
         allEtabs = ent2.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
