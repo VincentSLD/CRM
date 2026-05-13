@@ -5036,16 +5036,26 @@ async function loadEtablissementsLies(siren, currentClientId) {
     const nbInsee = inseeSecondaires.length;
     const nbCrm = (data || []).length;
 
+    // Compter actifs / fermés dans le CRM (croisement INSEE)
+    let nbActifsCrm = 0, nbFermesCrm = 0;
+    (data || []).forEach(r => {
+      const ins = r.siret ? inseeBysiret[r.siret] : null;
+      const etat = ins ? ins.etat_administratif : r.etat_insee;
+      if (etat === 'F' || etat === 'C') nbFermesCrm++;
+      else nbActifsCrm++;
+    });
+
     // Badge indicateur dans le header
     const headerEl = el.closest('.card')?.querySelector('.card-title');
-    if (headerEl && nbInsee > 0) {
-      const nbManquants = nbInsee - nbCrm;
+    if (headerEl && nbCrm > 0) {
+      const nbManquants = Math.max(0, nbInsee - nbActifsCrm);
+      let badgeParts = [];
+      badgeParts.push('<span style="color:#10b981">' + nbActifsCrm + ' actif' + (nbActifsCrm > 1 ? 's' : '') + '</span>');
+      if (nbFermesCrm > 0) badgeParts.push('<span style="color:#ef4444">' + nbFermesCrm + ' fermé' + (nbFermesCrm > 1 ? 's' : '') + '</span>');
+      if (nbManquants > 0) badgeParts.push('<span style="color:#f59e0b">' + nbManquants + ' manquant' + (nbManquants > 1 ? 's' : '') + '</span>');
       const badgeColor = nbManquants > 0 ? '#f59e0b' : '#10b981';
-      const badgeText = nbManquants > 0
-        ? nbCrm + '/' + nbInsee + ' dans le CRM — ' + nbManquants + ' manquant(s)'
-        : nbCrm + '/' + nbInsee + ' — tous dans le CRM';
       headerEl.innerHTML = 'Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ' + siren + ')</span> '
-        + '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:' + badgeColor + '22;color:' + badgeColor + ';margin-left:6px">' + badgeText + '</span>';
+        + '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:var(--bg2);margin-left:6px">' + badgeParts.join(' · ') + '</span>';
     } else if (headerEl) {
       headerEl.innerHTML = 'Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ' + siren + ')</span>';
     }
