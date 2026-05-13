@@ -5123,23 +5123,28 @@ async function majEtatEtablissements(siren, currentClientId) {
     const data = await resp.json();
     const allInsee = (data.etablissements || []);
 
-    // Index par SIRET
+    // Index par SIRET : état + date de fermeture
     const inseeMap = {};
     for (const e of allInsee) {
       const per = (e.periodesEtablissement || [])[0] || {};
-      inseeMap[e.siret] = per.etatAdministratifEtablissement || 'A';
+      const etatInsee = per.etatAdministratifEtablissement || 'A';
+      // Si fermé, dateDebut de la 1ère période = date de fermeture
+      const dateFermeture = etatInsee === 'F' ? (per.dateDebut || null) : null;
+      inseeMap[e.siret] = { etat: etatInsee, dateFermeture };
     }
 
     // Charger les établissements CRM de ce SIREN
-    const { data: crmEtabs } = await sb.from('clients').select('id,siret,etat_insee').eq('siren', siren);
+    const { data: crmEtabs } = await sb.from('clients').select('id,siret,etat_insee,date_fermeture').eq('siren', siren);
     if (!crmEtabs || crmEtabs.length === 0) { toast('Aucun établissement CRM pour ce SIREN', 'warn'); return; }
 
     let updated = 0;
     for (const c of crmEtabs) {
       if (!c.siret || !inseeMap[c.siret]) continue;
-      const etat = inseeMap[c.siret] === 'F' ? 'C' : 'A'; // CRM stocke 'C' pour cessé/fermé
-      if (c.etat_insee !== etat) {
-        await sb.from('clients').update({ etat_insee: etat }).eq('id', c.id);
+      const info = inseeMap[c.siret];
+      const etat = info.etat === 'F' ? 'C' : 'A'; // CRM stocke 'C' pour cessé/fermé
+      const dateFerm = info.dateFermeture || null;
+      if (c.etat_insee !== etat || c.date_fermeture !== dateFerm) {
+        await sb.from('clients').update({ etat_insee: etat, date_fermeture: dateFerm }).eq('id', c.id);
         updated++;
       }
     }
@@ -5376,7 +5381,7 @@ async function syncSitesVersAkuiteo() {
 
   try {
     // 1. Charger les établissements secondaires depuis le CRM (même SIREN, est_siege = false)
-    const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city,est_siege,etat_insee')
+    const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city,est_siege,etat_insee,date_fermeture')
       .eq('siren', c.siren).eq('est_siege', false).order('name');
 
     if (!etabs || etabs.length === 0) {
@@ -5420,7 +5425,7 @@ async function syncSitesVersAkuiteo() {
         customerId: c.akuiteo_id,
         name: siteName,
         SIRET: etab.siret || null,
-        validUntil: etab.etat_insee === 'C' ? new Date().toISOString().split('T')[0] + 'T00:00:00' : null,
+        validUntil: etab.etat_insee === 'C' && etab.date_fermeture ? etab.date_fermeture + 'T00:00:00' : null,
         address: {
           line1: (etab.adresse_ligne1 || '').substring(0, 38) || null,
           postalCode: (etab.code_postal || '').substring(0, 10) || null,
@@ -16688,7 +16693,7 @@ async function pushClientToAkuiteo(clientId) {
     if (customerAkId && full.est_siege === true && full.siren) {
       setSyncText('Synchronisation des établissements secondaires (Sites)…');
       try {
-        const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city,etat_insee')
+        const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city,etat_insee,date_fermeture')
           .eq('siren', full.siren).eq('est_siege', false).order('name');
         if (etabs && etabs.length > 0) {
           // Charger les sites existants dans Akuiteo
@@ -16718,7 +16723,7 @@ async function pushClientToAkuiteo(clientId) {
               customerId: customerAkId,
               name: siteName,
               SIRET: etab.siret || null,
-              validUntil: etab.etat_insee === 'C' ? new Date().toISOString().split('T')[0] + 'T00:00:00' : null,
+              validUntil: etab.etat_insee === 'C' && etab.date_fermeture ? etab.date_fermeture + 'T00:00:00' : null,
               address: { line1: (etab.adresse_ligne1 || '').substring(0, 38) || null, postalCode: (etab.code_postal || '').substring(0, 10) || null, city: (etab.city || '').substring(0, 38) || null, country: 'FR' },
             };
 
