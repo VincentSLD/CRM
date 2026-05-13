@@ -3690,7 +3690,7 @@ function renderPage(page) {
   if (page === 'clients' && !clientsFilterOptsLoaded) {
     loadClientsFilterOpts().then(() => { if (currentPage === 'clients') renderPage('clients'); });
   }
-  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
+  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); loadAdminInseeKey(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
   if (page === 'dashboard') setTimeout(() => renderDashObjectifsAgences(), 50);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
   if (page === 'collaborateurs-lucca') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); renderCollaborateursLuccaRefresh(); }, 50);
@@ -5095,58 +5095,65 @@ async function rechercherEtablissementsSirene() {
     let allEtabs = [];
     const siegeSiret = c.siret || '';
 
-    async function sireneCallEtab(query, page) {
-      const p = new URLSearchParams({ q: query, per_page: '25', limite_matching_etablissements: '100', mtm_campaign: 'crm-novam' });
-      if (page > 1) p.set('page_etablissements', String(page));
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + p.toString());
-        if (resp.status === 429) {
-          const wait = (attempt + 1) * 3000;
-          panel.innerHTML = '<div style="text-align:center;padding:16px;color:var(--t3);font-size:12px">Rate limit — pause ' + (wait/1000) + 's…</div>';
-          await new Promise(resolve => setTimeout(resolve, wait));
-          continue;
-        }
-        if (!resp.ok) throw new Error('API HTTP ' + resp.status);
-        return resp.json();
-      }
-      throw new Error('Rate limit persistant');
+    // 1. Essayer l'API INSEE (retourne TOUS les établissements par SIREN)
+    const inseeResult = await fetchInseeEtablissements(c.siren);
+    if (inseeResult && inseeResult.length > 0) {
+      allEtabs = inseeResult.filter(e => e.siret !== siegeSiret && !e.est_siege);
+      panel.querySelector('div').textContent = allEtabs.length + ' établissement(s) trouvé(s) via INSEE…';
     }
 
-    // Recherche par NOM (matching_etablissements est vide sur recherche par SIREN)
-    const searchName = c.raison_sociale || c.name || '';
-    if (searchName) {
-      const d = await sireneCallEtab(searchName, 1);
-      const enterprise = (d.results || []).find(e => e.siren === c.siren);
-      if (enterprise && enterprise.matching_etablissements) {
-        allEtabs = enterprise.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
-        // Pagination si plus d'établissements disponibles
-        const nbTotal = (enterprise.nombre_etablissements_ouverts || 0) - 1; // -1 pour le siège
-        if (allEtabs.length < nbTotal) {
-          for (let pg = 2; pg <= Math.ceil(nbTotal / 100); pg++) {
-            await new Promise(r => setTimeout(r, 600));
-            const d2 = await sireneCallEtab(searchName, pg);
-            const ent2 = (d2.results || []).find(e => e.siren === c.siren);
-            if (ent2 && ent2.matching_etablissements) {
-              const more = ent2.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
-              if (more.length === 0) break;
-              allEtabs = allEtabs.concat(more);
-            } else break;
+    // 2. Fallback : API recherche-entreprises (par nom puis par SIREN)
+    if (allEtabs.length === 0) {
+      async function sireneCallEtab(query, page) {
+        const p = new URLSearchParams({ q: query, per_page: '25', limite_matching_etablissements: '100', mtm_campaign: 'crm-novam' });
+        if (page > 1) p.set('page_etablissements', String(page));
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + p.toString());
+          if (resp.status === 429) {
+            const wait = (attempt + 1) * 3000;
+            panel.innerHTML = '<div style="text-align:center;padding:16px;color:var(--t3);font-size:12px">Rate limit — pause ' + (wait/1000) + 's…</div>';
+            await new Promise(resolve => setTimeout(resolve, wait));
+            continue;
+          }
+          if (!resp.ok) throw new Error('API HTTP ' + resp.status);
+          return resp.json();
+        }
+        throw new Error('Rate limit persistant');
+      }
+
+      const searchName = c.raison_sociale || c.name || '';
+      if (searchName) {
+        const d = await sireneCallEtab(searchName, 1);
+        const enterprise = (d.results || []).find(e => e.siren === c.siren);
+        if (enterprise && enterprise.matching_etablissements) {
+          allEtabs = enterprise.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+          const nbTotal = (enterprise.nombre_etablissements_ouverts || 0) - 1;
+          if (allEtabs.length < nbTotal) {
+            for (let pg = 2; pg <= Math.ceil(nbTotal / 100); pg++) {
+              await new Promise(r => setTimeout(r, 600));
+              const d2 = await sireneCallEtab(searchName, pg);
+              const ent2 = (d2.results || []).find(e => e.siren === c.siren);
+              if (ent2 && ent2.matching_etablissements) {
+                const more = ent2.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+                if (more.length === 0) break;
+                allEtabs = allEtabs.concat(more);
+              } else break;
+            }
           }
         }
       }
-    }
 
-    // Fallback par SIREN si aucun résultat par nom
-    if (allEtabs.length === 0) {
-      const d2 = await sireneCallEtab(c.siren, 1);
-      const ent2 = (d2.results || []).find(e => e.siren === c.siren);
-      if (ent2 && ent2.matching_etablissements) {
-        allEtabs = ent2.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+      if (allEtabs.length === 0) {
+        const d2 = await sireneCallEtab(c.siren, 1);
+        const ent2 = (d2.results || []).find(e => e.siren === c.siren);
+        if (ent2 && ent2.matching_etablissements) {
+          allEtabs = ent2.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+        }
       }
     }
 
     if (allEtabs.length === 0) {
-      panel.innerHTML = '<div style="text-align:center;padding:16px;color:var(--t3);font-size:13px">Aucun établissement secondaire actif trouvé via SIRENE.</div>';
+      panel.innerHTML = '<div style="text-align:center;padding:16px;color:var(--t3);font-size:13px">Aucun établissement secondaire actif trouvé.' + (!_inseeApiKey ? '<br><span style="font-size:11px">Configurez la clé API INSEE dans Paramétrage pour obtenir la liste complète.</span>' : '') + '</div>';
       return;
     }
 
@@ -11386,6 +11393,24 @@ function renderAdmin() {
   </div>
 
   <div class="card" style="margin-top:16px">
+    <div class="card-header"><div class="card-title">Clé API INSEE (SIRENE)</div></div>
+    <div class="card-body">
+      <p style="font-size:13px;color:var(--t2);margin-bottom:12px">
+        Clé API INSEE pour interroger la base SIRENE et lister <strong>tous</strong> les établissements d'un SIREN.<br>
+        Inscription gratuite sur <a href="https://portail-api.insee.fr/" target="_blank" rel="noopener" style="color:var(--accent)">portail-api.insee.fr</a>
+        → S'abonner à l'API Sirene → Copier la clé API ici.
+      </p>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="password" id="admin-insee-key" placeholder="Clé API INSEE"
+          style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:400px;background:var(--card);color:var(--t1);font-family:'DM Mono',monospace">
+        <button class="btn btn-primary" onclick="saveInseeKey()" style="font-size:13px">Enregistrer</button>
+        <button class="btn" onclick="testInseeKey()" style="font-size:13px">Tester</button>
+        <span id="insee-key-status" style="font-size:12px;color:var(--t3)">Chargement...</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
     <div class="card-header"><div class="card-title">IDs Akuiteo disponibles</div></div>
     <div class="card-body">
       <p style="font-size:13px;color:var(--t2);margin-bottom:12px">Cliquez "Charger" pour récupérer la liste des accountManagerId depuis Akuiteo et voir combien de clients chacun gère.</p>
@@ -12570,7 +12595,7 @@ async function autoLinkCommerciaux() {
   if (linkedAk > 0) msgs.push(`${linkedAk} ID Akuiteo rempli(s)`);
   toast(msgs.length > 0 ? msgs.join(', ') : 'Aucune nouvelle liaison trouvée', msgs.length > 0 ? 'success' : 'info');
   renderPage('admin');
-  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
+  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); loadAdminInseeKey(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
 }
 
 let linkCommercialLuccaForId = null;
@@ -12586,7 +12611,7 @@ function openManualLinkCommercialLucca(commId, commName) {
     closeModal('link-lucca');
     toast('Liaison effectuée', 'success');
     renderPage('admin');
-    setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
+    setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); loadAdminInseeKey(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
   };
   renderLinkLuccaList();
   openModal('link-lucca');
@@ -12599,7 +12624,7 @@ async function unlinkCommercialLucca(commId) {
   if (comm) comm.lucca_id = null;
   toast('Liaison supprimée', 'success');
   renderPage('admin');
-  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
+  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); loadAdminInseeKey(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
 }
 
 async function updateCommercialRole(commercialId, role) {
@@ -13564,62 +13589,69 @@ async function loadSecondaryEstablishments() {
     let allEtabs = [];
     const siegeSiret = (r.siege || {}).siret || '';
 
-    async function sireneCall(query, page) {
-      const params = new URLSearchParams();
-      params.set('q', query);
-      params.set('per_page', '25');
-      params.set('limite_matching_etablissements', '100');
-      params.set('mtm_campaign', 'crm-novam');
-      if (page > 1) params.set('page_etablissements', String(page));
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + params.toString());
-        if (resp.status === 429) {
-          const wait = (attempt + 1) * 3000;
-          listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Rate limit — pause ' + (wait/1000) + 's…</div>';
-          await new Promise(resolve => setTimeout(resolve, wait));
-          continue;
-        }
-        if (!resp.ok) throw new Error('API HTTP ' + resp.status);
-        return resp.json();
-      }
-      throw new Error('Rate limit persistant');
+    // 1. Essayer l'API INSEE (retourne TOUS les établissements par SIREN)
+    const inseeResult = await fetchInseeEtablissements(r.siren);
+    if (inseeResult && inseeResult.length > 0) {
+      allEtabs = inseeResult.filter(e => e.siret !== siegeSiret && !e.est_siege);
+      listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">' + allEtabs.length + ' établissement(s) via INSEE…</div>';
     }
 
-    // Recherche par NOM (matching_etablissements est vide sur recherche par SIREN)
-    const searchName = r.nom_complet || r.nom_raison_sociale || '';
-    if (searchName) {
-      const d = await sireneCall(searchName, 1);
-      const enterprise = (d.results || []).find(e => e.siren === r.siren);
-      if (enterprise && enterprise.matching_etablissements) {
-        allEtabs = enterprise.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
-        // Pagination si plus d'établissements disponibles
-        const nbTotal = (enterprise.nombre_etablissements_ouverts || 0) - 1;
-        if (allEtabs.length < nbTotal) {
-          for (let pg = 2; pg <= Math.ceil(nbTotal / 100); pg++) {
-            await new Promise(res => setTimeout(res, 600));
-            const d2 = await sireneCall(searchName, pg);
-            const ent2 = (d2.results || []).find(e => e.siren === r.siren);
-            if (ent2 && ent2.matching_etablissements) {
-              const more = ent2.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
-              if (more.length === 0) break;
-              allEtabs = allEtabs.concat(more);
-            } else break;
+    // 2. Fallback : API recherche-entreprises
+    if (allEtabs.length === 0) {
+      async function sireneCall(query, page) {
+        const params = new URLSearchParams();
+        params.set('q', query);
+        params.set('per_page', '25');
+        params.set('limite_matching_etablissements', '100');
+        params.set('mtm_campaign', 'crm-novam');
+        if (page > 1) params.set('page_etablissements', String(page));
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + params.toString());
+          if (resp.status === 429) {
+            const wait = (attempt + 1) * 3000;
+            listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Rate limit — pause ' + (wait/1000) + 's…</div>';
+            await new Promise(resolve => setTimeout(resolve, wait));
+            continue;
+          }
+          if (!resp.ok) throw new Error('API HTTP ' + resp.status);
+          return resp.json();
+        }
+        throw new Error('Rate limit persistant');
+      }
+
+      const searchName = r.nom_complet || r.nom_raison_sociale || '';
+      if (searchName) {
+        const d = await sireneCall(searchName, 1);
+        const enterprise = (d.results || []).find(e => e.siren === r.siren);
+        if (enterprise && enterprise.matching_etablissements) {
+          allEtabs = enterprise.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+          const nbTotal = (enterprise.nombre_etablissements_ouverts || 0) - 1;
+          if (allEtabs.length < nbTotal) {
+            for (let pg = 2; pg <= Math.ceil(nbTotal / 100); pg++) {
+              await new Promise(res => setTimeout(res, 600));
+              const d2 = await sireneCall(searchName, pg);
+              const ent2 = (d2.results || []).find(e => e.siren === r.siren);
+              if (ent2 && ent2.matching_etablissements) {
+                const more = ent2.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+                if (more.length === 0) break;
+                allEtabs = allEtabs.concat(more);
+              } else break;
+            }
           }
         }
       }
-    }
 
-    // Fallback par SIREN si aucun résultat par nom
-    if (allEtabs.length === 0) {
-      const d2 = await sireneCall(r.siren, 1);
-      const ent2 = (d2.results || []).find(e => e.siren === r.siren);
-      if (ent2 && ent2.matching_etablissements) {
-        allEtabs = ent2.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+      if (allEtabs.length === 0) {
+        const d2 = await sireneCall(r.siren, 1);
+        const ent2 = (d2.results || []).find(e => e.siren === r.siren);
+        if (ent2 && ent2.matching_etablissements) {
+          allEtabs = ent2.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+        }
       }
     }
 
     if (allEtabs.length === 0) {
-      listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Aucun établissement secondaire actif trouvé via l\'API SIRENE.</div>';
+      listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Aucun établissement secondaire actif trouvé.' + (!_inseeApiKey ? '<br><span style="font-size:10px">Configurez la clé API INSEE dans Paramétrage pour la liste complète.</span>' : '') + '</div>';
       btn.textContent = 'Aucun trouvé';
       return;
     }
@@ -13991,6 +14023,107 @@ async function saveDeletePassword() {
     if (pwd) localStorage.setItem('crm_delete_pwd', pwd);
     else localStorage.removeItem('crm_delete_pwd');
     toast('Enregistré localement (table crm_config absente)', 'warn');
+  }
+}
+
+// ═══ CLÉ API INSEE (Supabase crm_config) ═══
+let _inseeApiKey = null;
+async function loadInseeKey() {
+  if (_inseeApiKey) return _inseeApiKey;
+  try {
+    const { data } = await sb.from('crm_config').select('value').eq('key', 'insee_api_key').maybeSingle();
+    _inseeApiKey = data?.value || '';
+    return _inseeApiKey;
+  } catch (e) { return localStorage.getItem('crm_insee_key') || ''; }
+}
+async function loadAdminInseeKey() {
+  const key = await loadInseeKey();
+  const input = document.getElementById('admin-insee-key');
+  const status = document.getElementById('insee-key-status');
+  if (input) input.value = key;
+  if (status) status.textContent = key ? 'Clé configurée' : 'Non configurée';
+}
+async function saveInseeKey() {
+  const key = document.getElementById('admin-insee-key').value.trim();
+  try {
+    await sb.from('crm_config').upsert({ key: 'insee_api_key', value: key, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    _inseeApiKey = key;
+    toast(key ? 'Clé API INSEE enregistrée' : 'Clé API INSEE supprimée', key ? 'success' : 'info');
+    document.getElementById('insee-key-status').textContent = key ? 'Clé configurée' : 'Non configurée';
+  } catch (e) {
+    if (key) localStorage.setItem('crm_insee_key', key);
+    else localStorage.removeItem('crm_insee_key');
+    _inseeApiKey = key;
+    toast('Enregistré localement (table crm_config absente)', 'warn');
+  }
+}
+async function testInseeKey() {
+  const key = document.getElementById('admin-insee-key').value.trim();
+  if (!key) { toast('Saisissez d\'abord une clé API', 'error'); return; }
+  const status = document.getElementById('insee-key-status');
+  status.textContent = 'Test en cours…';
+  status.style.color = 'var(--t3)';
+  try {
+    // Test avec un SIREN connu (INSEE elle-même)
+    const resp = await fetch('https://api.insee.fr/api-sirene/3.11/siret?q=siren:120027016&nombre=1', {
+      headers: { 'Accept': 'application/json', 'X-INSEE-Api-Key-Integration': key }
+    });
+    if (resp.ok) {
+      status.textContent = '✓ Clé valide';
+      status.style.color = 'var(--green)';
+      toast('Connexion INSEE OK', 'success');
+    } else if (resp.status === 401 || resp.status === 403) {
+      status.textContent = '✗ Clé invalide (' + resp.status + ')';
+      status.style.color = 'var(--red)';
+      toast('Clé API INSEE invalide', 'error');
+    } else {
+      status.textContent = '? Erreur HTTP ' + resp.status;
+      status.style.color = '#f59e0b';
+      toast('Erreur INSEE HTTP ' + resp.status, 'warn');
+    }
+  } catch (e) {
+    status.textContent = '✗ Erreur réseau';
+    status.style.color = 'var(--red)';
+    toast('Erreur réseau: ' + e.message, 'error');
+  }
+}
+
+// Appel API INSEE SIRENE : retourne tous les établissements actifs d'un SIREN
+async function fetchInseeEtablissements(siren) {
+  const key = await loadInseeKey();
+  if (!key) return null;
+  try {
+    const url = 'https://api.insee.fr/api-sirene/3.11/siret?q=siren:' + siren
+      + ' AND periode(etatAdministratifEtablissement:A)&nombre=1000&tri=true';
+    const resp = await fetch(url, {
+      headers: { 'Accept': 'application/json', 'X-INSEE-Api-Key-Integration': key }
+    });
+    if (!resp.ok) {
+      if (resp.status === 401 || resp.status === 403) console.warn('INSEE: clé invalide');
+      return null;
+    }
+    const data = await resp.json();
+    return (data.etablissements || []).map(e => {
+      const addr = e.adresseEtablissement || {};
+      const per = (e.periodesEtablissement || [])[0] || {};
+      return {
+        siret: e.siret || '',
+        siren: e.siren || siren,
+        est_siege: per.etablissementSiege === 'true' || per.etablissementSiege === true,
+        etat_administratif: per.etatAdministratifEtablissement || 'A',
+        activite_principale: per.activitePrincipaleEtablissement || '',
+        numero_voie: addr.numeroVoieEtablissement || '',
+        type_voie: addr.typeVoieEtablissement || '',
+        libelle_voie: addr.libelleVoieEtablissement || '',
+        complement_adresse: addr.complementAdresseEtablissement || '',
+        code_postal: addr.codePostalEtablissement || '',
+        libelle_commune: addr.libelleCommuneEtablissement || '',
+        adresse: [addr.numeroVoieEtablissement, addr.typeVoieEtablissement, addr.libelleVoieEtablissement].filter(Boolean).join(' '),
+      };
+    });
+  } catch (e) {
+    console.warn('fetchInseeEtablissements error:', e.message);
+    return null;
   }
 }
 
