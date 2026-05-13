@@ -5017,36 +5017,38 @@ async function loadEtablissementsLies(siren, currentClientId) {
   const el = document.getElementById('etablissements-lies');
   if (!el) return;
   try {
-    const { data } = await sb.from('clients').select('id,name,siret,city,code_postal,est_siege').eq('siren', siren).neq('id', currentClientId).order('name');
+    // Charger en parallèle : établissements CRM + établissements INSEE (actifs)
+    const currentSiret = currentClient?.siret || '';
+    const [crmResult, inseeEtabs] = await Promise.all([
+      sb.from('clients').select('id,name,siret,city,code_postal,est_siege').eq('siren', siren).neq('id', currentClientId).order('name'),
+      fetchInseeEtablissements(siren).catch(() => null),
+    ]);
+    const data = crmResult.data;
 
-    // Requête SIRENE en parallèle pour connaître le nb total d'établissements
-    let nbSirene = 0;
-    try {
-      const params = new URLSearchParams({ q: siren, per_page: '1', mtm_campaign: 'crm-novam' });
-      const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + params.toString());
-      if (resp.ok) {
-        const d = await resp.json();
-        const ent = (d.results || []).find(e => e.siren === siren);
-        if (ent) nbSirene = ent.nombre_etablissements_ouverts || 0;
-      }
-    } catch (_) {}
-
+    // Compter les établissements secondaires actifs INSEE (hors siège)
+    const inseeSecondaires = inseeEtabs
+      ? inseeEtabs.filter(e => e.siret !== currentSiret && !e.est_siege && e.etat_administratif !== 'F')
+      : [];
+    const nbInsee = inseeSecondaires.length;
     const nbCrm = (data || []).length;
-    // Badge indicateur SIRENE dans le header
+
+    // Badge indicateur dans le header
     const headerEl = el.closest('.card')?.querySelector('.card-title');
-    if (headerEl && nbSirene > 1) {
-      const nbManquants = nbSirene - 1 - nbCrm; // -1 pour le siège lui-même
+    if (headerEl && nbInsee > 0) {
+      const nbManquants = nbInsee - nbCrm;
       const badgeColor = nbManquants > 0 ? '#f59e0b' : '#10b981';
       const badgeText = nbManquants > 0
-        ? nbCrm + '/' + (nbSirene - 1) + ' dans le CRM — ' + nbManquants + ' manquant(s)'
-        : nbCrm + '/' + (nbSirene - 1) + ' — tous dans le CRM';
+        ? nbCrm + '/' + nbInsee + ' dans le CRM — ' + nbManquants + ' manquant(s)'
+        : nbCrm + '/' + nbInsee + ' — tous dans le CRM';
       headerEl.innerHTML = 'Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ' + siren + ')</span> '
         + '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:' + badgeColor + '22;color:' + badgeColor + ';margin-left:6px">' + badgeText + '</span>';
+    } else if (headerEl) {
+      headerEl.innerHTML = 'Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ' + siren + ')</span>';
     }
 
     if (!data || data.length === 0) {
       el.innerHTML = '<div style="color:var(--t3);font-size:13px">Aucun autre établissement trouvé dans le CRM pour ce SIREN.</div>'
-        + (nbSirene > 1 ? '<div style="margin-top:10px"><button class="btn btn-primary" onclick="rechercherEtablissementsSirene()" style="font-size:12px">+ Ajouter des établissements depuis SIRENE (' + (nbSirene - 1) + ' disponible(s))</button></div>' : '');
+        + (nbInsee > 0 ? '<div style="margin-top:10px"><button class="btn btn-primary" onclick="rechercherEtablissementsSirene()" style="font-size:12px">+ Ajouter des établissements depuis SIRENE (' + nbInsee + ' disponible(s))</button></div>' : '');
       return;
     }
     el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:2px solid var(--border)">'
@@ -5064,7 +5066,7 @@ async function loadEtablissementsLies(siren, currentClientId) {
       + '</tbody></table>'
       + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap;gap:6px">'
       + '<div style="font-size:11px;color:var(--t3)">' + data.length + ' autre(s) établissement(s) dans le CRM</div>'
-      + (nbSirene > 1 ? '<button class="btn" onclick="rechercherEtablissementsSirene()" style="font-size:11px;padding:3px 10px">+ Ajouter depuis SIRENE</button>' : '')
+      + '<button class="btn" onclick="rechercherEtablissementsSirene()" style="font-size:11px;padding:3px 10px">+ Ajouter depuis SIRENE</button>'
       + '</div>'
       + '<div id="etab-sirene-panel" style="display:none;margin-top:12px;border-top:2px solid var(--border);padding-top:12px"></div>';
   } catch (err) {
