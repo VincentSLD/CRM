@@ -5095,6 +5095,7 @@ async function syncSitesVersAkuiteo() {
       const siteBody = {
         customerId: c.akuiteo_id,
         name: siteName,
+        SIRET: etab.siret || null,
         address: {
           line1: (etab.adresse_ligne1 || '').substring(0, 38) || null,
           postalCode: (etab.code_postal || '').substring(0, 10) || null,
@@ -16320,6 +16321,7 @@ async function pushClientToAkuiteo(clientId) {
             const siteBody = {
               customerId: customerAkId,
               name: siteName,
+              SIRET: etab.siret || null,
               address: { line1: (etab.adresse_ligne1 || '').substring(0, 38) || null, postalCode: (etab.code_postal || '').substring(0, 10) || null, city: (etab.city || '').substring(0, 38) || null, country: 'FR' },
             };
 
