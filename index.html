@@ -2782,8 +2782,9 @@ let clientsFilterOrigine = '';
 let clientsFilterSiret = ''; // '' | 'yes' | 'no'
 let clientsFilterSiege = ''; // '' | 'siege' | 'etablissement'
 let clientsFilterCatCompte = '';
+let clientsFilterReseauxPro = '';
 const CLIENTS_PER_PAGE = 50;
-let clientsFilterOpts = { depts: [], novam: [], gph: [], categorie: [], sousCategorie: [], categoriePro: [], secteur: [], type: [], groupe: [], origine: [] };
+let clientsFilterOpts = { depts: [], novam: [], gph: [], categorie: [], sousCategorie: [], categoriePro: [], secteur: [], type: [], groupe: [], origine: [], reseauxPro: [] };
 let clientsFilterOptsLoaded = false;
 
 async function loadClientsFilterOpts() {
@@ -2801,8 +2802,8 @@ async function loadClientsFilterOpts() {
     }
     return all;
   };
-  const rows = await fetchAll('code_postal,departement,account_manager_name,salesman_name,commerciaux_associes,mk_categorie,mk_sous_categorie,mk_categorie_pro,mk_secteur,mk_type,mk_groupe,mk_origine');
-  const sets = { dept: new Set(), novam: new Set(), gph: new Set(), categorie: new Set(), sousCategorie: new Set(), categoriePro: new Set(), secteur: new Set(), type: new Set(), groupe: new Set(), origine: new Set() };
+  const rows = await fetchAll('code_postal,departement,account_manager_name,salesman_name,commerciaux_associes,mk_categorie,mk_sous_categorie,mk_categorie_pro,mk_secteur,mk_type,mk_groupe,mk_origine,reseaux_pro');
+  const sets = { dept: new Set(), novam: new Set(), gph: new Set(), categorie: new Set(), sousCategorie: new Set(), categoriePro: new Set(), secteur: new Set(), type: new Set(), groupe: new Set(), origine: new Set(), reseauxPro: new Set() };
   const addIf = (set, v) => { if (v && String(v).trim()) set.add(String(v).trim()); };
   for (const r of rows) {
     if (r.code_postal && /^\d/.test(r.code_postal)) sets.dept.add(r.code_postal.slice(0, 2));
@@ -2819,6 +2820,7 @@ async function loadClientsFilterOpts() {
     addIf(sets.type, r.mk_type);
     addIf(sets.groupe, r.mk_groupe);
     addIf(sets.origine, r.mk_origine);
+    if (Array.isArray(r.reseaux_pro)) r.reseaux_pro.forEach(v => { if (v && v.trim()) sets.reseauxPro.add(v.trim()); });
   }
   const sortFr = arr => [...arr].sort((a, b) => a.localeCompare(b, 'fr'));
   clientsFilterOpts.depts = [...sets.dept].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
@@ -2831,6 +2833,7 @@ async function loadClientsFilterOpts() {
   clientsFilterOpts.type = sortFr(sets.type);
   clientsFilterOpts.groupe = sortFr(sets.groupe);
   clientsFilterOpts.origine = sortFr(sets.origine);
+  clientsFilterOpts.reseauxPro = sortFr(sets.reseauxPro);
   clientsFilterOptsLoaded = true;
 }
 let clientsTotalCount = 0;
@@ -3244,6 +3247,8 @@ async function loadClientsPage(page, letter, search) {
   // Siège / Établissement
   if (clientsFilterSiege === 'siege') query = query.eq('est_siege', true);
   if (clientsFilterSiege === 'etablissement') query = query.eq('est_siege', false);
+  // Réseaux pro (array contains)
+  if (clientsFilterReseauxPro) query = query.contains('reseaux_pro', [clientsFilterReseauxPro]);
   // Catégorie du compte (JSONB — filtre côté client après requête)
   if (clientsFilterCatCompte) query = query.not('categorie_compte', 'is', null);
   query = query.order('name', {ascending: true}).range(from, to);
@@ -3281,6 +3286,7 @@ function resetClientsFilters() {
   clientsFilterSiret = '';
   clientsFilterSiege = '';
   clientsFilterCatCompte = '';
+  clientsFilterReseauxPro = '';
   clientsLetter = '';
   clientsSearch = '';
   loadClientsPage(0, '', '');
@@ -4942,6 +4948,10 @@ function renderClients(filter='all') {
         <option value="" ${!clientsFilterSiege?'selected':''}>— Établissement —</option>
         <option value="siege" ${clientsFilterSiege==='siege'?'selected':''}>Siège social</option>
         <option value="etablissement" ${clientsFilterSiege==='etablissement'?'selected':''}>Établissement secondaire</option>
+      </select>
+      <select onchange="clientsFilterReseauxPro=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterReseauxPro?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterReseauxPro?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
+        <option value="" ${!clientsFilterReseauxPro?'selected':''}>— Réseau pro —</option>
+        ${clientsFilterOpts.reseauxPro.map(v => '<option value="' + v.replace(/"/g,'&quot;') + '"' + (clientsFilterReseauxPro===v?' selected':'') + '>' + v + '</option>').join('')}
       </select>
     </div>
   </details>
