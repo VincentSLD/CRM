@@ -5018,8 +5018,35 @@ async function loadEtablissementsLies(siren, currentClientId) {
   if (!el) return;
   try {
     const { data } = await sb.from('clients').select('id,name,siret,city,code_postal,est_siege').eq('siren', siren).neq('id', currentClientId).order('name');
+
+    // Requête SIRENE en parallèle pour connaître le nb total d'établissements
+    let nbSirene = 0;
+    try {
+      const params = new URLSearchParams({ q: siren, per_page: '1', mtm_campaign: 'crm-novam' });
+      const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + params.toString());
+      if (resp.ok) {
+        const d = await resp.json();
+        const ent = (d.results || []).find(e => e.siren === siren);
+        if (ent) nbSirene = ent.nombre_etablissements_ouverts || 0;
+      }
+    } catch (_) {}
+
+    const nbCrm = (data || []).length;
+    // Badge indicateur SIRENE dans le header
+    const headerEl = el.closest('.card')?.querySelector('.card-title');
+    if (headerEl && nbSirene > 1) {
+      const nbManquants = nbSirene - 1 - nbCrm; // -1 pour le siège lui-même
+      const badgeColor = nbManquants > 0 ? '#f59e0b' : '#10b981';
+      const badgeText = nbManquants > 0
+        ? nbCrm + '/' + (nbSirene - 1) + ' dans le CRM — ' + nbManquants + ' manquant(s)'
+        : nbCrm + '/' + (nbSirene - 1) + ' — tous dans le CRM';
+      headerEl.innerHTML = 'Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ' + siren + ')</span> '
+        + '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:' + badgeColor + '22;color:' + badgeColor + ';margin-left:6px">' + badgeText + '</span>';
+    }
+
     if (!data || data.length === 0) {
-      el.innerHTML = '<div style="color:var(--t3);font-size:13px">Aucun autre établissement trouvé dans le CRM pour ce SIREN.</div>';
+      el.innerHTML = '<div style="color:var(--t3);font-size:13px">Aucun autre établissement trouvé dans le CRM pour ce SIREN.</div>'
+        + (nbSirene > 1 ? '<div style="margin-top:10px"><button class="btn btn-primary" onclick="rechercherEtablissementsSirene()" style="font-size:12px">+ Ajouter des établissements depuis SIRENE (' + (nbSirene - 1) + ' disponible(s))</button></div>' : '');
       return;
     }
     el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="border-bottom:2px solid var(--border)">'
@@ -5035,10 +5062,200 @@ async function loadEtablissementsLies(siren, currentClientId) {
         + '<td style="padding:6px 10px">' + (r.est_siege === true ? '<span style="color:var(--accent);font-weight:600">Siège</span>' : r.est_siege === false ? 'Établissement' : '—') + '</td>'
         + '</tr>').join('')
       + '</tbody></table>'
-      + '<div style="font-size:11px;color:var(--t3);margin-top:6px">' + data.length + ' autre(s) établissement(s) dans le CRM</div>';
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap;gap:6px">'
+      + '<div style="font-size:11px;color:var(--t3)">' + data.length + ' autre(s) établissement(s) dans le CRM</div>'
+      + (nbSirene > 1 ? '<button class="btn" onclick="rechercherEtablissementsSirene()" style="font-size:11px;padding:3px 10px">+ Ajouter depuis SIRENE</button>' : '')
+      + '</div>'
+      + '<div id="etab-sirene-panel" style="display:none;margin-top:12px;border-top:2px solid var(--border);padding-top:12px"></div>';
   } catch (err) {
     el.innerHTML = '<div style="color:var(--red);font-size:13px">Erreur: ' + err.message + '</div>';
   }
+}
+
+// ═══ RECHERCHE ÉTABLISSEMENTS SIRENE DEPUIS FICHE CLIENT ═══
+async function rechercherEtablissementsSirene() {
+  const c = currentClient;
+  if (!c || !c.siren) { toast('Ce client n\'a pas de SIREN', 'error'); return; }
+
+  // Trouver ou créer le panel
+  let panel = document.getElementById('etab-sirene-panel');
+  if (!panel) {
+    const el = document.getElementById('etablissements-lies');
+    if (!el) return;
+    const div = document.createElement('div');
+    div.id = 'etab-sirene-panel';
+    div.style.cssText = 'margin-top:12px;border-top:2px solid var(--border);padding-top:12px';
+    el.appendChild(div);
+    panel = div;
+  }
+  panel.style.display = '';
+  panel.innerHTML = '<div style="text-align:center;padding:16px;color:var(--t3);font-size:13px">Recherche des établissements sur SIRENE…</div>';
+
+  try {
+    // Appel API SIRENE
+    const params = new URLSearchParams({ q: c.siren, per_page: '25', mtm_campaign: 'crm-novam' });
+    let allEtabs = [];
+    const siegeSiret = c.siret || '';
+
+    async function sireneCallEtab(query) {
+      const p = new URLSearchParams({ q: query, per_page: '25', mtm_campaign: 'crm-novam' });
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + p.toString());
+        if (resp.status === 429) {
+          const wait = (attempt + 1) * 3000;
+          panel.innerHTML = '<div style="text-align:center;padding:16px;color:var(--t3);font-size:12px">Rate limit — pause ' + (wait/1000) + 's…</div>';
+          await new Promise(resolve => setTimeout(resolve, wait));
+          continue;
+        }
+        if (!resp.ok) throw new Error('API HTTP ' + resp.status);
+        return resp.json();
+      }
+      throw new Error('Rate limit persistant');
+    }
+
+    const d = await sireneCallEtab(c.siren);
+    const enterprise = (d.results || []).find(e => e.siren === c.siren);
+    if (enterprise && enterprise.matching_etablissements) {
+      allEtabs = enterprise.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+    }
+
+    // Fallback par nom
+    if (allEtabs.length === 0 && c.name) {
+      const d2 = await sireneCallEtab(c.name);
+      const ent2 = (d2.results || []).find(e => e.siren === c.siren);
+      if (ent2 && ent2.matching_etablissements) {
+        allEtabs = ent2.matching_etablissements.filter(e => e.siret !== siegeSiret && e.etat_administratif !== 'F');
+      }
+    }
+
+    if (allEtabs.length === 0) {
+      panel.innerHTML = '<div style="text-align:center;padding:16px;color:var(--t3);font-size:13px">Aucun établissement secondaire actif trouvé via SIRENE.</div>';
+      return;
+    }
+
+    // Vérifier lesquels existent déjà en base
+    const sirets = allEtabs.map(e => e.siret).filter(Boolean);
+    const existingByKey = {};
+    if (sirets.length) {
+      const { data: existing } = await sb.from('clients').select('id,name,siret').in('siret', sirets);
+      for (const ec of (existing || [])) {
+        if (ec.siret) existingByKey[ec.siret] = ec;
+      }
+    }
+
+    window._etabSireneList = allEtabs;
+
+    // Afficher les checkboxes
+    const nbDejaEnBase = sirets.filter(s => existingByKey[s]).length;
+    const nbDisponibles = allEtabs.length - nbDejaEnBase;
+
+    panel.innerHTML = '<div style="font-weight:600;font-size:13px;margin-bottom:8px">Établissements SIRENE <span style="font-weight:400;color:var(--t3)">(' + allEtabs.length + ' trouvé(s), ' + nbDejaEnBase + ' déjà en base)</span></div>'
+      + '<div id="etab-sirene-list" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:6px">'
+      + allEtabs.map((e, i) => {
+        const existing = existingByKey[e.siret];
+        const addr = [e.numero_voie, e.type_voie, e.libelle_voie].filter(Boolean).join(' ') || e.adresse || '';
+        const cp = e.code_postal || '';
+        const ville = e.libelle_commune || '';
+        const existingBadge = existing
+          ? '<span style="padding:1px 6px;border-radius:4px;background:rgba(16,185,129,.15);color:#10b981;font-size:10px;font-weight:700;margin-left:6px">Déjà en base</span>'
+          : '';
+        return '<div style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:flex-start;' + (existing ? 'opacity:0.5' : '') + '">'
+          + '<input type="checkbox" class="etab-sirene-check" data-idx="' + i + '"' + (existing ? ' disabled' : '') + ' onchange="updateEtabSireneSelectedCount()" style="margin-top:3px;cursor:pointer">'
+          + '<div style="flex:1;font-size:12px">'
+          + '<div style="font-weight:600;color:var(--t1)"><span style="font-family:monospace;font-size:11px">' + (e.siret || '—') + '</span>' + existingBadge + '</div>'
+          + '<div style="color:var(--t2);font-size:11px">' + addr + ' ' + cp + ' ' + ville + '</div>'
+          + (existing ? '<div style="font-size:10px;color:#10b981;cursor:pointer" onclick="event.stopPropagation();showClient(\'' + existing.id + '\')">→ ' + existing.name + '</div>' : '')
+          + '</div></div>';
+      }).join('')
+      + '</div>'
+      + '<div id="etab-sirene-actions" style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">'
+      + '<button class="btn" onclick="toggleAllEtabSirene(true)" style="font-size:11px;padding:3px 10px">Tout cocher</button>'
+      + '<button class="btn" onclick="toggleAllEtabSirene(false)" style="font-size:11px;padding:3px 10px">Tout décocher</button>'
+      + '<span id="etab-sirene-count" style="font-size:12px;color:var(--t3);flex:1"></span>'
+      + '<button class="btn btn-primary" id="etab-sirene-add-btn" onclick="ajouterEtablissementsSirene()" style="font-size:12px;padding:5px 14px" disabled>Ajouter au CRM</button>'
+      + '</div>';
+
+    updateEtabSireneSelectedCount();
+
+  } catch (err) {
+    console.error('rechercherEtablissementsSirene error:', err);
+    panel.innerHTML = '<div style="text-align:center;padding:16px;color:var(--red);font-size:13px">Erreur : ' + err.message + '</div>';
+  }
+}
+
+function toggleAllEtabSirene(checked) {
+  document.querySelectorAll('.etab-sirene-check:not(:disabled)').forEach(cb => { cb.checked = checked; });
+  updateEtabSireneSelectedCount();
+}
+
+function updateEtabSireneSelectedCount() {
+  const count = document.querySelectorAll('.etab-sirene-check:checked:not(:disabled)').length;
+  const el = document.getElementById('etab-sirene-count');
+  if (el) el.textContent = count > 0 ? count + ' sélectionné(s)' : '';
+  const btn = document.getElementById('etab-sirene-add-btn');
+  if (btn) {
+    btn.disabled = count === 0;
+    btn.textContent = count > 0 ? 'Ajouter ' + count + ' au CRM' : 'Ajouter au CRM';
+  }
+}
+
+async function ajouterEtablissementsSirene() {
+  const c = currentClient;
+  if (!c || !c.siren) return;
+  const allEtabs = window._etabSireneList || [];
+  const checks = [...document.querySelectorAll('.etab-sirene-check:checked:not(:disabled)')];
+  if (checks.length === 0) return;
+
+  const btn = document.getElementById('etab-sirene-add-btn');
+  btn.disabled = true;
+  btn.textContent = 'Création en cours…';
+
+  const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
+  const name = c.raison_sociale || c.name || 'Sans nom';
+  const ini = name.split(' ').map(w => (w || '')[0]).join('').substring(0, 2).toUpperCase();
+  let created = 0, errors = 0;
+
+  for (const cb of checks) {
+    const etab = allEtabs[parseInt(cb.dataset.idx)];
+    if (!etab || !etab.siret) continue;
+
+    const dept = etab.code_postal ? etab.code_postal.substring(0, 2) : (etab.departement || '');
+    const etabId = name.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 15) + '_' + etab.siret.slice(-6) + '_' + String(Date.now()).slice(-4);
+    const addr = [etab.numero_voie, etab.type_voie, etab.libelle_voie].filter(Boolean).join(' ') || etab.adresse || null;
+
+    const { error } = await sb.from('clients').insert({
+      id: etabId, name,
+      code: ('ETB-' + etab.siret.slice(-6)).substring(0, 10),
+      raison_sociale: c.raison_sociale || name,
+      raison_sociale2: c.raison_sociale2 || null,
+      forme_juridique: c.forme_juridique || null,
+      sector: c.sector || '',
+      adresse_ligne1: addr,
+      adresse_ligne2: etab.complement_adresse || null,
+      code_postal: etab.code_postal || null,
+      city: etab.libelle_commune || '',
+      departement: deptName(dept),
+      region: regionFromDept(dept),
+      pays: 'FR',
+      siren: c.siren, siret: etab.siret,
+      ape: etab.activite_principale || c.ape || null,
+      ini: ini || '??', color: colors[Math.floor(Math.random() * colors.length)],
+      status: 'nouveau', est_siege: false,
+      ca: 0, obj: 0, margin: 0, dso: 0,
+      score: 50, sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15,
+      last_contact: new Date().toISOString(),
+    });
+
+    if (!error) created++;
+    else { console.warn('Insert établissement err:', etab.siret, error.message); errors++; }
+  }
+
+  if (created > 0) toast(created + ' établissement(s) ajouté(s) au CRM', 'success');
+  if (errors > 0) toast(errors + ' erreur(s) lors de la création', 'error');
+
+  // Rafraîchir la liste
+  await loadDB();
+  loadEtablissementsLies(c.siren, c.id);
 }
 
 // ═══ SYNC ÉTABLISSEMENTS → SITES AKUITEO ═══
