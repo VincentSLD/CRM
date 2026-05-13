@@ -5091,14 +5091,14 @@ async function syncSitesVersAkuiteo() {
         return false;
       });
 
-      const siteName = (etab.city || etab.siret || 'Établissement') + (etab.siret ? ' (' + etab.siret + ')' : '');
+      const siteName = ((etab.city || etab.siret || 'Établissement') + (etab.siret ? ' (' + etab.siret + ')' : '')).substring(0, 50);
       const siteBody = {
         customerId: c.akuiteo_id,
         name: siteName,
         address: {
-          line1: etab.adresse_ligne1 || null,
-          postalCode: etab.code_postal || null,
-          city: etab.city || null,
+          line1: (etab.adresse_ligne1 || '').substring(0, 38) || null,
+          postalCode: (etab.code_postal || '').substring(0, 10) || null,
+          city: (etab.city || '').substring(0, 38) || null,
           country: 'FR',
         },
       };
@@ -16316,11 +16316,11 @@ async function pushClientToAkuiteo(clientId) {
               return false;
             });
 
-            const siteName = (etab.city || etab.siret || 'Établissement') + (etab.siret ? ' (' + etab.siret + ')' : '');
+            const siteName = ((etab.city || etab.siret || 'Établissement') + (etab.siret ? ' (' + etab.siret + ')' : '')).substring(0, 50);
             const siteBody = {
               customerId: customerAkId,
               name: siteName,
-              address: { line1: etab.adresse_ligne1 || null, postalCode: etab.code_postal || null, city: etab.city || null, country: 'FR' },
+              address: { line1: (etab.adresse_ligne1 || '').substring(0, 38) || null, postalCode: (etab.code_postal || '').substring(0, 10) || null, city: (etab.city || '').substring(0, 38) || null, country: 'FR' },
             };
 
             try {
