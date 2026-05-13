@@ -5041,6 +5041,99 @@ async function loadEtablissementsLies(siren, currentClientId) {
   }
 }
 
+// ═══ SYNC ÉTABLISSEMENTS → SITES AKUITEO ═══
+async function syncSitesVersAkuiteo() {
+  const c = currentClient;
+  if (!c || !c.siren || !c.akuiteo_id) { toast('Ce client n\'a pas de SIREN ou d\'ID Akuiteo', 'error'); return; }
+  if (!confirm('Synchroniser les établissements secondaires vers l\'onglet SITES d\'Akuiteo ?\n\nClient siège : ' + c.name + '\nAkuiteo ID : ' + c.akuiteo_id)) return;
+
+  showSyncLoading(true);
+  setSyncText('Chargement des établissements du CRM…');
+
+  try {
+    // 1. Charger les établissements secondaires depuis le CRM (même SIREN, est_siege = false)
+    const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city,est_siege')
+      .eq('siren', c.siren).eq('est_siege', false).order('name');
+
+    if (!etabs || etabs.length === 0) {
+      showSyncLoading(false);
+      toast('Aucun établissement secondaire trouvé dans le CRM pour ce SIREN.', 'warn');
+      return;
+    }
+
+    setSyncText(etabs.length + ' établissement(s) trouvé(s) — Chargement des sites Akuiteo…');
+
+    // 2. Charger les sites existants dans Akuiteo
+    let existingSites = [];
+    try {
+      const sites = await akuiteoFetch('GET', '/crm/customers/' + c.akuiteo_id + '/sites');
+      if (Array.isArray(sites)) existingSites = sites;
+    } catch (e) { console.warn('Impossible de charger les sites Akuiteo:', e.message); }
+
+    setSyncText(existingSites.length + ' site(s) existant(s) dans Akuiteo — Synchronisation…');
+
+    // 3. Pour chaque établissement CRM, créer ou mettre à jour un site
+    let created = 0, updated = 0, errors = 0;
+
+    for (let i = 0; i < etabs.length; i++) {
+      const etab = etabs[i];
+      setSyncText('Site ' + (i + 1) + ' / ' + etabs.length + ' — ' + (etab.city || etab.siret || '') + '…');
+
+      // Chercher un site existant par correspondance ville+CP ou nom contenant le SIRET
+      const existingSite = existingSites.find(s => {
+        const a = s.address || {};
+        // Correspondance par ville + code postal
+        if (etab.code_postal && a.postalCode && etab.city && a.city) {
+          return a.postalCode === etab.code_postal && a.city.toUpperCase() === (etab.city || '').toUpperCase();
+        }
+        // Correspondance par nom contenant le SIRET
+        if (etab.siret && s.name && s.name.includes(etab.siret)) return true;
+        return false;
+      });
+
+      const siteName = (etab.city || etab.siret || 'Établissement') + (etab.siret ? ' (' + etab.siret + ')' : '');
+      const siteBody = {
+        name: siteName,
+        address: {
+          line1: etab.adresse_ligne1 || null,
+          postalCode: etab.code_postal || null,
+          city: etab.city || null,
+          country: 'FR',
+        },
+      };
+
+      try {
+        if (existingSite) {
+          // Mise à jour
+          siteBody.id = existingSite.id;
+          await akuiteoFetch('POST', '/crm/customers/' + c.akuiteo_id + '/sites/' + existingSite.id, siteBody, { accept: 'text/plain' });
+          updated++;
+        } else {
+          // Création
+          await akuiteoFetch('PUT', '/crm/customers/' + c.akuiteo_id + '/sites', siteBody, { accept: 'text/plain' });
+          created++;
+        }
+      } catch (err) {
+        console.warn('Sync site error:', etab.siret, err.message);
+        errors++;
+      }
+    }
+
+    showSyncLoading(false);
+
+    const msg = [];
+    if (created > 0) msg.push(created + ' site(s) créé(s)');
+    if (updated > 0) msg.push(updated + ' site(s) mis à jour');
+    if (errors > 0) msg.push(errors + ' erreur(s)');
+    toast('Sites Akuiteo : ' + msg.join(', '), errors > 0 ? 'warn' : 'success');
+
+  } catch (err) {
+    console.error('syncSitesVersAkuiteo error:', err);
+    showSyncLoading(false);
+    toast('Erreur sync sites : ' + err.message, 'error');
+  }
+}
+
 function renderClientDetail() {
   const c = currentClient;
   if(!c) return '<p>Société non trouvée</p>';
@@ -5140,7 +5233,7 @@ function renderClientDetail() {
     ])}
   </div>
   ${c.siren ? `<div class="card" style="margin-bottom:16px">
-    <div class="card-header"><div class="card-title">Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ${c.siren})</span></div></div>
+    <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ${c.siren})</span></div>${c.est_siege === true && c.akuiteo_id ? '<button class="btn" onclick="syncSitesVersAkuiteo()" style="font-size:11px;padding:3px 10px">Synchroniser Sites → Akuiteo</button>' : ''}</div>
     <div class="card-body" id="etablissements-lies" style="padding:12px"><div style="color:var(--t3);font-size:13px">Chargement...</div></div>
   </div>` : ''}
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
