@@ -5020,10 +5020,14 @@ async function loadEtablissementsLies(siren, currentClientId) {
     // Charger en parallèle : établissements CRM + établissements INSEE (actifs)
     const currentSiret = currentClient?.siret || '';
     const [crmResult, inseeEtabs] = await Promise.all([
-      sb.from('clients').select('id,name,siret,city,code_postal,est_siege').eq('siren', siren).neq('id', currentClientId).order('name'),
+      sb.from('clients').select('id,name,siret,city,code_postal,est_siege,etat_insee').eq('siren', siren).neq('id', currentClientId).order('name'),
       fetchInseeEtablissements(siren).catch(() => null),
     ]);
     const data = crmResult.data;
+
+    // Index INSEE par SIRET pour croisement
+    const inseeBysiret = {};
+    if (inseeEtabs) inseeEtabs.forEach(e => { if (e.siret) inseeBysiret[e.siret] = e; });
 
     // Compter les établissements secondaires actifs INSEE (hors siège)
     const inseeSecondaires = inseeEtabs
@@ -5056,21 +5060,78 @@ async function loadEtablissementsLies(siren, currentClientId) {
       + '<th style="padding:6px 10px;text-align:left">SIRET</th>'
       + '<th style="padding:6px 10px;text-align:left">Ville</th>'
       + '<th style="padding:6px 10px;text-align:left">Type</th>'
+      + '<th style="padding:6px 10px;text-align:left">État</th>'
       + '</tr></thead><tbody>'
-      + data.map(r => '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="showClient(\'' + r.id + '\')" onmouseover="this.style.background=\'var(--hover)\'" onmouseout="this.style.background=\'\'">'
-        + '<td style="padding:6px 10px;font-weight:500;color:var(--accent)">' + (r.name || '—') + '</td>'
-        + '<td style="padding:6px 10px;font-family:monospace;font-size:12px">' + (r.siret || '—') + '</td>'
-        + '<td style="padding:6px 10px">' + (r.code_postal ? r.code_postal + ' ' : '') + (r.city || '—') + '</td>'
-        + '<td style="padding:6px 10px">' + (r.est_siege === true ? '<span style="color:var(--accent);font-weight:600">Siège</span>' : r.est_siege === false ? 'Établissement' : '—') + '</td>'
-        + '</tr>').join('')
+      + data.map(r => {
+        const insee = r.siret ? inseeBysiret[r.siret] : null;
+        const etat = insee ? insee.etat_administratif : r.etat_insee;
+        const etatHtml = etat === 'A' ? '<span style="color:var(--green)">● Actif</span>'
+          : etat === 'F' || etat === 'C' ? '<span style="color:var(--red)">● Fermé</span>'
+          : '<span style="color:var(--t3)">—</span>';
+        return '<tr style="border-bottom:1px solid var(--border);cursor:pointer;' + (etat === 'F' || etat === 'C' ? 'opacity:0.5;' : '') + '" onclick="showClient(\'' + r.id + '\')" onmouseover="this.style.background=\'var(--hover)\'" onmouseout="this.style.background=\'\'">'
+          + '<td style="padding:6px 10px;font-weight:500;color:var(--accent)">' + (r.name || '—') + '</td>'
+          + '<td style="padding:6px 10px;font-family:monospace;font-size:12px">' + (r.siret || '—') + '</td>'
+          + '<td style="padding:6px 10px">' + (r.code_postal ? r.code_postal + ' ' : '') + (r.city || '—') + '</td>'
+          + '<td style="padding:6px 10px">' + (r.est_siege === true ? '<span style="color:var(--accent);font-weight:600">Siège</span>' : r.est_siege === false ? 'Établissement' : '—') + '</td>'
+          + '<td style="padding:6px 10px;font-size:12px">' + etatHtml + '</td>'
+          + '</tr>';
+      }).join('')
       + '</tbody></table>'
       + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap;gap:6px">'
       + '<div style="font-size:11px;color:var(--t3)">' + data.length + ' autre(s) établissement(s) dans le CRM</div>'
+      + '<div style="display:flex;gap:6px">'
+      + '<button class="btn" onclick="majEtatEtablissements(\'' + siren + '\',\'' + currentClientId + '\')" style="font-size:11px;padding:3px 10px" title="Mettre à jour l\'état (actif/fermé) depuis INSEE">↻ MAJ états</button>'
       + '<button class="btn" onclick="rechercherEtablissementsSirene()" style="font-size:11px;padding:3px 10px">+ Ajouter depuis SIRENE</button>'
-      + '</div>'
+      + '</div></div>'
       + '<div id="etab-sirene-panel" style="display:none;margin-top:12px;border-top:2px solid var(--border);padding-top:12px"></div>';
   } catch (err) {
     el.innerHTML = '<div style="color:var(--red);font-size:13px">Erreur: ' + err.message + '</div>';
+  }
+}
+
+// ═══ MAJ ÉTAT ÉTABLISSEMENTS DEPUIS INSEE ═══
+async function majEtatEtablissements(siren, currentClientId) {
+  showSyncLoading(true);
+  setSyncText('Chargement des états depuis INSEE…');
+  try {
+    // Charger tous les établissements INSEE (actifs ET fermés) pour ce SIREN
+    const proxyBase = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:3000' : '';
+    const q = 'siren:' + siren;
+    const resp = await fetch(proxyBase + '/api/insee?path=/siret&q=' + encodeURIComponent(q) + '&nombre=1000&tri=true');
+    if (!resp.ok) { toast('Erreur INSEE HTTP ' + resp.status, 'error'); return; }
+    const data = await resp.json();
+    const allInsee = (data.etablissements || []);
+
+    // Index par SIRET
+    const inseeMap = {};
+    for (const e of allInsee) {
+      const per = (e.periodesEtablissement || [])[0] || {};
+      inseeMap[e.siret] = per.etatAdministratifEtablissement || 'A';
+    }
+
+    // Charger les établissements CRM de ce SIREN
+    const { data: crmEtabs } = await sb.from('clients').select('id,siret,etat_insee').eq('siren', siren);
+    if (!crmEtabs || crmEtabs.length === 0) { toast('Aucun établissement CRM pour ce SIREN', 'warn'); return; }
+
+    let updated = 0;
+    for (const c of crmEtabs) {
+      if (!c.siret || !inseeMap[c.siret]) continue;
+      const etat = inseeMap[c.siret] === 'F' ? 'C' : 'A'; // CRM stocke 'C' pour cessé/fermé
+      if (c.etat_insee !== etat) {
+        await sb.from('clients').update({ etat_insee: etat }).eq('id', c.id);
+        updated++;
+      }
+    }
+
+    toast(updated > 0 ? updated + ' état(s) mis à jour' : 'Tous les états sont déjà à jour', updated > 0 ? 'success' : 'info');
+    // Rafraîchir la liste
+    loadEtablissementsLies(siren, currentClientId);
+  } catch (e) {
+    console.error('majEtatEtablissements error:', e);
+    toast('Erreur: ' + e.message, 'error');
+  } finally {
+    showSyncLoading(false);
   }
 }
 
