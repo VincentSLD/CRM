@@ -5366,7 +5366,7 @@ async function syncSitesVersAkuiteo() {
 
   try {
     // 1. Charger les établissements secondaires depuis le CRM (même SIREN, est_siege = false)
-    const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city,est_siege')
+    const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city,est_siege,etat_insee')
       .eq('siren', c.siren).eq('est_siege', false).order('name');
 
     if (!etabs || etabs.length === 0) {
@@ -5410,6 +5410,7 @@ async function syncSitesVersAkuiteo() {
         customerId: c.akuiteo_id,
         name: siteName,
         SIRET: etab.siret || null,
+        isClosed: etab.etat_insee === 'C',
         address: {
           line1: (etab.adresse_ligne1 || '').substring(0, 38) || null,
           postalCode: (etab.code_postal || '').substring(0, 10) || null,
@@ -16677,7 +16678,7 @@ async function pushClientToAkuiteo(clientId) {
     if (customerAkId && full.est_siege === true && full.siren) {
       setSyncText('Synchronisation des établissements secondaires (Sites)…');
       try {
-        const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city')
+        const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city,etat_insee')
           .eq('siren', full.siren).eq('est_siege', false).order('name');
         if (etabs && etabs.length > 0) {
           // Charger les sites existants dans Akuiteo
@@ -16707,6 +16708,7 @@ async function pushClientToAkuiteo(clientId) {
               customerId: customerAkId,
               name: siteName,
               SIRET: etab.siret || null,
+              isClosed: etab.etat_insee === 'C',
               address: { line1: (etab.adresse_ligne1 || '').substring(0, 38) || null, postalCode: (etab.code_postal || '').substring(0, 10) || null, city: (etab.city || '').substring(0, 38) || null, country: 'FR' },
             };
 
