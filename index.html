@@ -5420,7 +5420,7 @@ async function syncSitesVersAkuiteo() {
         customerId: c.akuiteo_id,
         name: siteName,
         SIRET: etab.siret || null,
-        closed: etab.etat_insee === 'C',
+        validUntil: etab.etat_insee === 'C' ? new Date().toISOString().split('T')[0] + 'T00:00:00' : null,
         address: {
           line1: (etab.adresse_ligne1 || '').substring(0, 38) || null,
           postalCode: (etab.code_postal || '').substring(0, 10) || null,
@@ -16718,7 +16718,7 @@ async function pushClientToAkuiteo(clientId) {
               customerId: customerAkId,
               name: siteName,
               SIRET: etab.siret || null,
-              closed: etab.etat_insee === 'C',
+              validUntil: etab.etat_insee === 'C' ? new Date().toISOString().split('T')[0] + 'T00:00:00' : null,
               address: { line1: (etab.adresse_ligne1 || '').substring(0, 38) || null, postalCode: (etab.code_postal || '').substring(0, 10) || null, city: (etab.city || '').substring(0, 38) || null, country: 'FR' },
             };
 
