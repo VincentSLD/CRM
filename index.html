@@ -13333,130 +13333,174 @@ function updateNcEtabSelectedCount() {
 async function submitNewClient() {
   const name = document.getElementById('nc-name').value.trim();
   if (!name) { toast('Le nom est obligatoire','error'); return; }
-  // Vérifier les doublons sur nom, SIRET ou téléphone
-  const siret = document.getElementById('nc-siret').value.trim();
-  const phone = document.getElementById('nc-phone').value.trim();
-  const duplicates = [];
-  const { data: byName } = await sb.from('clients').select('id,name').ilike('name', name).limit(3);
-  if (byName && byName.length > 0) duplicates.push(...byName.map(c => ({ ...c, reason: 'nom' })));
-  if (siret) {
-    const { data: bySiret } = await sb.from('clients').select('id,name,siret').eq('siret', siret).limit(3);
-    if (bySiret && bySiret.length > 0) bySiret.filter(c => !duplicates.some(d => d.id === c.id)).forEach(c => duplicates.push({ ...c, reason: 'SIRET' }));
-  }
-  if (phone) {
-    const { data: byPhone } = await sb.from('clients').select('id,name,phone').eq('phone', phone).limit(3);
-    if (byPhone && byPhone.length > 0) byPhone.filter(c => !duplicates.some(d => d.id === c.id)).forEach(c => duplicates.push({ ...c, reason: 'téléphone' }));
-  }
-  if (duplicates.length > 0) {
-    const details = duplicates.map(d => `- "${d.name}" (même ${d.reason})`).join('\n');
-    if (!confirm(`Doublon(s) détecté(s) :\n${details}\n\nVoulez-vous quand même créer cette société ?`)) return;
-  }
-  const id = name.toLowerCase().replace(/[^a-z0-9]/g,'_').substring(0,20) + '_' + String(Date.now()).slice(-4);
-  const ini = name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
-  const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
-  await dbInsert('clients', {
-    id, name,
-    code: document.getElementById('nc-code').value.trim() || `CLI-${String(Date.now()).slice(-4)}`,
-    raison_sociale: document.getElementById('nc-raison').value.trim() || null,
-    raison_sociale2: document.getElementById('nc-raison2').value.trim() || null,
-    forme_juridique: document.getElementById('nc-forme').value.trim() || null,
-    sector: document.getElementById('nc-sector').value.trim() || '',
-    adresse_ligne1: document.getElementById('nc-addr1').value.trim() || null,
-    adresse_ligne2: document.getElementById('nc-addr2').value.trim() || null,
-    adresse_ligne3: document.getElementById('nc-addr3').value.trim() || null,
-    code_postal: document.getElementById('nc-cp').value.trim() || null,
-    city: document.getElementById('nc-city').value.trim() || '',
-    departement: document.getElementById('nc-dept').value.trim() || null,
-    region: document.getElementById('nc-region').value.trim() || null,
-    pays: document.getElementById('nc-pays').value.trim() || null,
-    email: document.getElementById('nc-email').value.trim() || '',
-    phone: document.getElementById('nc-phone').value.trim() || '',
-    telephone2: document.getElementById('nc-phone2').value.trim() || null,
-    mobile: document.getElementById('nc-mobile').value.trim() || null,
-    fax: document.getElementById('nc-fax').value.trim() || null,
-    site_web: document.getElementById('nc-web').value.trim() || null,
-    siren: document.getElementById('nc-siren').value.trim() || null,
-    siret: document.getElementById('nc-siret').value.trim() || null,
-    ape: document.getElementById('nc-ape').value.trim() || null,
-    reference_externe: document.getElementById('nc-refext').value.trim() || null,
-    categorie_compte: readCategorieCompte('nc'),
-    notes: document.getElementById('nc-notes').value.trim() || null,
-    habitudes_techniques: document.getElementById('nc-hab-tech').innerHTML.trim() || null,
-    habitudes_geotechniques: document.getElementById('nc-hab-geo').innerHTML.trim() || null,
-    code_codial: document.getElementById('nc-code-codial')?.value.trim() || null,
-    ...getAkuiteoFieldsFromModal('nc'),
-    ini, color: colors[Math.floor(Math.random()*colors.length)],
-    status: 'nouveau',
-    est_siege: window._ncEstSiege ?? null,
-  });
-  // Créer les établissements secondaires cochés
-  const etabChecks = [...document.querySelectorAll('.nc-etab-check:checked:not(:disabled)')];
-  const secondaryEtabs = window._ncSecondaryEstablishments || [];
-  let etabAdded = 0;
-  if (etabChecks.length > 0 && secondaryEtabs.length > 0) {
-    const siren = document.getElementById('nc-siren').value.trim();
-    const raisonSociale = document.getElementById('nc-raison').value.trim() || name;
-    const raisonSociale2 = document.getElementById('nc-raison2').value.trim() || null;
-    const formeJuridique = document.getElementById('nc-forme').value.trim() || null;
-    const sector = document.getElementById('nc-sector').value.trim() || '';
-    const apeMain = document.getElementById('nc-ape').value.trim() || null;
-    const akuiteoFields = getAkuiteoFieldsFromModal('nc');
-    const categorieCompte = readCategorieCompte('nc');
 
-    for (const cb of etabChecks) {
-      const etab = secondaryEtabs[parseInt(cb.dataset.idx)];
-      if (!etab || !etab.siret) continue;
-      const dept = etab.code_postal ? etab.code_postal.substring(0, 2) : (etab.departement || '');
-      const etabId = name.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 15) + '_' + etab.siret.slice(-6) + '_' + String(Date.now()).slice(-4);
-      const etabIni = name.split(' ').map(w => (w || '')[0]).join('').substring(0, 2).toUpperCase();
-      const addr = [etab.numero_voie, etab.type_voie, etab.libelle_voie].filter(Boolean).join(' ') || etab.adresse || null;
-      const { error } = await sb.from('clients').insert({
-        id: etabId, name,
-        code: ('ETB-' + etab.siret.slice(-6)).substring(0, 10),
-        raison_sociale: raisonSociale, raison_sociale2: raisonSociale2,
-        forme_juridique: formeJuridique, sector,
-        adresse_ligne1: addr,
-        adresse_ligne2: etab.complement_adresse || null,
-        code_postal: etab.code_postal || null,
-        city: etab.libelle_commune || '',
-        departement: deptName(dept),
-        region: regionFromDept(dept),
-        pays: 'FR',
-        siren, siret: etab.siret,
-        ape: etab.activite_principale || apeMain,
-        ini: etabIni, color: colors[Math.floor(Math.random() * colors.length)],
-        status: 'nouveau', est_siege: false,
-        categorie_compte: categorieCompte,
-        ...akuiteoFields,
-      });
-      if (!error) etabAdded++;
-      else console.warn('Insert établissement secondaire err:', etab.siret, error.message);
+  // Overlay de progression
+  let overlay = document.getElementById('nc-progress-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'nc-progress-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML = '<div style="background:var(--card);border-radius:12px;padding:28px 36px;box-shadow:0 8px 32px rgba(0,0,0,.3);text-align:center;min-width:320px;max-width:420px">'
+      + '<div style="font-size:32px;margin-bottom:12px" id="nc-prog-icon">&#9203;</div>'
+      + '<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:8px" id="nc-prog-title">Enregistrement en cours…</div>'
+      + '<div style="font-size:12px;color:var(--t2)" id="nc-prog-step"></div>'
+      + '<div style="margin-top:14px;height:4px;background:var(--border);border-radius:4px;overflow:hidden"><div id="nc-prog-bar" style="height:100%;width:0%;background:var(--accent);border-radius:4px;transition:width 0.3s"></div></div>'
+      + '</div>';
+    document.body.appendChild(overlay);
+  }
+  overlay.style.display = 'flex';
+  const setStep = (txt, pct) => {
+    document.getElementById('nc-prog-step').textContent = txt;
+    document.getElementById('nc-prog-bar').style.width = pct + '%';
+  };
+
+  try {
+    // 1. Vérification des doublons
+    setStep('Vérification des doublons…', 5);
+    const siret = document.getElementById('nc-siret').value.trim();
+    const phone = document.getElementById('nc-phone').value.trim();
+    const duplicates = [];
+    const { data: byName } = await sb.from('clients').select('id,name').ilike('name', name).limit(3);
+    if (byName && byName.length > 0) duplicates.push(...byName.map(c => ({ ...c, reason: 'nom' })));
+    if (siret) {
+      const { data: bySiret } = await sb.from('clients').select('id,name,siret').eq('siret', siret).limit(3);
+      if (bySiret && bySiret.length > 0) bySiret.filter(c => !duplicates.some(d => d.id === c.id)).forEach(c => duplicates.push({ ...c, reason: 'SIRET' }));
     }
-    if (etabAdded > 0) toast(etabAdded + ' établissement(s) secondaire(s) créé(s)', 'success');
-  }
+    if (phone) {
+      const { data: byPhone } = await sb.from('clients').select('id,name,phone').eq('phone', phone).limit(3);
+      if (byPhone && byPhone.length > 0) byPhone.filter(c => !duplicates.some(d => d.id === c.id)).forEach(c => duplicates.push({ ...c, reason: 'téléphone' }));
+    }
+    if (duplicates.length > 0) {
+      overlay.style.display = 'none';
+      const details = duplicates.map(d => `- "${d.name}" (même ${d.reason})`).join('\n');
+      if (!confirm(`Doublon(s) détecté(s) :\n${details}\n\nVoulez-vous quand même créer cette société ?`)) return;
+      overlay.style.display = 'flex';
+    }
 
-  window._ncEstSiege = null;
-  window._ncSelectedSireneResult = null;
-  window._ncSecondaryEstablishments = [];
-  closeModal('new-client');
-  // Si on venait du formulaire CR, sélectionner le nouveau client
-  if (crViewMode === 'detail') {
-    await loadDB();
-    renderPage('cr');
-    setTimeout(() => {
-      selectCRClient(id, name);
-      // Re-remplir les autres champs du CR si on éditait
-      if (currentReport) {
-        const co = document.getElementById('crContactSearch');
-        if (co) { co.value = currentReport.contact_name || ''; co.disabled = !id; co.style.opacity = '1'; }
-        const coi = document.getElementById('crContactId');
-        if (coi) coi.value = currentReport.contact_id || '';
+    // 2. Création du client principal
+    setStep('Création du client « ' + name + ' »…', 20);
+    const id = name.toLowerCase().replace(/[^a-z0-9]/g,'_').substring(0,20) + '_' + String(Date.now()).slice(-4);
+    const ini = name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+    const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
+    await dbInsert('clients', {
+      id, name,
+      code: document.getElementById('nc-code').value.trim() || `CLI-${String(Date.now()).slice(-4)}`,
+      raison_sociale: document.getElementById('nc-raison').value.trim() || null,
+      raison_sociale2: document.getElementById('nc-raison2').value.trim() || null,
+      forme_juridique: document.getElementById('nc-forme').value.trim() || null,
+      sector: document.getElementById('nc-sector').value.trim() || '',
+      adresse_ligne1: document.getElementById('nc-addr1').value.trim() || null,
+      adresse_ligne2: document.getElementById('nc-addr2').value.trim() || null,
+      adresse_ligne3: document.getElementById('nc-addr3').value.trim() || null,
+      code_postal: document.getElementById('nc-cp').value.trim() || null,
+      city: document.getElementById('nc-city').value.trim() || '',
+      departement: document.getElementById('nc-dept').value.trim() || null,
+      region: document.getElementById('nc-region').value.trim() || null,
+      pays: document.getElementById('nc-pays').value.trim() || null,
+      email: document.getElementById('nc-email').value.trim() || '',
+      phone: document.getElementById('nc-phone').value.trim() || '',
+      telephone2: document.getElementById('nc-phone2').value.trim() || null,
+      mobile: document.getElementById('nc-mobile').value.trim() || null,
+      fax: document.getElementById('nc-fax').value.trim() || null,
+      site_web: document.getElementById('nc-web').value.trim() || null,
+      siren: document.getElementById('nc-siren').value.trim() || null,
+      siret: document.getElementById('nc-siret').value.trim() || null,
+      ape: document.getElementById('nc-ape').value.trim() || null,
+      reference_externe: document.getElementById('nc-refext').value.trim() || null,
+      categorie_compte: readCategorieCompte('nc'),
+      notes: document.getElementById('nc-notes').value.trim() || null,
+      habitudes_techniques: document.getElementById('nc-hab-tech').innerHTML.trim() || null,
+      habitudes_geotechniques: document.getElementById('nc-hab-geo').innerHTML.trim() || null,
+      code_codial: document.getElementById('nc-code-codial')?.value.trim() || null,
+      ...getAkuiteoFieldsFromModal('nc'),
+      ini, color: colors[Math.floor(Math.random()*colors.length)],
+      status: 'nouveau',
+      est_siege: window._ncEstSiege ?? null,
+    });
+    setStep('Client « ' + name + ' » créé', 50);
+
+    // 3. Créer les établissements secondaires cochés
+    const etabChecks = [...document.querySelectorAll('.nc-etab-check:checked:not(:disabled)')];
+    const secondaryEtabs = window._ncSecondaryEstablishments || [];
+    let etabAdded = 0;
+    if (etabChecks.length > 0 && secondaryEtabs.length > 0) {
+      const totalEtab = etabChecks.length;
+      const siren = document.getElementById('nc-siren').value.trim();
+      const raisonSociale = document.getElementById('nc-raison').value.trim() || name;
+      const raisonSociale2 = document.getElementById('nc-raison2').value.trim() || null;
+      const formeJuridique = document.getElementById('nc-forme').value.trim() || null;
+      const sector = document.getElementById('nc-sector').value.trim() || '';
+      const apeMain = document.getElementById('nc-ape').value.trim() || null;
+      const akuiteoFields = getAkuiteoFieldsFromModal('nc');
+      const categorieCompte = readCategorieCompte('nc');
+
+      for (let ei = 0; ei < etabChecks.length; ei++) {
+        const cb = etabChecks[ei];
+        const etab = secondaryEtabs[parseInt(cb.dataset.idx)];
+        if (!etab || !etab.siret) continue;
+        const pct = 50 + Math.round((ei + 1) / totalEtab * 30);
+        setStep('Établissement ' + (ei + 1) + ' / ' + totalEtab + ' — ' + (etab.libelle_commune || etab.siret) + '…', pct);
+        const dept = etab.code_postal ? etab.code_postal.substring(0, 2) : (etab.departement || '');
+        const etabId = name.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 15) + '_' + etab.siret.slice(-6) + '_' + String(Date.now()).slice(-4);
+        const etabIni = name.split(' ').map(w => (w || '')[0]).join('').substring(0, 2).toUpperCase();
+        const addr = [etab.numero_voie, etab.type_voie, etab.libelle_voie].filter(Boolean).join(' ') || etab.adresse || null;
+        const { error } = await sb.from('clients').insert({
+          id: etabId, name,
+          code: ('ETB-' + etab.siret.slice(-6)).substring(0, 10),
+          raison_sociale: raisonSociale, raison_sociale2: raisonSociale2,
+          forme_juridique: formeJuridique, sector,
+          adresse_ligne1: addr,
+          adresse_ligne2: etab.complement_adresse || null,
+          code_postal: etab.code_postal || null,
+          city: etab.libelle_commune || '',
+          departement: deptName(dept),
+          region: regionFromDept(dept),
+          pays: 'FR',
+          siren, siret: etab.siret,
+          ape: etab.activite_principale || apeMain,
+          ini: etabIni, color: colors[Math.floor(Math.random() * colors.length)],
+          status: 'nouveau', est_siege: false,
+          categorie_compte: categorieCompte,
+          ...akuiteoFields,
+        });
+        if (!error) etabAdded++;
+        else console.warn('Insert établissement secondaire err:', etab.siret, error.message);
       }
-    }, 100);
-  } else {
-    // Naviguer vers la fiche de la société créée
-    await loadDB();
-    showClient(id);
+      if (etabAdded > 0) toast(etabAdded + ' établissement(s) secondaire(s) créé(s)', 'success');
+    }
+
+    // 4. Rechargement des données
+    setStep('Rechargement des données…', 85);
+    window._ncEstSiege = null;
+    window._ncSelectedSireneResult = null;
+    window._ncSecondaryEstablishments = [];
+    closeModal('new-client');
+
+    if (crViewMode === 'detail') {
+      await loadDB();
+      setStep('Finalisation…', 95);
+      overlay.style.display = 'none';
+      renderPage('cr');
+      setTimeout(() => {
+        selectCRClient(id, name);
+        if (currentReport) {
+          const co = document.getElementById('crContactSearch');
+          if (co) { co.value = currentReport.contact_name || ''; co.disabled = !id; co.style.opacity = '1'; }
+          const coi = document.getElementById('crContactId');
+          if (coi) coi.value = currentReport.contact_id || '';
+        }
+      }, 100);
+    } else {
+      await loadDB();
+      setStep('Ouverture de la fiche…', 95);
+      overlay.style.display = 'none';
+      showClient(id);
+    }
+
+  } catch (err) {
+    console.error('submitNewClient error:', err);
+    overlay.style.display = 'none';
+    toast('Erreur lors de la création : ' + err.message, 'error');
   }
 }
 
