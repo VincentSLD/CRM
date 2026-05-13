@@ -16280,11 +16280,63 @@ async function pushClientToAkuiteo(clientId) {
     if (customerAkId) {
       const { data: contacts } = await sb.from('contacts').select('id').eq('client_id', clientId);
       if (contacts && contacts.length > 0) {
-        toast(`Synchronisation de ${contacts.length} contact(s)...`, 'info');
+        setSyncText(`Synchronisation de ${contacts.length} contact(s)…`);
         for (const ct of contacts) {
           await pushContactToAkuiteo(ct.id);
         }
       }
+    }
+    // --- Synchroniser les établissements secondaires comme Sites Akuiteo ---
+    if (customerAkId && full.est_siege === true && full.siren) {
+      setSyncText('Synchronisation des établissements secondaires (Sites)…');
+      try {
+        const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city')
+          .eq('siren', full.siren).eq('est_siege', false).order('name');
+        if (etabs && etabs.length > 0) {
+          // Charger les sites existants dans Akuiteo
+          let existingSites = [];
+          try {
+            const sites = await akuiteoFetch('GET', '/crm/customers/' + customerAkId + '/sites');
+            if (Array.isArray(sites)) existingSites = sites;
+          } catch (e) { console.warn('Chargement sites Akuiteo:', e.message); }
+
+          let sitesCreated = 0, sitesUpdated = 0;
+          for (let i = 0; i < etabs.length; i++) {
+            const etab = etabs[i];
+            setSyncText('Site ' + (i + 1) + ' / ' + etabs.length + ' — ' + (etab.city || etab.siret || '') + '…');
+
+            // Chercher site existant par ville+CP ou nom contenant le SIRET
+            const existingSite = existingSites.find(s => {
+              const a = s.address || {};
+              if (etab.code_postal && a.postalCode && etab.city && a.city) {
+                return a.postalCode === etab.code_postal && a.city.toUpperCase() === (etab.city || '').toUpperCase();
+              }
+              if (etab.siret && s.name && s.name.includes(etab.siret)) return true;
+              return false;
+            });
+
+            const siteName = (etab.city || etab.siret || 'Établissement') + (etab.siret ? ' (' + etab.siret + ')' : '');
+            const siteBody = {
+              name: siteName,
+              address: { line1: etab.adresse_ligne1 || null, postalCode: etab.code_postal || null, city: etab.city || null, country: 'FR' },
+            };
+
+            try {
+              if (existingSite) {
+                siteBody.id = existingSite.id;
+                await akuiteoFetch('POST', '/crm/customers/' + customerAkId + '/sites/' + existingSite.id, siteBody, { accept: 'text/plain' });
+                sitesUpdated++;
+              } else {
+                await akuiteoFetch('PUT', '/crm/customers/' + customerAkId + '/sites', siteBody, { accept: 'text/plain' });
+                sitesCreated++;
+              }
+            } catch (siteErr) { console.warn('Sync site error:', etab.siret, siteErr.message); }
+          }
+          if (sitesCreated + sitesUpdated > 0) {
+            toast(sitesCreated + ' site(s) créé(s), ' + sitesUpdated + ' mis à jour dans Akuiteo', 'success');
+          }
+        }
+      } catch (siteErr) { console.warn('Sync sites error:', siteErr.message); }
     }
     // Marquer comme synchronisé
     await sb.from('clients').update({ akuiteo_dirty: false }).eq('id', clientId);
