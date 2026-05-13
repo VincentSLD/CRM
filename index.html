@@ -5093,6 +5093,7 @@ async function syncSitesVersAkuiteo() {
 
       const siteName = (etab.city || etab.siret || 'Établissement') + (etab.siret ? ' (' + etab.siret + ')' : '');
       const siteBody = {
+        customerId: c.akuiteo_id,
         name: siteName,
         address: {
           line1: etab.adresse_ligne1 || null,
@@ -16317,6 +16318,7 @@ async function pushClientToAkuiteo(clientId) {
 
             const siteName = (etab.city || etab.siret || 'Établissement') + (etab.siret ? ' (' + etab.siret + ')' : '');
             const siteBody = {
+              customerId: customerAkId,
               name: siteName,
               address: { line1: etab.adresse_ligne1 || null, postalCode: etab.code_postal || null, city: etab.city || null, country: 'FR' },
             };
