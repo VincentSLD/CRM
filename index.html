@@ -2012,6 +2012,7 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Commercial Novam</label><select class="fi" id="nc-mk-manager"></select></div>
         <div class="fg"><label class="fl">Commercial GPH</label><select class="fi" id="nc-mk-salesman"></select></div>
         <div class="fg"><label class="fl">Code CODIAL <span style="font-weight:400;color:var(--t3);font-size:10px">(local)</span></label><input class="fi" id="nc-code-codial" placeholder="Ex: T16-00123"></div>
+        <div class="fg"><label class="fl">Compta CODIAL <span style="font-weight:400;color:var(--t3);font-size:10px">(local)</span></label><input class="fi" id="nc-compta-codial" placeholder="Ex: 411-00123"></div>
       </div>
       <div class="fg" style="margin-bottom:16px">
         <label class="fl">Réseaux professionnels</label>
@@ -2465,6 +2466,7 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Commercial Novam</label><select class="fi" id="ec-mk-manager"></select></div>
         <div class="fg"><label class="fl">Commercial GPH</label><select class="fi" id="ec-mk-salesman"></select></div>
         <div class="fg"><label class="fl">Code CODIAL <span style="font-weight:400;color:var(--t3);font-size:10px">(local)</span></label><input class="fi" id="ec-code-codial" placeholder="Ex: T16-00123"></div>
+        <div class="fg"><label class="fl">Compta CODIAL <span style="font-weight:400;color:var(--t3);font-size:10px">(local)</span></label><input class="fi" id="ec-compta-codial" placeholder="Ex: 411-00123"></div>
       </div>
       <div class="fg" style="margin-bottom:16px">
         <label class="fl">Réseaux professionnels</label>
@@ -5610,6 +5612,7 @@ function renderClientDetail() {
       })()),
       detailRow('Société Akuiteo', c.code_societe || '—'),
       detailRow('Code CODIAL <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.code_codial || '—'),
+      detailRow('Compta CODIAL <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.compta_codial || '—'),
       detailRow('Réseaux pro', (() => {
         const rp = c.reseaux_pro;
         if (!rp || !Array.isArray(rp) || rp.length === 0) return '—';
@@ -6794,13 +6797,14 @@ let _imxOutCr = [];   // comptes-rendus mergés (colonnes XML brutes + jointures
 let _imxColMap = { soc: {}, con: {}, cr: {} }; // mapping CSV→CRM, défini APRÈS construction
 let _imxNextId = 1;
 
-const CRM_FIELDS_SOC = ['name','code','code_codial','raison_sociale','siren','siret','ape','forme_juridique','adresse_ligne1','adresse_ligne2','code_postal','city','departement','region','pays','phone','telephone2','fax','mobile','email','site_web','lat','lng','sector','contact','notes','habitudes_techniques','habitudes_geotechniques','effectif','ca','status','mk_categorie','mk_sous_categorie','mk_categorie_pro','mk_secteur','mk_type','mk_groupe','mk_origine','legacy_id'];
+const CRM_FIELDS_SOC = ['name','code','code_codial','compta_codial','raison_sociale','siren','siret','ape','forme_juridique','adresse_ligne1','adresse_ligne2','code_postal','city','departement','region','pays','phone','telephone2','fax','mobile','email','site_web','lat','lng','sector','contact','notes','habitudes_techniques','habitudes_geotechniques','effectif','ca','status','mk_categorie','mk_sous_categorie','mk_categorie_pro','mk_secteur','mk_type','mk_groupe','mk_origine','legacy_id'];
 const CRM_FIELDS_CON = ['nom','prenom','nom_prenom','titre','fonction','telephone','mobile','email','email2','adresse','code_postal','commentaire','legacy_id','legacy_societe_id'];
 const CRM_FIELDS_CR = ['ref','titre','date','date_creation','prochain_rdv','contenu','type_cr','statut_cr','agence','redacteur_name','client_name','contact_name','commentaire_qualite','commentaire_technique','commentaire_support','legacy_id','legacy_societe_id','legacy_contact_id'];
 
 const AUTOMAP_SOC = {
   'TXT_Societe':'name','TXT_Nom':'name','TXT_Denomination':'name',
   'COD_CODIAL_Client':'code_codial','COD_Codial':'code_codial',
+  'COD_CODIAL_Compta':'compta_codial','COD_Compta_Codial':'compta_codial','Compta_Codial':'compta_codial',
   'TXT_Adresse':'adresse_ligne1','TXT_BoitePostale':'adresse_ligne2',
   'TXT_CP':'code_postal','TXT_Commune_Nouveau':'city','TXT_Commune':'city',
   'TXT_Telephone':'phone','TXT_Telephone2':'telephone2','TXT_Fax':'fax',
@@ -13155,6 +13159,7 @@ function openModal(id) {
     document.getElementById('ec-hab-geo').innerHTML = c.habitudes_geotechniques||'';
     document.getElementById('ec-tva').value = c.tva_intracommunautaire || computeTVA(c.siren) || '';
     const ecCodial = document.getElementById('ec-code-codial'); if (ecCodial) ecCodial.value = c.code_codial || '';
+    const ecComptaCodial = document.getElementById('ec-compta-codial'); if (ecComptaCodial) ecComptaCodial.value = c.compta_codial || '';
     // Réseaux pro
     _rpSelected = Array.isArray(c.reseaux_pro) ? [...c.reseaux_pro] : [];
     renderReseauxProChips('ec-reseaux-chips');
@@ -13906,6 +13911,7 @@ async function submitNewClient() {
       habitudes_techniques: document.getElementById('nc-hab-tech').innerHTML.trim() || null,
       habitudes_geotechniques: document.getElementById('nc-hab-geo').innerHTML.trim() || null,
       code_codial: document.getElementById('nc-code-codial')?.value.trim() || null,
+      compta_codial: document.getElementById('nc-compta-codial')?.value.trim() || null,
       reseaux_pro: _rpSelected.length > 0 ? _rpSelected : null,
       ...getAkuiteoFieldsFromModal('nc'),
       ini, color: colors[Math.floor(Math.random()*colors.length)],
@@ -14078,6 +14084,7 @@ async function submitEditClient() {
     habitudes_techniques: document.getElementById('ec-hab-tech').innerHTML.trim() || null,
     habitudes_geotechniques: document.getElementById('ec-hab-geo').innerHTML.trim() || null,
     code_codial: document.getElementById('ec-code-codial')?.value.trim() || null,
+    compta_codial: document.getElementById('ec-compta-codial')?.value.trim() || null,
     reseaux_pro: _rpSelected.length > 0 ? _rpSelected : null,
     ...getAkuiteoFieldsFromModal('ec'),
   };
@@ -14090,7 +14097,7 @@ async function submitEditClient() {
     const safeCols = ['name','code','sector','city','email','phone','raison_sociale','raison_sociale2','forme_juridique',
       'adresse_ligne1','adresse_ligne2','adresse_ligne3','code_postal','departement','region','pays',
       'telephone2','mobile','fax','site_web','siren','siret','ape','reference_externe',
-      'notes','habitudes_techniques','habitudes_geotechniques','code_codial','categorie_compte'];
+      'notes','habitudes_techniques','habitudes_geotechniques','code_codial','compta_codial','categorie_compte'];
     toSend = {};
     for (const k of safeCols) { if (k in fields) toSend[k] = fields[k]; }
     const r2 = await sb.from('clients').update(toSend).eq('id', currentClient.id);
