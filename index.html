@@ -7661,10 +7661,25 @@ async function imxImportContacts() {
   showSyncLoading(true); setSyncText('Préparation...');
   const legacySocIds = [...new Set(mapped.map(c => c.legacy_societe_id).filter(Boolean))];
   const socMap = {};
+  // 1) Match par legacy_id
   for (let i = 0; i < legacySocIds.length; i += 200) {
     const batch = legacySocIds.slice(i, i + 200);
     const { data } = await sb.from('clients').select('id,legacy_id').in('legacy_id', batch);
     for (const r of (data || [])) socMap[r.legacy_id] = r.id;
+  }
+  // 2) Match par code (CODE) pour les non-trouvés
+  const unmatchedCode = legacySocIds.filter(id => !socMap[id]);
+  for (let i = 0; i < unmatchedCode.length; i += 200) {
+    const batch = unmatchedCode.slice(i, i + 200);
+    const { data } = await sb.from('clients').select('id,code').in('code', batch);
+    for (const r of (data || [])) { if (r.code && !socMap[r.code]) socMap[r.code] = r.id; }
+  }
+  // 3) Match par code_codial (COD_CODIAL_Client) pour les non-trouvés
+  const unmatchedCodial = legacySocIds.filter(id => !socMap[id]);
+  for (let i = 0; i < unmatchedCodial.length; i += 200) {
+    const batch = unmatchedCodial.slice(i, i + 200);
+    const { data } = await sb.from('clients').select('id,code_codial').in('code_codial', batch);
+    for (const r of (data || [])) { if (r.code_codial && !socMap[r.code_codial]) socMap[r.code_codial] = r.id; }
   }
   const legacyContactIds = mapped.map(c => c.legacy_id).filter(Boolean);
   const existing = {};
@@ -7715,10 +7730,25 @@ async function imxImportCR() {
   showSyncLoading(true); setSyncText('Préparation...');
   const legacySocIds = [...new Set(mapped.map(c => c.legacy_societe_id).filter(Boolean))];
   const socMap = {}; const socNameMap = {};
+  // 1) Match par legacy_id
   for (let i = 0; i < legacySocIds.length; i += 200) {
     const batch = legacySocIds.slice(i, i + 200);
     const { data } = await sb.from('clients').select('id,name,legacy_id').in('legacy_id', batch);
     for (const r of (data || [])) { socMap[r.legacy_id] = r.id; socNameMap[r.legacy_id] = r.name; }
+  }
+  // 2) Match par code (CODE) pour les non-trouvés
+  const unmatchedCode = legacySocIds.filter(id => !socMap[id]);
+  for (let i = 0; i < unmatchedCode.length; i += 200) {
+    const batch = unmatchedCode.slice(i, i + 200);
+    const { data } = await sb.from('clients').select('id,name,code').in('code', batch);
+    for (const r of (data || [])) { if (r.code && !socMap[r.code]) { socMap[r.code] = r.id; socNameMap[r.code] = r.name; } }
+  }
+  // 3) Match par code_codial (COD_CODIAL_Client) pour les non-trouvés
+  const unmatchedCodial = legacySocIds.filter(id => !socMap[id]);
+  for (let i = 0; i < unmatchedCodial.length; i += 200) {
+    const batch = unmatchedCodial.slice(i, i + 200);
+    const { data } = await sb.from('clients').select('id,name,code_codial').in('code_codial', batch);
+    for (const r of (data || [])) { if (r.code_codial && !socMap[r.code_codial]) { socMap[r.code_codial] = r.id; socNameMap[r.code_codial] = r.name; } }
   }
   // Mapping legacy_contact_id → contact_name (nom + prénom)
   const legacyConIds = [...new Set(mapped.map(c => c.legacy_contact_id).filter(Boolean))];
