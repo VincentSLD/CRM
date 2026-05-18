@@ -5638,6 +5638,10 @@ function renderClientDetail() {
       detailRow('Type', c.mk_type || '—'),
       detailRow('Groupe', c.mk_groupe || '—'),
       detailRow('Origine', c.mk_origine || '—'),
+      detailRow('Effectif', c.effectif ? Number(c.effectif).toLocaleString('fr-FR') : '—'),
+      detailRow('Chiffre d\'affaires', c.chiffre_affaires ? Number(c.chiffre_affaires).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }) : '—'),
+      detailRow('Mode de paiement', c.mode_paiement || '—'),
+      detailRow('Conditions de paiement', c.condition_paiement || '—'),
     ])}
     ${detailSection('Tarification', [
       detailRow('Mode de tarification', c.mode_tarification_name || resolvePricingMethod(c.mode_tarification) || '—'),
