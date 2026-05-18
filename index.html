@@ -2004,8 +2004,12 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Secteur</label><select class="fi" id="nc-mk-secteur"></select></div>
         <div class="fg"><label class="fl">Type</label><select class="fi" id="nc-mk-type"></select></div>
         <div class="fg"><label class="fl">Mode de tarification</label><select class="fi" id="nc-mk-tarification"></select></div>
-        <div class="fg"><label class="fl">Groupe</label><input class="fi" id="nc-mk-groupe"></div>
-        <div class="fg"><label class="fl">Origine</label><input class="fi" id="nc-mk-origine"></div>
+        <div class="fg"><label class="fl">RFA applicable</label><input class="fi" id="nc-rfa-applicable" placeholder=""></div>
+        <div class="fg"><label class="fl">Date Remise convention</label><input class="fi" type="date" id="nc-date-remise-convention"></div>
+        <div class="fg"><label class="fl">Date Signature convention</label><input class="fi" type="date" id="nc-date-signature-convention"></div>
+        <div class="fg"><label class="fl">Commentaires tarif.</label><input class="fi" id="nc-commentaires-tarification" placeholder=""></div>
+        <div class="fg"><label class="fl">Groupe</label><select class="fi" id="nc-mk-groupe"><option value="">Groupe...</option></select></div>
+        <div class="fg"><label class="fl">Origine</label><select class="fi" id="nc-mk-origine"><option value="">Origine...</option></select></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Commercial <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
@@ -2459,8 +2463,12 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Secteur</label><select class="fi" id="ec-mk-secteur"></select></div>
         <div class="fg"><label class="fl">Type</label><select class="fi" id="ec-mk-type"></select></div>
         <div class="fg"><label class="fl">Mode de tarification</label><select class="fi" id="ec-mk-tarification"></select></div>
-        <div class="fg"><label class="fl">Groupe</label><input class="fi" id="ec-mk-groupe"></div>
-        <div class="fg"><label class="fl">Origine</label><input class="fi" id="ec-mk-origine"></div>
+        <div class="fg"><label class="fl">RFA applicable</label><input class="fi" id="ec-rfa-applicable" placeholder=""></div>
+        <div class="fg"><label class="fl">Date Remise convention</label><input class="fi" type="date" id="ec-date-remise-convention"></div>
+        <div class="fg"><label class="fl">Date Signature convention</label><input class="fi" type="date" id="ec-date-signature-convention"></div>
+        <div class="fg"><label class="fl">Commentaires tarif.</label><input class="fi" id="ec-commentaires-tarification" placeholder=""></div>
+        <div class="fg"><label class="fl">Groupe</label><select class="fi" id="ec-mk-groupe"><option value="">Groupe...</option></select></div>
+        <div class="fg"><label class="fl">Origine</label><select class="fi" id="ec-mk-origine"><option value="">Origine...</option></select></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Commercial <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
@@ -9994,8 +10002,8 @@ function getAkuiteoFieldsFromModal(prefix) {
     mode_tarification: val('tarification'), mode_tarification_name: txt('tarification'),
     account_manager_id: val('manager'), account_manager_name: txt('manager'),
     salesman_id: val('salesman'), salesman_name: txt('salesman'),
-    mk_groupe: document.getElementById(prefix + '-mk-groupe').value.trim() || null,
-    mk_origine: document.getElementById(prefix + '-mk-origine').value.trim() || null,
+    mk_groupe: document.getElementById(prefix + '-mk-groupe').value || null,
+    mk_origine: document.getElementById(prefix + '-mk-origine').value || null,
   };
 }
 
@@ -13230,8 +13238,16 @@ async function fillAkuiteoDropdowns(prefix, client) {
   document.getElementById(prefix + '-mk-tarification').innerHTML = akRefOptions(akRef.pricingMethods, c.mode_tarification, 'Mode de tarification...');
   document.getElementById(prefix + '-mk-manager').innerHTML = akRefOptions(akRef.employees, c.account_manager_id, 'Commercial Novam...');
   document.getElementById(prefix + '-mk-salesman').innerHTML = akRefOptions(akRef.employees, c.salesman_id, 'Commercial GPH...');
-  document.getElementById(prefix + '-mk-groupe').value = c.mk_groupe || '';
-  document.getElementById(prefix + '-mk-origine').value = c.mk_origine || '';
+  // Groupe / Origine (dropdowns dynamiques)
+  const [groupes, origines] = await Promise.all([loadDistinctValues('mk_groupe'), loadDistinctValues('mk_origine')]);
+  document.getElementById(prefix + '-mk-groupe').innerHTML = buildDistinctOptions(groupes, c.mk_groupe, 'Groupe...');
+  document.getElementById(prefix + '-mk-origine').innerHTML = buildDistinctOptions(origines, c.mk_origine, 'Origine...');
+  // Tarification (champs directs)
+  const el = id => document.getElementById(prefix + '-' + id);
+  if (el('rfa-applicable')) el('rfa-applicable').value = c.rfa_applicable || c.custom_data?.['1-alpha04']?.value || '';
+  if (el('date-remise-convention')) el('date-remise-convention').value = c.date_remise_convention || c.custom_data?.['1-date01']?.value || '';
+  if (el('date-signature-convention')) el('date-signature-convention').value = c.date_signature_convention || c.custom_data?.['1-date02']?.value || '';
+  if (el('commentaires-tarification')) el('commentaires-tarification').value = c.commentaires_tarification || c.custom_data?.['1-alpha01']?.value || '';
   fillCategorieCompteDropdowns(prefix, c.categorie_compte);
 }
 function fillCategorieCompteDropdowns(prefix, catCompte) {
@@ -13961,6 +13977,10 @@ async function submitNewClient() {
       code_codial: document.getElementById('nc-code-codial')?.value.trim() || null,
       compta_codial: document.getElementById('nc-compta-codial')?.value.trim() || null,
       id_plateforme: document.getElementById('nc-id-plateforme')?.value.trim() || null,
+      rfa_applicable: document.getElementById('nc-rfa-applicable')?.value.trim() || null,
+      date_remise_convention: document.getElementById('nc-date-remise-convention')?.value || null,
+      date_signature_convention: document.getElementById('nc-date-signature-convention')?.value || null,
+      commentaires_tarification: document.getElementById('nc-commentaires-tarification')?.value.trim() || null,
       reseaux_pro: _rpSelected.length > 0 ? _rpSelected : null,
       ...getAkuiteoFieldsFromModal('nc'),
       ini, color: colors[Math.floor(Math.random()*colors.length)],
@@ -13968,6 +13988,7 @@ async function submitNewClient() {
       est_siege: window._ncEstSiege ?? null,
     });
     invalidateReseauxProCache();
+    invalidateGroupeOrigineCache();
     setStep('Client « ' + name + ' » créé', 50);
 
     // 3. Créer les établissements secondaires cochés
@@ -14135,10 +14156,15 @@ async function submitEditClient() {
     code_codial: document.getElementById('ec-code-codial')?.value.trim() || null,
     compta_codial: document.getElementById('ec-compta-codial')?.value.trim() || null,
     id_plateforme: document.getElementById('ec-id-plateforme')?.value.trim() || null,
+    rfa_applicable: document.getElementById('ec-rfa-applicable')?.value.trim() || null,
+    date_remise_convention: document.getElementById('ec-date-remise-convention')?.value || null,
+    date_signature_convention: document.getElementById('ec-date-signature-convention')?.value || null,
+    commentaires_tarification: document.getElementById('ec-commentaires-tarification')?.value.trim() || null,
     reseaux_pro: _rpSelected.length > 0 ? _rpSelected : null,
     ...getAkuiteoFieldsFromModal('ec'),
   };
   invalidateReseauxProCache();
+  invalidateGroupeOrigineCache();
   // Tenter l'update complet, si 400 (colonne inexistante) retirer les champs problématiques
   let toSend = { ...fields };
   let { error } = await sb.from('clients').update(toSend).eq('id', currentClient.id);
@@ -14238,6 +14264,30 @@ async function fetchInseeEtablissements(siren) {
     console.warn('fetchInseeEtablissements error:', e.message);
     return null;
   }
+}
+
+// ═══ GROUPES / ORIGINES (dropdowns dynamiques) ═══
+let _distinctGroupeCache = null, _distinctOrigineCache = null;
+async function loadDistinctValues(field) {
+  const cache = field === 'mk_groupe' ? _distinctGroupeCache : _distinctOrigineCache;
+  if (cache) return cache;
+  const { data } = await sb.from('clients').select(field).not(field, 'is', null).not(field, 'eq', '');
+  const set = new Set();
+  (data || []).forEach(r => { if (r[field]) set.add(r[field].trim()); });
+  const sorted = [...set].sort((a, b) => a.localeCompare(b, 'fr'));
+  if (field === 'mk_groupe') _distinctGroupeCache = sorted; else _distinctOrigineCache = sorted;
+  return sorted;
+}
+function invalidateGroupeOrigineCache() { _distinctGroupeCache = null; _distinctOrigineCache = null; }
+function buildDistinctOptions(values, selected, placeholder) {
+  let html = '<option value="">' + (placeholder || '—') + '</option>';
+  let found = false;
+  for (const v of values) {
+    const sel = v === selected ? (found = true, ' selected') : '';
+    html += '<option value="' + v.replace(/"/g, '&quot;') + '"' + sel + '>' + v + '</option>';
+  }
+  if (selected && !found) html += '<option value="' + selected.replace(/"/g, '&quot;') + '" selected>' + selected + '</option>';
+  return html;
 }
 
 // ═══ RÉSEAUX PROFESSIONNELS ═══
