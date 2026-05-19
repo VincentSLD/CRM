@@ -7844,7 +7844,7 @@ let _esResults = []; // [{client, candidates, applied, rejected}]
 let _esRunning = false;
 let _esCancel = false;
 const ES_PAGE_SIZE = 25;
-let _esFilters = { dept: '', page: 0, withAkuiteo: true, categorie: '', sousCategorie: '', categoriePro: '', secteur: '', type: '', groupe: '', origine: '' };
+let _esFilters = { dept: '', codeCodial: '', idPlateforme: '', page: 0, withAkuiteo: true, categorie: '', sousCategorie: '', categoriePro: '', secteur: '', type: '', groupe: '', origine: '' };
 let _esTotal = 0;
 
 function _esLevenshtein(a, b) {
@@ -7949,6 +7949,8 @@ async function esLaunchSearch() {
     .or('siret.is.null,siret.eq.')
     .order('name', { ascending: true });
   if (_esFilters.dept) q = q.ilike('code_postal', _esFilters.dept + '%');
+  if (_esFilters.codeCodial) q = q.ilike('code_codial', '%' + _esFilters.codeCodial + '%');
+  if (_esFilters.idPlateforme) q = q.ilike('id_plateforme', '%' + _esFilters.idPlateforme + '%');
   if (_esFilters.categorie) q = q.eq('mk_categorie', _esFilters.categorie);
   if (_esFilters.sousCategorie) q = q.eq('mk_sous_categorie', _esFilters.sousCategorie);
   if (_esFilters.categoriePro) q = q.eq('mk_categorie_pro', _esFilters.categoriePro);
@@ -8299,6 +8301,10 @@ function renderEnrichSiren() {
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
         <div><label class="fl">Département</label>
           <input class="fi" placeholder="Ex: 85" value="${_esFilters.dept}" oninput="_esFilters.dept=this.value;_esFilters.page=0" style="width:80px;font-size:12px"></div>
+        <div><label class="fl">Code Codial</label>
+          <input class="fi" placeholder="Ex: T16-00123" value="${_esFilters.codeCodial}" oninput="_esFilters.codeCodial=this.value;_esFilters.page=0" style="width:110px;font-size:12px"></div>
+        <div><label class="fl">ID Plateforme</label>
+          <input class="fi" placeholder="" value="${_esFilters.idPlateforme}" oninput="_esFilters.idPlateforme=this.value;_esFilters.page=0" style="width:110px;font-size:12px"></div>
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-left:6px">
           <input type="checkbox" ${_esFilters.withAkuiteo?'checked':''} onchange="_esFilters.withAkuiteo=this.checked"> Pousser aussi dans Akuiteo
         </label>
@@ -8336,7 +8342,7 @@ function renderEnrichSiren() {
           <option value="">— Origine —</option>
           ${(clientsFilterOpts.origine||[]).map(v => `<option value="${v.replace(/"/g,'&quot;')}"${_esFilters.origine===v?' selected':''}>${v}</option>`).join('')}
         </select>
-        ${(_esFilters.categorie||_esFilters.sousCategorie||_esFilters.categoriePro||_esFilters.secteur||_esFilters.type||_esFilters.groupe||_esFilters.origine) ? `<button class="btn" onclick="_esFilters.categorie='';_esFilters.sousCategorie='';_esFilters.categoriePro='';_esFilters.secteur='';_esFilters.type='';_esFilters.groupe='';_esFilters.origine='';_esFilters.page=0;renderPage('enrich-siren')" style="font-size:11px;padding:3px 8px;color:var(--red)">✕ Effacer</button>` : ''}
+        ${(_esFilters.categorie||_esFilters.sousCategorie||_esFilters.categoriePro||_esFilters.secteur||_esFilters.type||_esFilters.groupe||_esFilters.origine||_esFilters.codeCodial||_esFilters.idPlateforme) ? `<button class="btn" onclick="_esFilters.categorie='';_esFilters.sousCategorie='';_esFilters.categoriePro='';_esFilters.secteur='';_esFilters.type='';_esFilters.groupe='';_esFilters.origine='';_esFilters.codeCodial='';_esFilters.idPlateforme='';_esFilters.page=0;renderPage('enrich-siren')" style="font-size:11px;padding:3px 8px;color:var(--red)">✕ Effacer</button>` : ''}
         ${!clientsFilterOptsLoaded ? '<span style="font-size:11px;color:var(--t3)">⏳ chargement options...</span>' : ''}
       </div>
     </div>
