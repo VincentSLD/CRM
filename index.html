@@ -7981,8 +7981,10 @@ async function esLaunchSearch() {
     .or('siret.is.null,siret.eq.')
     .order('name', { ascending: true });
   if (_esFilters.dept) q = q.ilike('code_postal', _esFilters.dept + '%');
-  if (_esFilters.codeCodial) q = q.ilike('code_codial', '%' + _esFilters.codeCodial + '%');
-  if (_esFilters.idPlateforme) q = q.ilike('id_plateforme', '%' + _esFilters.idPlateforme + '%');
+  if (_esFilters.codeCodial === 'has') q = q.not('code_codial', 'is', null).neq('code_codial', '');
+  if (_esFilters.codeCodial === 'empty') q = q.or('code_codial.is.null,code_codial.eq.');
+  if (_esFilters.idPlateforme === 'has') q = q.not('id_plateforme', 'is', null).neq('id_plateforme', '');
+  if (_esFilters.idPlateforme === 'empty') q = q.or('id_plateforme.is.null,id_plateforme.eq.');
   if (_esFilters.categorie) q = q.eq('mk_categorie', _esFilters.categorie);
   if (_esFilters.sousCategorie) q = q.eq('mk_sous_categorie', _esFilters.sousCategorie);
   if (_esFilters.categoriePro) q = q.eq('mk_categorie_pro', _esFilters.categoriePro);
@@ -8334,9 +8336,17 @@ function renderEnrichSiren() {
         <div><label class="fl">Département</label>
           <input class="fi" placeholder="Ex: 85" value="${_esFilters.dept}" oninput="_esFilters.dept=this.value;_esFilters.page=0" style="width:80px;font-size:12px"></div>
         <div><label class="fl">Code Codial</label>
-          <input class="fi" placeholder="Ex: T16-00123" value="${_esFilters.codeCodial}" oninput="_esFilters.codeCodial=this.value;_esFilters.page=0" style="width:110px;font-size:12px"></div>
+          <select class="fi" onchange="_esFilters.codeCodial=this.value;_esFilters.page=0" style="width:140px;font-size:12px">
+            <option value="">— Tous —</option>
+            <option value="has"${_esFilters.codeCodial==='has'?' selected':''}>Avec identifiant</option>
+            <option value="empty"${_esFilters.codeCodial==='empty'?' selected':''}>Pas d'identifiant</option>
+          </select></div>
         <div><label class="fl">ID Plateforme</label>
-          <input class="fi" placeholder="" value="${_esFilters.idPlateforme}" oninput="_esFilters.idPlateforme=this.value;_esFilters.page=0" style="width:110px;font-size:12px"></div>
+          <select class="fi" onchange="_esFilters.idPlateforme=this.value;_esFilters.page=0" style="width:140px;font-size:12px">
+            <option value="">— Tous —</option>
+            <option value="has"${_esFilters.idPlateforme==='has'?' selected':''}>Avec identifiant</option>
+            <option value="empty"${_esFilters.idPlateforme==='empty'?' selected':''}>Pas d'identifiant</option>
+          </select></div>
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-left:6px">
           <input type="checkbox" ${_esFilters.withAkuiteo?'checked':''} onchange="_esFilters.withAkuiteo=this.checked"> Pousser aussi dans Akuiteo
         </label>
