@@ -7633,40 +7633,72 @@ async function imxImportSocietes() {
   }
   // Appliquer le mapping pour transformer les lignes brutes en lignes CRM
   const mapped = _imxOutSoc.map(s => imxApplyMapping('soc', s));
-  if (!confirm('Importer ' + mapped.length + ' sociétés dans le CRM ?\nLes existants (legacy_id) seront mis à jour.')) return;
-  showSyncLoading(true); setSyncText('Import 0 / ' + mapped.length);
+  if (!confirm('Importer ' + mapped.length + ' sociétés dans le CRM ?\nLes existants (legacy_id / code / code_codial) seront mis à jour.')) return;
+  showSyncLoading(true); setSyncText('Préparation...');
   const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
+  // Construire la map des identifiants existants : legacy_id, code, code_codial → id
+  const existing = {}; // clé de matching → id Supabase
+  const allKeys = [...new Set(mapped.flatMap(s => [s.legacy_id, s.code, s.code_codial].filter(Boolean)))];
+  // 1) Match par legacy_id
   const legacyIds = mapped.map(s => s.legacy_id).filter(Boolean);
-  const existing = {};
   for (let i = 0; i < legacyIds.length; i += 200) {
     const batch = legacyIds.slice(i, i + 200);
     const { data } = await sb.from('clients').select('id,legacy_id').in('legacy_id', batch);
     for (const r of (data || [])) existing[r.legacy_id] = r.id;
+  }
+  // 2) Match par code pour les non-trouvés
+  const codes = mapped.map(s => s.code).filter(v => v && !existing[v]);
+  for (let i = 0; i < codes.length; i += 200) {
+    const batch = [...new Set(codes.slice(i, i + 200))];
+    const { data } = await sb.from('clients').select('id,code').in('code', batch);
+    for (const r of (data || [])) { if (r.code && !existing[r.code]) existing[r.code] = r.id; }
+  }
+  // 3) Match par code_codial pour les non-trouvés
+  const codials = mapped.map(s => s.code_codial).filter(v => v && !existing[v]);
+  for (let i = 0; i < codials.length; i += 200) {
+    const batch = [...new Set(codials.slice(i, i + 200))];
+    const { data } = await sb.from('clients').select('id,code_codial').in('code_codial', batch);
+    for (const r of (data || [])) { if (r.code_codial && !existing[r.code_codial]) existing[r.code_codial] = r.id; }
   }
   let inserted = 0, updated = 0, errors = 0;
   for (let i = 0; i < mapped.length; i += 50) {
     setSyncText('Import ' + Math.min(i + 50, mapped.length) + ' / ' + mapped.length);
     for (const s of mapped.slice(i, i + 50)) {
       if (!s.name) { errors++; continue; }
-      const ini = (s.name || '?').split(' ').map(w => (w||'')[0]).join('').substring(0, 2).toUpperCase();
-      const id = (s.name || 'imp').toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 18) + '_l' + (s.legacy_id || Math.random().toString(36).slice(-4));
-      const row = { ...s, ini, color: colors[Math.floor(Math.random() * colors.length)],
-        ca: Number(s.ca) || 0, obj: 0, margin: 0, dso: 0, score: 50,
-        sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15,
-        last_contact: new Date().toISOString().slice(0, 10),
-        sector: s.sector || '', contact: s.contact || '',
-        status: s.status || 'nouveau', pays: s.pays || 'FR',
-        code: s.code ? String(s.code).substring(0, 10) : null,
-        categorie_compte: s.categorie_compte ? (typeof s.categorie_compte === 'string' ? (() => { try { return JSON.parse(s.categorie_compte); } catch { return null; } })() : s.categorie_compte) : null,
-      };
-      if (typeof row.lat === 'string') row.lat = Number(row.lat.replace(',', '.')) || null;
-      if (typeof row.lng === 'string') row.lng = Number(row.lng.replace(',', '.')) || null;
-      if (typeof row.effectif === 'string') row.effectif = parseInt(row.effectif) || 0;
+      // Trouver l'id existant par legacy_id, code ou code_codial
+      const existingId = existing[s.legacy_id] || existing[s.code] || existing[s.code_codial];
       try {
-        if (existing[s.legacy_id]) {
-          const { error } = await sb.from('clients').update(row).eq('id', existing[s.legacy_id]);
+        if (existingId) {
+          // UPDATE : envoyer uniquement les champs du CSV, sans écraser les valeurs existantes
+          const updateRow = { ...s };
+          if (updateRow.code) updateRow.code = String(updateRow.code).substring(0, 10);
+          if (updateRow.categorie_compte && typeof updateRow.categorie_compte === 'string') {
+            try { updateRow.categorie_compte = JSON.parse(updateRow.categorie_compte); } catch { delete updateRow.categorie_compte; }
+          }
+          if (typeof updateRow.lat === 'string') updateRow.lat = Number(updateRow.lat.replace(',', '.')) || null;
+          if (typeof updateRow.lng === 'string') updateRow.lng = Number(updateRow.lng.replace(',', '.')) || null;
+          if (typeof updateRow.effectif === 'string') updateRow.effectif = parseInt(updateRow.effectif) || 0;
+          if (typeof updateRow.ca === 'string') updateRow.ca = Number(updateRow.ca) || undefined;
+          // Supprimer les champs vides pour ne pas écraser
+          for (const k of Object.keys(updateRow)) { if (updateRow[k] === '' || updateRow[k] === undefined) delete updateRow[k]; }
+          const { error } = await sb.from('clients').update(updateRow).eq('id', existingId);
           if (error) { errors++; console.warn('Update', s.name, error.message); } else updated++;
         } else {
+          // INSERT : créer avec valeurs par défaut
+          const ini = (s.name || '?').split(' ').map(w => (w||'')[0]).join('').substring(0, 2).toUpperCase();
+          const id = (s.name || 'imp').toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 18) + '_l' + (s.legacy_id || Math.random().toString(36).slice(-4));
+          const row = { ...s, ini, color: colors[Math.floor(Math.random() * colors.length)],
+            ca: Number(s.ca) || 0, obj: 0, margin: 0, dso: 0, score: 50,
+            sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15,
+            last_contact: new Date().toISOString().slice(0, 10),
+            sector: s.sector || '', contact: s.contact || '',
+            status: s.status || 'nouveau', pays: s.pays || 'FR',
+            code: s.code ? String(s.code).substring(0, 10) : null,
+            categorie_compte: s.categorie_compte ? (typeof s.categorie_compte === 'string' ? (() => { try { return JSON.parse(s.categorie_compte); } catch { return null; } })() : s.categorie_compte) : null,
+          };
+          if (typeof row.lat === 'string') row.lat = Number(row.lat.replace(',', '.')) || null;
+          if (typeof row.lng === 'string') row.lng = Number(row.lng.replace(',', '.')) || null;
+          if (typeof row.effectif === 'string') row.effectif = parseInt(row.effectif) || 0;
           const { error } = await sb.from('clients').insert({ ...row, id });
           if (error) { errors++; console.warn('Insert', s.name, error.message); } else inserted++;
         }
