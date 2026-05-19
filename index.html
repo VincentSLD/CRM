@@ -6951,7 +6951,12 @@ async function imxParseFile(file) {
     const reader = new FileReader();
     reader.onload = e => {
       try {
-        let text = e.target.result;
+        const buf = e.target.result;
+        // Détection encodage : UTF-8 d'abord, fallback Windows-1252 si caractères cassés
+        let text = new TextDecoder('utf-8').decode(buf);
+        if (text.includes('\uFFFD') || /Ã[©¨ª«¯°´¹²³µ¶·¸»¼½¾]/.test(text)) {
+          text = new TextDecoder('windows-1252').decode(buf);
+        }
         if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // strip BOM
         const isCsv = /\.csv$/i.test(file.name);
         const rows = isCsv ? imxParseCsv(text) : imxParseWindevXml(text);
@@ -6963,7 +6968,7 @@ async function imxParseFile(file) {
       } catch (err) { reject(err); }
     };
     reader.onerror = () => reject(new Error('Lecture impossible'));
-    reader.readAsText(file, 'UTF-8');
+    reader.readAsArrayBuffer(file);
   });
 }
 
@@ -7219,7 +7224,12 @@ function imxLoadCsv(kind, file) {
   const reader = new FileReader();
   reader.onload = e => {
     try {
-      const rows = imxParseCsv(e.target.result);
+      const buf = e.target.result;
+      let text = new TextDecoder('utf-8').decode(buf);
+      if (text.includes('\uFFFD') || /Ã[©¨ª«¯°´¹²³µ¶·¸»¼½¾]/.test(text)) {
+        text = new TextDecoder('windows-1252').decode(buf);
+      }
+      const rows = imxParseCsv(text);
       if (!rows.length) { toast('CSV vide ou illisible', 'warn'); return; }
       if (kind === 'soc') _imxOutSoc = rows;
       else if (kind === 'con') _imxOutCon = rows;
@@ -7232,7 +7242,7 @@ function imxLoadCsv(kind, file) {
     } catch (err) { toast('Erreur parsing CSV: ' + err.message, 'error'); }
   };
   reader.onerror = () => toast('Erreur lecture fichier', 'error');
-  reader.readAsText(file, 'UTF-8');
+  reader.readAsArrayBuffer(file);
 }
 
 function imxRenderFileCard(f) {
@@ -7562,13 +7572,33 @@ const IMX_TEXT_COLS = new Set([
 function imxIsLongNumber(v) {
   return typeof v === 'string' && /^\d{12,}$/.test(v);
 }
+// Conversion numérique sûre : pas d'arrondi, pas de notation scientifique
+// Gère les formats FR (virgule décimale) et les notations Excel (1,23E+06)
+function imxSafeNumber(v) {
+  if (v == null || v === '') return null;
+  let s = String(v).trim();
+  // Notation scientifique Excel FR (1,23E+06) → convertir virgule en point
+  if (/[eE][+-]?\d+/.test(s)) s = s.replace(',', '.');
+  // Virgule décimale FR sans notation scientifique → convertir
+  else if (/^\d[\d\s]*,\d+$/.test(s)) s = s.replace(/\s/g, '').replace(',', '.');
+  // Supprimer espaces de milliers
+  s = s.replace(/\s/g, '');
+  const n = Number(s);
+  if (isNaN(n)) return null;
+  return n;
+}
 // Wrapping CSV pour préserver les valeurs : ="..." que Excel interprète comme texte
 function imxCsvCell(col, v) {
   const s = (v == null ? '' : String(v));
   if (s === '') return '""';
-  const forceText = IMX_TEXT_COLS.has(col) || imxIsLongNumber(s) || s.startsWith('0');
+  // Forcer texte pour : colonnes sensibles, longs nombres, zéros initiaux, notation scientifique
+  const forceText = IMX_TEXT_COLS.has(col) || imxIsLongNumber(s) || s.startsWith('0') || /[eE][+-]?\d+/.test(s);
   if (forceText) {
     // ="value" avec échappement des "
+    return '"=""' + s.replace(/"/g, '""') + '"""';
+  }
+  // Pour les nombres, s'assurer qu'Excel ne les affiche pas en exposant
+  if (/^-?\d{1,}([.,]\d+)?$/.test(s) && s.length > 11) {
     return '"=""' + s.replace(/"/g, '""') + '"""';
   }
   return '"' + s.replace(/"/g, '""') + '"';
@@ -7675,10 +7705,12 @@ async function imxImportSocietes() {
           if (updateRow.categorie_compte && typeof updateRow.categorie_compte === 'string') {
             try { updateRow.categorie_compte = JSON.parse(updateRow.categorie_compte); } catch { delete updateRow.categorie_compte; }
           }
-          if (typeof updateRow.lat === 'string') updateRow.lat = Number(updateRow.lat.replace(',', '.')) || null;
-          if (typeof updateRow.lng === 'string') updateRow.lng = Number(updateRow.lng.replace(',', '.')) || null;
-          if (typeof updateRow.effectif === 'string') updateRow.effectif = parseInt(updateRow.effectif) || 0;
-          if (typeof updateRow.ca === 'string') updateRow.ca = Number(updateRow.ca) || undefined;
+          if (typeof updateRow.lat === 'string') updateRow.lat = imxSafeNumber(updateRow.lat);
+          if (typeof updateRow.lng === 'string') updateRow.lng = imxSafeNumber(updateRow.lng);
+          if (typeof updateRow.effectif === 'string') { const n = imxSafeNumber(updateRow.effectif); updateRow.effectif = n != null ? n : undefined; }
+          if (typeof updateRow.ca === 'string') { const n = imxSafeNumber(updateRow.ca); updateRow.ca = n != null ? n : undefined; }
+          if (typeof updateRow.chiffre_affaires === 'string') { const n = imxSafeNumber(updateRow.chiffre_affaires); updateRow.chiffre_affaires = n != null ? n : undefined; }
+          if (typeof updateRow.capital === 'string') { const n = imxSafeNumber(updateRow.capital); updateRow.capital = n != null ? n : undefined; }
           // Supprimer les champs vides pour ne pas écraser
           for (const k of Object.keys(updateRow)) { if (updateRow[k] === '' || updateRow[k] === undefined) delete updateRow[k]; }
           const { error } = await sb.from('clients').update(updateRow).eq('id', existingId);
@@ -7688,7 +7720,7 @@ async function imxImportSocietes() {
           const ini = (s.name || '?').split(' ').map(w => (w||'')[0]).join('').substring(0, 2).toUpperCase();
           const id = (s.name || 'imp').toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 18) + '_l' + (s.legacy_id || Math.random().toString(36).slice(-4));
           const row = { ...s, ini, color: colors[Math.floor(Math.random() * colors.length)],
-            ca: Number(s.ca) || 0, obj: 0, margin: 0, dso: 0, score: 50,
+            ca: imxSafeNumber(s.ca) || 0, obj: 0, margin: 0, dso: 0, score: 50,
             sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15,
             last_contact: new Date().toISOString().slice(0, 10),
             sector: s.sector || '', contact: s.contact || '',
@@ -7696,9 +7728,11 @@ async function imxImportSocietes() {
             code: s.code ? String(s.code).substring(0, 10) : null,
             categorie_compte: s.categorie_compte ? (typeof s.categorie_compte === 'string' ? (() => { try { return JSON.parse(s.categorie_compte); } catch { return null; } })() : s.categorie_compte) : null,
           };
-          if (typeof row.lat === 'string') row.lat = Number(row.lat.replace(',', '.')) || null;
-          if (typeof row.lng === 'string') row.lng = Number(row.lng.replace(',', '.')) || null;
-          if (typeof row.effectif === 'string') row.effectif = parseInt(row.effectif) || 0;
+          if (typeof row.lat === 'string') row.lat = imxSafeNumber(row.lat);
+          if (typeof row.lng === 'string') row.lng = imxSafeNumber(row.lng);
+          if (typeof row.effectif === 'string') { const n = imxSafeNumber(row.effectif); row.effectif = n != null ? n : 0; }
+          if (typeof row.chiffre_affaires === 'string') { const n = imxSafeNumber(row.chiffre_affaires); row.chiffre_affaires = n != null ? n : null; }
+          if (typeof row.capital === 'string') { const n = imxSafeNumber(row.capital); row.capital = n != null ? n : null; }
           const { error } = await sb.from('clients').insert({ ...row, id });
           if (error) { errors++; console.warn('Insert', s.name, error.message); } else inserted++;
         }
