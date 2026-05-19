@@ -7183,6 +7183,22 @@ function imxParseCsv(text) {
     if (m) return m[1].replace(/""/g, '"');
     // Et l'apostrophe de début (autre convention Excel pour forcer texte)
     if (s.startsWith("'")) return s.slice(1);
+    // Notation scientifique Excel (3,07737E+13 ou 3.07737E+13) → nombre entier complet
+    const sciMatch = s.trim().match(/^[+-]?(\d+)[.,]?(\d*)[eE]([+-]?\d+)$/);
+    if (sciMatch) {
+      const intPart = sciMatch[1];
+      const decPart = sciMatch[2] || '';
+      const exp = parseInt(sciMatch[3]);
+      const digits = intPart + decPart;
+      const dotPos = intPart.length + exp;
+      if (dotPos >= digits.length) {
+        return digits + '0'.repeat(dotPos - digits.length);
+      } else if (dotPos > 0) {
+        return digits.substring(0, dotPos) + '.' + digits.substring(dotPos);
+      } else {
+        return '0.' + '0'.repeat(-dotPos) + digits;
+      }
+    }
     return s;
   };
   return rows.slice(1)
@@ -7564,7 +7580,8 @@ function imxRenderColMappingSection(kind, rows, title, crmFields) {
 // Colonnes à forcer en texte (anti-arrondi Excel pour les longs IDs / codes)
 const IMX_TEXT_COLS = new Set([
   'legacy_id','legacy_societe_id','legacy_contact_id','ID_SOCIETE','ID_CONTACTS','ID_TACHESCOMMERCIALES','ID_COLLABORATEUR','ID_AGENCES','ID_CIVILITE','ID_FONCTIONCONTACT','ID_METIERS','ID_FILIALE','ID_STATUTSOCIETE','ID_CATEGORIESOCIETE','ID_SOCIETETYPECLIENT','ID_CONVENTION_TYPE','ID_PROJET','ID_CANDIDATURE','ID_TACHESCOMMERCIALESTYPE',
-  'siren','siret','code','code_codial','code_postal','ape','TXT_CP','COD_CODIAL_Client','TXT_SIREN','TXT_SIRET','TXT_APE',
+  'siren','siret','code','code_codial','compta_codial','id_plateforme','code_postal','ape','tva_intracommunautaire','reference_externe',
+  'TXT_CP','COD_CODIAL_Client','COD_CODIAL_Compta','TXT_SIREN','TXT_SIRET','TXT_APE','TXT_TVA','TXT_TVAIntra','TXT_ReferenceExterne',
   'phone','telephone','telephone2','mobile','fax','TXT_Telephone','TXT_Telephone2','TXT_TelFixe','TXT_TelPort','TXT_Fax',
   'TXT_OutlookID',
 ]);
