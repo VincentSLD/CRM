@@ -6867,6 +6867,17 @@ const AUTOMAP_CR = {
   'ID_TACHESCOMMERCIALES':'legacy_id','ID_SOCIETE':'legacy_societe_id','ID_CONTACTS':'legacy_contact_id',
 };
 
+function imxAutoDetectRoleCsv(fields) {
+  const s = new Set(fields);
+  // CR : contenu, type_cr, statut_cr sont spécifiques aux comptes-rendus
+  if (s.has('contenu') || s.has('type_cr') || s.has('statut_cr') || s.has('legacy_contact_id')) return 'master_cr';
+  // Contacts : nom, prenom, fonction sont spécifiques aux contacts
+  if ((s.has('nom') || s.has('prenom') || s.has('nom_prenom')) && s.has('legacy_societe_id') && !s.has('siren')) return 'master_contacts';
+  // Sociétés : siren, siret, name, raison_sociale
+  if (s.has('name') || s.has('siren') || s.has('siret') || s.has('raison_sociale') || s.has('code_codial')) return 'master_societes';
+  // Fallback : aussi par nom de fichier
+  return 'lookup';
+}
 function imxAutoDetectRole(filename) {
   const fn = filename.toUpperCase();
   // CR : tâches commerciales / rapports / comptes-rendus
@@ -6942,10 +6953,11 @@ async function imxParseFile(file) {
       try {
         let text = e.target.result;
         if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // strip BOM
-        const rows = imxParseWindevXml(text);
-        if (!rows.length) return reject(new Error('Aucune ligne <Table_Contenu> trouvée'));
+        const isCsv = /\.csv$/i.test(file.name);
+        const rows = isCsv ? imxParseCsv(text) : imxParseWindevXml(text);
+        if (!rows.length) return reject(new Error(isCsv ? 'CSV vide ou illisible' : 'Aucune ligne <Table_Contenu> trouvée'));
         const fields = [...new Set(rows.flatMap(r => Object.keys(r)))];
-        const role = imxAutoDetectRole(file.name);
+        const role = isCsv ? imxAutoDetectRoleCsv(fields) : imxAutoDetectRole(file.name);
         const pkField = imxAutoPK(fields);
         resolve({ id: 'f' + (_imxNextId++), filename: file.name, role, rows, fields, pkField });
       } catch (err) { reject(err); }
@@ -7446,10 +7458,10 @@ function renderImportXml() {
   </div>
 
   <div class="card" style="margin-bottom:14px">
-    <div class="card-header"><div class="card-title">1️⃣ Charger les XML CODIAL</div></div>
+    <div class="card-header"><div class="card-title">1️⃣ Charger les fichiers (XML ou CSV)</div></div>
     <div class="card-body" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <input type="file" accept=".xml" multiple id="imxMultiFile" onchange="const f=Array.from(this.files);this.value='';imxLoadMultiple(f)" style="font-size:13px">
-      <span id="imxLoadStatus" style="font-size:12px;color:var(--t3)">${_imxFiles.length ? _imxFiles.length+' fichier(s) chargé(s)' : 'Glissez plusieurs fichiers à la fois (Ctrl+clic)'}</span>
+      <input type="file" accept=".xml,.csv" multiple id="imxMultiFile" onchange="const f=Array.from(this.files);this.value='';imxLoadMultiple(f)" style="font-size:13px">
+      <span id="imxLoadStatus" style="font-size:12px;color:var(--t3)">${_imxFiles.length ? _imxFiles.length+' fichier(s) chargé(s)' : 'XML CODIAL ou CSV modèles — Ctrl+clic pour plusieurs fichiers'}</span>
       ${_imxFiles.length ? '<button class="btn" onclick="imxClearAll()" style="font-size:12px;color:var(--red)">✕ Tout vider</button>' : ''}
     </div>
   </div>
