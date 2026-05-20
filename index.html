@@ -8122,7 +8122,6 @@ async function imxImportCR() {
       const dateRdv = parseDateFr(c.date) || parseDateFr(c.date_creation) || null;
       const row = {
         legacy_id: c.legacy_id || null,
-        ref: c.ref || null,
         client_id: clientsList[0].id,
         client_name: clientsList[0].name,
         contact_id: contactsList[0]?.id || null,
@@ -8133,7 +8132,6 @@ async function imxImportCR() {
         titre: c.titre || c.ref || '(Sans titre)',
         type_cr: c.type_cr || null,
         statut_cr: c.statut_cr || null,
-        agence: c.agence || null,
         redacteur_nom: c.redacteur_name || null,
         contenu: contenu || null,
       };
