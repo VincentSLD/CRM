@@ -8085,7 +8085,7 @@ async function imxImportCR() {
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
     return null;
   };
-  let inserted = 0, updated = 0, skipped = 0, errors = 0;
+  let inserted = 0, updated = 0, skipped = 0, errors = 0, firstErr = '';
   for (let i = 0; i < mapped.length; i += 50) {
     setSyncText('Import ' + Math.min(i + 50, mapped.length) + ' / ' + mapped.length);
     for (const c of mapped.slice(i, i + 50)) {
@@ -8137,19 +8137,21 @@ async function imxImportCR() {
       try {
         if (existing[c.legacy_id]) {
           const { error } = await sb.from('reports').update(row).eq('id', existing[c.legacy_id]);
-          if (error) { errors++; console.warn('Update CR', row.titre, error.message, JSON.stringify(error)); } else updated++;
+          if (error) { errors++; if (!firstErr) firstErr = error.message + ' | details: ' + (error.details||'') + ' | hint: ' + (error.hint||''); console.error('[Import CR] Update ERREUR', row.titre, error); } else updated++;
         } else {
           const { error } = await sb.from('reports').insert(row);
-          if (error) { errors++; console.warn('Insert CR', row.titre, error.message, JSON.stringify(error)); } else inserted++;
+          if (error) { errors++; if (!firstErr) firstErr = error.message + ' | details: ' + (error.details||'') + ' | hint: ' + (error.hint||''); console.error('[Import CR] Insert ERREUR', row.titre, error); } else inserted++;
         }
-      } catch (e) { errors++; }
+      } catch (e) { errors++; if (!firstErr) firstErr = e.message; console.error('[Import CR] Exception', e); }
     }
   }
   showSyncLoading(false);
   if (inserted === 0 && updated === 0 && skipped > 0) {
     toast('Aucun CR importé : ' + skipped + ' ignorés car leur société n\'a pas été trouvée. Vérifiez que les sociétés sont déjà importées ou mappez la colonne "client_name" vers le nom de la société.', 'error');
   } else {
-    toast('CR : ' + inserted + ' créés · ' + updated + ' mis à jour · ' + skipped + ' ignorés (société absente) · ' + errors + ' erreurs', errors > 0 ? 'warn' : 'success');
+    let msg = 'CR : ' + inserted + ' créés · ' + updated + ' mis à jour · ' + skipped + ' ignorés · ' + errors + ' erreurs';
+    if (firstErr) msg += '\n⚠️ Première erreur : ' + firstErr;
+    toast(msg, errors > 0 ? 'warn' : 'success');
   }
 }
 
