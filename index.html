@@ -7961,6 +7961,7 @@ async function imxImportContacts() {
           const { error } = await sb.from('contacts').update(row).eq('id', existing[c.legacy_id]);
           if (error) { errors++; console.warn('Update contact', c.nom, error.message); } else updated++;
         } else {
+          row.id = crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9));
           const { error } = await sb.from('contacts').insert(row);
           if (error) { errors++; console.warn('Insert contact', c.nom, error.message); } else inserted++;
         }
