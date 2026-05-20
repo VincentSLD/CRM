@@ -6813,7 +6813,7 @@ let _imxColMap = { soc: {}, con: {}, cr: {} }; // mapping CSV→CRM, défini APR
 let _imxNextId = 1;
 
 const CRM_FIELDS_SOC = ['name','code','code_codial','compta_codial','id_plateforme','raison_sociale','raison_sociale2','siren','siret','ape','forme_juridique','adresse_ligne1','adresse_ligne2','adresse_ligne3','code_postal','city','departement','region','pays','phone','telephone2','fax','mobile','email','site_web','lat','lng','sector','contact','reference_externe','tva_intracommunautaire','notes','habitudes_techniques','habitudes_geotechniques','effectif','chiffre_affaires','capital','ca','status','langue','est_siege','etat_insee','reseaux_pro','account_manager_name','salesman_name','commerciaux_associes','categorie_compte','mk_categorie','mk_sous_categorie','mk_categorie_pro','mk_secteur','mk_type','mk_groupe','mk_origine','mode_tarification','rfa_applicable','date_remise_convention','date_signature_convention','commentaires_tarification','legacy_id'];
-const CRM_FIELDS_CON = ['nom','prenom','nom_prenom','titre','fonction','telephone','mobile','email','email2','adresse','code_postal','commentaire','legacy_id','legacy_societe_id'];
+const CRM_FIELDS_CON = ['nom','prenom','nom_prenom','titre','fonction','telephone','mobile','email','email2','adresse','code_postal','commentaire','client_name','legacy_id','legacy_societe_id'];
 const CRM_FIELDS_CR = ['ref','titre','date','date_creation','prochain_rdv','contenu','type_cr','statut_cr','agence','redacteur_name','client_name','contact_name','commentaire_qualite','commentaire_technique','commentaire_support','legacy_id','legacy_societe_id','legacy_contact_id'];
 
 const AUTOMAP_SOC = {
@@ -6855,6 +6855,7 @@ const AUTOMAP_CON = {
   'TXT_Mail':'email','TXT_Mail2':'email2',
   'TXT_Historique':'commentaire',
   'TXT_CIVILITE':'titre',
+  'TXT_Societe':'client_name','TXT_NomSociete':'client_name','societe':'client_name',
   'ID_CONTACTS':'legacy_id','ID_SOCIETE':'legacy_societe_id',
 };
 const AUTOMAP_CR = {
@@ -6865,6 +6866,7 @@ const AUTOMAP_CR = {
   'TXT_TacheCommercialeType':'type_cr','TXT_StatutTache':'statut_cr','TXT_Agence':'agence',
   'TXT_NomCollaborateur':'redacteur_name','TXT_Collaborateur':'redacteur_name',
   'ID_TACHESCOMMERCIALES':'legacy_id','ID_SOCIETE':'legacy_societe_id','ID_CONTACTS':'legacy_contact_id',
+  'TXT_Societe':'client_name','TXT_NomSociete':'client_name','societe':'client_name',
 };
 
 function imxAutoDetectRoleCsv(fields) {
@@ -7763,8 +7765,10 @@ async function imxImportSocietes() {
 
 async function imxImportContacts() {
   if (!_imxOutCon.length) { toast('Construisez d\'abord les CSV', 'warn'); return; }
-  if (!Object.values(_imxColMap.con || {}).includes('legacy_societe_id')) {
-    toast('Mappez une colonne vers "legacy_societe_id" pour lier les contacts à leur société', 'error');
+  const conMap = _imxColMap.con || {};
+  const hasSocLink = Object.values(conMap).includes('legacy_societe_id') || Object.values(conMap).includes('client_name');
+  if (!hasSocLink) {
+    toast('Mappez une colonne vers "legacy_societe_id" ou "client_name" pour lier les contacts à leur société', 'error');
     return;
   }
   // Appliquer le mapping
@@ -7793,6 +7797,27 @@ async function imxImportContacts() {
     const { data } = await sb.from('clients').select('id,code_codial').in('code_codial', batch);
     for (const r of (data || [])) { if (r.code_codial && !socMap[r.code_codial]) socMap[r.code_codial] = r.id; }
   }
+  // 4) Match par name (nom de la société) pour les non-trouvés
+  const clientNames = [...new Set(mapped.map(c => c.client_name).filter(Boolean))];
+  const unmatchedNames = clientNames.filter(n => !socMap[n]);
+  if (unmatchedNames.length) {
+    // Aussi ajouter les legacy_societe_id non résolus en tant que noms potentiels
+    const alsoTryNames = legacySocIds.filter(id => !socMap[id]);
+    const allNames = [...new Set([...unmatchedNames, ...alsoTryNames])];
+    for (let i = 0; i < allNames.length; i += 200) {
+      const batch = allNames.slice(i, i + 200);
+      const { data } = await sb.from('clients').select('id,name').in('name', batch);
+      for (const r of (data || [])) { if (r.name && !socMap[r.name]) socMap[r.name] = r.id; }
+    }
+  } else {
+    // Si pas de client_name, essayer legacy_societe_id comme nom de société
+    const tryAsName = legacySocIds.filter(id => !socMap[id]);
+    for (let i = 0; i < tryAsName.length; i += 200) {
+      const batch = tryAsName.slice(i, i + 200);
+      const { data } = await sb.from('clients').select('id,name').in('name', batch);
+      for (const r of (data || [])) { if (r.name && !socMap[r.name]) socMap[r.name] = r.id; }
+    }
+  }
   const legacyContactIds = mapped.map(c => c.legacy_id).filter(Boolean);
   const existing = {};
   for (let i = 0; i < legacyContactIds.length; i += 200) {
@@ -7804,8 +7829,8 @@ async function imxImportContacts() {
   for (let i = 0; i < mapped.length; i += 50) {
     setSyncText('Import ' + Math.min(i + 50, mapped.length) + ' / ' + mapped.length);
     for (const c of mapped.slice(i, i + 50)) {
-      const clientId = socMap[c.legacy_societe_id];
-      if (!clientId) { skipped++; continue; }
+      const clientId = socMap[c.legacy_societe_id] || socMap[c.client_name];
+      if (!clientId) { skipped++; if (skipped <= 5) console.warn('Contact ignoré (société introuvable):', c.nom, c.prenom, '→ legacy_societe_id:', c.legacy_societe_id, 'client_name:', c.client_name); continue; }
       const row = {
         legacy_id: c.legacy_id || null,
         client_id: clientId,
@@ -7819,22 +7844,28 @@ async function imxImportContacts() {
       try {
         if (existing[c.legacy_id]) {
           const { error } = await sb.from('contacts').update(row).eq('id', existing[c.legacy_id]);
-          if (error) errors++; else updated++;
+          if (error) { errors++; console.warn('Update contact', c.nom, error.message); } else updated++;
         } else {
           const { error } = await sb.from('contacts').insert(row);
-          if (error) errors++; else inserted++;
+          if (error) { errors++; console.warn('Insert contact', c.nom, error.message); } else inserted++;
         }
       } catch { errors++; }
     }
   }
   showSyncLoading(false);
-  toast('Contacts : ' + inserted + ' créés · ' + updated + ' mis à jour · ' + skipped + ' ignorés (société absente) · ' + errors + ' erreurs', errors > 0 ? 'warn' : 'success');
+  if (skipped > 0 && inserted === 0 && updated === 0) {
+    toast('Aucun contact importé — ' + skipped + ' ignorés car société introuvable.\nVérifiez que la colonne legacy_societe_id (ou client_name) correspond à un legacy_id, code, code_codial ou nom de société existant.', 'error');
+  } else {
+    toast('Contacts : ' + inserted + ' créés · ' + updated + ' mis à jour · ' + skipped + ' ignorés (société absente) · ' + errors + ' erreurs', errors > 0 ? 'warn' : 'success');
+  }
 }
 
 async function imxImportCR() {
   if (!_imxOutCr.length) { toast('Construisez d\'abord les CSV', 'warn'); return; }
-  if (!Object.values(_imxColMap.cr || {}).includes('legacy_societe_id')) {
-    toast('Mappez une colonne vers "legacy_societe_id" pour lier les CR à leur société', 'error');
+  const crMap = _imxColMap.cr || {};
+  const hasSocLink = Object.values(crMap).includes('legacy_societe_id') || Object.values(crMap).includes('client_name');
+  if (!hasSocLink) {
+    toast('Mappez une colonne vers "legacy_societe_id" ou "client_name" pour lier les CR à leur société', 'error');
     return;
   }
   const mapped = _imxOutCr.map(c => imxApplyMapping('cr', c));
@@ -7861,6 +7892,14 @@ async function imxImportCR() {
     const batch = unmatchedCodial.slice(i, i + 200);
     const { data } = await sb.from('clients').select('id,name,code_codial').in('code_codial', batch);
     for (const r of (data || [])) { if (r.code_codial && !socMap[r.code_codial]) { socMap[r.code_codial] = r.id; socNameMap[r.code_codial] = r.name; } }
+  }
+  // 4) Match par name (nom société) pour les non-trouvés
+  const clientNames = [...new Set(mapped.map(c => c.client_name).filter(Boolean))];
+  const tryAsName = [...new Set([...clientNames, ...legacySocIds].filter(n => n && !socMap[n]))];
+  for (let i = 0; i < tryAsName.length; i += 200) {
+    const batch = tryAsName.slice(i, i + 200);
+    const { data } = await sb.from('clients').select('id,name').in('name', batch);
+    for (const r of (data || [])) { if (r.name && !socMap[r.name]) { socMap[r.name] = r.id; socNameMap[r.name] = r.name; } }
   }
   // Mapping legacy_contact_id → contact_name (nom + prénom)
   const legacyConIds = [...new Set(mapped.map(c => c.legacy_contact_id).filter(Boolean))];
@@ -7889,7 +7928,7 @@ async function imxImportCR() {
   for (let i = 0; i < mapped.length; i += 50) {
     setSyncText('Import ' + Math.min(i + 50, mapped.length) + ' / ' + mapped.length);
     for (const c of mapped.slice(i, i + 50)) {
-      const clientId = socMap[c.legacy_societe_id];
+      const clientId = socMap[c.legacy_societe_id] || socMap[c.client_name];
       if (!clientId) { skipped++; continue; }
       // Concaténer commentaires si présents
       let contenu = c.contenu || '';
@@ -7899,7 +7938,7 @@ async function imxImportCR() {
       const row = {
         legacy_id: c.legacy_id || null,
         client_id: clientId,
-        client_name: socNameMap[c.legacy_societe_id] || c.client_name || null,
+        client_name: socNameMap[c.legacy_societe_id] || socNameMap[c.client_name] || c.client_name || null,
         contact_name: conNameMap[c.legacy_contact_id] || c.contact_name || null,
         date: parseDateFr(c.date) || parseDateFr(c.date_creation) || null,
         titre: c.titre || c.ref || '(Sans titre)',
@@ -7919,7 +7958,11 @@ async function imxImportCR() {
     }
   }
   showSyncLoading(false);
-  toast('CR : ' + inserted + ' créés · ' + updated + ' mis à jour · ' + skipped + ' ignorés (société absente) · ' + errors + ' erreurs', errors > 0 ? 'warn' : 'success');
+  if (inserted === 0 && updated === 0 && skipped > 0) {
+    toast('Aucun CR importé : ' + skipped + ' ignorés car leur société n\'a pas été trouvée. Vérifiez que les sociétés sont déjà importées ou mappez la colonne "client_name" vers le nom de la société.', 'error');
+  } else {
+    toast('CR : ' + inserted + ' créés · ' + updated + ' mis à jour · ' + skipped + ' ignorés (société absente) · ' + errors + ' erreurs', errors > 0 ? 'warn' : 'success');
+  }
 }
 
 // ═══ ENRICHISSEMENT SIREN/SIRET via API gouv ═══
