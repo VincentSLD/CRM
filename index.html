@@ -8132,16 +8132,15 @@ async function imxImportCR() {
         titre: c.titre || c.ref || '(Sans titre)',
         type_cr: c.type_cr || null,
         statut_cr: c.statut_cr || null,
-        redacteur_nom: c.redacteur_name || null,
         contenu: contenu || null,
       };
       try {
         if (existing[c.legacy_id]) {
           const { error } = await sb.from('reports').update(row).eq('id', existing[c.legacy_id]);
-          if (error) errors++; else updated++;
+          if (error) { errors++; console.warn('Update CR', row.titre, error.message, JSON.stringify(error)); } else updated++;
         } else {
           const { error } = await sb.from('reports').insert(row);
-          if (error) { errors++; console.warn('Insert CR', row.titre, error.message); } else inserted++;
+          if (error) { errors++; console.warn('Insert CR', row.titre, error.message, JSON.stringify(error)); } else inserted++;
         }
       } catch (e) { errors++; }
     }
