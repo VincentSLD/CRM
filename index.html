@@ -3134,10 +3134,26 @@ async function loadDB() {
       return all;
     }
 
+    // Requête clients avec retry
+    async function fetchClientsWithRetry(query, attempt = 0) {
+      const res = await query;
+      if (res.error && attempt < 3) {
+        console.warn(`[loadDB] Retry clients (tentative ${attempt + 1}):`, res.error.message);
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        // Recréer la requête (la précédente est consommée)
+        let q = sb.from('clients').select('*', { count: 'exact' }).order('name', {ascending: true}).range(0, CLIENTS_PER_PAGE - 1);
+        if (viewMyData && currentCommercial && currentCommercial.akuiteo_manager_id) {
+          q = q.eq('account_manager_id', currentCommercial.akuiteo_manager_id);
+        }
+        return fetchClientsWithRetry(q, attempt + 1);
+      }
+      return res;
+    }
+
     // Tout en parallèle, 1 seul appel par table
     const t0 = Date.now();
     const [cRes, dAll, cmAll, fAll, rAll, nAll, coAll, maAll, afAll] = await Promise.all([
-      clientQuery,
+      fetchClientsWithRetry(clientQuery),
       fetchFast('devis', DEVIS_LITE),
       fetchFast('commandes', CMD_LITE),
       fetchFast('factures', FACT_LITE),
