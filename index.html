@@ -8005,7 +8005,8 @@ async function imxImportCR() {
   const mapped = _imxOutCr.map(c => imxApplyMapping('cr', c));
   if (!confirm('Importer ' + mapped.length + ' compte(s)-rendu(s) dans le CRM ?\nLes CR sans société matchée seront ignorés.')) return;
   showSyncLoading(true); setSyncText('Préparation...');
-  const legacySocIds = [...new Set(mapped.map(c => c.legacy_societe_id).filter(Boolean))];
+  const splitNames = v => (v || '').split(/[,;]/).map(s => s.trim()).filter(Boolean);
+  const legacySocIds = [...new Set(mapped.flatMap(c => splitNames(c.legacy_societe_id)))];
   const socMap = {}; const socNameMap = {};
   // 1) Match par legacy_id
   for (let i = 0; i < legacySocIds.length; i += 200) {
@@ -8028,8 +8029,6 @@ async function imxImportCR() {
     for (const r of (data || [])) { if (r.code_codial && !socMap[r.code_codial]) { socMap[r.code_codial] = r.id; socNameMap[r.code_codial] = r.name; } }
   }
   // 4) Match par name (nom société) pour les non-trouvés
-  // Supporter multi-valeurs : "Soc A, Soc B" → splitter et résoudre chaque nom
-  const splitNames = v => (v || '').split(/[,;]/).map(s => s.trim()).filter(Boolean);
   const allClientNames = [...new Set(mapped.flatMap(c => splitNames(c.client_name)))];
   const tryAsName = [...new Set([...allClientNames, ...legacySocIds].filter(n => n && !socMap[n]))];
   for (let i = 0; i < tryAsName.length; i += 200) {
@@ -8038,7 +8037,7 @@ async function imxImportCR() {
     for (const r of (data || [])) { if (r.name && !socMap[r.name]) { socMap[r.name] = r.id; socNameMap[r.name] = r.name; } }
   }
   // Mapping legacy_contact_id → {id, name}
-  const legacyConIds = [...new Set(mapped.map(c => c.legacy_contact_id).filter(Boolean))];
+  const legacyConIds = [...new Set(mapped.flatMap(c => splitNames(c.legacy_contact_id)))];
   const conNameMap = {};  // legacy_id → nom complet
   const conIdMap = {};    // legacy_id → contact UUID
   for (let i = 0; i < legacyConIds.length; i += 200) {
