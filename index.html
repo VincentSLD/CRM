@@ -7898,8 +7898,10 @@ async function imxImportCR() {
     for (const r of (data || [])) { if (r.code_codial && !socMap[r.code_codial]) { socMap[r.code_codial] = r.id; socNameMap[r.code_codial] = r.name; } }
   }
   // 4) Match par name (nom société) pour les non-trouvés
-  const clientNames = [...new Set(mapped.map(c => c.client_name).filter(Boolean))];
-  const tryAsName = [...new Set([...clientNames, ...legacySocIds].filter(n => n && !socMap[n]))];
+  // Supporter multi-valeurs : "Soc A, Soc B" → splitter et résoudre chaque nom
+  const splitNames = v => (v || '').split(/[,;]/).map(s => s.trim()).filter(Boolean);
+  const allClientNames = [...new Set(mapped.flatMap(c => splitNames(c.client_name)))];
+  const tryAsName = [...new Set([...allClientNames, ...legacySocIds].filter(n => n && !socMap[n]))];
   for (let i = 0; i < tryAsName.length; i += 200) {
     const batch = tryAsName.slice(i, i + 200);
     const { data } = await sb.from('clients').select('id,name').in('name', batch);
@@ -7915,6 +7917,27 @@ async function imxImportCR() {
     for (const r of (data || [])) {
       conNameMap[r.legacy_id] = ((r.prenom||'') + ' ' + (r.nom||'')).trim();
       conIdMap[r.legacy_id] = r.id;
+    }
+  }
+  // 5) Résoudre contact_name multi-valeurs → {id, name} via nom/prénom
+  const allContactNames = [...new Set(mapped.flatMap(c => splitNames(c.contact_name)).filter(Boolean))];
+  const conByNameMap = {};  // "Prénom Nom" → {id, name}
+  if (allContactNames.length) {
+    // Charger les contacts des sociétés trouvées pour matcher par nom
+    const resolvedClientIds = [...new Set(Object.values(socMap))];
+    for (let i = 0; i < resolvedClientIds.length; i += 200) {
+      const batch = resolvedClientIds.slice(i, i + 200);
+      const { data } = await sb.from('contacts').select('id,nom,prenom,client_id').in('client_id', batch);
+      for (const r of (data || [])) {
+        const full = ((r.prenom||'') + ' ' + (r.nom||'')).trim();
+        const fullReverse = ((r.nom||'') + ' ' + (r.prenom||'')).trim();
+        for (const n of allContactNames) {
+          const nl = n.toLowerCase();
+          if ((full.toLowerCase() === nl || fullReverse.toLowerCase() === nl) && !conByNameMap[n]) {
+            conByNameMap[n] = { id: r.id, name: full };
+          }
+        }
+      }
     }
   }
   // Index CR existants
@@ -7936,24 +7959,44 @@ async function imxImportCR() {
   for (let i = 0; i < mapped.length; i += 50) {
     setSyncText('Import ' + Math.min(i + 50, mapped.length) + ' / ' + mapped.length);
     for (const c of mapped.slice(i, i + 50)) {
-      const clientId = socMap[c.legacy_societe_id] || socMap[c.client_name];
-      if (!clientId) { skipped++; continue; }
+      // Résoudre toutes les sociétés (multi-valeurs séparées par , ou ;)
+      const clientsList = [];
+      // D'abord legacy_societe_id (peut être multi-valeurs aussi)
+      for (const sid of splitNames(c.legacy_societe_id)) {
+        const id = socMap[sid];
+        if (id) clientsList.push({ id, name: socNameMap[sid] || sid });
+      }
+      // Puis client_name (multi-valeurs)
+      for (const cn of splitNames(c.client_name)) {
+        const id = socMap[cn];
+        if (id && !clientsList.some(x => x.id === id)) clientsList.push({ id, name: socNameMap[cn] || cn });
+      }
+      if (!clientsList.length) { skipped++; continue; }
+      // Résoudre tous les contacts (multi-valeurs)
+      const contactsList = [];
+      // D'abord legacy_contact_id
+      for (const cid of splitNames(c.legacy_contact_id)) {
+        const id = conIdMap[cid];
+        if (id) contactsList.push({ id, name: conNameMap[cid] || cid });
+      }
+      // Puis contact_name (multi-valeurs, résolution par nom)
+      for (const cn of splitNames(c.contact_name)) {
+        const resolved = conByNameMap[cn];
+        if (resolved && !contactsList.some(x => x.id === resolved.id)) contactsList.push(resolved);
+      }
       // Concaténer commentaires si présents
       let contenu = c.contenu || '';
       if (c.commentaire_qualite) contenu += '\n\n[QUALITÉ]\n' + c.commentaire_qualite;
       if (c.commentaire_technique) contenu += '\n\n[TECHNIQUE]\n' + c.commentaire_technique;
       if (c.commentaire_support) contenu += '\n\n[SUPPORT]\n' + c.commentaire_support;
-      const resolvedClientName = socNameMap[c.legacy_societe_id] || socNameMap[c.client_name] || c.client_name || null;
-      const resolvedContactId = conIdMap[c.legacy_contact_id] || null;
-      const resolvedContactName = conNameMap[c.legacy_contact_id] || c.contact_name || null;
       const row = {
         legacy_id: c.legacy_id || null,
-        client_id: clientId,
-        client_name: resolvedClientName,
-        contact_id: resolvedContactId,
-        contact_name: resolvedContactName,
-        clients_list: [{ id: clientId, name: resolvedClientName }],
-        contacts_list: resolvedContactId ? [{ id: resolvedContactId, name: resolvedContactName }] : [],
+        client_id: clientsList[0].id,
+        client_name: clientsList[0].name,
+        contact_id: contactsList[0]?.id || null,
+        contact_name: contactsList[0]?.name || null,
+        clients_list: clientsList,
+        contacts_list: contactsList,
         date: parseDateFr(c.date) || parseDateFr(c.date_creation) || null,
         titre: c.titre || c.ref || '(Sans titre)',
         type_cr: c.type_cr || null,
