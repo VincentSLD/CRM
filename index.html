@@ -7905,13 +7905,17 @@ async function imxImportCR() {
     const { data } = await sb.from('clients').select('id,name').in('name', batch);
     for (const r of (data || [])) { if (r.name && !socMap[r.name]) { socMap[r.name] = r.id; socNameMap[r.name] = r.name; } }
   }
-  // Mapping legacy_contact_id → contact_name (nom + prénom)
+  // Mapping legacy_contact_id → {id, name}
   const legacyConIds = [...new Set(mapped.map(c => c.legacy_contact_id).filter(Boolean))];
-  const conNameMap = {};
+  const conNameMap = {};  // legacy_id → nom complet
+  const conIdMap = {};    // legacy_id → contact UUID
   for (let i = 0; i < legacyConIds.length; i += 200) {
     const batch = legacyConIds.slice(i, i + 200);
     const { data } = await sb.from('contacts').select('id,nom,prenom,legacy_id').in('legacy_id', batch);
-    for (const r of (data || [])) conNameMap[r.legacy_id] = ((r.prenom||'') + ' ' + (r.nom||'')).trim();
+    for (const r of (data || [])) {
+      conNameMap[r.legacy_id] = ((r.prenom||'') + ' ' + (r.nom||'')).trim();
+      conIdMap[r.legacy_id] = r.id;
+    }
   }
   // Index CR existants
   const legacyCrIds = mapped.map(c => c.legacy_id).filter(Boolean);
@@ -7939,11 +7943,17 @@ async function imxImportCR() {
       if (c.commentaire_qualite) contenu += '\n\n[QUALITÉ]\n' + c.commentaire_qualite;
       if (c.commentaire_technique) contenu += '\n\n[TECHNIQUE]\n' + c.commentaire_technique;
       if (c.commentaire_support) contenu += '\n\n[SUPPORT]\n' + c.commentaire_support;
+      const resolvedClientName = socNameMap[c.legacy_societe_id] || socNameMap[c.client_name] || c.client_name || null;
+      const resolvedContactId = conIdMap[c.legacy_contact_id] || null;
+      const resolvedContactName = conNameMap[c.legacy_contact_id] || c.contact_name || null;
       const row = {
         legacy_id: c.legacy_id || null,
         client_id: clientId,
-        client_name: socNameMap[c.legacy_societe_id] || socNameMap[c.client_name] || c.client_name || null,
-        contact_name: conNameMap[c.legacy_contact_id] || c.contact_name || null,
+        client_name: resolvedClientName,
+        contact_id: resolvedContactId,
+        contact_name: resolvedContactName,
+        clients_list: [{ id: clientId, name: resolvedClientName }],
+        contacts_list: resolvedContactId ? [{ id: resolvedContactId, name: resolvedContactName }] : [],
         date: parseDateFr(c.date) || parseDateFr(c.date_creation) || null,
         titre: c.titre || c.ref || '(Sans titre)',
         type_cr: c.type_cr || null,
