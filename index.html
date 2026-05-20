@@ -7547,6 +7547,29 @@ function renderImportXml() {
   </div>
   ` : '<div style="text-align:center;color:var(--t3);padding:20px;font-size:13px">Cliquez "🔄 Construire" pour générer les 3 CSV à partir des XML chargés.</div>'}
   ` : ''}
+
+  <div class="card" style="margin-top:14px">
+    <div class="card-header"><div class="card-title">6. Exporter depuis la base CRM</div></div>
+    <div class="card-body">
+      <div style="font-size:12px;color:var(--t3);margin-bottom:10px">
+        Exporter toutes les données existantes de la base CRM en fichiers CSV (compatible avec le format d'import).
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--card);flex:1;min-width:200px;text-align:center">
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px">🏢 Sociétés</div>
+          <button class="btn" onclick="exportDbSocietes()" style="font-size:12px;width:100%">⬇️ Exporter CSV</button>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--card);flex:1;min-width:200px;text-align:center">
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px">👤 Contacts</div>
+          <button class="btn" onclick="exportDbContacts()" style="font-size:12px;width:100%">⬇️ Exporter CSV</button>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--card);flex:1;min-width:200px;text-align:center">
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px">📝 Comptes-rendus</div>
+          <button class="btn" onclick="exportDbCR()" style="font-size:12px;width:100%">⬇️ Exporter CSV</button>
+        </div>
+      </div>
+    </div>
+  </div>
   `;
 }
 
@@ -7639,6 +7662,94 @@ function imxDownloadCsv(kind) {
   a.click();
   URL.revokeObjectURL(a.href);
   toast(rows.length + ' lignes exportées', 'success');
+}
+
+// ═══ EXPORT CSV DEPUIS LA BASE CRM ═══
+const EXP_COLS_SOC = [...IMX_TPL_SOC, 'score', 'mode_paiement', 'conditions_paiement'];
+const EXP_COLS_CON = ['legacy_id', 'legacy_societe_id', 'client_name', 'nom', 'prenom', 'titre', 'fonction', 'telephone', 'mobile', 'email', 'email2', 'adresse', 'code_postal', 'commentaire'];
+const EXP_COLS_CR  = [...IMX_TPL_CR];
+
+function exportSerializeValue(col, v) {
+  if (v == null || v === '') return '';
+  if (Array.isArray(v)) return v.join(', ');
+  if (typeof v === 'object') {
+    // categorie_compte : {"GPH85":"A- Stratégique"} → "GPH85: A- Stratégique"
+    try { return Object.entries(v).map(([k, val]) => k + ': ' + val).join(', '); } catch { return JSON.stringify(v); }
+  }
+  return String(v);
+}
+
+function exportDbCsv(rows, cols, filename) {
+  if (!rows.length) { toast('Aucune donnée à exporter', 'warn'); return; }
+  const header = cols.join(';');
+  const lines = rows.map(r => cols.map(c => imxCsvCell(c, exportSerializeValue(c, r[c]))).join(';'));
+  const csv = [header, ...lines].join('\r\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(rows.length + ' lignes exportées', 'success');
+}
+
+async function exportDbSocietes() {
+  toast('Chargement des sociétés...', 'info');
+  let all = [], from = 0;
+  while (true) {
+    const { data } = await sb.from('clients').select('*').range(from, from + 999).order('name');
+    if (!data || !data.length) break;
+    all = all.concat(data);
+    if (data.length < 1000) break;
+    from += 1000;
+  }
+  if (!all.length) { toast('Aucune société en base', 'warn'); return; }
+  exportDbCsv(all, EXP_COLS_SOC, 'export_societes_' + new Date().toISOString().slice(0, 10) + '.csv');
+}
+
+async function exportDbContacts() {
+  toast('Chargement des contacts...', 'info');
+  // Construire un lookup id → name pour les sociétés
+  const clientNameMap = {};
+  for (const c of (DB.clients || [])) clientNameMap[c.id] = c.name;
+  // Si DB.clients est vide, charger les noms
+  if (!Object.keys(clientNameMap).length) {
+    const { data } = await sb.from('clients').select('id,name');
+    for (const c of (data || [])) clientNameMap[c.id] = c.name;
+  }
+  let all = [], from = 0;
+  while (true) {
+    const { data } = await sb.from('contacts').select('*').range(from, from + 999).order('nom');
+    if (!data || !data.length) break;
+    all = all.concat(data);
+    if (data.length < 1000) break;
+    from += 1000;
+  }
+  if (!all.length) { toast('Aucun contact en base', 'warn'); return; }
+  // Enrichir chaque contact avec client_name
+  const rows = all.map(c => ({ ...c, client_name: clientNameMap[c.client_id] || '' }));
+  exportDbCsv(rows, EXP_COLS_CON, 'export_contacts_' + new Date().toISOString().slice(0, 10) + '.csv');
+}
+
+async function exportDbCR() {
+  toast('Chargement des comptes-rendus...', 'info');
+  let all = [], from = 0;
+  while (true) {
+    const { data } = await sb.from('reports').select('*').range(from, from + 999).order('date', { ascending: false });
+    if (!data || !data.length) break;
+    all = all.concat(data);
+    if (data.length < 1000) break;
+    from += 1000;
+  }
+  if (!all.length) { toast('Aucun CR en base', 'warn'); return; }
+  // Résoudre multi-sociétés et multi-contacts
+  const rows = all.map(r => ({
+    ...r,
+    client_name: (r.clients_list && r.clients_list.length) ? r.clients_list.map(c => c.name).join(', ') : (r.client_name || ''),
+    contact_name: (r.contacts_list && r.contacts_list.length) ? r.contacts_list.map(c => c.name).join(', ') : (r.contact_name || ''),
+    redacteur_name: r.redacteur_nom || r.redacteur_name || '',
+  }));
+  exportDbCsv(rows, EXP_COLS_CR, 'export_cr_' + new Date().toISOString().slice(0, 10) + '.csv');
 }
 
 async function imxEnrichSirene() {
