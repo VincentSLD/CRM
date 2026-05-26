@@ -3157,7 +3157,7 @@ async function loadDB() {
       fetchFast('devis', DEVIS_LITE),
       fetchFast('commandes', CMD_LITE),
       fetchFast('factures', FACT_LITE),
-      sb.from('reports').select('id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,date,titre,type_cr,statut_cr,redacteur_id,pieces_jointes,created_at').order('date', {ascending:false}).limit(500).then(r => r.data || []),
+      sb.from('reports').select('id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at').order('date', {ascending:false}).limit(5000).then(r => r.data || []),
       sb.from('notifications').select('id,type,text,time_label,read,created_at').order('created_at', {ascending:false}).limit(100).then(r => r.data || []),
       sb.from('commerciaux').select('*').then(r => r.data || []),
       fetchFast('marches', MARCHE_LITE, 'date_debut', true),
@@ -8096,6 +8096,7 @@ async function imxImportCR() {
     return null;
   };
   let inserted = 0, updated = 0, skipped = 0, errors = 0, firstErr = '';
+  const _crImportCreatedCommerciaux = {}; // cache noms déjà créés
   for (let i = 0; i < mapped.length; i += 50) {
     setSyncText('Import ' + Math.min(i + 50, mapped.length) + ' / ' + mapped.length);
     for (const c of mapped.slice(i, i + 50)) {
@@ -8130,7 +8131,7 @@ async function imxImportCR() {
       if (c.commentaire_technique) contenu += '\n\n[TECHNIQUE]\n' + c.commentaire_technique;
       if (c.commentaire_support) contenu += '\n\n[SUPPORT]\n' + c.commentaire_support;
       const dateRdv = parseDateFr(c.date) || parseDateFr(c.date_creation) || null;
-      // Résoudre le rédacteur par nom → id collaborateur
+      // Résoudre le rédacteur par nom → id collaborateur (ou créer)
       let redacteurId = null, redacteurNom = c.redacteur_name || null;
       if (redacteurNom) {
         const rn = redacteurNom.toLowerCase().trim();
@@ -8138,7 +8139,6 @@ async function imxImportCR() {
           const nom = (co.nom||'').toLowerCase().trim();
           if (!nom) return false;
           if (nom === rn) return true;
-          // Tester inversion prénom/nom : "PINEAU Benoit" vs "Benoit PINEAU"
           const parts = rn.split(/\s+/);
           if (parts.length >= 2) {
             const reversed = parts.slice().reverse().join(' ');
@@ -8146,7 +8146,23 @@ async function imxImportCR() {
           }
           return false;
         });
-        if (match) { redacteurId = match.id; redacteurNom = match.nom || redacteurNom; }
+        if (match) {
+          redacteurId = match.id; redacteurNom = match.nom || redacteurNom;
+        } else if (!_crImportCreatedCommerciaux[rn]) {
+          // Collaborateur inconnu → le créer dans commerciaux
+          const { data: newCo } = await sb.from('commerciaux').insert({
+            nom: redacteurNom.trim(), email: null, role: 'commercial',
+            ca: 0, obj: 0, clients_count: 0, taux_conversion: '0%', score: 0
+          }).select().single();
+          if (newCo) {
+            DB.commerciaux.push(newCo);
+            _crImportCreatedCommerciaux[rn] = newCo;
+            redacteurId = newCo.id; redacteurNom = newCo.nom;
+          }
+        } else {
+          const cached = _crImportCreatedCommerciaux[rn];
+          redacteurId = cached.id; redacteurNom = cached.nom;
+        }
       }
       const row = {
         legacy_id: c.legacy_id || null,
@@ -10715,6 +10731,8 @@ function crStatutBadge(s) {
 }
 let crFilterAuteur = '__mine__'; // '__mine__' = mes CR, '__all__' = tous, ou un id commercial
 let crViewMode = 'list'; // 'list' ou 'detail'
+let crPage = 0;
+const CR_PER_PAGE = 100;
 let _crSelectedClients = [];  // [{id, name}, ...]
 let _crSelectedContacts = []; // [{id, name}, ...]
 
@@ -10733,18 +10751,25 @@ function renderCRList() {
     filteredReports = DB.reports.filter(r => r.redacteur_id == crFilterAuteur);
   }
   filteredReports.sort((a,b) => (b.date_raw||'').localeCompare(a.date_raw||''));
+  const totalCR = filteredReports.length;
+  const totalPages = Math.max(1, Math.ceil(totalCR / CR_PER_PAGE));
+  if (crPage >= totalPages) crPage = totalPages - 1;
+  if (crPage < 0) crPage = 0;
+  const pageReports = filteredReports.slice(crPage * CR_PER_PAGE, (crPage + 1) * CR_PER_PAGE);
+  const from = crPage * CR_PER_PAGE + 1;
+  const to = Math.min((crPage + 1) * CR_PER_PAGE, totalCR);
 
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:10px;align-items:center">
       <div style="font-size:13px;color:var(--t2)">Comptes-rendus</div>
       <select style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--bg-1);color:var(--t1)"
-        onchange="crFilterAuteur=this.value;renderPage('cr')">
+        onchange="crFilterAuteur=this.value;crPage=0;renderPage('cr')">
         <option value="__mine__" ${crFilterAuteur==='__mine__'?'selected':''}>Mes CR</option>
         <option value="__all__" ${crFilterAuteur==='__all__'?'selected':''}>Tous</option>
         ${(DB.commerciaux||[]).map(co => `<option value="${co.id}" ${crFilterAuteur==co.id?'selected':''}>${co.nom||co.email}</option>`).join('')}
       </select>
-      <span style="font-size:11px;color:var(--t3)">${filteredReports.length} CR</span>
+      <span style="font-size:11px;color:var(--t3)">${totalCR} CR</span>
     </div>
     <button class="btn btn-primary" onclick="openCRModal()">+ Nouveau CR</button>
   </div>
@@ -10763,8 +10788,8 @@ function renderCRList() {
           </tr>
         </thead>
         <tbody>
-          ${filteredReports.length === 0 ? '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--t3)">Aucun compte-rendu</td></tr>' :
-          filteredReports.map(r => {
+          ${pageReports.length === 0 ? '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--t3)">Aucun compte-rendu</td></tr>' :
+          pageReports.map(r => {
             const auteur = (DB.commerciaux||[]).find(co => co.id == r.redacteur_id);
             const dateRdv = r.date_raw ? fmtDateFR(r.date_raw) : '—';
             const nbPj = r.pieces_jointes ? r.pieces_jointes.length : 0;
@@ -10778,14 +10803,23 @@ function renderCRList() {
               <td style="padding:10px 14px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${clientNames}">${clientNames}</td>
               <td style="padding:10px 14px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t2)" title="${contactNames}">${contactNames}</td>
               <td style="padding:10px 14px;white-space:nowrap">${crTypeBadge(r.type_cr)}</td>
-              <td style="padding:10px 14px;white-space:nowrap;color:var(--t2)">${auteur ? auteur.nom : '—'}</td>
+              <td style="padding:10px 14px;white-space:nowrap;color:var(--t2)">${auteur ? auteur.nom : (r.redacteur_nom || '—')}</td>
               <td style="padding:10px 14px;white-space:nowrap">${crStatutBadge(r.statut_cr)}</td>
             </tr>`;
           }).join('')}
         </tbody>
       </table>
     </div>
-  </div>`;
+  </div>
+  ${totalPages > 1 ? `
+  <div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:12px">
+    <button class="btn" style="font-size:12px;padding:4px 10px" onclick="crPage=0;renderPage('cr')" ${crPage===0?'disabled':''}>&laquo;</button>
+    <button class="btn" style="font-size:12px;padding:4px 10px" onclick="crPage--;renderPage('cr')" ${crPage===0?'disabled':''}>&lsaquo; Préc.</button>
+    <span style="font-size:12px;color:var(--t2)">${from}–${to} sur ${totalCR}</span>
+    <button class="btn" style="font-size:12px;padding:4px 10px" onclick="crPage++;renderPage('cr')" ${crPage>=totalPages-1?'disabled':''}>Suiv. &rsaquo;</button>
+    <button class="btn" style="font-size:12px;padding:4px 10px" onclick="crPage=${totalPages-1};renderPage('cr')" ${crPage>=totalPages-1?'disabled':''}>&raquo;</button>
+  </div>` : ''}`;
+
 }
 
 function renderCRDetail() {
