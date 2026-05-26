@@ -10779,7 +10779,7 @@ function renderCRList() {
   let filteredReports = [...DB.reports];
   // Filtre auteur (select global)
   if (crFilterAuteur === '__mine__') {
-    filteredReports = filteredReports.filter(r => !r.redacteur_id || r.redacteur_id == myId);
+    filteredReports = filteredReports.filter(r => r.redacteur_id == myId);
   } else if (crFilterAuteur !== '__all__') {
     filteredReports = filteredReports.filter(r => r.redacteur_id == crFilterAuteur);
   }
