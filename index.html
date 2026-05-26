@@ -13522,6 +13522,30 @@ function buildCRMContext() {
       lines.push(`  - ${f.ref || ''} | ${f.client_name || ''} | ${(Number(f.montant||0)/1000).toFixed(1)}k€ | échéance ${f.echeance||'?'}`);
     });
   }
+  // Comptes-rendus
+  const reports = DB.reports || [];
+  lines.push(`\nTotal comptes-rendus : ${reports.length}`);
+  if (reports.length > 0) {
+    const crByType = {};
+    const crByRedacteur = {};
+    for (const r of reports) {
+      crByType[r.type_cr||'autre'] = (crByType[r.type_cr||'autre']||0) + 1;
+      const rnom = crGetRedacteurNom(r) || 'Non assigné';
+      crByRedacteur[rnom] = (crByRedacteur[rnom]||0) + 1;
+    }
+    lines.push('CR par type : ' + Object.entries(crByType).map(([t,n])=>`${t}: ${n}`).join(', '));
+    lines.push('CR par rédacteur (top 10) :');
+    Object.entries(crByRedacteur).sort((a,b)=>b[1]-a[1]).slice(0,10).forEach(([n,v]) => lines.push(`  - ${n}: ${v}`));
+    // Derniers CR (résumé)
+    const recent = reports.slice(0, 20);
+    lines.push('\nDerniers comptes-rendus :');
+    for (const r of recent) {
+      const d = r.date_raw ? fmtDateFR(r.date_raw) : '?';
+      const soc = crGetClientNames(r) || '?';
+      const red = crGetRedacteurNom(r) || '?';
+      lines.push(`  - [${d}] ${r.titre||'Sans titre'} | ${soc} | ${red} | ${r.type_cr||'autre'}`);
+    }
+  }
   // User actuel
   if (currentCommercial) lines.push(`\nUtilisateur connecté : ${currentCommercial.nom || currentCommercial.email}`);
   return lines.join('\n');
