@@ -8120,6 +8120,24 @@ async function imxImportCR() {
       if (c.commentaire_technique) contenu += '\n\n[TECHNIQUE]\n' + c.commentaire_technique;
       if (c.commentaire_support) contenu += '\n\n[SUPPORT]\n' + c.commentaire_support;
       const dateRdv = parseDateFr(c.date) || parseDateFr(c.date_creation) || null;
+      // Résoudre le rédacteur par nom → id collaborateur
+      let redacteurId = null, redacteurNom = c.redacteur_name || null;
+      if (redacteurNom) {
+        const rn = redacteurNom.toLowerCase().trim();
+        const match = (DB.commerciaux||[]).find(co => {
+          const nom = (co.nom||'').toLowerCase().trim();
+          if (!nom) return false;
+          if (nom === rn) return true;
+          // Tester inversion prénom/nom : "PINEAU Benoit" vs "Benoit PINEAU"
+          const parts = rn.split(/\s+/);
+          if (parts.length >= 2) {
+            const reversed = parts.slice().reverse().join(' ');
+            if (nom === reversed) return true;
+          }
+          return false;
+        });
+        if (match) { redacteurId = match.id; redacteurNom = match.nom || redacteurNom; }
+      }
       const row = {
         legacy_id: c.legacy_id || null,
         client_id: clientsList[0].id,
@@ -8132,7 +8150,8 @@ async function imxImportCR() {
         titre: c.titre || c.ref || '(Sans titre)',
         type_cr: c.type_cr || null,
         statut_cr: c.statut_cr || null,
-        redacteur_nom: c.redacteur_name || null,
+        redacteur_id: redacteurId ? Number(redacteurId) : null,
+        redacteur_nom: redacteurNom,
         contenu: contenu || null,
       };
       try {
