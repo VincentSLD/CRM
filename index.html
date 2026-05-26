@@ -8080,9 +8080,13 @@ async function imxImportCR() {
   }
   const parseDateFr = s => {
     if (!s) return null;
-    const m = String(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    const str = String(s).trim();
+    // DD/MM/YYYY ou DD-MM-YYYY ou DD.MM.YYYY (avec ou sans heure)
+    const m = str.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);
     if (m) return m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
-    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+    // YYYY-MM-DD ou YYYY/MM/DD
+    const m2 = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (m2) return m2[1] + '-' + m2[2].padStart(2,'0') + '-' + m2[3].padStart(2,'0');
     return null;
   };
   let inserted = 0, updated = 0, skipped = 0, errors = 0, firstErr = '';
