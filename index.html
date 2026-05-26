@@ -10733,6 +10733,34 @@ let crFilterAuteur = '__mine__'; // '__mine__' = mes CR, '__all__' = tous, ou un
 let crViewMode = 'list'; // 'list' ou 'detail'
 let crPage = 0;
 const CR_PER_PAGE = 100;
+let crSortCol = 'date';
+let crSortAsc = false;
+let crFilterDate = '';
+let crFilterTitre = '';
+let crFilterSociete = '';
+let crFilterContact = '';
+let crFilterType = '';
+let crFilterStatut = '';
+function crSetSort(col) {
+  if (crSortCol === col) crSortAsc = !crSortAsc;
+  else { crSortCol = col; crSortAsc = (col === 'titre' || col === 'societe' || col === 'contact'); }
+  crPage = 0; renderPage('cr');
+}
+function crResetFilters() {
+  crFilterAuteur = '__all__'; crFilterDate = ''; crFilterTitre = '';
+  crFilterSociete = ''; crFilterContact = ''; crFilterType = ''; crFilterStatut = '';
+  crSortCol = 'date'; crSortAsc = false; crPage = 0; renderPage('cr');
+}
+let _crFilterTimer = null;
+function crFilterInput(field, val) {
+  window['crFilter' + field] = val;
+  clearTimeout(_crFilterTimer);
+  _crFilterTimer = setTimeout(() => {
+    crPage = 0; renderPage('cr');
+    const el = document.getElementById('crF' + field);
+    if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  }, 300);
+}
 let _crSelectedClients = [];  // [{id, name}, ...]
 let _crSelectedContacts = []; // [{id, name}, ...]
 
@@ -10742,22 +10770,53 @@ function renderCR() {
   return renderCRList();
 }
 
+function crGetClientNames(r) { return r.clients_list && r.clients_list.length ? r.clients_list.map(c => c.name).join(', ') : (r.client || ''); }
+function crGetContactNames(r) { return r.contacts_list && r.contacts_list.length ? r.contacts_list.map(c => c.name).join(', ') : (r.contact_name || ''); }
+function crGetRedacteurNom(r) { const a = (DB.commerciaux||[]).find(co => co.id == r.redacteur_id); return a ? a.nom : (r.redacteur_nom || ''); }
+
 function renderCRList() {
   const myId = currentCommercial?.id || '';
-  let filteredReports = DB.reports;
+  let filteredReports = [...DB.reports];
+  // Filtre auteur (select global)
   if (crFilterAuteur === '__mine__') {
-    filteredReports = DB.reports.filter(r => !r.redacteur_id || r.redacteur_id == myId);
+    filteredReports = filteredReports.filter(r => !r.redacteur_id || r.redacteur_id == myId);
   } else if (crFilterAuteur !== '__all__') {
-    filteredReports = DB.reports.filter(r => r.redacteur_id == crFilterAuteur);
+    filteredReports = filteredReports.filter(r => r.redacteur_id == crFilterAuteur);
   }
-  filteredReports.sort((a,b) => (b.date_raw||'').localeCompare(a.date_raw||''));
+  // Filtres par colonne
+  if (crFilterDate) { const fd = crFilterDate.toLowerCase(); filteredReports = filteredReports.filter(r => (r.date_raw ? fmtDateFR(r.date_raw) : '').toLowerCase().includes(fd)); }
+  if (crFilterTitre) { const ft = crFilterTitre.toLowerCase(); filteredReports = filteredReports.filter(r => (r.titre||'').toLowerCase().includes(ft)); }
+  if (crFilterSociete) { const fs = crFilterSociete.toLowerCase(); filteredReports = filteredReports.filter(r => crGetClientNames(r).toLowerCase().includes(fs)); }
+  if (crFilterContact) { const fc = crFilterContact.toLowerCase(); filteredReports = filteredReports.filter(r => crGetContactNames(r).toLowerCase().includes(fc)); }
+  if (crFilterType) filteredReports = filteredReports.filter(r => r.type_cr === crFilterType);
+  if (crFilterStatut) filteredReports = filteredReports.filter(r => crFilterStatut === 'local' ? (r.statut_cr !== 'envoye') : r.statut_cr === crFilterStatut);
+  // Tri dynamique
+  const sortDir = crSortAsc ? 1 : -1;
+  filteredReports.sort((a, b) => {
+    let va = '', vb = '';
+    switch (crSortCol) {
+      case 'date': va = a.date_raw||''; vb = b.date_raw||''; break;
+      case 'titre': va = (a.titre||'').toLowerCase(); vb = (b.titre||'').toLowerCase(); break;
+      case 'societe': va = crGetClientNames(a).toLowerCase(); vb = crGetClientNames(b).toLowerCase(); break;
+      case 'contact': va = crGetContactNames(a).toLowerCase(); vb = crGetContactNames(b).toLowerCase(); break;
+      case 'type': va = a.type_cr||''; vb = b.type_cr||''; break;
+      case 'redacteur': va = crGetRedacteurNom(a).toLowerCase(); vb = crGetRedacteurNom(b).toLowerCase(); break;
+      case 'statut': va = a.statut_cr||''; vb = b.statut_cr||''; break;
+    }
+    return va < vb ? -sortDir : va > vb ? sortDir : 0;
+  });
+  // Pagination
   const totalCR = filteredReports.length;
   const totalPages = Math.max(1, Math.ceil(totalCR / CR_PER_PAGE));
   if (crPage >= totalPages) crPage = totalPages - 1;
   if (crPage < 0) crPage = 0;
   const pageReports = filteredReports.slice(crPage * CR_PER_PAGE, (crPage + 1) * CR_PER_PAGE);
-  const from = crPage * CR_PER_PAGE + 1;
+  const from = totalCR ? crPage * CR_PER_PAGE + 1 : 0;
   const to = Math.min((crPage + 1) * CR_PER_PAGE, totalCR);
+  const sortIcon = col => crSortCol === col ? (crSortAsc ? ' &#9650;' : ' &#9660;') : ' <span style="opacity:0.3">&#9650;</span>';
+  const thStyle = 'padding:8px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none';
+  const fStyle = 'font-size:11px;padding:4px 6px;width:100%;border:1px solid var(--border);border-radius:4px;background:var(--bg-0);color:var(--t1)';
+  const hasFilters = crFilterDate || crFilterTitre || crFilterSociete || crFilterContact || crFilterType || crFilterStatut;
 
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
@@ -10770,6 +10829,7 @@ function renderCRList() {
         ${(DB.commerciaux||[]).map(co => `<option value="${co.id}" ${crFilterAuteur==co.id?'selected':''}>${co.nom||co.email}</option>`).join('')}
       </select>
       <span style="font-size:11px;color:var(--t3)">${totalCR} CR</span>
+      ${hasFilters ? '<button class="btn" style="font-size:10px;padding:2px 8px;color:var(--red)" onclick="crResetFilters()">Reinitialiser filtres</button>' : ''}
     </div>
     <button class="btn btn-primary" onclick="openCRModal()">+ Nouveau CR</button>
   </div>
@@ -10778,32 +10838,53 @@ function renderCRList() {
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead>
           <tr style="background:var(--bg-1);border-bottom:2px solid var(--border)">
-            <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase;white-space:nowrap">Date RDV</th>
-            <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Titre</th>
-            <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Société</th>
-            <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Contact</th>
-            <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Type</th>
-            <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Rédacteur</th>
-            <th style="padding:10px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase">Statut</th>
+            <th style="${thStyle}" onclick="crSetSort('date')">Date RDV${sortIcon('date')}</th>
+            <th style="${thStyle}" onclick="crSetSort('titre')">Titre${sortIcon('titre')}</th>
+            <th style="${thStyle}" onclick="crSetSort('societe')">Societe${sortIcon('societe')}</th>
+            <th style="${thStyle}" onclick="crSetSort('contact')">Contact${sortIcon('contact')}</th>
+            <th style="${thStyle}" onclick="crSetSort('type')">Type${sortIcon('type')}</th>
+            <th style="${thStyle}" onclick="crSetSort('redacteur')">Redacteur${sortIcon('redacteur')}</th>
+            <th style="${thStyle}" onclick="crSetSort('statut')">Statut${sortIcon('statut')}</th>
+          </tr>
+          <tr style="background:var(--bg-0);border-bottom:1px solid var(--border)">
+            <td style="padding:4px 6px"><input id="crFDate" style="${fStyle}" placeholder="Filtrer..." value="${crFilterDate}" oninput="crFilterInput('Date',this.value)"></td>
+            <td style="padding:4px 6px"><input id="crFTitre" style="${fStyle}" placeholder="Filtrer..." value="${crFilterTitre}" oninput="crFilterInput('Titre',this.value)"></td>
+            <td style="padding:4px 6px"><input id="crFSociete" style="${fStyle}" placeholder="Filtrer..." value="${crFilterSociete}" oninput="crFilterInput('Societe',this.value)"></td>
+            <td style="padding:4px 6px"><input id="crFContact" style="${fStyle}" placeholder="Filtrer..." value="${crFilterContact}" oninput="crFilterInput('Contact',this.value)"></td>
+            <td style="padding:4px 6px"><select style="${fStyle}" onchange="crFilterType=this.value;crPage=0;renderPage('cr')">
+              <option value="">Tous</option>
+              <option value="rdv_ext" ${crFilterType==='rdv_ext'?'selected':''}>RDV EXT.</option>
+              <option value="rdv_int" ${crFilterType==='rdv_int'?'selected':''}>RDV INT.</option>
+              <option value="salon_foire" ${crFilterType==='salon_foire'?'selected':''}>SALON-FOIRE</option>
+              <option value="tel" ${crFilterType==='tel'?'selected':''}>TEL.</option>
+              <option value="visio" ${crFilterType==='visio'?'selected':''}>VISIO.</option>
+              <option value="autre" ${crFilterType==='autre'?'selected':''}>AUTRE</option>
+            </select></td>
+            <td style="padding:4px 6px"></td>
+            <td style="padding:4px 6px"><select style="${fStyle}" onchange="crFilterStatut=this.value;crPage=0;renderPage('cr')">
+              <option value="">Tous</option>
+              <option value="envoye" ${crFilterStatut==='envoye'?'selected':''}>Envoye</option>
+              <option value="local" ${crFilterStatut==='local'?'selected':''}>Local</option>
+            </select></td>
           </tr>
         </thead>
         <tbody>
           ${pageReports.length === 0 ? '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--t3)">Aucun compte-rendu</td></tr>' :
           pageReports.map(r => {
-            const auteur = (DB.commerciaux||[]).find(co => co.id == r.redacteur_id);
             const dateRdv = r.date_raw ? fmtDateFR(r.date_raw) : '—';
             const nbPj = r.pieces_jointes ? r.pieces_jointes.length : 0;
-            const clientNames = r.clients_list && r.clients_list.length ? r.clients_list.map(c => c.name).join(', ') : (r.client || '—');
-            const contactNames = r.contacts_list && r.contacts_list.length ? r.contacts_list.map(c => c.name).join(', ') : (r.contact_name || '—');
+            const clientNames = crGetClientNames(r) || '—';
+            const contactNames = crGetContactNames(r) || '—';
+            const redacteurNom = crGetRedacteurNom(r) || '—';
             return `<tr style="border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s"
               onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
               onclick="openCRDetail(${r.id})">
               <td style="padding:10px 14px;white-space:nowrap;font-weight:500">${dateRdv}</td>
-              <td style="padding:10px 14px;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">${r.titre||'Sans titre'}${nbPj ? ' <span style="color:var(--t3);font-weight:400" title="'+nbPj+' pièce(s) jointe(s)">📎'+nbPj+'</span>' : ''}</td>
+              <td style="padding:10px 14px;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">${r.titre||'Sans titre'}${nbPj ? ' <span style="color:var(--t3);font-weight:400" title="'+nbPj+' piece(s) jointe(s)">📎'+nbPj+'</span>' : ''}</td>
               <td style="padding:10px 14px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${clientNames}">${clientNames}</td>
               <td style="padding:10px 14px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t2)" title="${contactNames}">${contactNames}</td>
               <td style="padding:10px 14px;white-space:nowrap">${crTypeBadge(r.type_cr)}</td>
-              <td style="padding:10px 14px;white-space:nowrap;color:var(--t2)">${auteur ? auteur.nom : (r.redacteur_nom || '—')}</td>
+              <td style="padding:10px 14px;white-space:nowrap;color:var(--t2)">${redacteurNom}</td>
               <td style="padding:10px 14px;white-space:nowrap">${crStatutBadge(r.statut_cr)}</td>
             </tr>`;
           }).join('')}
@@ -10814,7 +10895,7 @@ function renderCRList() {
   ${totalPages > 1 ? `
   <div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:12px">
     <button class="btn" style="font-size:12px;padding:4px 10px" onclick="crPage=0;renderPage('cr')" ${crPage===0?'disabled':''}>&laquo;</button>
-    <button class="btn" style="font-size:12px;padding:4px 10px" onclick="crPage--;renderPage('cr')" ${crPage===0?'disabled':''}>&lsaquo; Préc.</button>
+    <button class="btn" style="font-size:12px;padding:4px 10px" onclick="crPage--;renderPage('cr')" ${crPage===0?'disabled':''}>&lsaquo; Prec.</button>
     <span style="font-size:12px;color:var(--t2)">${from}–${to} sur ${totalCR}</span>
     <button class="btn" style="font-size:12px;padding:4px 10px" onclick="crPage++;renderPage('cr')" ${crPage>=totalPages-1?'disabled':''}>Suiv. &rsaquo;</button>
     <button class="btn" style="font-size:12px;padding:4px 10px" onclick="crPage=${totalPages-1};renderPage('cr')" ${crPage>=totalPages-1?'disabled':''}>&raquo;</button>
