@@ -8150,7 +8150,7 @@ async function imxImportCR() {
         titre: c.titre || c.ref || '(Sans titre)',
         type_cr: c.type_cr || null,
         statut_cr: c.statut_cr || null,
-        redacteur_id: redacteurId ? Number(redacteurId) : null,
+        redacteur_id: redacteurId || null,
         redacteur_nom: redacteurNom,
         contenu: contenu || null,
       };
