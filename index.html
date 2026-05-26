@@ -8087,6 +8087,12 @@ async function imxImportCR() {
     // YYYY-MM-DD ou YYYY/MM/DD
     const m2 = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
     if (m2) return m2[1] + '-' + m2[2].padStart(2,'0') + '-' + m2[3].padStart(2,'0');
+    // Numéro de série Excel (ex: 42536 = 15/06/2016)
+    const num = Number(str);
+    if (num > 1000 && num < 200000) {
+      const d = new Date(Date.UTC(1899, 11, 30 + num));
+      return d.toISOString().substring(0, 10);
+    }
     return null;
   };
   let inserted = 0, updated = 0, skipped = 0, errors = 0, firstErr = '';
