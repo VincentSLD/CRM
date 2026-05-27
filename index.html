@@ -3152,7 +3152,7 @@ async function loadDB() {
 
     // Tout en parallèle, 1 seul appel par table
     const t0 = Date.now();
-    const [cRes, dAll, cmAll, fAll, rAll, nAll, coAll, maAll, afAll] = await Promise.all([
+    const [cRes, dAll, cmAll, fAll, rAll, nAll, coAll, maAll, afAll, luccaAll] = await Promise.all([
       fetchClientsWithRetry(clientQuery),
       fetchFast('devis', DEVIS_LITE),
       fetchFast('commandes', CMD_LITE),
@@ -3162,6 +3162,7 @@ async function loadDB() {
       sb.from('commerciaux').select('*').then(r => r.data || []),
       fetchFast('marches', MARCHE_LITE, 'date_debut', true),
       fetchFast('affaires', AFFAIRE_LITE, 'date_debut', true),
+      sb.from('collaborateurs_lucca').select('id,lucca_id,nom,prenom,email').order('nom').then(r => r.data || []),
     ]);
     console.log(`[loadDB] Fetch en ${Date.now()-t0}ms : ${dAll.length} devis, ${cmAll.length} cmd, ${fAll.length} fact, ${maAll.length} marchés, ${afAll.length} affaires`);
     console.log(`[loadDB] Marchés: ${maAll.length}, Affaires: ${afAll.length}`);
@@ -3187,6 +3188,9 @@ async function loadDB() {
     }));
     DB.notifications = nAll.map(n => ({ ...n, time: n.time_label }));
     DB.commerciaux = coAll;
+    collaborateursLuccaData = luccaAll;
+    // Construire un mapping commerciaux → Lucca (par email ou nom) pour affichage NOM + Prénom
+    _buildCommerciauxLuccaMap();
     DB.marches = maAll.map(m => ({ ...m, client: m.client_name, date_raw: m.date_debut, date: fmtDateFR(m.date_debut) }));
     DB.affaires = afAll.map(a => ({ ...a, client: a.client_name, date_raw: a.date_debut, date: fmtDateFR(a.date_debut) }));
     // Enrichir marchés/affaires avec le champ societe (déduit des devis/commandes/factures liés)
@@ -10772,7 +10776,43 @@ function renderCR() {
 
 function crGetClientNames(r) { return r.clients_list && r.clients_list.length ? r.clients_list.map(c => c.name).join(', ') : (r.client || ''); }
 function crGetContactNames(r) { return r.contacts_list && r.contacts_list.length ? r.contacts_list.map(c => c.name).join(', ') : (r.contact_name || ''); }
-function crGetRedacteurNom(r) { const a = (DB.commerciaux||[]).find(co => co.id == r.redacteur_id); return a ? a.nom : (r.redacteur_nom || ''); }
+
+// Mapping commerciaux.id → collaborateur Lucca pour affichage NOM + Prénom
+let _commerciauxLuccaMap = {}; // { commerciauxId: { nom, prenom, label } }
+function _buildCommerciauxLuccaMap() {
+  _commerciauxLuccaMap = {};
+  const luccaList = collaborateursLuccaData || [];
+  (DB.commerciaux || []).forEach(co => {
+    // Chercher correspondance par email
+    let match = null;
+    if (co.email) {
+      match = luccaList.find(l => l.email && l.email.toLowerCase() === co.email.toLowerCase());
+    }
+    // Sinon par nom (comparaison souple)
+    if (!match && co.nom) {
+      const coNorm = co.nom.toLowerCase().trim();
+      match = luccaList.find(l => {
+        const ln = (l.nom || '').toLowerCase().trim();
+        const fn = (l.prenom || '').toLowerCase().trim();
+        return coNorm === `${ln} ${fn}` || coNorm === `${fn} ${ln}` || coNorm === ln;
+      });
+    }
+    if (match) {
+      _commerciauxLuccaMap[co.id] = { nom: match.nom || '', prenom: match.prenom || '', label: `${(match.nom || '').toUpperCase()} ${match.prenom || ''}`.trim() };
+    }
+  });
+}
+
+function crGetRedacteurLabel(coId) {
+  if (_commerciauxLuccaMap[coId]) return _commerciauxLuccaMap[coId].label;
+  const co = (DB.commerciaux || []).find(c => c.id == coId);
+  return co ? (co.nom || co.email || '') : '';
+}
+
+function crGetRedacteurNom(r) {
+  if (r.redacteur_id && _commerciauxLuccaMap[r.redacteur_id]) return _commerciauxLuccaMap[r.redacteur_id].label;
+  const a = (DB.commerciaux||[]).find(co => co.id == r.redacteur_id); return a ? a.nom : (r.redacteur_nom || '');
+}
 
 function renderCRList() {
   const myId = currentCommercial?.id || '';
@@ -10826,7 +10866,7 @@ function renderCRList() {
         onchange="crFilterAuteur=this.value;crPage=0;renderPage('cr')">
         <option value="__mine__" ${crFilterAuteur==='__mine__'?'selected':''}>Mes CR</option>
         <option value="__all__" ${crFilterAuteur==='__all__'?'selected':''}>Tous</option>
-        ${(DB.commerciaux||[]).map(co => `<option value="${co.id}" ${crFilterAuteur==co.id?'selected':''}>${co.nom||co.email}</option>`).join('')}
+        ${(DB.commerciaux||[]).map(co => ({ id: co.id, label: crGetRedacteurLabel(co.id) })).filter(c => c.label).sort((a,b) => a.label.localeCompare(b.label)).map(c => `<option value="${c.id}" ${crFilterAuteur==c.id?'selected':''}>${c.label}</option>`).join('')}
       </select>
       <span style="font-size:11px;color:var(--t3)">${totalCR} CR</span>
       ${hasFilters ? '<button class="btn" style="font-size:10px;padding:2px 8px;color:var(--red)" onclick="crResetFilters()">Reinitialiser filtres</button>' : ''}
@@ -11029,7 +11069,7 @@ function getCREditorHTML(r) {
       <div>
         <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Rédacteur <span style="color:var(--red)">*</span></label>
         <select id="crRedacteur" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
-          ${(DB.commerciaux||[]).map(co => `<option value="${co.id}" ${(r ? r.redacteur_id == co.id : co.id == myId) ? 'selected' : ''}>${co.nom||co.email}</option>`).join('')}
+          ${(DB.commerciaux||[]).map(co => ({ id: co.id, label: crGetRedacteurLabel(co.id) })).filter(c => c.label).sort((a,b) => a.label.localeCompare(b.label)).map(c => `<option value="${c.id}" ${(r ? r.redacteur_id == c.id : c.id == myId) ? 'selected' : ''}>${c.label}</option>`).join('')}
         </select>
       </div>
     </div>
@@ -11537,7 +11577,7 @@ async function saveReport(silent) {
     date: dateCr + 'T12:00:00',
     updated_at: new Date().toISOString(),
     redacteur_id: redacteurId ? Number(redacteurId) : null,
-    redacteur_nom: redacteur?.nom || null,
+    redacteur_nom: crGetRedacteurLabel(redacteurId) || redacteur?.nom || null,
     pieces_jointes: crAttachments.length ? crAttachments : null,
   };
 
