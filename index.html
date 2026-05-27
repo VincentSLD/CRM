@@ -13587,24 +13587,30 @@ async function aiAssist(action) {
   // Préparer RDV : trame + résumé IA des anciens CR client
   if (action === 'preprdv') {
     const clientName = _crSelectedClients.map(c => c.name).join(', ') || 'le client';
-    const clientId = _crSelectedClients.length ? _crSelectedClients[0].id : '';
+    const clientIds = _crSelectedClients.map(c => c.id).filter(Boolean);
 
     // Afficher spinner
     status.textContent = '✦ Préparation en cours...';
     aiArea.innerHTML = `<div class="ai-box"><div class="ai-box-head">✦ Préparation RDV en cours...</div><div class="ai-box-text" style="text-align:center;padding:20px;color:var(--t3)"><div style="display:inline-block;width:20px;height:20px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></div><br>Recherche des anciens CR avec ${clientName}...</div></div>`;
 
-    // Charger les anciens CR de ce client
+    // Charger les anciens CR de toutes les sociétés sélectionnées
     let historiqueHtml = '';
-    if (clientId) {
+    if (clientIds.length) {
       try {
-        const { data: oldCRs } = await sb.from('reports').select('titre,contenu,date,type_cr')
-          .eq('client_id', clientId).order('date', { ascending: false }).limit(10);
+        // Chercher dans clients_list (JSONB) et client_id (legacy)
+        const allCRs = (DB.reports || []).filter(r => {
+          if (clientIds.includes(r.client_id)) return true;
+          if (r.clients_list && r.clients_list.length) {
+            return r.clients_list.some(cl => clientIds.includes(cl.id));
+          }
+          return false;
+        }).sort((a,b) => (b.date_raw||'').localeCompare(a.date_raw||'')).slice(0, 20);
 
-        if (oldCRs && oldCRs.length > 0) {
+        if (allCRs.length > 0) {
           // Préparer le texte des anciens CR pour l'IA
-          const crTexts = oldCRs.map(cr => {
-            const d = cr.date ? fmtDateFR(cr.date) : '?';
-            const plain = cr.contenu ? cr.contenu.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '';
+          const crTexts = allCRs.map(cr => {
+            const d = cr.date_raw ? fmtDateFR(cr.date_raw) : '?';
+            const plain = (cr.contenu || cr.text || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
             return `[${d}] ${cr.titre || 'Sans titre'} : ${plain.substring(0, 500)}`;
           }).join('\n\n');
 
@@ -13622,7 +13628,7 @@ async function aiAssist(action) {
           if (resp.ok) {
             const { result } = await resp.json();
             historiqueHtml = `<div style="background:var(--bg-1);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px">
-              <strong style="color:var(--accent)">Historique société (${oldCRs.length} CR)</strong><br><br>${result}</div>`;
+              <strong style="color:var(--accent)">Historique société (${allCRs.length} CR)</strong><br><br>${result}</div>`;
           }
         } else {
           historiqueHtml = `<div style="background:var(--bg-1);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px;color:var(--t3)">
