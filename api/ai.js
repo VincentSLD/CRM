@@ -30,14 +30,24 @@ ${text}`,
 
     preprdv: `Tu es un assistant commercial expert. Voici l'historique des comptes-rendus précédents avec le client ${clientName || ''}.
 
-Analyse cet historique et produis un résumé structuré pour préparer le prochain RDV. Inclus :
-- Les sujets principaux abordés lors des échanges précédents
-- Les décisions prises et engagements en cours
-- Les points en attente ou non résolus
-- Les opportunités identifiées
-- Les éventuels risques ou points de vigilance
+Analyse cet historique et produis une préparation complète de RDV structurée en 3 parties.
 
-Réponds en HTML structuré (utilise <strong>, <br>, <ul><li>). Sois concis et orienté action.
+**PARTIE 1 — RÉSUMÉ HISTORIQUE**
+Résume brièvement l'historique de la relation (sujets abordés, décisions prises, points en attente, opportunités, risques).
+
+**PARTIE 2 — TRAME DE PRÉPARATION (réponds aux 6 questions)**
+Pour chaque question, propose une réponse pré-remplie basée sur l'historique :
+1. Pourquoi je suis là ? Quel motif commercial valable ?
+2. Qu'est-ce que je veux savoir ? Quelles informations obtenir ?
+3. Qu'est-ce que je veux échanger comme informations ?
+4. Quelles sont les objections possibles ? Doutes ou incertitudes du client ?
+5. Quels sont mes différenciateurs clés ? Et mes faiblesses critiques ?
+6. Quels engagements d'actions prendre à la fin de l'entretien ?
+
+**PARTIE 3 — QUESTIONS À POSER AU CLIENT**
+Propose 5 à 10 questions pertinentes à poser lors du RDV, en lien avec l'historique et les enjeux identifiés.
+
+Réponds en HTML structuré. Utilise <h4> pour les titres de parties, <strong> pour les questions, <ul><li> pour les listes. Sois concis et orienté action.
 
 Historique des CR :
 ${text}`
@@ -55,7 +65,7 @@ ${text}`
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
+        max_tokens: action === 'preprdv' ? 2048 : 1024,
         system: systemPrompt,
         messages: [{ role: 'user', content: prompts[action] || prompts.rewrite }]
       })

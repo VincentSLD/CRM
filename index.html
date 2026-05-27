@@ -13644,22 +13644,35 @@ async function aiAssist(action) {
         <strong>Historique société</strong><br>Sélectionnez une société pour voir l'historique.</div>`;
     }
 
-    const prepHtml = `<strong>Préparation RDV — ${clientName}</strong><br><br>`
-      + historiqueHtml
-      + `<strong>1. Pourquoi je suis là ? Motif commercial valable ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
-      + `<strong>2. Qu'est-ce que je veux savoir ? Informations à obtenir ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
-      + `<strong>3. Qu'est-ce que je veux échanger comme informations ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
-      + `<strong>4. Quelles sont les objections possibles ? Doutes ou incertitudes ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
-      + `<strong>5. Quels sont mes différenciateurs clés ? Et mes faiblesses "critiques" ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
-      + `<strong>6. Quels engagements d'actions prendre à la fin de l'entretien ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span>`;
-    aiArea.innerHTML = `<div class="ai-box">
-      <div class="ai-box-head">✦ Trame de préparation RDV</div>
-      <div class="ai-box-text">${prepHtml}</div>
-      <div class="ai-box-actions">
-        <button class="btn btn-primary" style="font-size:11px" onclick="acceptAI()">Insérer dans le CR</button>
-        <button class="btn" style="font-size:11px" onclick="document.getElementById('aiArea').innerHTML=''">Ignorer</button>
-      </div>
-    </div>`;
+    // Si on a un historique, l'IA a déjà produit les 3 parties (résumé + trame + questions)
+    if (historiqueHtml) {
+      aiArea.innerHTML = `<div class="ai-box">
+        <div class="ai-box-head">✦ Préparation RDV — ${clientName}</div>
+        <div class="ai-box-text">${historiqueHtml}</div>
+        <div class="ai-box-actions">
+          <button class="btn btn-primary" style="font-size:11px" onclick="acceptAI()">Insérer dans le CR</button>
+          <button class="btn" style="font-size:11px" onclick="document.getElementById('aiArea').innerHTML=''">Ignorer</button>
+          <button class="btn" style="font-size:11px" onclick="aiAssist('preprdv')">Régénérer</button>
+        </div>
+      </div>`;
+    } else {
+      // Pas d'historique : trame vide
+      const prepHtml = `<strong>Préparation RDV — ${clientName}</strong><br><br>`
+        + `<strong>1. Pourquoi je suis là ? Motif commercial valable ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
+        + `<strong>2. Qu'est-ce que je veux savoir ? Informations à obtenir ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
+        + `<strong>3. Qu'est-ce que je veux échanger comme informations ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
+        + `<strong>4. Quelles sont les objections possibles ? Doutes ou incertitudes ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
+        + `<strong>5. Quels sont mes différenciateurs clés ? Et mes faiblesses "critiques" ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span><br><br>`
+        + `<strong>6. Quels engagements d'actions prendre à la fin de l'entretien ?</strong><br><span style="color:var(--t3)">[Votre réponse ici]</span>`;
+      aiArea.innerHTML = `<div class="ai-box">
+        <div class="ai-box-head">✦ Trame de préparation RDV</div>
+        <div class="ai-box-text">${prepHtml}</div>
+        <div class="ai-box-actions">
+          <button class="btn btn-primary" style="font-size:11px" onclick="acceptAI()">Insérer dans le CR</button>
+          <button class="btn" style="font-size:11px" onclick="document.getElementById('aiArea').innerHTML=''">Ignorer</button>
+        </div>
+      </div>`;
+    }
     status.textContent = 'Prêt';
     return;
   }
