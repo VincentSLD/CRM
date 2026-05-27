@@ -11204,9 +11204,16 @@ async function searchCRClient(q) {
   if (!q || q.length < 1) { dd.style.display='none'; return; }
   clearTimeout(crClientTimeout);
   crClientTimeout = setTimeout(async () => {
-    const { data } = await sb.from('clients').select('id,name,code,city')
-      .or(`name.ilike.%${q}%,code.ilike.%${q}%`)
-      .order('name').limit(15);
+    // Recherche "contient" chaque mot séparément
+    const words = q.trim().split(/\s+/).filter(Boolean);
+    let query = sb.from('clients').select('id,name,code,city');
+    if (words.length === 1) {
+      query = query.or(`name.ilike.%${words[0]}%,code.ilike.%${words[0]}%`);
+    } else {
+      // Chaque mot doit être contenu dans le nom
+      for (const w of words) query = query.ilike('name', `%${w}%`);
+    }
+    const { data } = await query.order('name').limit(15);
     const selectedIds = new Set(_crSelectedClients.map(c => c.id));
     const filtered = (data || []).filter(c => !selectedIds.has(c.id));
     const createBtn = `<div style="padding:10px 12px;cursor:pointer;font-size:12px;color:var(--accent);font-weight:600;border-top:1px solid var(--border)"
