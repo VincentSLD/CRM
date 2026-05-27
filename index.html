@@ -10866,7 +10866,7 @@ function renderCRList() {
         onchange="crFilterAuteur=this.value;crPage=0;renderPage('cr')">
         <option value="__mine__" ${crFilterAuteur==='__mine__'?'selected':''}>Mes CR</option>
         <option value="__all__" ${crFilterAuteur==='__all__'?'selected':''}>Tous</option>
-        ${(DB.commerciaux||[]).map(co => ({ id: co.id, label: crGetRedacteurLabel(co.id) })).filter(c => c.label).sort((a,b) => a.label.localeCompare(b.label)).map(c => `<option value="${c.id}" ${crFilterAuteur==c.id?'selected':''}>${c.label}</option>`).join('')}
+        ${(() => { const ids = new Set((DB.reports||[]).map(r => r.redacteur_id).filter(Boolean)); return (DB.commerciaux||[]).filter(co => ids.has(co.id)).map(co => ({ id: co.id, label: crGetRedacteurLabel(co.id) })).filter(c => c.label).sort((a,b) => a.label.localeCompare(b.label)).map(c => `<option value="${c.id}" ${crFilterAuteur==c.id?'selected':''}>${c.label}</option>`).join(''); })()}
       </select>
       <span style="font-size:11px;color:var(--t3)">${totalCR} CR</span>
       ${hasFilters ? '<button class="btn" style="font-size:10px;padding:2px 8px;color:var(--red)" onclick="crResetFilters()">Reinitialiser filtres</button>' : ''}
