@@ -13695,17 +13695,58 @@ async function aiAssist(action) {
   if (!editor || !editor.innerText.trim()) { toast('Écrivez d\'abord du contenu','error'); return; }
 
   const labels = { rewrite: 'Reformulation', summarize: 'Synthèse', complete: 'Complément' };
+
+  // Capturer la sélection dans l'éditeur
+  const sel = window.getSelection();
+  let selectedText = '';
+  let selRange = null;
+  if (sel && sel.rangeCount > 0) {
+    const range = sel.getRangeAt(0);
+    // Vérifier que la sélection est dans l'éditeur
+    if (editor.contains(range.startContainer) && editor.contains(range.endContainer) && !range.collapsed) {
+      selectedText = sel.toString().trim();
+      selRange = range.cloneRange();
+    }
+  }
+
+  const textToSend = selectedText || editor.innerText.trim();
+  const isPartial = !!selectedText;
+
   status.textContent = '✦ IA en traitement...';
-  aiArea.innerHTML = `<div class="ai-box"><div class="ai-box-head">✦ ${labels[action] || 'IA'} en cours...</div><div class="ai-box-text" style="text-align:center;padding:20px;color:var(--t3)"><div style="display:inline-block;width:20px;height:20px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></div><br>Analyse du contenu...</div></div>`;
+
+  // Si sélection partielle : envelopper le texte sélectionné dans un span marqué,
+  // puis insérer le bloc de suggestion juste après
+  if (isPartial && selRange) {
+    _removeInlineSuggestion();
+    // Envelopper la sélection dans un span identifiable
+    const wrapper = document.createElement('span');
+    wrapper.id = 'aiSelectedOriginal';
+    wrapper.style.cssText = 'background:rgba(245,197,24,0.18);border-radius:3px;';
+    try {
+      selRange.surroundContents(wrapper);
+    } catch (_e) {
+      // Si la sélection traverse des éléments, extraire et réinsérer dans le wrapper
+      wrapper.appendChild(selRange.extractContents());
+      selRange.insertNode(wrapper);
+    }
+    // Insérer le spinner inline juste après le span
+    const spinnerDiv = document.createElement('div');
+    spinnerDiv.id = 'aiInlineSuggestion';
+    spinnerDiv.style.cssText = 'background:var(--bg-1);border:1px solid var(--accent);border-radius:8px;padding:10px 14px;margin:8px 0;';
+    spinnerDiv.innerHTML = `<div style="display:flex;align-items:center;gap:8px;color:var(--t3);font-size:12px"><div style="display:inline-block;width:16px;height:16px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></div> ${labels[action] || 'IA'} en cours...</div>`;
+    wrapper.after(spinnerDiv);
+    sel.removeAllRanges();
+  } else {
+    aiArea.innerHTML = `<div class="ai-box"><div class="ai-box-head">✦ ${labels[action] || 'IA'} en cours...</div><div class="ai-box-text" style="text-align:center;padding:20px;color:var(--t3)"><div style="display:inline-block;width:20px;height:20px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></div><br>Analyse du contenu...</div></div>`;
+  }
 
   try {
     const clientName = _crSelectedClients.map(c => c.name).join(', ') || '';
-    const text = editor.innerText.trim();
 
     const resp = await fetch('/api/ai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, text, clientName })
+      body: JSON.stringify({ action, text: textToSend, clientName })
     });
 
     if (!resp.ok) {
@@ -13714,21 +13755,77 @@ async function aiAssist(action) {
     }
 
     const { result } = await resp.json();
-    aiArea.innerHTML = `<div class="ai-box">
-      <div class="ai-box-head">✦ ${labels[action] || 'Suggestion IA'}</div>
-      <div class="ai-box-text">${result}</div>
-      <div class="ai-box-actions">
-        <button class="btn btn-primary" style="font-size:11px" onclick="acceptAI()">Accepter</button>
-        <button class="btn" style="font-size:11px" onclick="document.getElementById('aiArea').innerHTML=''">Ignorer</button>
-        <button class="btn" style="font-size:11px" onclick="aiAssist('${action}')">Régénérer</button>
-      </div>
-    </div>`;
+
+    if (isPartial) {
+      // Afficher la suggestion inline sous la sélection
+      const box = document.getElementById('aiInlineSuggestion');
+      if (box) {
+        // Stocker la sélection d'origine pour le remplacement
+        _aiPendingSelection = { text: selectedText, action };
+        box.innerHTML = `<div style="font-size:11px;font-weight:600;color:var(--accent);margin-bottom:6px">✦ ${labels[action] || 'Suggestion IA'}</div>
+          <div class="ai-inline-result" style="font-size:13px;line-height:1.5;margin-bottom:8px">${result}</div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-primary" style="font-size:11px;padding:3px 10px" onclick="acceptAIInline()">Accepter</button>
+            <button class="btn" style="font-size:11px;padding:3px 10px" onclick="_removeInlineSuggestion()">Ignorer</button>
+            <button class="btn" style="font-size:11px;padding:3px 10px" onclick="_removeInlineSuggestion();aiAssist('${action}')">Régénérer</button>
+          </div>`;
+      }
+    } else {
+      aiArea.innerHTML = `<div class="ai-box">
+        <div class="ai-box-head">✦ ${labels[action] || 'Suggestion IA'}</div>
+        <div class="ai-box-text">${result}</div>
+        <div class="ai-box-actions">
+          <button class="btn btn-primary" style="font-size:11px" onclick="acceptAI()">Accepter</button>
+          <button class="btn" style="font-size:11px" onclick="document.getElementById('aiArea').innerHTML=''">Ignorer</button>
+          <button class="btn" style="font-size:11px" onclick="aiAssist('${action}')">Régénérer</button>
+        </div>
+      </div>`;
+    }
   } catch (e) {
     console.error('AI error:', e);
-    aiArea.innerHTML = `<div class="ai-box"><div class="ai-box-head" style="color:var(--red)">Erreur IA</div><div class="ai-box-text">${e.message}</div><div class="ai-box-actions"><button class="btn" style="font-size:11px" onclick="document.getElementById('aiArea').innerHTML=''">Fermer</button><button class="btn" style="font-size:11px" onclick="aiAssist('${action}')">Réessayer</button></div></div>`;
+    if (isPartial) {
+      const box = document.getElementById('aiInlineSuggestion');
+      if (box) box.innerHTML = `<div style="color:var(--red);font-size:12px">Erreur : ${e.message} <button class="btn" style="font-size:11px;margin-left:8px" onclick="_removeInlineSuggestion()">Fermer</button> <button class="btn" style="font-size:11px" onclick="_removeInlineSuggestion();aiAssist('${action}')">Réessayer</button></div>`;
+    } else {
+      aiArea.innerHTML = `<div class="ai-box"><div class="ai-box-head" style="color:var(--red)">Erreur IA</div><div class="ai-box-text">${e.message}</div><div class="ai-box-actions"><button class="btn" style="font-size:11px" onclick="document.getElementById('aiArea').innerHTML=''">Fermer</button><button class="btn" style="font-size:11px" onclick="aiAssist('${action}')">Réessayer</button></div></div>`;
+    }
   } finally {
     status.textContent = 'Prêt';
   }
+}
+
+// Sélection en attente pour remplacement inline
+let _aiPendingSelection = null;
+
+function _removeInlineSuggestion() {
+  const box = document.getElementById('aiInlineSuggestion');
+  if (box) box.remove();
+  // Retirer le surlignage du texte original mais garder le contenu
+  const orig = document.getElementById('aiSelectedOriginal');
+  if (orig) {
+    const parent = orig.parentNode;
+    while (orig.firstChild) parent.insertBefore(orig.firstChild, orig);
+    orig.remove();
+  }
+  _aiPendingSelection = null;
+}
+
+function acceptAIInline() {
+  const box = document.getElementById('aiInlineSuggestion');
+  const orig = document.getElementById('aiSelectedOriginal');
+  if (!box) return;
+  const resultEl = box.querySelector('.ai-inline-result');
+  if (!resultEl) return;
+  const newContent = resultEl.innerHTML;
+  // Remplacer le texte original surligné par le contenu IA
+  if (orig) {
+    const temp = document.createElement('span');
+    temp.innerHTML = newContent;
+    orig.replaceWith(temp);
+  }
+  box.remove();
+  _aiPendingSelection = null;
+  toast('Suggestion intégrée','success');
 }
 
 function acceptAI() {
