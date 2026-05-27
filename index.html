@@ -11506,6 +11506,11 @@ async function saveReport(silent) {
   if (!_crSelectedClients.length) missing.push('Société');
   if (missing.length) { toast('Champs obligatoires manquants : ' + missing.join(', '), 'error'); return false; }
 
+  // Sablier pendant l'enregistrement
+  const saveBtn = document.querySelector('[onclick="saveReport()"]');
+  const saveBtnText = saveBtn ? saveBtn.innerHTML : '';
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><span style="display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></span>Enregistrement...</span>'; }
+
   const redacteur = (DB.commerciaux||[]).find(co => co.id == redacteurId);
   const clientsList = [..._crSelectedClients];
   const contactsList = [..._crSelectedContacts];
@@ -11532,18 +11537,20 @@ async function saveReport(silent) {
   const allClientNames = clientsList.map(c => c.name).join(', ');
   const allContactNames = contactsList.map(c => c.name).join(', ');
 
+  const restoreBtn = () => { if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = saveBtnText; } };
   if (currentReport) {
     const { error } = await sb.from('reports').update(reportData).eq('id', currentReport.id);
-    if (error) { toast('Erreur: '+error.message, 'error'); return false; }
+    if (error) { restoreBtn(); toast('Erreur: '+error.message, 'error'); return false; }
     Object.assign(currentReport, reportData, { client: allClientNames, clients_list: clientsList, contacts_list: contactsList });
     if (!silent) toast('Compte-rendu mis à jour', 'success');
   } else {
     reportData.statut_cr = 'brouillon';
     const { data, error } = await sb.from('reports').insert(reportData).select();
-    if (error) { toast('Erreur: '+error.message, 'error'); return false; }
+    if (error) { restoreBtn(); toast('Erreur: '+error.message, 'error'); return false; }
     if (!silent) toast('Compte-rendu enregistré', 'success');
     if (data && data[0]) currentReport = { ...data[0], client: allClientNames, clients_list: clientsList, contacts_list: contactsList };
   }
+  restoreBtn();
   if (!silent) {
     await loadDB();
     closeCRModal();
