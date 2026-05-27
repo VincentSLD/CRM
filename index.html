@@ -3152,7 +3152,7 @@ async function loadDB() {
 
     // Tout en parallèle, 1 seul appel par table
     const t0 = Date.now();
-    const [cRes, dAll, cmAll, fAll, rAll, nAll, coAll, maAll, afAll, luccaAll] = await Promise.all([
+    const [cRes, dAll, cmAll, fAll, rAll, nAll, coAll, maAll, afAll, luccaAll, akAll] = await Promise.all([
       fetchClientsWithRetry(clientQuery),
       fetchFast('devis', DEVIS_LITE),
       fetchFast('commandes', CMD_LITE),
@@ -3163,6 +3163,7 @@ async function loadDB() {
       fetchFast('marches', MARCHE_LITE, 'date_debut', true),
       fetchFast('affaires', AFFAIRE_LITE, 'date_debut', true),
       sb.from('collaborateurs_lucca').select('id,lucca_id,nom,prenom,email').order('nom').then(r => r.data || []),
+      sb.from('collaborateurs').select('id,lucca_id,akuiteo_id,nom,prenom,code,email').order('nom').then(r => r.data || []),
     ]);
     console.log(`[loadDB] Fetch en ${Date.now()-t0}ms : ${dAll.length} devis, ${cmAll.length} cmd, ${fAll.length} fact, ${maAll.length} marchés, ${afAll.length} affaires`);
     console.log(`[loadDB] Marchés: ${maAll.length}, Affaires: ${afAll.length}`);
@@ -3189,6 +3190,7 @@ async function loadDB() {
     DB.notifications = nAll.map(n => ({ ...n, time: n.time_label }));
     DB.commerciaux = coAll;
     collaborateursLuccaData = luccaAll;
+    collaborateursData = akAll;
     // Construire un mapping commerciaux → Lucca (par email ou nom) pour affichage NOM + Prénom
     _buildCommerciauxLuccaMap();
     DB.marches = maAll.map(m => ({ ...m, client: m.client_name, date_raw: m.date_debut, date: fmtDateFR(m.date_debut) }));
@@ -10809,6 +10811,37 @@ function crGetRedacteurLabel(coId) {
   return co ? (co.nom || co.email || '') : '';
 }
 
+// Liste des rédacteurs pour le select de la fiche CR : collaborateurs liés Akuiteo↔Lucca
+function getCRRedacteurOptions() {
+  const options = [];
+  const seenCoIds = new Set();
+  // Parcourir les collaborateurs Akuiteo liés à Lucca
+  (collaborateursData || []).forEach(ak => {
+    if (!ak.lucca_id) return;
+    const lucca = (collaborateursLuccaData || []).find(l => l.lucca_id === ak.lucca_id);
+    if (!lucca) return;
+    const label = `${(lucca.nom || '').toUpperCase()} ${lucca.prenom || ''}`.trim();
+    if (!label) return;
+    // Trouver le commercial correspondant (par email ou nom)
+    let co = null;
+    if (ak.email) co = (DB.commerciaux || []).find(c => c.email && c.email.toLowerCase() === ak.email.toLowerCase());
+    if (!co && ak.nom) {
+      const akNorm = ak.nom.toLowerCase().trim();
+      const akFull1 = `${(ak.nom||'').toLowerCase().trim()} ${(ak.prenom||'').toLowerCase().trim()}`;
+      const akFull2 = `${(ak.prenom||'').toLowerCase().trim()} ${(ak.nom||'').toLowerCase().trim()}`;
+      co = (DB.commerciaux || []).find(c => {
+        const cn = (c.nom || '').toLowerCase().trim();
+        return cn === akNorm || cn === akFull1 || cn === akFull2;
+      });
+    }
+    if (co && !seenCoIds.has(co.id)) {
+      seenCoIds.add(co.id);
+      options.push({ id: co.id, label });
+    }
+  });
+  return options.sort((a, b) => a.label.localeCompare(b.label));
+}
+
 function crGetRedacteurNom(r) {
   if (r.redacteur_id && _commerciauxLuccaMap[r.redacteur_id]) return _commerciauxLuccaMap[r.redacteur_id].label;
   const a = (DB.commerciaux||[]).find(co => co.id == r.redacteur_id); return a ? a.nom : (r.redacteur_nom || '');
@@ -11069,7 +11102,7 @@ function getCREditorHTML(r) {
       <div>
         <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Rédacteur <span style="color:var(--red)">*</span></label>
         <select id="crRedacteur" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
-          ${(DB.commerciaux||[]).map(co => ({ id: co.id, label: crGetRedacteurLabel(co.id) })).filter(c => c.label).sort((a,b) => a.label.localeCompare(b.label)).map(c => `<option value="${c.id}" ${(r ? r.redacteur_id == c.id : c.id == myId) ? 'selected' : ''}>${c.label}</option>`).join('')}
+          ${getCRRedacteurOptions().map(c => `<option value="${c.id}" ${(r ? r.redacteur_id == c.id : c.id == myId) ? 'selected' : ''}>${c.label}</option>`).join('')}
         </select>
       </div>
     </div>
