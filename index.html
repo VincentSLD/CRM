@@ -11265,14 +11265,16 @@ async function deleteReport() {
     const paths = currentReport.pieces_jointes.map(pj => pj.path);
     await sb.storage.from('cr-attachments').remove(paths);
   }
-  const { error } = await sb.from('reports').delete().eq('id', currentReport.id);
+  const deletedId = currentReport.id;
+  const { error } = await sb.from('reports').delete().eq('id', deletedId);
   if (error) { toast('Erreur: '+error.message, 'error'); return; }
+  // Retirer de la liste en mémoire sans tout recharger
+  DB.reports = DB.reports.filter(r => r.id !== deletedId);
   toast('Compte-rendu supprimé', 'success');
   currentReport = null;
   crAttachments = [];
   crViewMode = 'list';
   closeCRModal();
-  await loadDB();
   renderPage('cr');
 }
 
