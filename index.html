@@ -1678,6 +1678,10 @@ tbody tr:last-child td { border-bottom: none; }
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/><circle cx="20" cy="9" r="1.5"/></svg>
         BatiScop'
       </div>
+      <div class="nav-item" data-page="annuaire" onclick="go('annuaire')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Collaborateurs
+      </div>
     </div>
     <div class="nav-section">
       <div class="nav-section-title">Commerce</div>
@@ -3679,7 +3683,7 @@ function go(page) {
   const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing','marches-publics':'Veille marchés publics','procedures-coll':'Veille procédures collectives (BODACC)',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
     cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
-    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA'};
+    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs'};
   document.getElementById('pageTitle').textContent = titles[page]||page;
   renderPage(page);
   if(window.innerWidth<=768) toggleSidebar(false);
@@ -3725,6 +3729,7 @@ function renderPage(page) {
     alertes: renderAlertes,
     collaborateurs: renderCollaborateurs,
     'collaborateurs-lucca': renderCollaborateursLucca,
+    annuaire: renderAnnuaire,
     admin: renderAdmin,
   };
   // Charger les données envois si nécessaire
@@ -11697,6 +11702,85 @@ function renderEnvois() {
       </table></div>`}
     </div>
   </div>`;
+}
+
+// ═══ ANNUAIRE COLLABORATEURS ═══
+let annuaireSearch = '';
+
+function renderAnnuaire() {
+  // Collaborateurs Akuiteo liés à Lucca
+  let list = (collaborateursData || []).filter(ak => ak.lucca_id).map(ak => {
+    const lucca = (collaborateursLuccaData || []).find(l => l.lucca_id === ak.lucca_id);
+    return {
+      akId: ak.id,
+      nom: lucca ? (lucca.nom || '').toUpperCase() : (ak.nom || '').toUpperCase(),
+      prenom: lucca ? (lucca.prenom || '') : (ak.prenom || ''),
+      email: lucca ? (lucca.email || '') : (ak.email || ''),
+      telephone: ak.telephone || '',
+      mobile: ak.mobile || '',
+      agence: lucca ? (lucca.etablissement || '') : '',
+    };
+  });
+  // Filtre recherche
+  if (annuaireSearch) {
+    const q = annuaireSearch.toLowerCase();
+    list = list.filter(c =>
+      c.nom.toLowerCase().includes(q) ||
+      c.prenom.toLowerCase().includes(q) ||
+      c.email.toLowerCase().includes(q) ||
+      c.agence.toLowerCase().includes(q) ||
+      c.telephone.includes(q) ||
+      c.mobile.includes(q)
+    );
+  }
+  // Tri par nom
+  list.sort((a, b) => a.nom.localeCompare(b.nom) || a.prenom.localeCompare(b.prenom));
+
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;gap:8px;align-items:center">
+      <span style="font-size:12px;color:var(--t3)">${list.length} collaborateur(s)</span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="text" placeholder="Rechercher nom, prénom, email, agence..." value="${annuaireSearch}"
+        style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:300px;background:var(--bg-1);color:var(--t1)"
+        oninput="annuaireSearch=this.value;renderAnnuaireRefresh()">
+      ${annuaireSearch ? '<button class="btn" onclick="annuaireSearch=\'\';renderAnnuaireRefresh()" style="font-size:11px">Effacer</button>' : ''}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body" style="padding:0;overflow-x:auto">
+      <table class="tbl-compact">
+        <thead><tr>
+          <th>Nom</th><th>Prénom</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th>Agence</th>
+        </tr></thead>
+        <tbody>${list.length === 0
+          ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--t3)">Aucun collaborateur lié Akuiteo↔Lucca</td></tr>'
+          : list.map(c => `<tr>
+            <td><strong>${c.nom}</strong></td>
+            <td>${c.prenom}</td>
+            <td>${c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : '—'}</td>
+            <td><input type="text" value="${(c.telephone||'').replace(/"/g,'&quot;')}" style="border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:12px;width:120px;background:var(--bg-0);color:var(--t1)" onchange="updateCollabPhone('${c.akId}','telephone',this.value)"></td>
+            <td><input type="text" value="${(c.mobile||'').replace(/"/g,'&quot;')}" style="border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:12px;width:120px;background:var(--bg-0);color:var(--t1)" onchange="updateCollabPhone('${c.akId}','mobile',this.value)"></td>
+            <td>${c.agence || '—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function renderAnnuaireRefresh() {
+  document.getElementById('contentArea').innerHTML = '<div class="page active">' + renderAnnuaire() + '</div>';
+}
+
+async function updateCollabPhone(akId, field, value) {
+  const { error } = await sb.from('collaborateurs').update({ [field]: value.trim() }).eq('id', akId);
+  if (error) { toast('Erreur mise à jour : ' + error.message, 'error'); return; }
+  // Mettre à jour en mémoire
+  const c = (collaborateursData || []).find(co => co.id === akId);
+  if (c) c[field] = value.trim();
+  toast('Numéro mis à jour', 'success');
 }
 
 // ═══ COLLABORATEURS ═══
