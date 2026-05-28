@@ -11749,6 +11749,10 @@ function renderAnnuaire() {
       <span style="font-size:11px;color:var(--red)">${_annuaireAbsentsToday.size ? _annuaireAbsentsToday.size + ' absent(s) aujourd\\'hui' : ''}</span>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
+      <label class="btn btn-primary" style="font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">
+        Importer téléphones (CSV/Excel)
+        <input type="file" accept=".csv,.txt" onchange="importAnnuairePhones(this.files[0]);this.value=''" style="display:none">
+      </label>
       <input type="text" placeholder="Rechercher nom, prénom, email, agence, poste..." value="${annuaireSearch}"
         style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:320px;background:var(--bg-1);color:var(--t1)"
         oninput="annuaireSearch=this.value;renderAnnuaireRefresh()">
@@ -11801,6 +11805,96 @@ async function updateCollabPhone(akId, field, value) {
   const c = (collaborateursData || []).find(co => co.id === akId);
   if (c) c[field] = value.trim();
   toast('Numéro mis à jour', 'success');
+}
+
+async function importAnnuairePhones(file) {
+  if (!file) return;
+  toast('Lecture du fichier...', 'info');
+  const buf = await file.arrayBuffer();
+  let text = new TextDecoder('utf-8').decode(buf);
+  if (text.includes('\uFFFD') || /Ã[©¨ª«¯°´¹²³µ¶·¸»¼½¾]/.test(text)) {
+    text = new TextDecoder('windows-1252').decode(buf);
+  }
+  const rows = imxParseCsv(text);
+  if (!rows.length) { toast('Fichier vide ou illisible', 'error'); return; }
+
+  // Détecter les colonnes du CSV (insensible casse, accents)
+  const fields = Object.keys(rows[0]);
+  const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  const findCol = (...names) => fields.find(f => names.includes(norm(f))) || null;
+
+  const colNom = findCol('nom', 'name', 'lastname', 'last_name');
+  const colPrenom = findCol('prenom', 'firstname', 'first_name', 'prénom');
+  const colTel = findCol('telephone', 'tel', 'phone', 'tel fixe', 'tel_fixe', 'téléphone');
+  const colMobile = findCol('mobile', 'portable', 'cell', 'gsm', 'tel_mobile', 'tel mobile');
+  const colEmail = findCol('email', 'mail', 'e-mail', 'courriel');
+
+  if (!colNom && !colEmail) {
+    toast('Colonnes introuvables. Le CSV doit contenir au minimum "Nom" (ou "Email") et "Telephone" ou "Mobile".\nColonnes détectées : ' + fields.join(', '), 'error');
+    return;
+  }
+  if (!colTel && !colMobile) {
+    toast('Aucune colonne "Telephone" ou "Mobile" trouvée.\nColonnes détectées : ' + fields.join(', '), 'error');
+    return;
+  }
+
+  // Construire la liste des collaborateurs liés pour le matching
+  const linked = (collaborateursData || []).filter(ak => ak.lucca_id).map(ak => {
+    const lucca = (collaborateursLuccaData || []).find(l => l.lucca_id === ak.lucca_id);
+    return {
+      ak,
+      nom: (lucca ? lucca.nom : ak.nom || '').toLowerCase().trim(),
+      prenom: (lucca ? lucca.prenom : ak.prenom || '').toLowerCase().trim(),
+      email: (lucca ? lucca.email : ak.email || '').toLowerCase().trim(),
+    };
+  });
+
+  let updated = 0, notFound = 0, skipped = 0;
+  const notFoundNames = [];
+
+  for (const row of rows) {
+    const csvNom = (row[colNom] || '').toLowerCase().trim();
+    const csvPrenom = colPrenom ? (row[colPrenom] || '').toLowerCase().trim() : '';
+    const csvEmail = colEmail ? (row[colEmail] || '').toLowerCase().trim() : '';
+    const csvTel = colTel ? (row[colTel] || '').trim() : '';
+    const csvMobile = colMobile ? (row[colMobile] || '').trim() : '';
+
+    if (!csvTel && !csvMobile) { skipped++; continue; }
+
+    // Match par email d'abord, puis par nom+prénom
+    let match = null;
+    if (csvEmail) match = linked.find(c => c.email === csvEmail);
+    if (!match && csvNom) {
+      match = linked.find(c => c.nom === csvNom && (!csvPrenom || c.prenom === csvPrenom));
+      // Fallback : nom contient ou prénom inversé
+      if (!match) match = linked.find(c => c.nom === csvNom);
+    }
+
+    if (!match) {
+      notFound++;
+      if (notFoundNames.length < 10) notFoundNames.push(`${row[colNom] || ''} ${colPrenom ? row[colPrenom] || '' : ''}`);
+      continue;
+    }
+
+    const updates = {};
+    if (csvTel) updates.telephone = csvTel;
+    if (csvMobile) updates.mobile = csvMobile;
+
+    const { error } = await sb.from('collaborateurs').update(updates).eq('id', match.ak.id);
+    if (!error) {
+      // Mettre à jour en mémoire
+      if (csvTel) match.ak.telephone = csvTel;
+      if (csvMobile) match.ak.mobile = csvMobile;
+      updated++;
+    }
+  }
+
+  let msg = `Import terminé : ${updated} mis à jour`;
+  if (skipped) msg += `, ${skipped} ignoré(s) (pas de numéro)`;
+  if (notFound) msg += `, ${notFound} non trouvé(s)`;
+  if (notFoundNames.length) msg += '\nNon trouvés : ' + notFoundNames.join(', ');
+  toast(msg, updated > 0 ? 'success' : 'warn');
+  renderAnnuaireRefresh();
 }
 
 // ═══ COLLABORATEURS ═══
