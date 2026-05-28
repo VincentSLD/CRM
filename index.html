@@ -3166,7 +3166,7 @@ async function loadDB() {
       sb.from('commerciaux').select('*').then(r => r.data || []),
       fetchFast('marches', MARCHE_LITE, 'date_debut', true),
       fetchFast('affaires', AFFAIRE_LITE, 'date_debut', true),
-      sb.from('collaborateurs_lucca').select('id,lucca_id,nom,prenom,email,etablissement').order('nom').then(r => r.data || []),
+      sb.from('collaborateurs_lucca').select('id,lucca_id,nom,prenom,email,etablissement,poste').order('nom').then(r => r.data || []),
       sb.from('collaborateurs').select('id,lucca_id,akuiteo_id,nom,prenom,code,email,telephone,mobile').order('nom').then(r => r.data || []),
     ]);
     console.log(`[loadDB] Fetch en ${Date.now()-t0}ms : ${dAll.length} devis, ${cmAll.length} cmd, ${fAll.length} fact, ${maAll.length} marchés, ${afAll.length} affaires`);
@@ -3761,6 +3761,7 @@ function renderPage(page) {
   if (page === 'dashboard') setTimeout(() => renderDashObjectifsAgences(), 50);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
   if (page === 'collaborateurs-lucca') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); renderCollaborateursLuccaRefresh(); }, 50);
+  if (page === 'annuaire') setTimeout(async () => { await loadAnnuaireAbsences(); renderAnnuaireRefresh(); }, 50);
   if (page === 'cr' && crViewMode === 'send') setTimeout(loadSendGroups, 50);
 }
 
@@ -11706,6 +11707,7 @@ function renderEnvois() {
 
 // ═══ ANNUAIRE COLLABORATEURS ═══
 let annuaireSearch = '';
+let _annuaireAbsentsToday = new Set(); // Set de lucca_id absents aujourd'hui
 
 function renderAnnuaire() {
   // Collaborateurs Akuiteo liés à Lucca
@@ -11713,12 +11715,15 @@ function renderAnnuaire() {
     const lucca = (collaborateursLuccaData || []).find(l => l.lucca_id === ak.lucca_id);
     return {
       akId: ak.id,
+      luccaId: ak.lucca_id,
       nom: lucca ? (lucca.nom || '').toUpperCase() : (ak.nom || '').toUpperCase(),
       prenom: lucca ? (lucca.prenom || '') : (ak.prenom || ''),
       email: lucca ? (lucca.email || '') : (ak.email || ''),
       telephone: ak.telephone || '',
       mobile: ak.mobile || '',
       agence: lucca ? (lucca.etablissement || '') : '',
+      poste: lucca ? (lucca.poste || '') : '',
+      absent: _annuaireAbsentsToday.has(ak.lucca_id),
     };
   });
   // Filtre recherche
@@ -11729,6 +11734,7 @@ function renderAnnuaire() {
       c.prenom.toLowerCase().includes(q) ||
       c.email.toLowerCase().includes(q) ||
       c.agence.toLowerCase().includes(q) ||
+      c.poste.toLowerCase().includes(q) ||
       c.telephone.includes(q) ||
       c.mobile.includes(q)
     );
@@ -11740,10 +11746,11 @@ function renderAnnuaire() {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:8px;align-items:center">
       <span style="font-size:12px;color:var(--t3)">${list.length} collaborateur(s)</span>
+      <span style="font-size:11px;color:var(--red)">${_annuaireAbsentsToday.size ? _annuaireAbsentsToday.size + ' absent(s) aujourd\\'hui' : ''}</span>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
-      <input type="text" placeholder="Rechercher nom, prénom, email, agence..." value="${annuaireSearch}"
-        style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:300px;background:var(--bg-1);color:var(--t1)"
+      <input type="text" placeholder="Rechercher nom, prénom, email, agence, poste..." value="${annuaireSearch}"
+        style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:320px;background:var(--bg-1);color:var(--t1)"
         oninput="annuaireSearch=this.value;renderAnnuaireRefresh()">
       ${annuaireSearch ? '<button class="btn" onclick="annuaireSearch=\'\';renderAnnuaireRefresh()" style="font-size:11px">Effacer</button>' : ''}
     </div>
@@ -11752,22 +11759,35 @@ function renderAnnuaire() {
     <div class="card-body" style="padding:0;overflow-x:auto">
       <table class="tbl-compact">
         <thead><tr>
-          <th>Nom</th><th>Prénom</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th>Agence</th>
+          <th>Nom</th><th>Prénom</th><th>Poste</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th>Agence</th><th style="text-align:center">Présence</th>
         </tr></thead>
         <tbody>${list.length === 0
-          ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--t3)">Aucun collaborateur lié Akuiteo↔Lucca</td></tr>'
-          : list.map(c => `<tr>
+          ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucun collaborateur lié Akuiteo↔Lucca</td></tr>'
+          : list.map(c => `<tr${c.absent ? ' style="opacity:0.55"' : ''}>
             <td><strong>${c.nom}</strong></td>
             <td>${c.prenom}</td>
+            <td style="font-size:11px;color:var(--t2)">${c.poste || '—'}</td>
             <td>${c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : '—'}</td>
             <td><input type="text" value="${(c.telephone||'').replace(/"/g,'&quot;')}" style="border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:12px;width:120px;background:var(--bg-0);color:var(--t1)" onchange="updateCollabPhone('${c.akId}','telephone',this.value)"></td>
             <td><input type="text" value="${(c.mobile||'').replace(/"/g,'&quot;')}" style="border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:12px;width:120px;background:var(--bg-0);color:var(--t1)" onchange="updateCollabPhone('${c.akId}','mobile',this.value)"></td>
             <td>${c.agence || '—'}</td>
+            <td style="text-align:center">${c.absent
+              ? '<span style="color:var(--red);font-weight:600;font-size:12px">Absent</span>'
+              : '<span style="color:var(--green);font-size:12px">Présent</span>'}</td>
           </tr>`).join('')}
         </tbody>
       </table>
     </div>
   </div>`;
+}
+
+async function loadAnnuaireAbsences() {
+  const today = new Date().toISOString().substring(0, 10);
+  const { data } = await sb.from('absences_lucca')
+    .select('lucca_id')
+    .eq('date_absence', today)
+    .eq('actif', true);
+  _annuaireAbsentsToday = new Set((data || []).map(a => a.lucca_id));
 }
 
 function renderAnnuaireRefresh() {
