@@ -11629,18 +11629,24 @@ async function saveReport(silent) {
   if (currentReport) {
     const { error } = await sb.from('reports').update(reportData).eq('id', currentReport.id);
     if (error) { restoreBtn(); toast('Erreur: '+error.message, 'error'); return false; }
-    Object.assign(currentReport, reportData, { client: allClientNames, clients_list: clientsList, contacts_list: contactsList });
+    Object.assign(currentReport, reportData, { client: allClientNames, clients_list: clientsList, contacts_list: contactsList, date_raw: reportData.date, date: timeAgo(reportData.date) });
+    // Mettre à jour en mémoire
+    const idx = DB.reports.findIndex(r => r.id === currentReport.id);
+    if (idx >= 0) DB.reports[idx] = { ...currentReport };
     if (!silent) toast('Compte-rendu mis à jour', 'success');
   } else {
     reportData.statut_cr = 'brouillon';
     const { data, error } = await sb.from('reports').insert(reportData).select();
     if (error) { restoreBtn(); toast('Erreur: '+error.message, 'error'); return false; }
     if (!silent) toast('Compte-rendu enregistré', 'success');
-    if (data && data[0]) currentReport = { ...data[0], client: allClientNames, clients_list: clientsList, contacts_list: contactsList };
+    if (data && data[0]) {
+      currentReport = { ...data[0], client: allClientNames, clients_list: clientsList, contacts_list: contactsList, date_raw: reportData.date, date: timeAgo(reportData.date), text: reportData.contenu || '' };
+      // Ajouter en mémoire
+      DB.reports.unshift(currentReport);
+    }
   }
   restoreBtn();
   if (!silent) {
-    await loadDB();
     closeCRModal();
     crViewMode = 'list';
     renderPage('cr');
