@@ -14152,101 +14152,130 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ═══ PANNEAU D'APPEL TÉLÉPHONIQUE ═══
+// Workflow : appel → notes texte pendant l'appel → raccrocher → dicter résumé → IA synthétise → CR
 let _callActive = false, _callContact = null, _callClient = null;
 let _callTimer = null, _callSeconds = 0;
-let _callTranscript = '', _callRecording = false, _callRec = null;
+let _callNotes = '', _callDictText = '', _callRecording = false, _callRec = null;
+let _callPhase = 'call'; // 'call' = en appel, 'summary' = résumé post-appel
 
 function openCallPanel(contactId, clientId, clientName, contactName, phoneNumber) {
   if (_callActive) closeCallPanel();
   _callActive = true;
   _callContact = { id: contactId, name: contactName };
   _callClient = { id: clientId, name: clientName };
-  _callSeconds = 0; _callTranscript = ''; _callRecording = false;
+  _callSeconds = 0; _callNotes = ''; _callDictText = ''; _callRecording = false;
+  _callPhase = 'call';
 
   // Lancer l'appel téléphonique
   const a = document.createElement('a'); a.href = 'tel:' + phoneNumber.replace(/[^\d+]/g, '');
   a.style.display = 'none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
 
-  // Créer le panneau
+  _renderCallPanel(contactName, clientName);
+}
+
+function _renderCallPanel(contactName, clientName) {
   let panel = document.getElementById('callPanel');
   if (panel) panel.remove();
   panel = document.createElement('div');
   panel.id = 'callPanel';
-  panel.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:2px solid var(--accent);padding:12px 16px;z-index:9999;box-shadow:0 -4px 20px rgba(0,0,0,.15);display:flex;flex-direction:column;gap:10px';
-  panel.innerHTML = `
-    <div style="display:flex;align-items:center;gap:12px">
-      <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#22c55e,#16a34a);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px">📞</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:14px;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${contactName}</div>
-        <div style="font-size:12px;color:var(--t3)">${clientName}</div>
-      </div>
-      <div id="callChrono" style="font-family:monospace;font-size:18px;font-weight:700;color:var(--accent);min-width:60px;text-align:center">00:00</div>
-      <div style="display:flex;gap:6px">
-        <button id="callRecBtn" onclick="startCallTranscription()" class="btn btn-primary" style="padding:6px 12px;font-size:12px" title="Transcrire la conversation">🎙️ Transcrire</button>
-        <button id="callStopRecBtn" onclick="stopCallTranscription()" class="btn" style="padding:6px 12px;font-size:12px;display:none" title="Arrêter la transcription">⏹️ Stop</button>
-        <button id="callGenCRBtn" onclick="callGenerateCR()" class="btn btn-primary" style="padding:6px 12px;font-size:12px;display:none;background:#8b5cf6" title="Générer un CR à partir de la transcription">✦ Générer CR</button>
-        <button onclick="closeCallPanel()" class="btn" style="padding:6px 12px;font-size:12px;background:#ef4444;color:#fff;border-color:#ef4444" title="Raccrocher">Raccrocher</button>
-      </div>
-    </div>
-    <div id="callTranscriptZone" style="display:none;max-height:120px;overflow-y:auto;padding:8px 12px;background:var(--bg-1);border-radius:8px;font-size:12px;line-height:1.5;color:var(--t2)">
-      <span id="callTranscriptText"></span><span id="callInterim" style="color:var(--t3);font-style:italic"></span>
-    </div>`;
-  document.body.appendChild(panel);
+  panel.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:2px solid var(--accent);padding:12px 16px;z-index:9999;box-shadow:0 -4px 20px rgba(0,0,0,.15);display:flex;flex-direction:column;gap:10px';
 
-  // Chronomètre
-  _callTimer = setInterval(() => {
-    _callSeconds++;
-    const m = String(Math.floor(_callSeconds / 60)).padStart(2, '0');
-    const s = String(_callSeconds % 60).padStart(2, '0');
-    const el = document.getElementById('callChrono');
-    if (el) el.textContent = m + ':' + s;
-  }, 1000);
+  if (_callPhase === 'call') {
+    // ─── PHASE 1 : EN APPEL — chrono + notes texte ───
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#22c55e,#16a34a);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:16px">📞</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:14px;color:var(--t1)">${contactName}</div>
+          <div style="font-size:12px;color:var(--t3)">${clientName}</div>
+        </div>
+        <div id="callChrono" style="font-family:monospace;font-size:18px;font-weight:700;color:var(--accent);min-width:60px;text-align:center">00:00</div>
+        <button onclick="endCall()" class="btn" style="padding:8px 14px;font-size:12px;background:#ef4444;color:#fff;border-color:#ef4444;font-weight:600">Raccrocher</button>
+      </div>
+      <div>
+        <textarea id="callNotesInput" placeholder="Notes rapides pendant l'appel..." style="width:100%;min-height:60px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;line-height:1.5;background:var(--bg-1);color:var(--t1);resize:vertical;box-sizing:border-box">${_callNotes}</textarea>
+      </div>`;
+    // Chrono
+    if (!_callTimer) {
+      _callTimer = setInterval(() => {
+        _callSeconds++;
+        const m = String(Math.floor(_callSeconds / 60)).padStart(2, '0');
+        const s = String(_callSeconds % 60).padStart(2, '0');
+        const el = document.getElementById('callChrono');
+        if (el) el.textContent = m + ':' + s;
+      }, 1000);
+    }
+  } else {
+    // ─── PHASE 2 : POST-APPEL — dicter un résumé ───
+    const dur = String(Math.floor(_callSeconds / 60)).padStart(2, '0') + ':' + String(_callSeconds % 60).padStart(2, '0');
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+        <div style="width:32px;height:32px;border-radius:50%;background:#8b5cf6;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px">✦</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:13px;color:var(--t1)">Résumé d'appel — ${contactName}</div>
+          <div style="font-size:11px;color:var(--t3)">${clientName} · Durée : ${dur}</div>
+        </div>
+        <button onclick="closeCallPanel()" class="btn" style="font-size:11px;padding:4px 10px">Annuler</button>
+      </div>
+      ${_callNotes ? '<div style="font-size:11px;color:var(--t3);margin-bottom:4px">Notes prises : <em>' + _callNotes.substring(0, 80) + (_callNotes.length > 80 ? '...' : '') + '</em></div>' : ''}
+      <div style="font-size:12px;color:var(--t2);font-weight:600;margin-bottom:4px">Dicte ou tape ton résumé de l'appel :</div>
+      <textarea id="callDictArea" placeholder="Résumé de la conversation..." style="width:100%;min-height:80px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;line-height:1.5;background:var(--bg-1);color:var(--t1);resize:vertical;box-sizing:border-box">${_callDictText}</textarea>
+      <div style="display:flex;gap:6px;justify-content:space-between;align-items:center">
+        <div style="display:flex;gap:6px">
+          <button id="callDictBtn" onclick="toggleCallDictation()" class="btn" style="font-size:12px;padding:6px 12px">🎙️ Dicter</button>
+          <button id="callDictStopBtn" onclick="stopCallDictation()" class="btn" style="font-size:12px;padding:6px 12px;display:none;color:var(--red)">⏹️ Arrêter</button>
+          <span id="callDictInterim" style="font-size:11px;color:var(--t3);font-style:italic;align-self:center"></span>
+        </div>
+        <button onclick="callGenerateCR()" class="btn btn-primary" style="font-size:12px;padding:8px 16px;background:#8b5cf6;font-weight:600">✦ Générer CR</button>
+      </div>`;
+  }
+  document.body.appendChild(panel);
 }
 
-function startCallTranscription() {
-  if (_callRecording) return;
+function endCall() {
+  // Sauvegarder les notes
+  const notesEl = document.getElementById('callNotesInput');
+  if (notesEl) _callNotes = notesEl.value.trim();
+  // Arrêter le chrono
+  if (_callTimer) { clearInterval(_callTimer); _callTimer = null; }
+  // Passer en phase résumé
+  _callPhase = 'summary';
+  _renderCallPanel(_callContact?.name || '', _callClient?.name || '');
+}
+
+function toggleCallDictation() {
+  if (_callRecording) { stopCallDictation(); return; }
   _callRecording = true;
-  document.getElementById('callRecBtn').style.display = 'none';
-  document.getElementById('callStopRecBtn').style.display = '';
-  document.getElementById('callTranscriptZone').style.display = 'block';
+  const btn = document.getElementById('callDictBtn');
+  const stopBtn = document.getElementById('callDictStopBtn');
+  if (btn) btn.style.display = 'none';
+  if (stopBtn) stopBtn.style.display = '';
 
   _callRec = _startSpeechRec({
     onFinal(text) {
-      _callTranscript += (_callTranscript ? ' ' : '') + text;
-      const el = document.getElementById('callTranscriptText');
-      if (el) el.textContent = _callTranscript;
-      const zone = document.getElementById('callTranscriptZone');
-      if (zone) zone.scrollTop = zone.scrollHeight;
+      const area = document.getElementById('callDictArea');
+      if (area) { area.value += (area.value && !area.value.endsWith(' ') ? ' ' : '') + text; _callDictText = area.value; }
     },
     onInterim(text) {
-      const el = document.getElementById('callInterim');
-      if (el) el.textContent = text ? ' ' + text : '';
+      const el = document.getElementById('callDictInterim');
+      if (el) el.textContent = text || '';
     },
     shouldRestart() { return _callRecording; },
     onStop() {
       _callRecording = false;
-      const btn = document.getElementById('callStopRecBtn');
-      if (btn) btn.style.display = 'none';
-      const rec = document.getElementById('callRecBtn');
-      if (rec) { rec.style.display = ''; rec.textContent = '🎙️ Reprendre'; }
-      if (_callTranscript) {
-        const gen = document.getElementById('callGenCRBtn');
-        if (gen) gen.style.display = '';
-      }
+      const btn = document.getElementById('callDictBtn');
+      const stopBtn = document.getElementById('callDictStopBtn');
+      const interim = document.getElementById('callDictInterim');
+      if (btn) { btn.style.display = ''; btn.textContent = '🎙️ Reprendre'; }
+      if (stopBtn) stopBtn.style.display = 'none';
+      if (interim) interim.textContent = '';
     }
   });
 }
 
-function stopCallTranscription() {
+function stopCallDictation() {
   _callRecording = false;
   if (_callRec) { try { _callRec.stop(); } catch(e) {} _callRec = null; }
-  document.getElementById('callStopRecBtn').style.display = 'none';
-  const rec = document.getElementById('callRecBtn');
-  if (rec) { rec.style.display = ''; rec.textContent = '🎙️ Reprendre'; }
-  if (_callTranscript) {
-    const gen = document.getElementById('callGenCRBtn');
-    if (gen) gen.style.display = '';
-  }
 }
 
 function closeCallPanel() {
@@ -14255,66 +14284,61 @@ function closeCallPanel() {
   if (_callTimer) { clearInterval(_callTimer); _callTimer = null; }
   const panel = document.getElementById('callPanel');
   if (panel) panel.remove();
-  // Si transcription non vide, proposer de générer un CR
-  if (_callTranscript && _callClient) {
-    if (confirm('Vous avez une transcription d\'appel. Voulez-vous générer un CR ?')) {
-      callGenerateCR();
-      return;
-    }
-  }
   _callActive = false; _callContact = null; _callClient = null;
-  _callSeconds = 0; _callTranscript = '';
+  _callSeconds = 0; _callNotes = ''; _callDictText = ''; _callPhase = 'call';
 }
 
 async function callGenerateCR() {
-  if (!_callTranscript || !_callClient) { toast('Pas de transcription disponible', 'error'); return; }
+  // Récupérer le résumé dicté/tapé + les notes
+  const area = document.getElementById('callDictArea');
+  if (area) _callDictText = area.value.trim();
+  const allText = [_callNotes, _callDictText].filter(Boolean).join('\n\n');
+  if (!allText) { toast('Tape ou dicte un résumé avant de générer le CR', 'error'); return; }
+
   const contactName = _callContact?.name || '';
   const clientName = _callClient?.name || '';
   const clientId = _callClient?.id || '';
   const contactId = _callContact?.id || '';
-  const transcript = _callTranscript;
 
-  // Fermer le panneau sans prompt
+  // Fermer le panneau
   _callRecording = false;
   if (_callRec) { try { _callRec.stop(); } catch(e) {} _callRec = null; }
   if (_callTimer) { clearInterval(_callTimer); _callTimer = null; }
   const panel = document.getElementById('callPanel');
   if (panel) panel.remove();
   _callActive = false; _callContact = null; _callClient = null;
-  _callSeconds = 0; _callTranscript = '';
+  _callSeconds = 0; _callNotes = ''; _callDictText = ''; _callPhase = 'call';
 
   // Naviguer vers la création de CR
   goToCR(clientId, clientName, contactId, contactName);
 
   // Attendre que le formulaire soit rendu
   setTimeout(async () => {
-    // Pré-remplir le type TEL
     const typeEl = document.getElementById('crType');
     if (typeEl) typeEl.value = 'tel';
-    // Pré-remplir le titre
     const titreEl = document.getElementById('crTitre');
     if (titreEl) titreEl.value = 'Appel téléphonique — ' + contactName;
 
     // Générer la synthèse IA
     const body = document.getElementById('editorBody');
-    if (body) body.innerHTML = '<p style="color:var(--t3);font-style:italic">⏳ Génération de la synthèse en cours...</p>';
+    if (body) body.innerHTML = '<p style="color:var(--t3);font-style:italic">Génération de la synthèse en cours...</p>';
     try {
       const resp = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'transcribe_cr', text: transcript, clientName })
+        body: JSON.stringify({ action: 'transcribe_cr', text: allText, clientName })
       });
       const data = await resp.json();
       if (data.result && body) {
         body.innerHTML = data.result;
         toast('Synthèse d\'appel générée', 'success');
       } else {
-        if (body) body.innerHTML = '<p>' + transcript + '</p>';
-        toast('Erreur synthèse IA — transcription brute insérée', 'error');
+        if (body) body.innerHTML = '<p>' + allText.replace(/\n/g, '<br>') + '</p>';
+        toast('Erreur synthèse — texte brut inséré', 'error');
       }
     } catch (e) {
-      if (body) body.innerHTML = '<p>' + transcript + '</p>';
-      toast('Erreur réseau — transcription brute insérée', 'error');
+      if (body) body.innerHTML = '<p>' + allText.replace(/\n/g, '<br>') + '</p>';
+      toast('Erreur réseau — texte brut inséré', 'error');
     }
   }, 500);
 }
