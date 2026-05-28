@@ -133,7 +133,7 @@ export default async function handler(req, res) {
   const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
   if (!ANTHROPIC_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
-  const { question, history } = req.body || {};
+  const { question, history, userProfile } = req.body || {};
   if (!question) return res.status(400).json({ error: 'Missing question' });
 
   const systemPrompt = `Tu es un assistant IA intégré dans un CRM commercial français utilisé par le groupe GPH (plusieurs agences : GPH-R, GPH64, GPH85, SA85, etc.).
@@ -177,8 +177,10 @@ Exemples :
 - Clients stratégiques d'une agence : query_table(table="clients", filters={"categorie_compte.cs":"{\\"GPH85\\":\\"A- Stratégique\\"}"}, select="name,city,categorie_compte")
 
 Réponds en français, concis, avec des chiffres exacts issus des outils. Format monnaie : k€ ou M€ pour les grands nombres.
+Tutoie l'utilisateur et personnalise tes réponses en fonction de son profil.
 
-Date actuelle : ${new Date().toISOString().slice(0,10)}`;
+Date actuelle : ${new Date().toISOString().slice(0,10)}
+${userProfile ? `\nUtilisateur connecté : ${userProfile.prenom || ''} ${userProfile.nom || ''} (${userProfile.email || ''})${userProfile.poste ? ' — Poste : ' + userProfile.poste : ''}${userProfile.etablissement ? ' — Agence : ' + userProfile.etablissement : ''}` : ''}`;
 
   try {
     const messages = Array.isArray(history) ? history.slice(-10) : [];

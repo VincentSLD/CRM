@@ -14081,7 +14081,9 @@ function toggleAIChat() {
   panel.style.display = open ? 'none' : 'flex';
   if (open) aiStopSpeak();
   if (!open && _aiChatHistory.length === 0) {
-    addAIMsg('assistant', 'Bonjour ! Je suis votre assistant IA. Posez-moi des questions sur vos données CRM : CA, factures, clients, affaires, etc.');
+    const _p = _getAIUserProfile();
+    const _hello = _p && _p.prenom ? `Bonjour ${_p.prenom} ! ` : 'Bonjour ! ';
+    addAIMsg('assistant', _hello + 'Je suis ton assistant IA. Pose-moi tes questions sur les données CRM : CA, factures, clients, affaires, etc.');
   }
   if (!open) {
     setTimeout(() => document.getElementById('aiChatInput')?.focus(), 100);
@@ -14195,6 +14197,20 @@ function buildCRMContext() {
   if (currentCommercial) lines.push(`\nUtilisateur connecté : ${currentCommercial.nom || currentCommercial.email}`);
   return lines.join('\n');
 }
+function _getAIUserProfile() {
+  const co = currentCommercial;
+  if (!co) return null;
+  const profile = { nom: co.nom || '', email: co.email || '' };
+  // Enrichir avec les données Lucca
+  const luccaMatch = (collaborateursLuccaData || []).find(l => l.email && co.email && l.email.toLowerCase() === co.email.toLowerCase());
+  if (luccaMatch) {
+    profile.nom = (luccaMatch.nom || '').toUpperCase();
+    profile.prenom = luccaMatch.prenom || '';
+    profile.poste = luccaMatch.poste || '';
+    profile.etablissement = luccaMatch.etablissement || '';
+  }
+  return profile;
+}
 async function askAIChat(presetQuestion) {
   const input = document.getElementById('aiChatInput');
   const question = (presetQuestion || input?.value || '').trim();
@@ -14208,7 +14224,8 @@ async function askAIChat(presetQuestion) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         question,
-        history: _aiChatHistory
+        history: _aiChatHistory,
+        userProfile: _getAIUserProfile()
       })
     });
     if (!resp.ok) {
