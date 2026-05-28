@@ -1,4 +1,4 @@
-// ═══ CHATBOT IA AVEC ACCÈS SUPABASE (tool use) ═══
+// ═══ CHATBOT IA AVEC ACCÈS SUPABASE (tool use) + STREAMING SSE ═══
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://asuccniyofzvwgooxjah.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzdWNjbml5b2Z6dndnb294amFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MDQyNjgsImV4cCI6MjA4ODQ4MDI2OH0.dPerW1BApAxe26xzv9i7oWIubgGuzO5RibMvs-MFm88';
 
@@ -35,6 +35,8 @@ const TOOLS = [
     }
   }
 ];
+
+const TABLE_LABELS = { clients:'clients', contacts:'contacts', devis:'devis', commandes:'commandes', factures:'factures', affaires:'affaires', marches:'marchés', reports:'comptes-rendus', commerciaux:'commerciaux' };
 
 async function sbRequest(path, options = {}) {
   const url = SUPABASE_URL + '/rest/v1/' + path;
@@ -75,7 +77,6 @@ async function executeTool(name, input) {
     }
     if (name === 'aggregate_table') {
       const { table, column, op, filters, group_by } = input || {};
-      // Supabase REST ne supporte pas nativement les agrégations → on charge tout et on agrège en JS
       const selectCols = group_by ? [column, group_by].filter(Boolean).join(',') : (column || '*');
       const qs = buildQueryParams(filters, selectCols, null, 10000);
       const data = await sbRequest(table + '?' + qs);
@@ -123,20 +124,15 @@ async function callClaude(ANTHROPIC_KEY, body) {
   return resp.json();
 }
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+function toolLabel(tu) {
+  const tbl = TABLE_LABELS[tu.input?.table] || tu.input?.table || 'données';
+  if (tu.name === 'query_table') return 'Consultation ' + tbl;
+  if (tu.name === 'aggregate_table') return 'Calcul sur ' + tbl;
+  return tu.name;
+}
 
-  const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-  if (!ANTHROPIC_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
-
-  const { question, history, userProfile } = req.body || {};
-  if (!question) return res.status(400).json({ error: 'Missing question' });
-
-  const systemPrompt = `Tu t'appelles NOVA. Tu es une assistante IA féminine intégrée dans un CRM commercial français utilisé par le groupe GPH (plusieurs agences : GPH-R, GPH64, GPH85, SA85, etc.).
+function buildSystemPrompt(userProfile) {
+  return `Tu t'appelles NOVA. Tu es une assistante IA féminine intégrée dans un CRM commercial français utilisé par le groupe GPH (plusieurs agences : GPH-R, GPH64, GPH85, SA85, etc.).
 Tu es une analyste financière, commerciale et stratégique au service de l'entreprise. Tu parles au féminin (je suis ravie, j'ai trouvé, etc.).
 
 RÈGLES STRICTES :
@@ -181,7 +177,86 @@ Tutoie l'utilisateur et personnalise tes réponses en fonction de son profil.
 
 Date actuelle : ${new Date().toISOString().slice(0,10)}
 ${userProfile ? `\nUtilisateur connecté : ${userProfile.prenom || ''} ${userProfile.nom || ''} (${userProfile.email || ''})${userProfile.poste ? ' — Poste : ' + userProfile.poste : ''}${userProfile.etablissement ? ' — Agence : ' + userProfile.etablissement : ''}` : ''}`;
+}
 
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+
+  const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+  if (!ANTHROPIC_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+  const { question, history, userProfile, stream } = req.body || {};
+  if (!question) return res.status(400).json({ error: 'Missing question' });
+
+  const systemPrompt = buildSystemPrompt(userProfile);
+
+  // ─── MODE SSE STREAMING ───
+  if (stream) {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+    const sse = (data) => { try { res.write('data: ' + JSON.stringify(data) + '\n\n'); } catch(e) {} };
+
+    try {
+      const messages = Array.isArray(history) ? history.slice(-10) : [];
+      messages.push({ role: 'user', content: question });
+
+      let iterations = 0;
+      const MAX_ITER = 6;
+      while (iterations < MAX_ITER) {
+        iterations++;
+        sse({ type: 'status', text: iterations === 1 ? 'Réflexion...' : 'Analyse approfondie...' });
+
+        const data = await callClaude(ANTHROPIC_KEY, {
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 2048,
+          system: systemPrompt,
+          tools: TOOLS,
+          messages
+        });
+
+        if (data.stop_reason === 'tool_use') {
+          const toolUses = data.content.filter(c => c.type === 'tool_use');
+          messages.push({ role: 'assistant', content: data.content });
+          // Envoyer le statut des outils en cours
+          const labels = toolUses.map(t => toolLabel(t)).join(', ');
+          sse({ type: 'status', text: labels + '...' });
+          const toolResults = [];
+          for (const tu of toolUses) {
+            const result = await executeTool(tu.name, tu.input);
+            const str = JSON.stringify(result);
+            const truncated = str.length > 8000 ? str.substring(0, 8000) + '... [tronqué]' : str;
+            toolResults.push({ type: 'tool_result', tool_use_id: tu.id, content: truncated });
+          }
+          messages.push({ role: 'user', content: toolResults });
+          continue;
+        }
+
+        // Réponse finale
+        const textBlock = data.content.find(c => c.type === 'text');
+        const result = textBlock?.text || '';
+        sse({ type: 'done', result });
+        res.end();
+        return;
+      }
+      sse({ type: 'done', result: "Trop d'itérations — reformule ta question." });
+      res.end();
+    } catch (e) {
+      console.error('AI chat stream error:', e);
+      sse({ type: 'error', text: e.message });
+      res.end();
+    }
+    return;
+  }
+
+  // ─── MODE CLASSIQUE (non-streaming) ───
   try {
     const messages = Array.isArray(history) ? history.slice(-10) : [];
     messages.push({ role: 'user', content: question });
@@ -198,14 +273,12 @@ ${userProfile ? `\nUtilisateur connecté : ${userProfile.prenom || ''} ${userPro
         messages
       });
 
-      // Si l'IA veut utiliser des tools, on exécute et on reboucle
       if (data.stop_reason === 'tool_use') {
         const toolUses = data.content.filter(c => c.type === 'tool_use');
         messages.push({ role: 'assistant', content: data.content });
         const toolResults = [];
         for (const tu of toolUses) {
           const result = await executeTool(tu.name, tu.input);
-          // Tronquer les résultats trop gros pour ne pas saturer l'IA
           const str = JSON.stringify(result);
           const truncated = str.length > 8000 ? str.substring(0, 8000) + '... [tronqué]' : str;
           toolResults.push({ type: 'tool_result', tool_use_id: tu.id, content: truncated });
@@ -214,7 +287,6 @@ ${userProfile ? `\nUtilisateur connecté : ${userProfile.prenom || ''} ${userPro
         continue;
       }
 
-      // Réponse finale
       const textBlock = data.content.find(c => c.type === 'text');
       const result = textBlock?.text || '';
       return res.status(200).json({ result });

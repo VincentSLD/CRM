@@ -2680,6 +2680,7 @@ tbody tr:last-child td { border-bottom: none; }
       <button id="aiTtsToggle" onclick="toggleAITts()" title="Lecture vocale" style="background:none;border:none;color:#fff;cursor:pointer;font-size:16px;opacity:.7;padding:4px">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
       </button>
+      <button id="aiSpeedToggle" onclick="cycleAITtsSpeed()" title="Vitesse vocale" style="background:none;border:none;color:#fff;cursor:pointer;font-size:11px;opacity:.7;padding:4px;font-weight:700;min-width:30px">1x</button>
       <button onclick="toggleAIChat()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:22px;line-height:1">×</button>
     </div>
   </div>
@@ -3558,7 +3559,7 @@ function renderContactDetail() {
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${c.email ? '<a href="mailto:'+c.email+'" class="btn btn-primary" style="text-decoration:none">Envoyer un email</a>' : ''}
-        ${c.telephone ? `<button class="btn" onclick="openCallPanel('${c.id}','${c.client_id||''}','${(c._clientName||'').replace(/'/g,"\\\\'")}','${([c.prenom,c.nom].filter(Boolean).join(' ')).replace(/'/g,"\\\\'")}','${c.telephone}')">Appeler</button>` : ''}
+        ${(c.telephone || c.mobile) ? `<button class="btn" onclick="openCallPanel('${c.id}','${c.client_id||''}','${(c._clientName||'').replace(/'/g,"\\\\'")}','${([c.prenom,c.nom].filter(Boolean).join(' ')).replace(/'/g,"\\\\'")}','${c.telephone || c.mobile}')">Appeler</button>` : ''}
         <button class="btn" onclick="goToCR('${c.client_id||''}','${(c._clientName||'').replace(/'/g,"\\'")}','${c.id||''}','${([c.prenom,c.nom].filter(Boolean).join(' ')).replace(/'/g,"\\'")}')">Rédiger CR</button>
         <button class="btn" onclick="toggleEditContact()">Modifier</button>
         <button class="btn ${c.akuiteo_id ? 'btn-synced' : 'btn-not-synced'}" onclick="pushContactToAkuiteo('${c.id}')" title="${c.akuiteo_id ? 'Synchronisé (ID: '+c.akuiteo_id+')' : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? '✔ Synchronisé' : '⬆ Sync Akuiteo'}</button>
@@ -14321,34 +14322,52 @@ async function callGenerateCR() {
 // ═══ CHATBOT NOVA ═══
 let _aiChatHistory = [];
 let _aiTtsEnabled = window.innerWidth <= 768; // activé par défaut sur mobile
+let _aiTtsSpeed = 1; // 1, 1.25, 1.5, 2
+let _aiConversationMode = false; // mode conversation continue
 if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
 
 function toggleAITts() {
   _aiTtsEnabled = !_aiTtsEnabled;
+  _aiConversationMode = _aiTtsEnabled; // conversation continue = TTS activé
   const btn = document.getElementById('aiTtsToggle');
   if (btn) btn.style.opacity = _aiTtsEnabled ? '1' : '.4';
   if (!_aiTtsEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
-  toast(_aiTtsEnabled ? 'Lecture vocale activée' : 'Lecture vocale désactivée', 'info');
+  toast(_aiTtsEnabled ? 'Mode vocal activé (conversation continue)' : 'Mode vocal désactivé', 'info');
 }
 function aiSpeak(text) {
   if (!_aiTtsEnabled || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
-  const clean = text.replace(/<[^>]*>/g, ' ').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
+  // Nettoyer HTML, entités, emojis
+  let clean = text.replace(/<[^>]*>/g, ' ').replace(/&[a-z]+;/g, ' ');
+  clean = clean.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}\u{2702}-\u{27B0}\u{1F1E0}-\u{1F1FF}\u{2B50}\u{2B55}\u{231A}-\u{23F3}\u{23E9}-\u{23EF}\u{25AA}-\u{25FE}\u{2934}-\u{2935}\u{2190}-\u{21FF}\u{2022}\u{25CF}\u{2605}\u{2764}\u{FE0F}✦✔⬆⏳★●▶◀→←↗↘]/gu, '');
+  clean = clean.replace(/\s+/g, ' ').trim();
   if (!clean) return;
   const utter = new SpeechSynthesisUtterance(clean);
-  utter.lang = 'fr-FR'; utter.rate = 1; utter.pitch = 1.1;
+  utter.lang = 'fr-FR'; utter.rate = _aiTtsSpeed; utter.pitch = 1.1;
   const voices = speechSynthesis.getVoices();
   const frVoices = voices.filter(v => v.lang.startsWith('fr'));
-  // Exclure voix masculines connues
   const notMale = frVoices.filter(v => !/\b(paul|thomas|henri|male)\b/i.test(v.name));
-  // Préférer voix féminine française
   const femaleVoice = (notMale.length ? notMale : frVoices).find(v =>
     /female|femme|hortense|denise|amelie|audrey|aurelie|marie|lea|chloe|julie|caroline|virginie|elise/i.test(v.name)
   ) || notMale[0] || frVoices[0];
   if (femaleVoice) utter.voice = femaleVoice;
+  // Mode conversation continue : relancer le micro après la lecture
+  utter.onend = () => {
+    if (_aiConversationMode && _aiTtsEnabled) {
+      setTimeout(() => { if (!_aiDictOn) toggleAIDictation(); }, 300);
+    }
+  };
   speechSynthesis.speak(utter);
 }
 function aiStopSpeak() { if (window.speechSynthesis) window.speechSynthesis.cancel(); }
+function cycleAITtsSpeed() {
+  const speeds = [1, 1.25, 1.5, 2];
+  const idx = speeds.indexOf(_aiTtsSpeed);
+  _aiTtsSpeed = speeds[(idx + 1) % speeds.length];
+  const btn = document.getElementById('aiSpeedToggle');
+  if (btn) { btn.textContent = _aiTtsSpeed + 'x'; btn.style.opacity = _aiTtsSpeed > 1 ? '1' : '.7'; }
+  toast('Vitesse vocale : ' + _aiTtsSpeed + 'x', 'info');
+}
 
 function toggleAIChat() {
   const panel = document.getElementById('aiChatPanel');
@@ -14365,6 +14384,8 @@ function toggleAIChat() {
     setTimeout(() => document.getElementById('aiChatInput')?.focus(), 100);
     const btn = document.getElementById('aiTtsToggle');
     if (btn) btn.style.opacity = _aiTtsEnabled ? '1' : '.4';
+    const speedBtn = document.getElementById('aiSpeedToggle');
+    if (speedBtn) { speedBtn.textContent = _aiTtsSpeed + 'x'; speedBtn.style.opacity = _aiTtsSpeed > 1 ? '1' : '.7'; }
     // Afficher bouton téléphone sur mobile
     const phoneBtn = document.getElementById('aiPhoneBtn');
     if (phoneBtn) phoneBtn.style.display = window.innerWidth <= 768 ? '' : 'none';
@@ -14613,37 +14634,75 @@ async function askAIChat(presetQuestion) {
   const question = (presetQuestion || input?.value || '').trim();
   if (!question) return;
   if (input) input.value = '';
+  // Couper la dictée en cours pour ne pas interférer
+  if (_aiDictOn) { _aiDictOn = false; if (_aiDictRec) _aiDictRec.stop(); _aiDictRec = null; const db = document.getElementById('aiDictBtn'); if (db) { db.classList.remove('recording'); db.style.color = ''; } }
   addAIMsg('user', question.replace(/</g,'&lt;'));
-  const loadingDiv = addAIMsg('assistant', '<span style="opacity:.6">✦ Analyse en cours...</span>');
+  const loadingDiv = addAIMsg('assistant', '<span style="opacity:.6">✦ Réflexion...</span>');
+  const box = document.getElementById('aiChatMsgs');
   try {
     const resp = await fetch('/api/ai-chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        question,
-        history: _aiChatHistory,
-        userProfile: _getAIUserProfile()
-      })
+      body: JSON.stringify({ question, history: _aiChatHistory, userProfile: _getAIUserProfile(), stream: true })
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      throw new Error(err.error || ('Erreur IA ('+resp.status+')'));
+      throw new Error(err.error || ('Erreur IA (' + resp.status + ')'));
     }
-    const { result } = await resp.json();
+    // Lire le flux SSE
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '', fullResult = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      while (buf.includes('\n\n')) {
+        const idx = buf.indexOf('\n\n');
+        const chunk = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 2);
+        if (!chunk.startsWith('data: ')) continue;
+        try {
+          const ev = JSON.parse(chunk.slice(6));
+          if (ev.type === 'status') {
+            loadingDiv.innerHTML = '<span style="opacity:.6">✦ ' + ev.text + '</span>';
+            if (box) box.scrollTop = box.scrollHeight;
+          } else if (ev.type === 'done') {
+            fullResult = ev.result || '';
+          } else if (ev.type === 'error') {
+            throw new Error(ev.text);
+          }
+        } catch (pe) { if (pe.message && !pe.message.includes('JSON')) throw pe; }
+      }
+    }
+    if (!fullResult && buf.includes('data: ')) {
+      try { const ev = JSON.parse(buf.split('data: ').pop()); fullResult = ev.result || ''; } catch(e) {}
+    }
+    // Affichage progressif ligne par ligne
     _aiChatHistory.push({ role: 'user', content: question });
-    _aiChatHistory.push({ role: 'assistant', content: result });
-    loadingDiv.innerHTML = result.replace(/\n/g, '<br>');
-    // Ajouter bouton lecture sur la réponse
+    _aiChatHistory.push({ role: 'assistant', content: fullResult });
+    const lines = fullResult.split('\n').filter(l => l.trim());
+    if (lines.length > 1) {
+      loadingDiv.innerHTML = '';
+      for (let i = 0; i < lines.length; i++) {
+        loadingDiv.innerHTML += (i > 0 ? '<br>' : '') + lines[i];
+        if (box) box.scrollTop = box.scrollHeight;
+        await new Promise(r => setTimeout(r, 35));
+      }
+    } else {
+      loadingDiv.innerHTML = fullResult.replace(/\n/g, '<br>');
+    }
+    // Bouton lecture
     const speakBtn = document.createElement('button');
     speakBtn.title = 'Lire à voix haute';
     speakBtn.style.cssText = 'position:absolute;top:4px;right:4px;background:none;border:none;cursor:pointer;opacity:.4;padding:2px;color:var(--t3);font-size:12px';
     speakBtn.innerHTML = '🔊';
-    speakBtn.onclick = () => { aiSpeak(loadingDiv.textContent); };
+    speakBtn.onclick = () => aiSpeak(loadingDiv.textContent);
     speakBtn.onmouseenter = () => speakBtn.style.opacity = '1';
     speakBtn.onmouseleave = () => speakBtn.style.opacity = '.4';
     loadingDiv.appendChild(speakBtn);
-    // Auto-lecture vocale
-    aiSpeak(result);
+    if (box) box.scrollTop = box.scrollHeight;
+    aiSpeak(fullResult);
   } catch (e) {
     loadingDiv.innerHTML = '<span style="color:var(--red)">Erreur: ' + e.message + '</span>';
   }
