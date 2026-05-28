@@ -14383,8 +14383,10 @@ function aiSpeak(text) {
     /female|femme|hortense|denise|amelie|audrey|aurelie|marie|lea|chloe|julie|caroline|virginie|elise/i.test(v.name)
   ) || notMale[0] || frVoices[0];
   if (femaleVoice) utter.voice = femaleVoice;
-  // Mode conversation continue : relancer le micro après la lecture
+  // Après lecture vocale : focus le champ + relancer micro en mode conversation
   utter.onend = () => {
+    const inp = document.getElementById('aiChatInput');
+    if (inp) inp.focus();
     if (_aiConversationMode && _aiTtsEnabled) {
       setTimeout(() => { if (!_aiDictOn) toggleAIDictation(); }, 300);
     }
@@ -14735,6 +14737,8 @@ async function askAIChat(presetQuestion) {
     loadingDiv.appendChild(speakBtn);
     if (box) box.scrollTop = box.scrollHeight;
     aiSpeak(fullResult);
+    // Focus le champ pour enchaîner directement (si TTS off, pas de onend)
+    if (!_aiTtsEnabled) { const inp = document.getElementById('aiChatInput'); if (inp) inp.focus(); }
   } catch (e) {
     loadingDiv.innerHTML = '<span style="color:var(--red)">Erreur: ' + e.message + '</span>';
   }
