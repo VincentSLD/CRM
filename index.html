@@ -3507,7 +3507,7 @@ function renderContactDetail() {
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${c.email ? '<a href="mailto:'+c.email+'" class="btn btn-primary" style="text-decoration:none">Envoyer un email</a>' : ''}
-        ${c.telephone ? '<a href="tel:'+c.telephone+'" class="btn" style="text-decoration:none">Appeler</a>' : ''}
+        ${c.telephone ? `<button class="btn" onclick="openCallPanel('${c.id}','${c.client_id||''}','${(c._clientName||'').replace(/'/g,"\\\\'")}','${([c.prenom,c.nom].filter(Boolean).join(' ')).replace(/'/g,"\\\\'")}','${c.telephone}')">Appeler</button>` : ''}
         <button class="btn" onclick="goToCR('${c.client_id||''}','${(c._clientName||'').replace(/'/g,"\\'")}','${c.id||''}','${([c.prenom,c.nom].filter(Boolean).join(' ')).replace(/'/g,"\\'")}')">Rédiger CR</button>
         <button class="btn" onclick="toggleEditContact()">Modifier</button>
         <button class="btn ${c.akuiteo_id ? 'btn-synced' : 'btn-not-synced'}" onclick="pushContactToAkuiteo('${c.id}')" title="${c.akuiteo_id ? 'Synchronisé (ID: '+c.akuiteo_id+')' : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? '✔ Synchronisé' : '⬆ Sync Akuiteo'}</button>
@@ -14099,9 +14099,178 @@ document.addEventListener('DOMContentLoaded', () => {
   // (la reconnaissance vocale nécessite une interaction utilisateur)
 });
 
+// ═══ PANNEAU D'APPEL TÉLÉPHONIQUE ═══
+let _callActive = false, _callContact = null, _callClient = null;
+let _callTimer = null, _callSeconds = 0;
+let _callTranscript = '', _callRecording = false, _callRec = null;
+
+function openCallPanel(contactId, clientId, clientName, contactName, phoneNumber) {
+  if (_callActive) closeCallPanel();
+  _callActive = true;
+  _callContact = { id: contactId, name: contactName };
+  _callClient = { id: clientId, name: clientName };
+  _callSeconds = 0; _callTranscript = ''; _callRecording = false;
+
+  // Lancer l'appel téléphonique
+  const a = document.createElement('a'); a.href = 'tel:' + phoneNumber.replace(/[^\d+]/g, '');
+  a.style.display = 'none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+
+  // Créer le panneau
+  let panel = document.getElementById('callPanel');
+  if (panel) panel.remove();
+  panel = document.createElement('div');
+  panel.id = 'callPanel';
+  panel.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:2px solid var(--accent);padding:12px 16px;z-index:9999;box-shadow:0 -4px 20px rgba(0,0,0,.15);display:flex;flex-direction:column;gap:10px';
+  panel.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#22c55e,#16a34a);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px">📞</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:14px;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${contactName}</div>
+        <div style="font-size:12px;color:var(--t3)">${clientName}</div>
+      </div>
+      <div id="callChrono" style="font-family:monospace;font-size:18px;font-weight:700;color:var(--accent);min-width:60px;text-align:center">00:00</div>
+      <div style="display:flex;gap:6px">
+        <button id="callRecBtn" onclick="startCallTranscription()" class="btn btn-primary" style="padding:6px 12px;font-size:12px" title="Transcrire la conversation">🎙️ Transcrire</button>
+        <button id="callStopRecBtn" onclick="stopCallTranscription()" class="btn" style="padding:6px 12px;font-size:12px;display:none" title="Arrêter la transcription">⏹️ Stop</button>
+        <button id="callGenCRBtn" onclick="callGenerateCR()" class="btn btn-primary" style="padding:6px 12px;font-size:12px;display:none;background:#8b5cf6" title="Générer un CR à partir de la transcription">✦ Générer CR</button>
+        <button onclick="closeCallPanel()" class="btn" style="padding:6px 12px;font-size:12px;background:#ef4444;color:#fff;border-color:#ef4444" title="Raccrocher">Raccrocher</button>
+      </div>
+    </div>
+    <div id="callTranscriptZone" style="display:none;max-height:120px;overflow-y:auto;padding:8px 12px;background:var(--bg-1);border-radius:8px;font-size:12px;line-height:1.5;color:var(--t2)">
+      <span id="callTranscriptText"></span><span id="callInterim" style="color:var(--t3);font-style:italic"></span>
+    </div>`;
+  document.body.appendChild(panel);
+
+  // Chronomètre
+  _callTimer = setInterval(() => {
+    _callSeconds++;
+    const m = String(Math.floor(_callSeconds / 60)).padStart(2, '0');
+    const s = String(_callSeconds % 60).padStart(2, '0');
+    const el = document.getElementById('callChrono');
+    if (el) el.textContent = m + ':' + s;
+  }, 1000);
+}
+
+function startCallTranscription() {
+  if (_callRecording) return;
+  _callRecording = true;
+  document.getElementById('callRecBtn').style.display = 'none';
+  document.getElementById('callStopRecBtn').style.display = '';
+  document.getElementById('callTranscriptZone').style.display = 'block';
+
+  _callRec = _startSpeechRec({
+    onFinal(text) {
+      _callTranscript += (_callTranscript ? ' ' : '') + text;
+      const el = document.getElementById('callTranscriptText');
+      if (el) el.textContent = _callTranscript;
+      const zone = document.getElementById('callTranscriptZone');
+      if (zone) zone.scrollTop = zone.scrollHeight;
+    },
+    onInterim(text) {
+      const el = document.getElementById('callInterim');
+      if (el) el.textContent = text ? ' ' + text : '';
+    },
+    shouldRestart() { return _callRecording; },
+    onStop() {
+      _callRecording = false;
+      const btn = document.getElementById('callStopRecBtn');
+      if (btn) btn.style.display = 'none';
+      const rec = document.getElementById('callRecBtn');
+      if (rec) { rec.style.display = ''; rec.textContent = '🎙️ Reprendre'; }
+      if (_callTranscript) {
+        const gen = document.getElementById('callGenCRBtn');
+        if (gen) gen.style.display = '';
+      }
+    }
+  });
+}
+
+function stopCallTranscription() {
+  _callRecording = false;
+  if (_callRec) { try { _callRec.stop(); } catch(e) {} _callRec = null; }
+  document.getElementById('callStopRecBtn').style.display = 'none';
+  const rec = document.getElementById('callRecBtn');
+  if (rec) { rec.style.display = ''; rec.textContent = '🎙️ Reprendre'; }
+  if (_callTranscript) {
+    const gen = document.getElementById('callGenCRBtn');
+    if (gen) gen.style.display = '';
+  }
+}
+
+function closeCallPanel() {
+  _callRecording = false;
+  if (_callRec) { try { _callRec.stop(); } catch(e) {} _callRec = null; }
+  if (_callTimer) { clearInterval(_callTimer); _callTimer = null; }
+  const panel = document.getElementById('callPanel');
+  if (panel) panel.remove();
+  // Si transcription non vide, proposer de générer un CR
+  if (_callTranscript && _callClient) {
+    if (confirm('Vous avez une transcription d\'appel. Voulez-vous générer un CR ?')) {
+      callGenerateCR();
+      return;
+    }
+  }
+  _callActive = false; _callContact = null; _callClient = null;
+  _callSeconds = 0; _callTranscript = '';
+}
+
+async function callGenerateCR() {
+  if (!_callTranscript || !_callClient) { toast('Pas de transcription disponible', 'error'); return; }
+  const contactName = _callContact?.name || '';
+  const clientName = _callClient?.name || '';
+  const clientId = _callClient?.id || '';
+  const contactId = _callContact?.id || '';
+  const transcript = _callTranscript;
+
+  // Fermer le panneau sans prompt
+  _callRecording = false;
+  if (_callRec) { try { _callRec.stop(); } catch(e) {} _callRec = null; }
+  if (_callTimer) { clearInterval(_callTimer); _callTimer = null; }
+  const panel = document.getElementById('callPanel');
+  if (panel) panel.remove();
+  _callActive = false; _callContact = null; _callClient = null;
+  _callSeconds = 0; _callTranscript = '';
+
+  // Naviguer vers la création de CR
+  goToCR(clientId, clientName, contactId, contactName);
+
+  // Attendre que le formulaire soit rendu
+  setTimeout(async () => {
+    // Pré-remplir le type TEL
+    const typeEl = document.getElementById('crType');
+    if (typeEl) typeEl.value = 'tel';
+    // Pré-remplir le titre
+    const titreEl = document.getElementById('crTitre');
+    if (titreEl) titreEl.value = 'Appel téléphonique — ' + contactName;
+
+    // Générer la synthèse IA
+    const body = document.getElementById('editorBody');
+    if (body) body.innerHTML = '<p style="color:var(--t3);font-style:italic">⏳ Génération de la synthèse en cours...</p>';
+    try {
+      const resp = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'transcribe_cr', text: transcript, clientName })
+      });
+      const data = await resp.json();
+      if (data.result && body) {
+        body.innerHTML = data.result;
+        toast('Synthèse d\'appel générée', 'success');
+      } else {
+        if (body) body.innerHTML = '<p>' + transcript + '</p>';
+        toast('Erreur synthèse IA — transcription brute insérée', 'error');
+      }
+    } catch (e) {
+      if (body) body.innerHTML = '<p>' + transcript + '</p>';
+      toast('Erreur réseau — transcription brute insérée', 'error');
+    }
+  }, 500);
+}
+
 // ═══ CHATBOT NOVA ═══
 let _aiChatHistory = [];
 let _aiTtsEnabled = window.innerWidth <= 768; // activé par défaut sur mobile
+if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
 
 function toggleAITts() {
   _aiTtsEnabled = !_aiTtsEnabled;
@@ -14116,12 +14285,15 @@ function aiSpeak(text) {
   const clean = text.replace(/<[^>]*>/g, ' ').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
   if (!clean) return;
   const utter = new SpeechSynthesisUtterance(clean);
-  utter.lang = 'fr-FR'; utter.rate = 1; utter.pitch = 1;
+  utter.lang = 'fr-FR'; utter.rate = 1; utter.pitch = 1.1;
   const voices = speechSynthesis.getVoices();
   const frVoices = voices.filter(v => v.lang.startsWith('fr'));
+  // Exclure voix masculines connues
+  const notMale = frVoices.filter(v => !/\b(paul|thomas|henri|male)\b/i.test(v.name));
   // Préférer voix féminine française
-  const femaleVoice = frVoices.find(v => /female|femme|amelie|audrey|aurelie|marie|lea|chloe|hortense|julie/i.test(v.name))
-    || frVoices[0];
+  const femaleVoice = (notMale.length ? notMale : frVoices).find(v =>
+    /female|femme|hortense|denise|amelie|audrey|aurelie|marie|lea|chloe|julie|caroline|virginie|elise/i.test(v.name)
+  ) || notMale[0] || frVoices[0];
   if (femaleVoice) utter.voice = femaleVoice;
   speechSynthesis.speak(utter);
 }

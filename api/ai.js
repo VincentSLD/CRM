@@ -50,6 +50,20 @@ Propose 5 à 10 questions pertinentes à poser lors du RDV, en lien avec l'histo
 Réponds en HTML structuré. Utilise <h4> pour les titres de parties, <strong> pour les questions, <ul><li> pour les listes. Sois concis et orienté action.
 
 Historique des CR :
+${text}`,
+
+    transcribe_cr: `Tu es un assistant commercial. Voici la transcription d'une conversation téléphonique avec ${clientName || 'un client'}.
+
+Produis un compte-rendu professionnel structuré de cet appel :
+- **Objet de l'appel** : résume le motif principal
+- **Points abordés** : liste les sujets discutés
+- **Décisions prises** : si applicable
+- **Actions à mener** : prochaines étapes identifiées
+- **Notes** : informations complémentaires importantes
+
+Réponds en HTML structuré (utilise <strong>, <ul><li>, <br>). Sois concis et factuel, ne rajoute pas d'informations inventées.
+
+Transcription :
 ${text}`
   };
 
@@ -65,7 +79,7 @@ ${text}`
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: action === 'preprdv' ? 2048 : 1024,
+        max_tokens: (action === 'preprdv' || action === 'transcribe_cr') ? 2048 : 1024,
         system: systemPrompt,
         messages: [{ role: 'user', content: prompts[action] || prompts.rewrite }]
       })
