@@ -3474,8 +3474,8 @@ function renderContacts() {
     ${contactsList.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--t3)">Aucun contact trouvé</div>' :
       contactsList.map(c => {
         const fullName = [c.prenom, (c.nom||'').toUpperCase()].filter(Boolean).join(' ');
-        const telFmt = formatPhone(c.telephone);
-        const mobFmt = formatPhone(c.mobile);
+        const _phone = c.telephone || c.mobile || c.telephone2 || '';
+        const _phoneFmt = formatPhone(_phone);
         return `<div onclick="showContact('${c.id}')" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
             <strong style="font-size:14px">${fullName}</strong>
@@ -3484,9 +3484,8 @@ function renderContacts() {
           ${c.fonction ? '<div style="font-size:12px;color:var(--t2);margin-bottom:2px">' + c.fonction + '</div>' : ''}
           ${c._clientName ? '<div style="font-size:11px;color:var(--accent);margin-bottom:6px">' + c._clientName + '</div>' : ''}
           <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center" onclick="event.stopPropagation()">
-            ${telFmt ? '<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--t3)">📞 ' + _phoneLink(c.telephone, telFmt) + '</span>' : ''}
-            ${mobFmt ? '<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--t3)">📱 ' + _phoneLink(c.mobile, mobFmt) + '</span>' : ''}
-            ${c.email ? '<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--t3)">✉ <a href="mailto:'+c.email+'" style="color:var(--accent);text-decoration:none;font-size:12px">'+c.email+'</a></span>' : ''}
+            ${_phone ? `<button onclick="openCallPanel('${c.id}','${c.client_id||''}','${(c._clientName||'').replace(/'/g,"\\\\'")}','${fullName.replace(/'/g,"\\\\'")}','${_phone}')" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:4px 10px;border:1px solid var(--accent);border-radius:6px;background:none;color:var(--accent);cursor:pointer">📞 Appeler${_phoneFmt ? ' '+_phoneFmt : ''}</button>` : ''}
+            ${c.email ? '<a href="mailto:'+c.email+'" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:6px;color:var(--accent);text-decoration:none">✉ Email</a>' : ''}
           </div>
         </div>`;
       }).join('')}
@@ -3559,7 +3558,7 @@ function renderContactDetail() {
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${c.email ? '<a href="mailto:'+c.email+'" class="btn btn-primary" style="text-decoration:none">Envoyer un email</a>' : ''}
-        ${(c.telephone || c.mobile) ? `<button class="btn" onclick="openCallPanel('${c.id}','${c.client_id||''}','${(c._clientName||'').replace(/'/g,"\\\\'")}','${([c.prenom,c.nom].filter(Boolean).join(' ')).replace(/'/g,"\\\\'")}','${c.telephone || c.mobile}')">Appeler</button>` : ''}
+        ${(c.telephone || c.mobile || c.telephone2) ? `<button class="btn" onclick="openCallPanel('${c.id}','${c.client_id||''}','${(c._clientName||'').replace(/'/g,"\\\\'")}','${([c.prenom,c.nom].filter(Boolean).join(' ')).replace(/'/g,"\\\\'")}','${c.telephone || c.mobile || c.telephone2}')">Appeler</button>` : ''}
         <button class="btn" onclick="goToCR('${c.client_id||''}','${(c._clientName||'').replace(/'/g,"\\'")}','${c.id||''}','${([c.prenom,c.nom].filter(Boolean).join(' ')).replace(/'/g,"\\'")}')">Rédiger CR</button>
         <button class="btn" onclick="toggleEditContact()">Modifier</button>
         <button class="btn ${c.akuiteo_id ? 'btn-synced' : 'btn-not-synced'}" onclick="pushContactToAkuiteo('${c.id}')" title="${c.akuiteo_id ? 'Synchronisé (ID: '+c.akuiteo_id+')' : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? '✔ Synchronisé' : '⬆ Sync Akuiteo'}</button>
