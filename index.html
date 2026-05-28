@@ -11734,8 +11734,13 @@ function annResetFilters() {
 }
 
 function renderAnnuaire() {
-  // Collaborateurs Akuiteo liés à Lucca
-  let list = (collaborateursData || []).filter(ak => ak.lucca_id).map(ak => {
+  // Collaborateurs Akuiteo liés à Lucca (dédoublonnés par lucca_id)
+  const _seenLucca = new Set();
+  let list = (collaborateursData || []).filter(ak => {
+    if (!ak.lucca_id || _seenLucca.has(ak.lucca_id)) return false;
+    _seenLucca.add(ak.lucca_id);
+    return true;
+  }).map(ak => {
     const lucca = (collaborateursLuccaData || []).find(l => l.lucca_id === ak.lucca_id);
     return {
       akId: ak.id,
