@@ -2801,7 +2801,34 @@ let clientsFilterCatCompte = '';
 let clientsFilterReseauxPro = '';
 const CLIENTS_PER_PAGE = 50;
 let clientsFilterOpts = { depts: [], novam: [], gph: [], categorie: [], sousCategorie: [], categoriePro: [], secteur: [], type: [], groupe: [], origine: [], reseauxPro: [] };
+let clientsFilterOptsVariants = {};
 let clientsFilterOptsLoaded = false;
+
+function _normFilterKey(s) {
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[-\s_.\/\\]+/g, '');
+}
+function _dedupFilterValues(arr) {
+  const groups = {};
+  for (const v of arr) {
+    const key = _normFilterKey(v);
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(v);
+  }
+  const values = [], variants = {};
+  for (const key of Object.keys(groups)) {
+    const g = groups[key];
+    let canon = g[0];
+    for (const v of g) { if (v[0] && v[0] === v[0].toUpperCase() && v[0] !== v[0].toLowerCase()) { canon = v; break; } }
+    values.push(canon);
+    variants[canon] = g;
+  }
+  return { values, variants };
+}
+function _expandFilterVariants(field, selected) {
+  const map = clientsFilterOptsVariants[field];
+  if (!map || !selected) return [selected];
+  return map[selected] || [selected];
+}
 
 async function loadClientsFilterOpts() {
   if (clientsFilterOptsLoaded) return;
@@ -2842,13 +2869,12 @@ async function loadClientsFilterOpts() {
   clientsFilterOpts.depts = [...sets.dept].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
   clientsFilterOpts.novam = sortFr(sets.novam);
   clientsFilterOpts.gph = sortFr(sets.gph);
-  clientsFilterOpts.categorie = sortFr(sets.categorie);
-  clientsFilterOpts.sousCategorie = sortFr(sets.sousCategorie);
-  clientsFilterOpts.categoriePro = sortFr(sets.categoriePro);
-  clientsFilterOpts.secteur = sortFr(sets.secteur);
-  clientsFilterOpts.type = sortFr(sets.type);
-  clientsFilterOpts.groupe = sortFr(sets.groupe);
-  clientsFilterOpts.origine = sortFr(sets.origine);
+  const dedupFields = ['categorie','sousCategorie','categoriePro','secteur','type','groupe','origine'];
+  for (const f of dedupFields) {
+    const { values, variants } = _dedupFilterValues(sortFr(sets[f]));
+    clientsFilterOpts[f] = sortFr(values);
+    clientsFilterOptsVariants[f] = variants;
+  }
   clientsFilterOpts.reseauxPro = sortFr(sets.reseauxPro);
   clientsFilterOptsLoaded = true;
 }
@@ -3275,14 +3301,14 @@ async function loadClientsPage(page, letter, search) {
   if (clientsFilterStatut) query = query.eq('status', clientsFilterStatut);
   if (clientsFilterSync === 'yes') query = query.not('akuiteo_id', 'is', null);
   if (clientsFilterSync === 'no') query = query.is('akuiteo_id', null);
-  // Filtres Infos Entreprise (eq exact car alimentés depuis dropdowns peuplés en base)
-  if (clientsFilterCategorie) query = query.eq('mk_categorie', clientsFilterCategorie);
-  if (clientsFilterSousCategorie) query = query.eq('mk_sous_categorie', clientsFilterSousCategorie);
-  if (clientsFilterCategoriePro) query = query.eq('mk_categorie_pro', clientsFilterCategoriePro);
-  if (clientsFilterSecteur) query = query.eq('mk_secteur', clientsFilterSecteur);
-  if (clientsFilterType) query = query.eq('mk_type', clientsFilterType);
-  if (clientsFilterGroupe) query = query.eq('mk_groupe', clientsFilterGroupe);
-  if (clientsFilterOrigine) query = query.eq('mk_origine', clientsFilterOrigine);
+  // Filtres Infos Entreprise (in avec variants pour gérer les quasi-doublons de casse/accents)
+  if (clientsFilterCategorie) query = query.in('mk_categorie', _expandFilterVariants('categorie', clientsFilterCategorie));
+  if (clientsFilterSousCategorie) query = query.in('mk_sous_categorie', _expandFilterVariants('sousCategorie', clientsFilterSousCategorie));
+  if (clientsFilterCategoriePro) query = query.in('mk_categorie_pro', _expandFilterVariants('categoriePro', clientsFilterCategoriePro));
+  if (clientsFilterSecteur) query = query.in('mk_secteur', _expandFilterVariants('secteur', clientsFilterSecteur));
+  if (clientsFilterType) query = query.in('mk_type', _expandFilterVariants('type', clientsFilterType));
+  if (clientsFilterGroupe) query = query.in('mk_groupe', _expandFilterVariants('groupe', clientsFilterGroupe));
+  if (clientsFilterOrigine) query = query.in('mk_origine', _expandFilterVariants('origine', clientsFilterOrigine));
   // SIRET présent / absent
   if (clientsFilterSiret === 'yes') query = query.not('siret', 'is', null).neq('siret', '');
   if (clientsFilterSiret === 'no') query = query.or('siret.is.null,siret.eq.');
@@ -8327,13 +8353,13 @@ async function esLaunchSearch() {
   if (_esFilters.codeCodial === 'empty') q = q.or('code_codial.is.null,code_codial.eq.');
   if (_esFilters.idPlateforme === 'has') q = q.not('id_plateforme', 'is', null).neq('id_plateforme', '');
   if (_esFilters.idPlateforme === 'empty') q = q.or('id_plateforme.is.null,id_plateforme.eq.');
-  if (_esFilters.categorie) q = q.eq('mk_categorie', _esFilters.categorie);
-  if (_esFilters.sousCategorie) q = q.eq('mk_sous_categorie', _esFilters.sousCategorie);
-  if (_esFilters.categoriePro) q = q.eq('mk_categorie_pro', _esFilters.categoriePro);
-  if (_esFilters.secteur) q = q.eq('mk_secteur', _esFilters.secteur);
-  if (_esFilters.type) q = q.eq('mk_type', _esFilters.type);
-  if (_esFilters.groupe) q = q.eq('mk_groupe', _esFilters.groupe);
-  if (_esFilters.origine) q = q.eq('mk_origine', _esFilters.origine);
+  if (_esFilters.categorie) q = q.in('mk_categorie', _expandFilterVariants('categorie', _esFilters.categorie));
+  if (_esFilters.sousCategorie) q = q.in('mk_sous_categorie', _expandFilterVariants('sousCategorie', _esFilters.sousCategorie));
+  if (_esFilters.categoriePro) q = q.in('mk_categorie_pro', _expandFilterVariants('categoriePro', _esFilters.categoriePro));
+  if (_esFilters.secteur) q = q.in('mk_secteur', _expandFilterVariants('secteur', _esFilters.secteur));
+  if (_esFilters.type) q = q.in('mk_type', _expandFilterVariants('type', _esFilters.type));
+  if (_esFilters.groupe) q = q.in('mk_groupe', _expandFilterVariants('groupe', _esFilters.groupe));
+  if (_esFilters.origine) q = q.in('mk_origine', _expandFilterVariants('origine', _esFilters.origine));
   q = q.range(from, to);
   const { data: clients, count, error } = await q;
   _esTotal = count || 0;
@@ -9168,13 +9194,14 @@ async function campRefreshPreview() {
     // 1) Construire la requête clients avec les filtres
     let q = sb.from('clients').select('id,name,city,code_postal,departement,email,phone,status,siren,siret,mk_categorie,mk_sous_categorie,mk_categorie_pro,mk_secteur,mk_type,mk_groupe,mk_origine');
     if (f.statut && f.statut.length) q = q.in('status', f.statut);
-    if (f.mk_categorie?.length)      q = q.in('mk_categorie', f.mk_categorie);
-    if (f.mk_sous_categorie?.length) q = q.in('mk_sous_categorie', f.mk_sous_categorie);
-    if (f.mk_categorie_pro?.length)  q = q.in('mk_categorie_pro', f.mk_categorie_pro);
-    if (f.mk_secteur?.length)        q = q.in('mk_secteur', f.mk_secteur);
-    if (f.mk_type?.length)           q = q.in('mk_type', f.mk_type);
-    if (f.mk_groupe?.length)         q = q.in('mk_groupe', f.mk_groupe);
-    if (f.mk_origine?.length)        q = q.in('mk_origine', f.mk_origine);
+    const _campExpand = (field, vals) => vals.flatMap(v => _expandFilterVariants(field, v));
+    if (f.mk_categorie?.length)      q = q.in('mk_categorie', _campExpand('categorie', f.mk_categorie));
+    if (f.mk_sous_categorie?.length) q = q.in('mk_sous_categorie', _campExpand('sousCategorie', f.mk_sous_categorie));
+    if (f.mk_categorie_pro?.length)  q = q.in('mk_categorie_pro', _campExpand('categoriePro', f.mk_categorie_pro));
+    if (f.mk_secteur?.length)        q = q.in('mk_secteur', _campExpand('secteur', f.mk_secteur));
+    if (f.mk_type?.length)           q = q.in('mk_type', _campExpand('type', f.mk_type));
+    if (f.mk_groupe?.length)         q = q.in('mk_groupe', _campExpand('groupe', f.mk_groupe));
+    if (f.mk_origine?.length)        q = q.in('mk_origine', _campExpand('origine', f.mk_origine));
     if (f.dept) q = q.ilike('code_postal', f.dept + '%');
     if (f.city) q = q.ilike('city', '%' + f.city + '%');
     if (f.withSiret === 'yes') q = q.not('siret', 'is', null).neq('siret', '');
