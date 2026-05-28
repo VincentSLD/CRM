@@ -853,6 +853,11 @@ tbody tr:last-child td { border-bottom: none; }
 
 @keyframes rec-pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
+.tts-w{border-radius:2px;transition:background .15s,opacity .3s;cursor:pointer}
+.tts-w:hover{background:rgba(99,102,241,.12)}
+.tts-hi{background:rgba(99,102,241,.28)!important;border-radius:2px}
+.tts-done{opacity:.5}
+
 .editor-body {
   min-height: 180px;
   padding: 14px 16px;
@@ -14366,25 +14371,90 @@ function toggleAITts() {
   if (!_aiTtsEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
   toast(_aiTtsEnabled ? 'Mode vocal activé (conversation continue)' : 'Mode vocal désactivé', 'info');
 }
-function aiSpeak(text) {
-  if (!_aiTtsEnabled || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  // Nettoyer HTML, entités, emojis
-  let clean = text.replace(/<[^>]*>/g, ' ').replace(/&[a-z]+;/g, ' ');
-  clean = clean.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}\u{2702}-\u{27B0}\u{1F1E0}-\u{1F1FF}\u{2B50}\u{2B55}\u{231A}-\u{23F3}\u{23E9}-\u{23EF}\u{25AA}-\u{25FE}\u{2934}-\u{2935}\u{2190}-\u{21FF}\u{2022}\u{25CF}\u{2605}\u{2764}\u{FE0F}✦✔⬆⏳★●▶◀→←↗↘]/gu, '');
+// ═══ TTS AVEC SURLIGNAGE MOT PAR MOT + CLIC-TO-SKIP ═══
+let _ttsWords = [], _ttsWordIdx = -1, _ttsMsgDiv = null;
+
+function _ttsCleanup() {
+  _ttsWords.forEach(w => { w.el.classList.remove('tts-hi','tts-done'); });
+  _ttsWords = []; _ttsWordIdx = -1; _ttsMsgDiv = null;
+}
+
+function _ttsPickVoice() {
+  const voices = speechSynthesis.getVoices();
+  const fr = voices.filter(v => v.lang.startsWith('fr'));
+  if (!fr.length) return null;
+  // 1) Voix en ligne / Neural / Google (beaucoup plus naturelles)
+  const online = fr.find(v => /google|neural|natural|online/i.test(v.name));
+  if (online) return online;
+  // 2) Voix féminine (exclure masculines connues)
+  const notMale = fr.filter(v => !/\b(paul|thomas|henri|male)\b/i.test(v.name));
+  const fem = (notMale.length ? notMale : fr).find(v =>
+    /female|femme|hortense|denise|amelie|audrey|aurelie|marie|lea|chloe|julie|caroline|virginie|elise/i.test(v.name)
+  );
+  return fem || notMale[0] || fr[0];
+}
+
+function _ttsWrapWords(div) {
+  _ttsWords = [];
+  function walk(node) {
+    if (node.nodeType === 3) {
+      const txt = node.textContent;
+      if (!txt.trim()) return;
+      const frag = document.createDocumentFragment();
+      txt.split(/(\S+)/).forEach(part => {
+        if (!part) return;
+        if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(part)); return; }
+        const s = document.createElement('span');
+        s.textContent = part; s.className = 'tts-w';
+        const idx = _ttsWords.length;
+        s.onclick = e => { e.stopPropagation(); _ttsSpeakFromWord(idx); };
+        _ttsWords.push({ el: s });
+        frag.appendChild(s);
+      });
+      node.parentNode.replaceChild(frag, node);
+    } else if (node.nodeType === 1 && node.tagName !== 'BUTTON') {
+      Array.from(node.childNodes).forEach(walk);
+    }
+  }
+  Array.from(div.childNodes).forEach(walk);
+}
+
+function _ttsSpeakFromWord(startIdx) {
+  speechSynthesis.cancel();
+  // Marquer les mots avant comme lus, retirer le surlignage
+  _ttsWords.forEach((w, i) => {
+    w.el.classList.remove('tts-hi');
+    if (i < startIdx) w.el.classList.add('tts-done');
+    else w.el.classList.remove('tts-done');
+  });
+  _ttsWordIdx = startIdx - 1;
+  const text = _ttsWords.slice(startIdx).map(w => w.el.textContent).join(' ');
+  _ttsDoSpeak(text);
+}
+
+function _ttsDoSpeak(text) {
+  // Nettoyer emojis
+  let clean = text.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}\u{2702}-\u{27B0}\u{1F1E0}-\u{1F1FF}\u{2B50}\u{2B55}\u{231A}-\u{23F3}\u{23E9}-\u{23EF}\u{25AA}-\u{25FE}\u{2934}-\u{2935}\u{2190}-\u{21FF}\u{2022}\u{25CF}\u{2605}\u{2764}\u{FE0F}✦✔⬆⏳★●▶◀→←↗↘]/gu, '');
   clean = clean.replace(/\s+/g, ' ').trim();
   if (!clean) return;
   const utter = new SpeechSynthesisUtterance(clean);
-  utter.lang = 'fr-FR'; utter.rate = _aiTtsSpeed; utter.pitch = 1.1;
-  const voices = speechSynthesis.getVoices();
-  const frVoices = voices.filter(v => v.lang.startsWith('fr'));
-  const notMale = frVoices.filter(v => !/\b(paul|thomas|henri|male)\b/i.test(v.name));
-  const femaleVoice = (notMale.length ? notMale : frVoices).find(v =>
-    /female|femme|hortense|denise|amelie|audrey|aurelie|marie|lea|chloe|julie|caroline|virginie|elise/i.test(v.name)
-  ) || notMale[0] || frVoices[0];
-  if (femaleVoice) utter.voice = femaleVoice;
-  // Après lecture vocale : focus le champ + relancer micro en mode conversation
+  utter.lang = 'fr-FR'; utter.rate = _aiTtsSpeed; utter.pitch = 1.0;
+  const voice = _ttsPickVoice();
+  if (voice) utter.voice = voice;
+  // Surlignage mot par mot via onboundary
+  utter.onboundary = e => {
+    if (e.name === 'word' && _ttsWords.length) {
+      _ttsWordIdx++;
+      _ttsWords.forEach(w => w.el.classList.remove('tts-hi'));
+      if (_ttsWords[_ttsWordIdx]) {
+        _ttsWords[_ttsWordIdx].el.classList.add('tts-hi');
+        for (let i = 0; i < _ttsWordIdx; i++) _ttsWords[i].el.classList.add('tts-done');
+      }
+    }
+  };
   utter.onend = () => {
+    _ttsWords.forEach(w => { w.el.classList.remove('tts-hi'); w.el.classList.add('tts-done'); });
+    setTimeout(() => _ttsCleanup(), 1500);
     const inp = document.getElementById('aiChatInput');
     if (inp) inp.focus();
     if (_aiConversationMode && _aiTtsEnabled) {
@@ -14393,7 +14463,38 @@ function aiSpeak(text) {
   };
   speechSynthesis.speak(utter);
 }
-function aiStopSpeak() { if (window.speechSynthesis) window.speechSynthesis.cancel(); }
+
+function aiSpeak(text, msgDiv) {
+  if (!_aiTtsEnabled || !window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  _ttsCleanup();
+  // Si on a le div du message, activer le surlignage mot par mot
+  if (msgDiv) {
+    _ttsMsgDiv = msgDiv;
+    if (msgDiv.querySelector('.tts-w')) {
+      // Déjà wrappé, réutiliser
+      _ttsWords = Array.from(msgDiv.querySelectorAll('.tts-w')).map((el, i) => {
+        el.onclick = e => { e.stopPropagation(); _ttsSpeakFromWord(i); };
+        return { el };
+      });
+    } else {
+      _ttsWrapWords(msgDiv);
+    }
+    _ttsWordIdx = -1;
+    const fullText = _ttsWords.map(w => w.el.textContent).join(' ');
+    _ttsDoSpeak(fullText);
+  } else {
+    // Pas de div — lecture simple (fallback)
+    let clean = text.replace(/<[^>]*>/g, ' ').replace(/&[a-z]+;/g, ' ');
+    clean = clean.replace(/\s+/g, ' ').trim();
+    _ttsDoSpeak(clean);
+  }
+}
+
+function aiStopSpeak() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  _ttsCleanup();
+}
 function cycleAITtsSpeed() {
   const speeds = [1, 1.25, 1.5, 2];
   const idx = speeds.indexOf(_aiTtsSpeed);
@@ -14440,7 +14541,7 @@ function addAIMsg(role, html) {
     speakBtn.title = 'Lire à voix haute';
     speakBtn.style.cssText = 'position:absolute;top:4px;right:4px;background:none;border:none;cursor:pointer;opacity:.4;padding:2px;color:var(--t3);font-size:12px';
     speakBtn.innerHTML = '🔊';
-    speakBtn.onclick = () => { aiSpeak(div.textContent); };
+    speakBtn.onclick = () => { aiSpeak(div.textContent, div); };
     speakBtn.onmouseenter = () => speakBtn.style.opacity = '1';
     speakBtn.onmouseleave = () => speakBtn.style.opacity = '.4';
     div.appendChild(speakBtn);
@@ -14731,12 +14832,12 @@ async function askAIChat(presetQuestion) {
     speakBtn.title = 'Lire à voix haute';
     speakBtn.style.cssText = 'position:absolute;top:4px;right:4px;background:none;border:none;cursor:pointer;opacity:.4;padding:2px;color:var(--t3);font-size:12px';
     speakBtn.innerHTML = '🔊';
-    speakBtn.onclick = () => aiSpeak(loadingDiv.textContent);
+    speakBtn.onclick = () => aiSpeak(loadingDiv.textContent, loadingDiv);
     speakBtn.onmouseenter = () => speakBtn.style.opacity = '1';
     speakBtn.onmouseleave = () => speakBtn.style.opacity = '.4';
     loadingDiv.appendChild(speakBtn);
     if (box) box.scrollTop = box.scrollHeight;
-    aiSpeak(fullResult);
+    aiSpeak(fullResult, loadingDiv);
     // Focus le champ pour enchaîner directement (si TTS off, pas de onend)
     if (!_aiTtsEnabled) { const inp = document.getElementById('aiChatInput'); if (inp) inp.focus(); }
   } catch (e) {
