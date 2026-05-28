@@ -3166,8 +3166,8 @@ async function loadDB() {
       sb.from('commerciaux').select('*').then(r => r.data || []),
       fetchFast('marches', MARCHE_LITE, 'date_debut', true),
       fetchFast('affaires', AFFAIRE_LITE, 'date_debut', true),
-      sb.from('collaborateurs_lucca').select('id,lucca_id,nom,prenom,email').order('nom').then(r => r.data || []),
-      sb.from('collaborateurs').select('id,lucca_id,akuiteo_id,nom,prenom,code,email').order('nom').then(r => r.data || []),
+      sb.from('collaborateurs_lucca').select('id,lucca_id,nom,prenom,email,etablissement').order('nom').then(r => r.data || []),
+      sb.from('collaborateurs').select('id,lucca_id,akuiteo_id,nom,prenom,code,email,telephone,mobile').order('nom').then(r => r.data || []),
     ]);
     console.log(`[loadDB] Fetch en ${Date.now()-t0}ms : ${dAll.length} devis, ${cmAll.length} cmd, ${fAll.length} fact, ${maAll.length} marchés, ${afAll.length} affaires`);
     console.log(`[loadDB] Marchés: ${maAll.length}, Affaires: ${afAll.length}`);
