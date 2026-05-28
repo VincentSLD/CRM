@@ -11708,6 +11708,29 @@ function renderEnvois() {
 // ═══ ANNUAIRE COLLABORATEURS ═══
 let annuaireSearch = '';
 let _annuaireAbsentsToday = new Set(); // Set de lucca_id absents aujourd'hui
+let annSortCol = 'nom', annSortAsc = true;
+let annFNom = '', annFPrenom = '', annFPoste = '', annFEmail = '', annFAgence = '', annFPresence = '';
+let _annFilterTimer = null;
+
+function annSetSort(col) {
+  if (annSortCol === col) annSortAsc = !annSortAsc;
+  else { annSortCol = col; annSortAsc = true; }
+  renderAnnuaireRefresh();
+}
+function annFilterInput(field, val) {
+  window['annF' + field] = val;
+  clearTimeout(_annFilterTimer);
+  _annFilterTimer = setTimeout(() => {
+    renderAnnuaireRefresh();
+    const el = document.getElementById('annF' + field);
+    if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  }, 300);
+}
+function annResetFilters() {
+  annFNom = ''; annFPrenom = ''; annFPoste = ''; annFEmail = ''; annFAgence = ''; annFPresence = '';
+  annSortCol = 'nom'; annSortAsc = true; annuaireSearch = '';
+  renderAnnuaireRefresh();
+}
 
 function renderAnnuaire() {
   // Collaborateurs Akuiteo liés à Lucca
@@ -11726,35 +11749,59 @@ function renderAnnuaire() {
       absent: _annuaireAbsentsToday.has(ak.lucca_id),
     };
   });
-  // Filtre recherche
+  // Filtre recherche globale
   if (annuaireSearch) {
     const q = annuaireSearch.toLowerCase();
     list = list.filter(c =>
-      c.nom.toLowerCase().includes(q) ||
-      c.prenom.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q) ||
-      c.agence.toLowerCase().includes(q) ||
-      c.poste.toLowerCase().includes(q) ||
-      c.telephone.includes(q) ||
-      c.mobile.includes(q)
+      c.nom.toLowerCase().includes(q) || c.prenom.toLowerCase().includes(q) ||
+      c.email.toLowerCase().includes(q) || c.agence.toLowerCase().includes(q) ||
+      c.poste.toLowerCase().includes(q) || c.telephone.includes(q) || c.mobile.includes(q)
     );
   }
-  // Tri par nom
-  list.sort((a, b) => a.nom.localeCompare(b.nom) || a.prenom.localeCompare(b.prenom));
+  // Filtres par colonne
+  if (annFNom) { const q = annFNom.toLowerCase(); list = list.filter(c => c.nom.toLowerCase().includes(q)); }
+  if (annFPrenom) { const q = annFPrenom.toLowerCase(); list = list.filter(c => c.prenom.toLowerCase().includes(q)); }
+  if (annFPoste) { const q = annFPoste.toLowerCase(); list = list.filter(c => c.poste.toLowerCase().includes(q)); }
+  if (annFEmail) { const q = annFEmail.toLowerCase(); list = list.filter(c => c.email.toLowerCase().includes(q)); }
+  if (annFAgence) { const q = annFAgence.toLowerCase(); list = list.filter(c => c.agence.toLowerCase().includes(q)); }
+  if (annFPresence === 'absent') list = list.filter(c => c.absent);
+  if (annFPresence === 'present') list = list.filter(c => !c.absent);
+
+  // Tri dynamique
+  list.sort((a, b) => {
+    let va, vb;
+    switch (annSortCol) {
+      case 'nom': va = a.nom; vb = b.nom; break;
+      case 'prenom': va = a.prenom; vb = b.prenom; break;
+      case 'poste': va = a.poste; vb = b.poste; break;
+      case 'email': va = a.email; vb = b.email; break;
+      case 'agence': va = a.agence; vb = b.agence; break;
+      case 'presence': va = a.absent ? 1 : 0; vb = b.absent ? 1 : 0; return annSortAsc ? va - vb : vb - va;
+      default: va = a.nom; vb = b.nom;
+    }
+    const cmp = (va || '').localeCompare(vb || '');
+    return annSortAsc ? cmp : -cmp;
+  });
+
+  const arrow = col => annSortCol === col ? (annSortAsc ? ' ▲' : ' ▼') : '';
+  const thStyle = 'cursor:pointer;user-select:none;white-space:nowrap';
+  const fStyle = 'font-size:11px;padding:3px 5px;width:100%;border:1px solid var(--border);border-radius:4px;background:var(--bg-0);color:var(--t1)';
+  const hasFilters = annFNom || annFPrenom || annFPoste || annFEmail || annFAgence || annFPresence || annuaireSearch;
 
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:8px;align-items:center">
       <span style="font-size:12px;color:var(--t3)">${list.length} collaborateur(s)</span>
       <span style="font-size:11px;color:var(--red)">${_annuaireAbsentsToday.size ? _annuaireAbsentsToday.size + " absent(s) aujourd'hui" : ''}</span>
+      ${hasFilters ? '<button class="btn" style="font-size:10px;padding:2px 8px;color:var(--red)" onclick="annResetFilters()">Reinitialiser filtres</button>' : ''}
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       <label class="btn btn-primary" style="font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">
         Importer téléphones (CSV/Excel)
         <input type="file" accept=".csv,.txt" onchange="importAnnuairePhones(this.files[0]);this.value=''" style="display:none">
       </label>
-      <input type="text" placeholder="Rechercher nom, prénom, email, agence, poste..." value="${annuaireSearch}"
-        style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:320px;background:var(--bg-1);color:var(--t1)"
+      <input type="text" placeholder="Recherche globale..." value="${annuaireSearch}"
+        style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:220px;background:var(--bg-1);color:var(--t1)"
         oninput="annuaireSearch=this.value;renderAnnuaireRefresh()">
       ${annuaireSearch ? '<button class="btn" onclick="annuaireSearch=\'\';renderAnnuaireRefresh()" style="font-size:11px">Effacer</button>' : ''}
     </div>
@@ -11762,11 +11809,34 @@ function renderAnnuaire() {
   <div class="card">
     <div class="card-body" style="padding:0;overflow-x:auto">
       <table class="tbl-compact">
-        <thead><tr>
-          <th>Nom</th><th>Prénom</th><th>Poste</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th>Agence</th><th style="text-align:center">Présence</th>
-        </tr></thead>
+        <thead>
+          <tr>
+            <th style="${thStyle}" onclick="annSetSort('nom')">Nom${arrow('nom')}</th>
+            <th style="${thStyle}" onclick="annSetSort('prenom')">Prénom${arrow('prenom')}</th>
+            <th style="${thStyle}" onclick="annSetSort('poste')">Poste${arrow('poste')}</th>
+            <th style="${thStyle}" onclick="annSetSort('email')">Email${arrow('email')}</th>
+            <th>Téléphone</th>
+            <th>Mobile</th>
+            <th style="${thStyle}" onclick="annSetSort('agence')">Agence${arrow('agence')}</th>
+            <th style="${thStyle};text-align:center" onclick="annSetSort('presence')">Présence${arrow('presence')}</th>
+          </tr>
+          <tr style="background:var(--bg-1)">
+            <td><input id="annFNom" style="${fStyle}" value="${annFNom}" placeholder="Filtrer..." oninput="annFilterInput('Nom',this.value)"></td>
+            <td><input id="annFPrenom" style="${fStyle}" value="${annFPrenom}" placeholder="Filtrer..." oninput="annFilterInput('Prenom',this.value)"></td>
+            <td><input id="annFPoste" style="${fStyle}" value="${annFPoste}" placeholder="Filtrer..." oninput="annFilterInput('Poste',this.value)"></td>
+            <td><input id="annFEmail" style="${fStyle}" value="${annFEmail}" placeholder="Filtrer..." oninput="annFilterInput('Email',this.value)"></td>
+            <td></td>
+            <td></td>
+            <td><input id="annFAgence" style="${fStyle}" value="${annFAgence}" placeholder="Filtrer..." oninput="annFilterInput('Agence',this.value)"></td>
+            <td><select id="annFPresence" style="${fStyle}" onchange="annFPresence=this.value;renderAnnuaireRefresh()">
+              <option value="">Tous</option>
+              <option value="present" ${annFPresence==='present'?'selected':''}>Présent</option>
+              <option value="absent" ${annFPresence==='absent'?'selected':''}>Absent</option>
+            </select></td>
+          </tr>
+        </thead>
         <tbody>${list.length === 0
-          ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucun collaborateur lié Akuiteo↔Lucca</td></tr>'
+          ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucun résultat</td></tr>'
           : list.map(c => `<tr${c.absent ? ' style="opacity:0.55"' : ''}>
             <td><strong>${c.nom}</strong></td>
             <td>${c.prenom}</td>
