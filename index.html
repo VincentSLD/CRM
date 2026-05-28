@@ -9126,7 +9126,7 @@ async function campLoadList(force) {
   if (_campListLoaded && !force) return;
   _campLoading = true;
   try {
-    const { data, error } = await sb.from('campagnes').select('*').order('updated_at', { ascending: false });
+    const { data, error } = await sb.from('campagnes').select('id,nom,description,criteria,emails_count,updated_at').order('updated_at', { ascending: false });
     if (error) {
       // Table absente probablement (404). On ne re-render pas pour éviter la boucle.
       console.warn('campLoadList', error.message);
@@ -9158,18 +9158,22 @@ function campNew() {
   renderPage('campagnes');
 }
 
-function campOpen(id) {
-  const c = _campList.find(x => x.id === id);
-  if (!c) return;
-  _campCurrent = { ...c, criteria: { ..._campDefaultFilters, ...(c.criteria || {}) }, emails: c.emails || [] };
-  _campPreview = { rows: [], emails: c.emails || [], count: (c.emails || []).length, loading: false };
+async function campOpen(id) {
+  const cached = _campList.find(x => x.id === id);
+  if (!cached) return;
+  _campCurrent = { ...cached, criteria: { ..._campDefaultFilters, ...(cached.criteria || {}) }, emails: [] };
+  _campPreview = { rows: [], emails: [], count: cached.emails_count || 0, loading: true };
   renderPage('campagnes');
+  const { data } = await sb.from('campagnes').select('emails').eq('id', id).single();
+  const emails = data?.emails || [];
+  _campCurrent.emails = emails;
+  _campPreview = { rows: [], emails, count: emails.length, loading: false };
+  campRenderPreviewArea();
   setTimeout(campRefreshPreview, 50);
 }
 
 function campClose() {
   _campCurrent = null;
-  campLoadList(true); // force refresh à la fermeture pour voir les changements
   renderPage('campagnes');
 }
 
@@ -9267,35 +9271,43 @@ async function campRefreshPreview() {
 async function campSave() {
   if (!_campCurrent) return;
   if (!_campCurrent.nom.trim()) { toast('Donnez un nom à la campagne', 'error'); return; }
-  // Capturer les emails actuels
-  const row = {
-    nom: _campCurrent.nom.trim(),
-    description: _campCurrent.description?.trim() || null,
-    criteria: _campCurrent.criteria,
-    emails: _campPreview.emails,
-    emails_count: _campPreview.count,
-    updated_at: new Date().toISOString(),
-  };
-  if (_campCurrent.id) {
-    const { error } = await sb.from('campagnes').update(row).eq('id', _campCurrent.id);
-    if (error) { toast('Erreur: ' + error.message, 'error'); return; }
-    toast('Campagne mise à jour', 'success');
-  } else {
-    const { data, error } = await sb.from('campagnes').insert(row).select().single();
-    if (error) { toast('Erreur: ' + error.message, 'error'); return; }
-    if (data) _campCurrent.id = data.id;
-    toast('Campagne créée', 'success');
+  const btn = document.querySelector('[onclick="campSave()"]');
+  const btnTxt = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Enregistrement…'; }
+  try {
+    const now = new Date().toISOString();
+    const row = {
+      nom: _campCurrent.nom.trim(),
+      description: _campCurrent.description?.trim() || null,
+      criteria: _campCurrent.criteria,
+      emails: _campPreview.emails,
+      emails_count: _campPreview.count,
+      updated_at: now,
+    };
+    if (_campCurrent.id) {
+      const { error } = await sb.from('campagnes').update(row).eq('id', _campCurrent.id);
+      if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+      const idx = _campList.findIndex(c => c.id === _campCurrent.id);
+      if (idx >= 0) Object.assign(_campList[idx], row);
+      toast('Campagne mise à jour', 'success');
+    } else {
+      const { data, error } = await sb.from('campagnes').insert(row).select().single();
+      if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+      if (data) { _campCurrent.id = data.id; _campList.unshift(data); }
+      toast('Campagne créée', 'success');
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = btnTxt; }
   }
-  await campLoadList(true);
 }
 
 async function campDelete(id) {
   if (!confirm('Supprimer définitivement cette campagne ?')) return;
   const { error } = await sb.from('campagnes').delete().eq('id', id);
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
-  toast('Campagne supprimée', 'success');
+  _campList = _campList.filter(c => c.id !== id);
   if (_campCurrent && _campCurrent.id === id) _campCurrent = null;
-  await campLoadList(true);
+  toast('Campagne supprimée', 'success');
   renderPage('campagnes');
 }
 
