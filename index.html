@@ -9296,6 +9296,8 @@ async function campSave() {
       if (data) { _campCurrent.id = data.id; _campList.unshift(data); }
       toast('Campagne créée', 'success');
     }
+    _campCurrent = null;
+    renderPage('campagnes');
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = btnTxt; }
   }
