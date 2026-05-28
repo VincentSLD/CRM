@@ -3447,6 +3447,54 @@ function renderContacts() {
     return '<div style="text-align:center;padding:40px;color:var(--t3)">Chargement des contacts...</div>';
   }
 
+  const _isMobile = window.innerWidth <= 768;
+
+  if (_isMobile) {
+    // --- MOBILE : cartes style annuaire ---
+    const _phoneLink = (num, label) => {
+      if (!num) return '';
+      const raw = num.replace(/[^\d+]/g, '');
+      return `<a href="tel:${raw}" style="color:var(--accent);text-decoration:none;font-size:12px">${label}</a>`;
+    };
+    return `
+    <div style="margin-bottom:10px">
+      <input type="text" id="contactSearchInput" placeholder="Rechercher un contact..." value="${contactsSearch}"
+        style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg-1);color:var(--t1);box-sizing:border-box"
+        onkeydown="if(event.key==='Enter'){loadContactsPage(0, '', this.value)}">
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
+      <button class="btn" onclick="loadContactsPage(0, '', document.getElementById('contactSearchInput').value)" style="font-size:12px">Rechercher</button>
+      ${contactsSearch ? '<button class="btn" onclick="document.getElementById(&#39;contactSearchInput&#39;).value=&#39;&#39;;loadContactsPage(0,&#39;&#39;,&#39;&#39;)" style="font-size:12px">Effacer</button>' : ''}
+      <span style="font-size:12px;color:var(--t3);margin-left:auto">${contactsTotalCount} contacts</span>
+    </div>
+    ${contactsList.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--t3)">Aucun contact trouvé</div>' :
+      contactsList.map(c => {
+        const fullName = [c.prenom, (c.nom||'').toUpperCase()].filter(Boolean).join(' ');
+        const telFmt = formatPhone(c.telephone);
+        const mobFmt = formatPhone(c.mobile);
+        return `<div onclick="showContact('${c.id}')" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <strong style="font-size:14px">${fullName}</strong>
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'}" title="${c.akuiteo_id ? 'Synchronisé' : 'Non synchronisé'}"></span>
+          </div>
+          ${c.fonction ? '<div style="font-size:12px;color:var(--t2);margin-bottom:2px">' + c.fonction + '</div>' : ''}
+          ${c._clientName ? '<div style="font-size:11px;color:var(--accent);margin-bottom:6px">' + c._clientName + '</div>' : ''}
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center" onclick="event.stopPropagation()">
+            ${telFmt ? '<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--t3)">📞 ' + _phoneLink(c.telephone, telFmt) + '</span>' : ''}
+            ${mobFmt ? '<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--t3)">📱 ' + _phoneLink(c.mobile, mobFmt) + '</span>' : ''}
+            ${c.email ? '<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--t3)">✉ <a href="mailto:'+c.email+'" style="color:var(--accent);text-decoration:none;font-size:12px">'+c.email+'</a></span>' : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    ${totalPages > 1 ? `
+    <div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:12px">
+      <button class="btn" ${contactsPage===0?'disabled':''} onclick="loadContactsPage(${contactsPage-1},'${contactsLetter}','${contactsSearch}')">Précédent</button>
+      <span style="font-size:13px;color:var(--t2)">Page ${contactsPage+1} / ${totalPages}</span>
+      <button class="btn" ${contactsPage>=totalPages-1?'disabled':''} onclick="loadContactsPage(${contactsPage+1},'${contactsLetter}','${contactsSearch}')">Suivant</button>
+    </div>` : ''}`;
+  }
+
+  // --- DESKTOP : tableau complet ---
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
