@@ -2681,7 +2681,7 @@ tbody tr:last-child td { border-bottom: none; }
   <div style="padding:14px 16px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;display:flex;align-items:center;justify-content:space-between">
     <div><div style="font-weight:700;font-size:14px">✦ NOVA</div><div style="font-size:11px;opacity:.85">Ton assistant IA — dis "Hey Nova"</div></div>
     <div style="display:flex;align-items:center;gap:8px">
-      <button id="novaWakeToggle" onclick="_activateNova()" title="Focus + micro" style="background:none;border:none;color:#fff;cursor:pointer;font-size:11px;opacity:.7;padding:4px;font-weight:600">Hey Nova</button>
+      <button id="novaWakeToggle" onclick="toggleNovaWake()" title="Écoute permanente Hey Nova" style="background:none;border:none;color:#fff;cursor:pointer;font-size:11px;opacity:.7;padding:4px;font-weight:600">Hey Nova</button>
       <button id="aiTtsToggle" onclick="toggleAITts()" title="Lecture vocale" style="background:none;border:none;color:#fff;cursor:pointer;font-size:16px;opacity:.7;padding:4px">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
       </button>
@@ -14115,37 +14115,47 @@ function toggleAIDictation() {
   toast('Dictée activée — Parlez...','info');
 }
 
-// ═══ WAKE WORD "HEY NOVA" ═══
+// ═══ WAKE WORD "HEY NOVA" (persistant) ═══
 let _novaWakeOn = false, _novaWakeRec = null;
 function _updateNovaWakeBtn() {
   const btn = document.getElementById('novaWakeToggle');
   if (btn) { btn.style.opacity = _novaWakeOn ? '1' : '.7'; btn.style.textDecoration = _novaWakeOn ? 'underline' : 'none'; }
 }
 function toggleNovaWake() {
-  if (_novaWakeOn) { _stopNovaWake(); _updateNovaWakeBtn(); toast('Écoute "Hey Nova" désactivée','info'); return; }
+  if (_novaWakeOn) { _novaWakeOn = false; _stopNovaWakeRec(); _updateNovaWakeBtn(); toast('Écoute "Hey Nova" désactivée','info'); return; }
   if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) { toast('Non supporté par ce navigateur','error'); return; }
+  _novaWakeOn = true;
+  _startNovaWakeRec();
+  _updateNovaWakeBtn();
+  toast('Écoute "Hey Nova" activée — je t\'écoute','info');
+}
+function _startNovaWakeRec() {
+  if (_novaWakeRec || _aiDictOn) return; // Pas de double instance
   _novaWakeRec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
   _novaWakeRec.lang = 'fr-FR'; _novaWakeRec.continuous = true; _novaWakeRec.interimResults = true;
   _novaWakeRec.onresult = e => {
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const t = e.results[i][0].transcript.toLowerCase();
       if (/hey\s*nova|hé\s*nova|eh\s*nova|ai\s*nova/.test(t)) {
-        _stopNovaWake();
+        _stopNovaWakeRec(); // Pause la reconnaissance (mais _novaWakeOn reste true)
         _activateNova();
         return;
       }
     }
   };
-  _novaWakeRec.onerror = e => { if (e.error !== 'no-speech' && e.error !== 'aborted') _stopNovaWake(); };
-  _novaWakeRec.onend = () => { if (_novaWakeOn) { try { _novaWakeRec.start(); } catch(e) { _stopNovaWake(); } } };
-  _novaWakeRec.start();
-  _novaWakeOn = true;
-  _updateNovaWakeBtn();
-  toast('Écoute "Hey Nova" activée — je t\'écoute','info');
+  _novaWakeRec.onerror = e => { if (e.error !== 'no-speech' && e.error !== 'aborted') _stopNovaWakeRec(); };
+  _novaWakeRec.onend = () => { if (_novaWakeOn && !_aiDictOn) { try { _novaWakeRec.start(); } catch(e) { _stopNovaWakeRec(); } } };
+  try { _novaWakeRec.start(); } catch(e) { _stopNovaWakeRec(); }
 }
-function _stopNovaWake() {
-  _novaWakeOn = false;
+function _stopNovaWakeRec() {
+  // Arrête la reconnaissance mais NE touche PAS _novaWakeOn
   if (_novaWakeRec) { try { _novaWakeRec.stop(); } catch(e) {} _novaWakeRec = null; }
+}
+function _resumeNovaWake() {
+  // Relance l'écoute du wake word si elle était activée
+  if (_novaWakeOn && !_novaWakeRec && !_aiDictOn) {
+    setTimeout(() => _startNovaWakeRec(), 500);
+  }
 }
 function _activateNova() {
   // Ouvrir le chat si fermé
@@ -14158,11 +14168,6 @@ function _activateNova() {
     if (!_aiDictOn) toggleAIDictation();
   }, 300);
 }
-// Auto-activer l'écoute wake word sur mobile
-document.addEventListener('DOMContentLoaded', () => {
-  // Sur mobile, proposer d'activer via le premier tap sur le bouton NOVA
-  // (la reconnaissance vocale nécessite une interaction utilisateur)
-});
 
 // ═══ PANNEAU D'APPEL TÉLÉPHONIQUE ═══
 // Workflow : appel → notes texte pendant l'appel → raccrocher → dicter résumé → IA synthétise → CR
@@ -14459,6 +14464,8 @@ function _ttsDoSpeak(text) {
     if (inp) inp.focus();
     if (_aiConversationMode && _aiTtsEnabled) {
       setTimeout(() => { if (!_aiDictOn) toggleAIDictation(); }, 300);
+    } else {
+      _resumeNovaWake(); // Relancer l'écoute "Hey Nova" après la réponse vocale
     }
   };
   speechSynthesis.speak(utter);
@@ -14839,7 +14846,7 @@ async function askAIChat(presetQuestion) {
     if (box) box.scrollTop = box.scrollHeight;
     aiSpeak(fullResult, loadingDiv);
     // Focus le champ pour enchaîner directement (si TTS off, pas de onend)
-    if (!_aiTtsEnabled) { const inp = document.getElementById('aiChatInput'); if (inp) inp.focus(); }
+    if (!_aiTtsEnabled) { const inp = document.getElementById('aiChatInput'); if (inp) inp.focus(); _resumeNovaWake(); }
   } catch (e) {
     loadingDiv.innerHTML = '<span style="color:var(--red)">Erreur: ' + e.message + '</span>';
   }
