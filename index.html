@@ -11709,6 +11709,7 @@ function renderEnvois() {
 let annuaireSearch = '';
 let _annuaireAbsentsToday = new Set(); // Set de lucca_id absents aujourd'hui
 let annSortCol = 'nom', annSortAsc = true;
+let _annEditingId = null;
 let annFNom = '', annFPrenom = '', annFPoste = '', annFEmail = '', annFAgence = '', annFPresence = '';
 let _annFilterTimer = null;
 
@@ -11796,10 +11797,6 @@ function renderAnnuaire() {
       ${hasFilters ? '<button class="btn" style="font-size:10px;padding:2px 8px;color:var(--red)" onclick="annResetFilters()">Reinitialiser filtres</button>' : ''}
     </div>
     <div style="display:flex;gap:8px;align-items:center">
-      <label class="btn btn-primary" style="font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">
-        Importer téléphones (CSV/Excel)
-        <input type="file" accept=".csv,.txt" onchange="importAnnuairePhones(this.files[0]);this.value=''" style="display:none">
-      </label>
       <input type="text" placeholder="Recherche globale..." value="${annuaireSearch}"
         style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:220px;background:var(--bg-1);color:var(--t1)"
         oninput="annuaireSearch=this.value;renderAnnuaireRefresh()">
@@ -11819,6 +11816,7 @@ function renderAnnuaire() {
             <th>Mobile</th>
             <th style="${thStyle}" onclick="annSetSort('agence')">Agence${arrow('agence')}</th>
             <th style="${thStyle};text-align:center" onclick="annSetSort('presence')">Présence${arrow('presence')}</th>
+            <th style="text-align:center">Actions</th>
           </tr>
           <tr style="background:var(--bg-1)">
             <td><input id="annFNom" style="${fStyle}" value="${annFNom}" placeholder="Filtrer..." oninput="annFilterInput('Nom',this.value)"></td>
@@ -11833,22 +11831,35 @@ function renderAnnuaire() {
               <option value="present" ${annFPresence==='present'?'selected':''}>Présent</option>
               <option value="absent" ${annFPresence==='absent'?'selected':''}>Absent</option>
             </select></td>
+            <td></td>
           </tr>
         </thead>
         <tbody>${list.length === 0
-          ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucun résultat</td></tr>'
-          : list.map(c => `<tr${c.absent ? ' style="opacity:0.55"' : ''}>
+          ? '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3)">Aucun résultat</td></tr>'
+          : list.map(c => {
+            const editing = _annEditingId === c.akId;
+            const telFmt = formatPhone(c.telephone);
+            const mobFmt = formatPhone(c.mobile);
+            return `<tr${c.absent ? ' style="opacity:0.55"' : ''}>
             <td><strong>${c.nom}</strong></td>
             <td>${c.prenom}</td>
             <td style="font-size:11px;color:var(--t2)">${c.poste || '—'}</td>
             <td>${c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : '—'}</td>
-            <td><input type="text" value="${formatPhone(c.telephone).replace(/"/g,'&quot;')}" style="border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:12px;width:120px;background:var(--bg-0);color:var(--t1)" onchange="updateCollabPhone('${c.akId}','telephone',this.value)"></td>
-            <td><input type="text" value="${formatPhone(c.mobile).replace(/"/g,'&quot;')}" style="border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:12px;width:120px;background:var(--bg-0);color:var(--t1)" onchange="updateCollabPhone('${c.akId}','mobile',this.value)"></td>
+            <td>${editing
+              ? `<input type="text" id="annTel_${c.akId}" value="${telFmt.replace(/"/g,'&quot;')}" style="border:1px solid var(--accent);border-radius:4px;padding:3px 6px;font-size:12px;width:120px;background:var(--bg-0);color:var(--t1)">`
+              : `<span style="font-size:12px">${telFmt || '—'}</span>`}</td>
+            <td>${editing
+              ? `<input type="text" id="annMob_${c.akId}" value="${mobFmt.replace(/"/g,'&quot;')}" style="border:1px solid var(--accent);border-radius:4px;padding:3px 6px;font-size:12px;width:120px;background:var(--bg-0);color:var(--t1)">`
+              : `<span style="font-size:12px">${mobFmt || '—'}</span>`}</td>
             <td>${c.agence || '—'}</td>
             <td style="text-align:center">${c.absent
               ? '<span style="color:var(--red);font-weight:600;font-size:12px">Absent</span>'
               : '<span style="color:var(--green);font-size:12px">Présent</span>'}</td>
-          </tr>`).join('')}
+            <td>${editing
+              ? `<button class="btn btn-primary" style="font-size:10px;padding:2px 8px" onclick="annSavePhone('${c.akId}')">Valider</button>
+                 <button class="btn" style="font-size:10px;padding:2px 8px" onclick="_annEditingId=null;renderAnnuaireRefresh()">Annuler</button>`
+              : `<button class="btn" style="font-size:10px;padding:2px 8px" onclick="_annEditingId='${c.akId}';renderAnnuaireRefresh()">Modifier</button>`}</td>
+          </tr>`; }).join('')}
         </tbody>
       </table>
     </div>
@@ -11888,10 +11899,26 @@ async function updateCollabPhone(akId, field, value) {
   const formatted = formatPhone(value);
   const { error } = await sb.from('collaborateurs').update({ [field]: formatted }).eq('id', akId);
   if (error) { toast('Erreur mise à jour : ' + error.message, 'error'); return; }
-  // Mettre à jour en mémoire
   const c = (collaborateursData || []).find(co => co.id === akId);
   if (c) c[field] = formatted;
-  toast('Numéro mis à jour', 'success');
+}
+
+async function annSavePhone(akId) {
+  const telEl = document.getElementById('annTel_' + akId);
+  const mobEl = document.getElementById('annMob_' + akId);
+  const newTel = telEl ? telEl.value : '';
+  const newMob = mobEl ? mobEl.value : '';
+  const updates = {};
+  const telFmt = formatPhone(newTel);
+  const mobFmt = formatPhone(newMob);
+  updates.telephone = telFmt;
+  updates.mobile = mobFmt;
+  const { error } = await sb.from('collaborateurs').update(updates).eq('id', akId);
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  const c = (collaborateursData || []).find(co => co.id === akId);
+  if (c) { c.telephone = telFmt; c.mobile = mobFmt; }
+  _annEditingId = null;
+  toast('Numéros mis à jour', 'success');
   renderAnnuaireRefresh();
 }
 
