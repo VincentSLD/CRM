@@ -9187,6 +9187,14 @@ function campToggleMulti(key, value) {
   const i = arr.indexOf(value);
   if (i >= 0) arr.splice(i, 1); else arr.push(value);
   _campCurrent.criteria[key] = arr;
+  // Mettre à jour le résumé + badge du dropdown
+  const el = document.querySelector('.camp-ms-details[data-key="' + key + '"]');
+  if (el) {
+    const sum = el.querySelector('summary');
+    if (sum) sum.textContent = arr.length ? arr.slice(0,2).join(', ') + (arr.length > 2 ? ' +' + (arr.length-2) : '') : '— Tous —';
+    const badge = el.closest('.camp-ms').querySelector('.camp-ms-badge');
+    if (badge) badge.innerHTML = arr.length ? '<span style="background:#3b82f6;color:#fff;border-radius:8px;padding:0 6px;font-size:10px">' + arr.length + '</span>' : '';
+  }
 }
 document.addEventListener('click', e => {
   document.querySelectorAll('.camp-ms-details[open]').forEach(d => {
@@ -9385,8 +9393,8 @@ function renderCampagnesList() {
 function _campMultiSelect(label, key, options) {
   const sel = _campCurrent.criteria[key] || [];
   return `<div style="position:relative" class="camp-ms">
-    <label style="font-size:11px;color:var(--t3);font-weight:600;display:block;margin-bottom:3px">${label}${sel.length ? ' <span style="background:#3b82f6;color:#fff;border-radius:8px;padding:0 6px;font-size:10px">'+sel.length+'</span>' : ''}</label>
-    <details style="position:relative" class="camp-ms-details">
+    <label style="font-size:11px;color:var(--t3);font-weight:600;display:block;margin-bottom:3px">${label}<span class="camp-ms-badge">${sel.length ? ' <span style="background:#3b82f6;color:#fff;border-radius:8px;padding:0 6px;font-size:10px">'+sel.length+'</span>' : ''}</span></label>
+    <details style="position:relative" class="camp-ms-details" data-key="${key}">
       <summary style="cursor:pointer;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1);list-style:none">
         ${sel.length ? sel.slice(0,2).join(', ') + (sel.length > 2 ? ' +' + (sel.length-2) : '') : '— Tous —'}
       </summary>
