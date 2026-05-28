@@ -2679,12 +2679,6 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
   </div>
   <div id="aiChatMsgs" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--bg-1)"></div>
-  <div style="padding:8px 10px;border-top:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap;background:var(--bg-2)">
-    <button class="btn" style="font-size:11px;padding:4px 8px" onclick="askAIChat('Quel est le CA facturé cette année ?')">CA facturé</button>
-    <button class="btn" style="font-size:11px;padding:4px 8px" onclick="askAIChat('Quelles sont les factures en retard les plus importantes ?')">Factures retard</button>
-    <button class="btn" style="font-size:11px;padding:4px 8px" onclick="askAIChat('Quel est le top 5 des clients par CA ?')">Top clients</button>
-    <button class="btn" style="font-size:11px;padding:4px 8px" onclick="askAIChat('Quelles sont les agences les plus performantes ?')">Top agences</button>
-  </div>
   <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;background:var(--card)">
     <input type="text" id="aiChatInput" placeholder="Posez votre question..." onkeydown="if(event.key==='Enter')askAIChat()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
     <button class="btn" id="aiDictBtn" onclick="toggleAIDictation()" title="Dictée vocale" style="font-size:12px;padding:6px 8px">
