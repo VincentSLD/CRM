@@ -2692,9 +2692,6 @@ tbody tr:last-child td { border-bottom: none; }
   <div id="aiChatMsgs" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--bg-1)"></div>
   <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;background:var(--card)">
     <textarea id="aiChatInput" placeholder="Posez votre question..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();askAIChat()}" oninput="_autoResizeAIInput()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1);resize:none;overflow-y:auto;max-height:120px;line-height:1.4;font-family:inherit"></textarea>
-    <button class="btn" id="aiPhoneBtn" onclick="toggleAIPhoneSearch()" title="Appeler un contact" style="font-size:12px;padding:6px 8px;display:none">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-    </button>
     <button class="btn" id="aiDictBtn" onclick="toggleAIDictation()" title="Dictée vocale" style="font-size:12px;padding:6px 8px">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
     </button>
@@ -3479,8 +3476,6 @@ function renderContacts() {
     ${contactsList.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--t3)">Aucun contact trouvé</div>' :
       contactsList.map(c => {
         const fullName = [c.prenom, (c.nom||'').toUpperCase()].filter(Boolean).join(' ');
-        const _phone = c.telephone || c.mobile || c.telephone2 || '';
-        const _phoneFmt = formatPhone(_phone);
         return `<div onclick="showContact('${c.id}')" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
             <strong style="font-size:14px">${fullName}</strong>
@@ -3489,7 +3484,7 @@ function renderContacts() {
           ${c.fonction ? '<div style="font-size:12px;color:var(--t2);margin-bottom:2px">' + c.fonction + '</div>' : ''}
           ${c._clientName ? '<div style="font-size:11px;color:var(--accent);margin-bottom:6px">' + c._clientName + '</div>' : ''}
           <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center" onclick="event.stopPropagation()">
-            ${_phone ? `<button onclick="openCallPanel('${c.id}','${c.client_id||''}','${(c._clientName||'').replace(/'/g,"\\\\'")}','${fullName.replace(/'/g,"\\\\'")}','${_phone}')" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:4px 10px;border:1px solid var(--accent);border-radius:6px;background:none;color:var(--accent);cursor:pointer">📞 Appeler${_phoneFmt ? ' '+_phoneFmt : ''}</button>` : ''}
+            ${_callBtns(c, fullName, 'card')}
             ${c.email ? '<a href="mailto:'+c.email+'" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:6px;color:var(--accent);text-decoration:none">✉ Email</a>' : ''}
           </div>
         </div>`;
@@ -3543,6 +3538,25 @@ function renderContacts() {
   </div>` : ''}`;
 }
 
+function _callBtns(c, contactName, style) {
+  // Collecte les numéros disponibles
+  const nums = [];
+  if (c.telephone) nums.push({ label: 'Tel', num: c.telephone });
+  if (c.mobile) nums.push({ label: 'Mobile', num: c.mobile });
+  if (c.telephone2) nums.push({ label: 'Tel 2', num: c.telephone2 });
+  if (!nums.length) return '';
+  const cId = c.id || '', clId = c.client_id || '';
+  const clName = (c._clientName || '').replace(/'/g, "\\'");
+  const cName = (contactName || '').replace(/'/g, "\\'");
+  if (nums.length === 1) {
+    return `<button class="${style === 'card' ? '' : 'btn'}" onclick="openCallPanel('${cId}','${clId}','${clName}','${cName}','${nums[0].num}')" style="${style === 'card' ? 'display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:4px 10px;border:1px solid var(--accent);border-radius:6px;background:none;color:var(--accent);cursor:pointer' : ''}">Appeler${style === 'card' ? ' ' + formatPhone(nums[0].num) : ''}</button>`;
+  }
+  return nums.map(n => {
+    const fmt = formatPhone(n.num);
+    return `<button class="${style === 'card' ? '' : 'btn'}" onclick="openCallPanel('${cId}','${clId}','${clName}','${cName}','${n.num}')" style="${style === 'card' ? 'display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:4px 10px;border:1px solid var(--accent);border-radius:6px;background:none;color:var(--accent);cursor:pointer' : ''}" title="${n.label}: ${fmt}">${style === 'card' ? '' : n.label + ' '}${fmt}</button>`;
+  }).join('');
+}
+
 function renderContactDetail() {
   if (!currentContact) return '<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--t3)">Aucun contact sélectionné</div></div>';
   const c = currentContact;
@@ -3563,7 +3577,7 @@ function renderContactDetail() {
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         ${c.email ? '<a href="mailto:'+c.email+'" class="btn btn-primary" style="text-decoration:none">Envoyer un email</a>' : ''}
-        ${(c.telephone || c.mobile || c.telephone2) ? `<button class="btn" onclick="openCallPanel('${c.id}','${c.client_id||''}','${(c._clientName||'').replace(/'/g,"\\\\'")}','${([c.prenom,c.nom].filter(Boolean).join(' ')).replace(/'/g,"\\\\'")}','${c.telephone || c.mobile || c.telephone2}')">Appeler</button>` : ''}
+        ${_callBtns(c, [c.prenom,c.nom].filter(Boolean).join(' '), 'btn')}
         <button class="btn" onclick="goToCR('${c.client_id||''}','${(c._clientName||'').replace(/'/g,"\\'")}','${c.id||''}','${([c.prenom,c.nom].filter(Boolean).join(' ')).replace(/'/g,"\\'")}')">Rédiger CR</button>
         <button class="btn" onclick="toggleEditContact()">Modifier</button>
         <button class="btn ${c.akuiteo_id ? 'btn-synced' : 'btn-not-synced'}" onclick="pushContactToAkuiteo('${c.id}')" title="${c.akuiteo_id ? 'Synchronisé (ID: '+c.akuiteo_id+')' : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? '✔ Synchronisé' : '⬆ Sync Akuiteo'}</button>
@@ -14528,9 +14542,6 @@ function toggleAIChat() {
     if (btn) btn.style.opacity = _aiTtsEnabled ? '1' : '.4';
     const speedBtn = document.getElementById('aiSpeedToggle');
     if (speedBtn) { speedBtn.textContent = _aiTtsSpeed + 'x'; speedBtn.style.opacity = _aiTtsSpeed > 1 ? '1' : '.7'; }
-    // Afficher bouton téléphone sur mobile
-    const phoneBtn = document.getElementById('aiPhoneBtn');
-    if (phoneBtn) phoneBtn.style.display = window.innerWidth <= 768 ? '' : 'none';
   }
 }
 let _aiMsgIdx = 0;
@@ -14653,122 +14664,33 @@ function _getAIUserProfile() {
   }
   return profile;
 }
-// ═══ RECHERCHE CONTACTS/COLLABORATEURS DEPUIS NOVA ═══
-function toggleAIPhoneSearch() {
-  const msgs = document.getElementById('aiChatMsgs');
-  if (!msgs) return;
-  // Si déjà ouvert, fermer
-  const existing = document.getElementById('aiPhoneSearchPanel');
-  if (existing) { existing.remove(); return; }
-
-  const panel = document.createElement('div');
-  panel.id = 'aiPhoneSearchPanel';
-  panel.style.cssText = 'position:absolute;bottom:0;left:0;right:0;top:0;background:#fff;z-index:10;display:flex;flex-direction:column';
-  panel.innerHTML = `
-    <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:#fff">
-      <button onclick="document.getElementById('aiPhoneSearchPanel')?.remove()" class="btn" style="font-size:12px;padding:4px 10px">← Retour</button>
-      <input type="text" id="aiPhoneSearchInput" placeholder="Rechercher un nom..." autofocus
-        style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:#fff;color:var(--t1);box-sizing:border-box"
-        oninput="aiPhoneDoSearch(this.value)">
-    </div>
-    <div id="aiPhoneResults" style="flex:1;overflow-y:auto;padding:10px 14px;background:#fff">
-      <div style="text-align:center;padding:30px;color:var(--t3);font-size:13px">Tape un nom pour rechercher un contact ou un collaborateur</div>
-    </div>`;
-  // Insert inside the chat panel, over messages
-  const chatPanel = document.getElementById('aiChatPanel');
-  if (chatPanel) { chatPanel.style.position = 'relative'; chatPanel.appendChild(panel); }
-  setTimeout(() => document.getElementById('aiPhoneSearchInput')?.focus(), 100);
-}
-
-let _aiPhoneSearchTimer = null;
-function aiPhoneDoSearch(q) {
-  clearTimeout(_aiPhoneSearchTimer);
-  const box = document.getElementById('aiPhoneResults');
-  if (!box) return;
-  const query = (q || '').trim().toLowerCase();
-  if (query.length < 2) {
-    box.innerHTML = '<div style="text-align:center;padding:30px;color:var(--t3);font-size:13px">Tape au moins 2 caractères</div>';
-    return;
-  }
-  box.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t3);font-size:13px">Recherche...</div>';
-  _aiPhoneSearchTimer = setTimeout(() => _aiPhoneExec(query, box), 300);
-}
-
-async function _aiPhoneExec(query, box) {
-  const results = [];
-
-  // Chercher contacts dans Supabase (recherche directe pour avoir tous les résultats)
-  try {
-    const words = query.split(/\s+/).filter(w => w.length >= 2);
-    let q = sb.from('contacts').select('id,nom,prenom,fonction,email,telephone,mobile,client_id');
-    for (const w of words) {
-      q = q.or(`nom.ilike.%${w}%,prenom.ilike.%${w}%`);
+// ═══ POST-TRAITEMENT : RENDRE LES NUMÉROS CLIQUABLES DANS LES RÉPONSES IA ═══
+function _aiLinkifyPhones(div) {
+  // Parcourir les text nodes pour trouver des numéros de téléphone et les rendre cliquables
+  const walker = document.createTreeWalker(div, NodeFilter.SHOW_TEXT, null);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  const phoneRe = /(?:\+33|0)[\s.]?[1-9](?:[\s.]?\d{2}){4}/g;
+  for (const node of nodes) {
+    if (node.parentElement?.tagName === 'A' || node.parentElement?.tagName === 'BUTTON') continue;
+    const txt = node.textContent;
+    if (!phoneRe.test(txt)) continue;
+    phoneRe.lastIndex = 0;
+    const frag = document.createDocumentFragment();
+    let last = 0, match;
+    while ((match = phoneRe.exec(txt)) !== null) {
+      if (match.index > last) frag.appendChild(document.createTextNode(txt.substring(last, match.index)));
+      const raw = match[0].replace(/[^\d+]/g, '');
+      const a = document.createElement('a');
+      a.href = 'tel:' + raw; a.textContent = match[0];
+      a.style.cssText = 'color:var(--accent);text-decoration:none;font-weight:600;white-space:nowrap';
+      a.onclick = e => e.stopPropagation();
+      frag.appendChild(a);
+      last = phoneRe.lastIndex;
     }
-    const { data: contacts } = await q.order('nom').limit(20);
-    if (contacts) {
-      // Charger les noms de sociétés pour les résultats
-      const cids = [...new Set(contacts.map(c => c.client_id).filter(Boolean))];
-      let clientMap = {};
-      if (cids.length) {
-        const { data: cls } = await sb.from('clients').select('id,name').in('id', cids);
-        if (cls) cls.forEach(cl => clientMap[cl.id] = cl.name);
-      }
-      for (const c of contacts) {
-        results.push({ type: 'contact', id: c.id, nom: (c.nom||'').toUpperCase(), prenom: c.prenom||'', fonction: c.fonction||'', societe: clientMap[c.client_id]||'', telephone: c.telephone, mobile: c.mobile, email: c.email, clientId: c.client_id });
-      }
-    }
-  } catch(e) {}
-
-  // Chercher dans les collaborateurs (toujours en mémoire)
-  const collabs = (typeof collaborateursData !== 'undefined' && collaborateursData) || [];
-  const luccas = (typeof collaborateursLuccaData !== 'undefined' && collaborateursLuccaData) || [];
-  for (const ak of collabs) {
-    if (!ak.lucca_id) continue;
-    const lucca = luccas.find(l => l.lucca_id === ak.lucca_id);
-    const nom = lucca ? lucca.nom : ak.nom;
-    const prenom = lucca ? lucca.prenom : (ak.prenom || '');
-    const searchable = [nom, prenom, lucca?.etablissement, lucca?.poste].filter(Boolean).join(' ').toLowerCase();
-    if (searchable.includes(query)) {
-      results.push({ type: 'collab', id: ak.id, nom: (nom||'').toUpperCase(), prenom: prenom, fonction: lucca?.poste||'', societe: lucca?.etablissement||'', telephone: ak.telephone, mobile: ak.mobile, email: lucca?.email || ak.email });
-    }
-    if (results.length >= 40) break;
+    if (last < txt.length) frag.appendChild(document.createTextNode(txt.substring(last)));
+    if (last > 0) node.parentNode.replaceChild(frag, node);
   }
-
-  if (!document.getElementById('aiPhoneResults')) return; // panel fermé entre-temps
-
-  if (results.length === 0) {
-    box.innerHTML = '<div style="text-align:center;padding:30px;color:var(--t3);font-size:13px">Aucun résultat</div>';
-    return;
-  }
-
-  const _pLink = (num) => {
-    if (!num) return '';
-    const raw = num.replace(/[^\d+]/g, '');
-    const fmt = formatPhone(num);
-    return `<a href="tel:${raw}" style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;background:var(--accent);color:#fff;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600">📞 ${fmt}</a>`;
-  };
-  const _mLink = (num) => {
-    if (!num) return '';
-    const raw = num.replace(/[^\d+]/g, '');
-    const fmt = formatPhone(num);
-    return `<a href="tel:${raw}" style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;background:#22c55e;color:#fff;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600">📱 ${fmt}</a>`;
-  };
-
-  box.innerHTML = results.map(r => `
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <strong style="font-size:14px">${r.nom} ${r.prenom}</strong>
-        <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:${r.type === 'contact' ? '#6366f1' : '#8b5cf6'};color:#fff">${r.type === 'contact' ? 'Contact' : 'Collaborateur'}</span>
-      </div>
-      ${r.fonction ? '<div style="font-size:12px;color:var(--t2);margin-bottom:2px">' + r.fonction + '</div>' : ''}
-      ${r.societe ? '<div style="font-size:11px;color:var(--accent);margin-bottom:6px">' + r.societe + '</div>' : ''}
-      <div style="display:flex;flex-wrap:wrap;gap:6px">
-        ${_pLink(r.telephone)}
-        ${_mLink(r.mobile)}
-        ${!r.telephone && !r.mobile ? '<span style="font-size:12px;color:var(--t3);padding:6px 0">Aucun numéro</span>' : ''}
-      </div>
-    </div>
-  `).join('');
 }
 
 async function askAIChat(presetQuestion) {
@@ -14834,6 +14756,8 @@ async function askAIChat(presetQuestion) {
     } else {
       loadingDiv.innerHTML = fullResult.replace(/\n/g, '<br>');
     }
+    // Rendre les numéros de téléphone cliquables
+    _aiLinkifyPhones(loadingDiv);
     // Bouton lecture
     const speakBtn = document.createElement('button');
     speakBtn.title = 'Lire à voix haute';
