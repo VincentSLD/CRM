@@ -2669,13 +2669,14 @@ tbody tr:last-child td { border-bottom: none; }
 <div class="toasts" id="toasts"></div>
 
 <!-- Chatbot IA flottant -->
-<div id="aiChatBtn" onclick="toggleAIChat()" title="Assistant IA" style="position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 6px 20px rgba(139,92,246,.4);z-index:900;transition:transform .2s" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform=''">
-  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+<div id="aiChatBtn" onclick="toggleAIChat()" title="NOVA" style="position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 6px 20px rgba(139,92,246,.4);z-index:900;transition:transform .2s;font-weight:800;font-size:11px;letter-spacing:1px" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform=''">
+  NOVA
 </div>
 <div id="aiChatPanel" style="display:none;position:fixed;bottom:90px;right:24px;width:400px;max-width:calc(100vw - 32px);height:560px;max-height:calc(100vh - 120px);background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.2);z-index:900;flex-direction:column;overflow:hidden">
   <div style="padding:14px 16px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;display:flex;align-items:center;justify-content:space-between">
-    <div><div style="font-weight:700;font-size:14px">✦ Assistant IA</div><div style="font-size:11px;opacity:.85">Posez vos questions sur vos données</div></div>
+    <div><div style="font-weight:700;font-size:14px">✦ NOVA</div><div style="font-size:11px;opacity:.85">Ton assistant IA — dis "Hey Nova"</div></div>
     <div style="display:flex;align-items:center;gap:8px">
+      <button id="novaWakeToggle" onclick="toggleNovaWake()" title="Activer Hey Nova" style="background:none;border:none;color:#fff;cursor:pointer;font-size:11px;opacity:.7;padding:4px;font-weight:600">Hey Nova</button>
       <button id="aiTtsToggle" onclick="toggleAITts()" title="Lecture vocale" style="background:none;border:none;color:#fff;cursor:pointer;font-size:16px;opacity:.7;padding:4px">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
       </button>
@@ -14051,8 +14052,54 @@ function toggleAIDictation() {
   toast('Dictée activée — Parlez...','info');
 }
 
-// ═══ AI ASSIST ═══
-// ═══ CHATBOT IA ═══
+// ═══ WAKE WORD "HEY NOVA" ═══
+let _novaWakeOn = false, _novaWakeRec = null;
+function _updateNovaWakeBtn() {
+  const btn = document.getElementById('novaWakeToggle');
+  if (btn) { btn.style.opacity = _novaWakeOn ? '1' : '.7'; btn.style.textDecoration = _novaWakeOn ? 'underline' : 'none'; }
+}
+function toggleNovaWake() {
+  if (_novaWakeOn) { _stopNovaWake(); _updateNovaWakeBtn(); toast('Écoute "Hey Nova" désactivée','info'); return; }
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) { toast('Non supporté par ce navigateur','error'); return; }
+  _novaWakeRec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  _novaWakeRec.lang = 'fr-FR'; _novaWakeRec.continuous = true; _novaWakeRec.interimResults = true;
+  _novaWakeRec.onresult = e => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript.toLowerCase();
+      if (/hey\s*nova|hé\s*nova|eh\s*nova|ai\s*nova/.test(t)) {
+        _stopNovaWake();
+        _activateNova();
+        return;
+      }
+    }
+  };
+  _novaWakeRec.onerror = e => { if (e.error !== 'no-speech' && e.error !== 'aborted') _stopNovaWake(); };
+  _novaWakeRec.onend = () => { if (_novaWakeOn) { try { _novaWakeRec.start(); } catch(e) { _stopNovaWake(); } } };
+  _novaWakeRec.start();
+  _novaWakeOn = true;
+  _updateNovaWakeBtn();
+  toast('Écoute "Hey Nova" activée — je t\'écoute','info');
+}
+function _stopNovaWake() {
+  _novaWakeOn = false;
+  if (_novaWakeRec) { try { _novaWakeRec.stop(); } catch(e) {} _novaWakeRec = null; }
+}
+function _activateNova() {
+  // Ouvrir le chat si fermé
+  const panel = document.getElementById('aiChatPanel');
+  if (!panel || panel.style.display !== 'flex') toggleAIChat();
+  // Démarrer la dictée automatiquement
+  setTimeout(() => {
+    if (!_aiDictOn) toggleAIDictation();
+  }, 300);
+}
+// Auto-activer l'écoute wake word sur mobile
+document.addEventListener('DOMContentLoaded', () => {
+  // Sur mobile, proposer d'activer via le premier tap sur le bouton NOVA
+  // (la reconnaissance vocale nécessite une interaction utilisateur)
+});
+
+// ═══ CHATBOT NOVA ═══
 let _aiChatHistory = [];
 let _aiTtsEnabled = window.innerWidth <= 768; // activé par défaut sur mobile
 
@@ -14071,9 +14118,11 @@ function aiSpeak(text) {
   const utter = new SpeechSynthesisUtterance(clean);
   utter.lang = 'fr-FR'; utter.rate = 1; utter.pitch = 1;
   const voices = speechSynthesis.getVoices();
-  const frVoice = voices.find(v => v.lang.startsWith('fr') && v.name.includes('Female'))
-    || voices.find(v => v.lang.startsWith('fr'));
-  if (frVoice) utter.voice = frVoice;
+  const frVoices = voices.filter(v => v.lang.startsWith('fr'));
+  // Préférer voix féminine française
+  const femaleVoice = frVoices.find(v => /female|femme|amelie|audrey|aurelie|marie|lea|chloe|hortense|julie/i.test(v.name))
+    || frVoices[0];
+  if (femaleVoice) utter.voice = femaleVoice;
   speechSynthesis.speak(utter);
 }
 function aiStopSpeak() { if (window.speechSynthesis) window.speechSynthesis.cancel(); }
@@ -14087,7 +14136,7 @@ function toggleAIChat() {
   if (!open && _aiChatHistory.length === 0) {
     const _p = _getAIUserProfile();
     const _hello = _p && _p.prenom ? `Bonjour ${_p.prenom} ! ` : 'Bonjour ! ';
-    addAIMsg('assistant', _hello + 'Je suis ton assistant IA. Pose-moi tes questions sur les données CRM : CA, factures, clients, affaires, etc.');
+    addAIMsg('assistant', _hello + 'Je suis NOVA, ton assistante IA. Pose-moi tes questions sur les données CRM, ou dis "Hey Nova" pour me parler.');
   }
   if (!open) {
     setTimeout(() => document.getElementById('aiChatInput')?.focus(), 100);
