@@ -11035,10 +11035,69 @@ function renderCRList() {
   const pageReports = filteredReports.slice(crPage * CR_PER_PAGE, (crPage + 1) * CR_PER_PAGE);
   const from = totalCR ? crPage * CR_PER_PAGE + 1 : 0;
   const to = Math.min((crPage + 1) * CR_PER_PAGE, totalCR);
+  const hasFilters = crFilterDate || crFilterTitre || crFilterSociete || crFilterContact || crFilterType || crFilterStatut;
+
+  const _isMobile = window.innerWidth <= 768;
+
+  if (_isMobile) {
+    // ═══ MOBILE : cartes CR ═══
+    return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px">
+      <select style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1);flex:1"
+        onchange="crFilterAuteur=this.value;crPage=0;renderPage('cr')">
+        <option value="__mine__" ${crFilterAuteur==='__mine__'?'selected':''}>Mes CR</option>
+        <option value="__all__" ${crFilterAuteur==='__all__'?'selected':''}>Tous</option>
+        ${(() => { const ids = new Set((DB.reports||[]).map(r => r.redacteur_id).filter(Boolean)); return (DB.commerciaux||[]).filter(co => ids.has(co.id)).map(co => ({ id: co.id, label: crGetRedacteurLabel(co.id) })).filter(c => c.label).sort((a,b) => a.label.localeCompare(b.label)).map(c => `<option value="${c.id}" ${crFilterAuteur==c.id?'selected':''}>${c.label}</option>`).join(''); })()}
+      </select>
+      <button class="btn btn-primary" onclick="openCRModal()" style="font-size:12px;white-space:nowrap">+ Nouveau CR</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <input type="text" placeholder="Rechercher..." value="${crFilterTitre}"
+        style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)"
+        oninput="crFilterTitre=this.value;crPage=0;renderPage('cr')">
+      <select style="padding:6px;border:1px solid var(--border);border-radius:8px;font-size:11px;background:var(--bg-1);color:var(--t1)"
+        onchange="crFilterType=this.value;crPage=0;renderPage('cr')">
+        <option value="">Type</option>
+        <option value="rdv_ext" ${crFilterType==='rdv_ext'?'selected':''}>RDV EXT.</option>
+        <option value="rdv_int" ${crFilterType==='rdv_int'?'selected':''}>RDV INT.</option>
+        <option value="tel" ${crFilterType==='tel'?'selected':''}>TEL.</option>
+        <option value="visio" ${crFilterType==='visio'?'selected':''}>VISIO.</option>
+        <option value="salon_foire" ${crFilterType==='salon_foire'?'selected':''}>SALON</option>
+        <option value="autre" ${crFilterType==='autre'?'selected':''}>AUTRE</option>
+      </select>
+    </div>
+    <div style="font-size:11px;color:var(--t3);margin-bottom:8px">${totalCR} compte(s)-rendu(s)${hasFilters ? ' — <a href="#" onclick="crResetFilters();return false" style="color:var(--red);text-decoration:none">Effacer filtres</a>' : ''}</div>
+    ${pageReports.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--t3)">Aucun compte-rendu</div>' :
+      pageReports.map(r => {
+        const dateRdv = r.date_raw ? fmtDateFR(r.date_raw) : '—';
+        const nbPj = r.pieces_jointes ? r.pieces_jointes.length : 0;
+        const clientNames = crGetClientNames(r) || '';
+        const contactNames = crGetContactNames(r) || '';
+        return `<div onclick="openCRDetail(${r.id})" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;gap:8px">
+            <strong style="font-size:14px;line-height:1.3;flex:1">${r.titre||'Sans titre'}${nbPj ? ' <span style="color:var(--t3);font-weight:400;font-size:12px">📎'+nbPj+'</span>' : ''}</strong>
+            ${crStatutBadge(r.statut_cr)}
+          </div>
+          ${clientNames ? '<div style="font-size:12px;color:var(--accent);margin-bottom:2px">' + clientNames + '</div>' : ''}
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px">
+            <span style="font-size:11px;color:var(--t2)">${dateRdv}</span>
+            ${crTypeBadge(r.type_cr)}
+            ${contactNames ? '<span style="font-size:11px;color:var(--t3)">' + contactNames + '</span>' : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    ${totalPages > 1 ? `
+    <div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:12px">
+      <button class="btn" ${crPage===0?'disabled':''} onclick="crPage--;renderPage('cr')" style="font-size:12px">Precedent</button>
+      <span style="font-size:12px;color:var(--t2)">Page ${crPage+1} / ${totalPages}</span>
+      <button class="btn" ${crPage>=totalPages-1?'disabled':''} onclick="crPage++;renderPage('cr')" style="font-size:12px">Suivant</button>
+    </div>` : ''}`;
+  }
+
+  // ═══ DESKTOP : tableau complet ═══
   const sortIcon = col => crSortCol === col ? (crSortAsc ? ' &#9650;' : ' &#9660;') : ' <span style="opacity:0.3">&#9650;</span>';
   const thStyle = 'padding:8px 14px;text-align:left;font-weight:600;font-size:11px;color:var(--t3);text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none';
   const fStyle = 'font-size:11px;padding:4px 6px;width:100%;border:1px solid var(--border);border-radius:4px;background:var(--bg-0);color:var(--t1)';
-  const hasFilters = crFilterDate || crFilterTitre || crFilterSociete || crFilterContact || crFilterType || crFilterStatut;
 
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
@@ -11226,7 +11285,7 @@ function getCREditorHTML(r) {
   const today = new Date().toISOString().split('T')[0];
   const myId = currentCommercial?.id || '';
   return `
-    <div class="cr-fields-row" style="padding:12px 16px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px">
+    <div class="cr-fields-row" style="padding:12px 16px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:${window.innerWidth<=768?'1fr':'2fr 1fr 1fr 1fr'};gap:10px">
       <div>
         <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Titre <span style="color:var(--red)">*</span></label>
         <input type="text" id="crTitre" placeholder="Titre du compte-rendu..." value="${r ? (r.titre||'').replace(/"/g,'&quot;') : ''}"
@@ -11255,7 +11314,7 @@ function getCREditorHTML(r) {
         </select>
       </div>
     </div>
-    <div class="cr-fields-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)">
+    <div class="cr-fields-row" style="display:grid;grid-template-columns:${window.innerWidth<=768?'1fr':'1fr 1fr'};gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)">
       <div style="position:relative">
         <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Sociétés <span style="color:var(--red)">*</span></label>
         <div id="crClientChips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px"></div>
