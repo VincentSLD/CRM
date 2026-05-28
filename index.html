@@ -14500,15 +14500,15 @@ function toggleAIPhoneSearch() {
 
   const panel = document.createElement('div');
   panel.id = 'aiPhoneSearchPanel';
-  panel.style.cssText = 'position:absolute;bottom:0;left:0;right:0;top:0;background:var(--bg-1);z-index:10;display:flex;flex-direction:column';
+  panel.style.cssText = 'position:absolute;bottom:0;left:0;right:0;top:0;background:#fff;z-index:10;display:flex;flex-direction:column';
   panel.innerHTML = `
-    <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--card)">
+    <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:#fff">
       <button onclick="document.getElementById('aiPhoneSearchPanel')?.remove()" class="btn" style="font-size:12px;padding:4px 10px">← Retour</button>
       <input type="text" id="aiPhoneSearchInput" placeholder="Rechercher un nom..." autofocus
-        style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg-1);color:var(--t1);box-sizing:border-box"
+        style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:#fff;color:var(--t1);box-sizing:border-box"
         oninput="aiPhoneDoSearch(this.value)">
     </div>
-    <div id="aiPhoneResults" style="flex:1;overflow-y:auto;padding:10px 14px">
+    <div id="aiPhoneResults" style="flex:1;overflow-y:auto;padding:10px 14px;background:#fff">
       <div style="text-align:center;padding:30px;color:var(--t3);font-size:13px">Tape un nom pour rechercher un contact ou un collaborateur</div>
     </div>`;
   // Insert inside the chat panel, over messages
