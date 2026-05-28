@@ -11856,6 +11856,45 @@ function renderAnnuaire() {
   const fStyle = 'font-size:11px;padding:3px 5px;width:100%;border:1px solid var(--border);border-radius:4px;background:var(--bg-0);color:var(--t1)';
   const hasFilters = annFNom || annFPrenom || annFPoste || annFEmail || annFAgence || annFPresence || annuaireSearch;
 
+  const _isMobile = window.innerWidth <= 768;
+  const _phoneLink = (num, label) => {
+    if (!num) return '—';
+    const raw = num.replace(/[^\d+]/g, '');
+    return `<a href="tel:${raw}" style="color:var(--accent);text-decoration:none;font-size:13px">${label}</a>`;
+  };
+
+  if (_isMobile) {
+    // --- MOBILE : cartes lecture seule ---
+    return `
+    <div style="margin-bottom:12px">
+      <input type="text" placeholder="Rechercher un collaborateur..." value="${annuaireSearch}"
+        style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg-1);color:var(--t1);box-sizing:border-box"
+        oninput="annuaireSearch=this.value;renderAnnuaireRefresh()">
+    </div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px">${list.length} collaborateur(s)${_annuaireAbsentsToday.size ? ' · <span style="color:var(--red)">' + _annuaireAbsentsToday.size + " absent(s)</span>" : ''}</div>
+    ${list.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--t3)">Aucun résultat</div>' :
+      list.map(c => {
+        const telFmt = formatPhone(c.telephone);
+        const mobFmt = formatPhone(c.mobile);
+        return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px${c.absent ? ';opacity:0.55' : ''}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <strong style="font-size:14px">${c.nom} ${c.prenom}</strong>
+            ${c.absent
+              ? '<span style="color:var(--red);font-size:11px;font-weight:600">Absent</span>'
+              : '<span style="color:var(--green);font-size:11px">Présent</span>'}
+          </div>
+          ${c.poste ? '<div style="font-size:12px;color:var(--t2);margin-bottom:4px">' + c.poste + '</div>' : ''}
+          ${c.agence ? '<div style="font-size:11px;color:var(--t3);margin-bottom:6px">' + c.agence + '</div>' : ''}
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+            ${telFmt ? '<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--t3)">📞 ' + _phoneLink(c.telephone, telFmt) + '</span>' : ''}
+            ${mobFmt ? '<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--t3)">📱 ' + _phoneLink(c.mobile, mobFmt) + '</span>' : ''}
+            ${c.email ? '<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--t3)">✉ <a href="mailto:'+c.email+'" style="color:var(--accent);text-decoration:none;font-size:12px">'+c.email+'</a></span>' : ''}
+          </div>
+        </div>`;
+      }).join('')}`;
+  }
+
+  // --- DESKTOP : tableau complet avec filtres et édition ---
   return `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:8px;align-items:center">
