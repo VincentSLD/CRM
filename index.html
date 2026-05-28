@@ -2670,6 +2670,9 @@ tbody tr:last-child td { border-bottom: none; }
   </div>
   <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px">
     <input type="text" id="aiChatInput" placeholder="Posez votre question..." onkeydown="if(event.key==='Enter')askAIChat()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)">
+    <button class="btn" id="aiDictBtn" onclick="toggleAIDictation()" title="Dictée vocale" style="font-size:12px;padding:6px 8px">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+    </button>
     <button class="btn btn-primary" onclick="askAIChat()" style="font-size:12px">Envoyer</button>
   </div>
 </div>
@@ -13935,18 +13938,51 @@ function renderAlertes() {
 }
 
 // ═══ DICTATION ═══
-let isRec = false, recognition = null;
+let isRec = false, recognition = null, _dictTarget = null;
+
+function _startSpeechRecognition(targetEl, onResult, onStatusChange) {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) { toast('Dictée non supportée par ce navigateur','error'); return null; }
+  const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  rec.lang = 'fr-FR'; rec.continuous = true; rec.interimResults = true;
+  rec.onresult = e => {
+    let t = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) { if (e.results[i].isFinal) t += e.results[i][0].transcript; }
+    if (t) onResult(t);
+  };
+  rec.onerror = e => { if (e.error !== 'no-speech' && e.error !== 'aborted') { onStatusChange(false); toast('Erreur dictée','error'); } };
+  rec.onend = () => { if (isRec) { try { rec.start(); } catch(e) { onStatusChange(false); } } };
+  rec.start();
+  return rec;
+}
 
 function toggleDictation() {
   const btn = document.getElementById('dictBtn');
-  if(!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) { toast('Dictée non supportée par ce navigateur','error'); return; }
-  if(isRec) { recognition.stop(); isRec=false; btn.classList.remove('recording'); document.getElementById('editorStatus').textContent='Prêt'; return; }
-  recognition = new (window.SpeechRecognition||window.webkitSpeechRecognition)();
-  recognition.lang='fr-FR'; recognition.continuous=true; recognition.interimResults=true;
-  recognition.onresult = e => { let t=''; for(let i=e.resultIndex;i<e.results.length;i++) if(e.results[i].isFinal) t+=e.results[i][0].transcript; if(t) document.getElementById('editorBody').innerHTML+=t+' '; };
-  recognition.onerror = () => { isRec=false; btn.classList.remove('recording'); document.getElementById('editorStatus').textContent='Prêt'; toast('Erreur dictée','error'); };
-  recognition.start(); isRec=true; btn.classList.add('recording');
-  document.getElementById('editorStatus').textContent='🔴 Dictée en cours...';
+  const status = document.getElementById('editorStatus');
+  if (isRec) { isRec = false; if (recognition) recognition.stop(); recognition = null; btn.classList.remove('recording'); status.textContent = 'Prêt'; return; }
+  _dictTarget = 'editor';
+  recognition = _startSpeechRecognition(
+    document.getElementById('editorBody'),
+    text => { const el = document.getElementById('editorBody'); if (el) el.innerHTML += text + ' '; },
+    running => { if (!running) { isRec = false; btn.classList.remove('recording'); status.textContent = 'Prêt'; } }
+  );
+  if (!recognition) return;
+  isRec = true; btn.classList.add('recording');
+  status.textContent = '🔴 Dictée en cours...';
+  toast('Dictée activée — Parlez...','info');
+}
+
+let _aiDictRec = null, _aiDictOn = false;
+function toggleAIDictation() {
+  const btn = document.getElementById('aiDictBtn');
+  const input = document.getElementById('aiChatInput');
+  if (_aiDictOn) { _aiDictOn = false; if (_aiDictRec) _aiDictRec.stop(); _aiDictRec = null; btn.classList.remove('recording'); btn.style.color = ''; return; }
+  _aiDictRec = _startSpeechRecognition(
+    input,
+    text => { if (input) input.value += (input.value && !input.value.endsWith(' ') ? ' ' : '') + text; },
+    running => { if (!running) { _aiDictOn = false; btn.classList.remove('recording'); btn.style.color = ''; } }
+  );
+  if (!_aiDictRec) return;
+  _aiDictOn = true; btn.classList.add('recording'); btn.style.color = 'var(--red)';
   toast('Dictée activée — Parlez...','info');
 }
 
