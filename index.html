@@ -5328,32 +5328,60 @@ async function refreshLegalFromSiret() {
   showSyncLoading(true);
   setSyncText('Recherche SIRENE…');
   try {
-    // 1. Chercher l'entreprise par SIREN via API publique
-    const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + siren + '&per_page=1');
+    // 1. Chercher l'entreprise par SIREN via API publique (actives + fermées)
+    let resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + siren + '&per_page=1&etat_administratif=A');
     if (!resp.ok) throw new Error('API SIRENE HTTP ' + resp.status);
-    const data = await resp.json();
-    const entreprise = (data.results || [])[0];
+    let data = await resp.json();
+    let entreprise = (data.results || [])[0];
+    // Si non trouvée parmi les actives, chercher parmi les fermées
+    if (!entreprise) {
+      resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + siren + '&per_page=1&etat_administratif=C');
+      if (resp.ok) {
+        data = await resp.json();
+        entreprise = (data.results || [])[0];
+      }
+    }
     if (!entreprise) { toast('Aucune entreprise trouvée pour ce SIREN', 'error'); return; }
 
     const siege = entreprise.siege || {};
 
-    // 2. Chercher TOUS les établissements actifs via API
+    // 2. Chercher TOUS les établissements (actifs + fermés) via API
     let allEtabs = [];
+    // D'abord ajouter le siège depuis la recherche principale
+    if (siege.siret) allEtabs.push({ ...siege, est_siege: true, etat_administratif: siege.etat_administratif || 'A' });
+    // Chercher les établissements actifs
     try {
-      const resp2 = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + siren + '&per_page=25&mtm_campaign=crm');
+      const resp2 = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + siren + '&per_page=25&etat_administratif=A');
       if (resp2.ok) {
         const d2 = await resp2.json();
         const ent2 = (d2.results || [])[0];
         if (ent2) {
-          // Le siège
-          if (ent2.siege) allEtabs.push({ ...ent2.siege, est_siege: true });
-          // Établissements secondaires
           if (ent2.matching_etablissements) {
-            ent2.matching_etablissements.forEach(e => allEtabs.push({ ...e, est_siege: false }));
+            const existingSirets = new Set(allEtabs.map(e => e.siret));
+            ent2.matching_etablissements.forEach(e => { if (!existingSirets.has(e.siret)) allEtabs.push({ ...e, est_siege: false, etat_administratif: e.etat_administratif || 'A' }); });
           }
         }
       }
-    } catch(e) { /* ignore, on a au moins le siège */ }
+    } catch(e) { /* ignore */ }
+    // Chercher aussi les établissements fermés
+    try {
+      const resp3 = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + siren + '&per_page=25&etat_administratif=C');
+      if (resp3.ok) {
+        const d3 = await resp3.json();
+        const ent3 = (d3.results || [])[0];
+        if (ent3) {
+          const existingSirets = new Set(allEtabs.map(e => e.siret));
+          // Siège de l'entreprise fermée
+          if (ent3.siege && !existingSirets.has(ent3.siege.siret)) {
+            allEtabs.push({ ...ent3.siege, est_siege: true, etat_administratif: ent3.siege.etat_administratif || 'F' });
+            existingSirets.add(ent3.siege.siret);
+          }
+          if (ent3.matching_etablissements) {
+            ent3.matching_etablissements.forEach(e => { if (!existingSirets.has(e.siret)) allEtabs.push({ ...e, est_siege: false, etat_administratif: e.etat_administratif || 'F' }); });
+          }
+        }
+      }
+    } catch(e) { /* ignore */ }
 
     // Compléter avec l'API INSEE si disponible
     try {
@@ -5423,34 +5451,67 @@ async function refreshLegalFromSiret() {
       }
     } catch(e) { /* ignore si INSEE indisponible */ }
 
-    // 3. Identifier l'établissement correspondant au SIRET saisi
-    const etabCourant = allEtabs.find(e => e.siret === siret) || siege;
-    const isSiege = etabCourant.est_siege || etabCourant.siret === siege.siret;
-    const etabEtat = etabCourant.etat_administratif || 'A';
+    // 3. Si le SIRET recherché n'est toujours pas dans la liste, recherche directe par SIRET
+    if (!allEtabs.find(e => e.siret === siret)) {
+      try {
+        // Recherche directe par SIRET via l'API publique
+        const respSiret = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + siret + '&per_page=5');
+        if (respSiret.ok) {
+          const dataSiret = await respSiret.json();
+          for (const ent of (dataSiret.results || [])) {
+            if (ent.siren === siren) {
+              // Vérifier le siège
+              if (ent.siege && ent.siege.siret === siret) {
+                allEtabs.push({ ...ent.siege, est_siege: true, etat_administratif: ent.siege.etat_administratif || 'A' });
+              }
+              // Vérifier les matching_etablissements
+              (ent.matching_etablissements || []).forEach(e => {
+                if (e.siret === siret && !allEtabs.find(x => x.siret === siret)) {
+                  allEtabs.push({ ...e, est_siege: false, etat_administratif: e.etat_administratif || 'A' });
+                }
+              });
+              break;
+            }
+          }
+        }
+      } catch(e) { /* ignore */ }
+    }
+
+    // 4. Dernier recours : si toujours pas trouvé, utiliser les infos du siège en marquant correctement
+    let etabCourant = allEtabs.find(e => e.siret === siret);
+    let siretNotFound = false;
+    if (!etabCourant) {
+      // Le SIRET spécifique n'a pas été trouvé (probablement fermé et pas dans les API)
+      // On utilise les données de l'entreprise mais on signale que c'est un établissement non trouvé
+      siretNotFound = true;
+      etabCourant = siege;
+    }
+    const isSiege = !siretNotFound && (etabCourant.est_siege || etabCourant.siret === siege.siret);
+    const etabEtat = etabCourant.etat_administratif || (siretNotFound ? 'F' : 'A');
     const etabActif = etabEtat !== 'F' && etabEtat !== 'C';
 
-    // 4. Construire les champs proposés depuis l'établissement courant
+    // 5. Construire les champs proposés depuis l'établissement courant
     const adrParts = [etabCourant.numero_voie, etabCourant.indice_repetition, etabCourant.type_voie, etabCourant.libelle_voie].filter(Boolean).join(' ');
     const adresseFull = etabCourant.adresse || adrParts || null;
     const proposed = {
       raison_sociale: entreprise.nom_raison_sociale || entreprise.nom_complet || null,
       siren: entreprise.siren || null,
-      siret: etabCourant.siret || siret,
+      siret: siret,
       ape: etabCourant.activite_principale || siege.activite_principale || entreprise.activite_principale || null,
       forme_juridique: entreprise.nature_juridique || null,
       tva_intracommunautaire: computeTVA(entreprise.siren) || null,
-      adresse_ligne1: adresseFull,
-      adresse_ligne2: etabCourant.complement_adresse || null,
-      code_postal: etabCourant.code_postal || null,
-      city: etabCourant.libelle_commune || null,
-      departement: etabCourant.code_postal ? deptName(etabCourant.code_postal.substring(0, 2)) : null,
-      region: etabCourant.code_postal ? regionFromDept(etabCourant.code_postal.substring(0, 2)) : null,
+      adresse_ligne1: siretNotFound ? null : adresseFull,
+      adresse_ligne2: siretNotFound ? null : (etabCourant.complement_adresse || null),
+      code_postal: siretNotFound ? null : (etabCourant.code_postal || null),
+      city: siretNotFound ? null : (etabCourant.libelle_commune || null),
+      departement: (!siretNotFound && etabCourant.code_postal) ? deptName(etabCourant.code_postal.substring(0, 2)) : null,
+      region: (!siretNotFound && etabCourant.code_postal) ? regionFromDept(etabCourant.code_postal.substring(0, 2)) : null,
       est_siege: isSiege,
       etat_insee: etabActif ? 'A' : 'C',
     };
 
-    // 5. Afficher la modale de comparaison
-    showLegalUpdateModal(c, proposed, allEtabs, siret, entreprise);
+    // 6. Afficher la modale de comparaison
+    showLegalUpdateModal(c, proposed, allEtabs, siret, entreprise, siretNotFound);
   } catch (e) {
     console.error('refreshLegalFromSiret:', e);
     toast('Erreur : ' + e.message, 'error');
@@ -5459,23 +5520,25 @@ async function refreshLegalFromSiret() {
   }
 }
 
-function showLegalUpdateModal(client, proposed, allEtabs, selectedSiret, entreprise) {
+function showLegalUpdateModal(client, proposed, allEtabs, selectedSiret, entreprise, siretNotFound) {
   // Détecter l'état de l'établissement sélectionné
   const etabSel = allEtabs.find(e => e.siret === selectedSiret);
   const selIsSiege = proposed.est_siege === true;
-  const selEtat = etabSel ? etabSel.etat_administratif : null;
+  const selEtat = etabSel ? etabSel.etat_administratif : (siretNotFound ? 'F' : null);
   const selActif = selEtat !== 'F' && selEtat !== 'C';
 
   // Bannière statut de l'établissement
-  const typeLabel = selIsSiege ? 'Siège social' : 'Établissement secondaire';
+  const typeLabel = siretNotFound ? 'Établissement non trouvé dans SIRENE' : (selIsSiege ? 'Siège social' : 'Établissement secondaire');
   const etatLabel = selActif ? 'En activité' : 'Fermé';
   const etatColor = selActif ? '#10b981' : '#dc2626';
   const etatBg = selActif ? '#10b98115' : '#dc262615';
+  const typeColor = siretNotFound ? '#f59e0b' : 'var(--accent)';
+  const typeBg = siretNotFound ? '#f59e0b15' : 'var(--accent)12';
   const typeIcon = selIsSiege
     ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/><path d="M9 21V12h6v9"/></svg>'
     : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22V12h6v10"/><path d="M8 6h.01M16 6h.01M12 6h.01M8 10h.01M16 10h.01M12 10h.01"/></svg>';
-  const bannerHtml = `<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-    <div style="display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;background:var(--accent)12;border:1px solid var(--accent)30;font-size:13px;font-weight:600;color:var(--accent)">
+  let bannerHtml = `<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;background:${typeBg};border:1px solid ${typeColor}30;font-size:13px;font-weight:600;color:${typeColor}">
       ${typeIcon} ${typeLabel}
     </div>
     <div style="display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;background:${etatBg};border:1px solid ${etatColor}30;font-size:13px;font-weight:600;color:${etatColor}">
@@ -5484,8 +5547,10 @@ function showLegalUpdateModal(client, proposed, allEtabs, selectedSiret, entrepr
     <div style="display:flex;align-items:center;padding:8px 14px;border-radius:8px;background:#f3f4f6;font-family:monospace;font-size:13px;color:#374151">
       SIRET ${selectedSiret}
     </div>
-  </div>`
-  + (!selActif ? '<div style="padding:10px 14px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;margin-bottom:16px;font-size:13px;color:#991b1b"><strong>Attention :</strong> Cet établissement est fermé. Les informations légales correspondent à son dernier état connu.</div>' : '');
+  </div>`;
+  if (!selActif) {
+    bannerHtml += '<div style="padding:10px 14px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;margin-bottom:16px;font-size:13px;color:#991b1b"><strong>Attention :</strong> Cet établissement est fermé. Les informations légales correspondent à son dernier état connu.' + (siretNotFound ? ' L\'adresse de cet établissement n\'a pas pu être récupérée — seules les informations de l\'entreprise (raison sociale, SIREN, APE, forme juridique) sont disponibles.' : '') + '</div>';
+  }
 
   // Champs à comparer
   const fields = [
