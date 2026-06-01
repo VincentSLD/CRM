@@ -5380,17 +5380,54 @@ async function refreshLegalFromSiret() {
       }
     } catch(e) { /* ignore */ }
 
-    // S'assurer que le siège est dans la liste
+    // S'assurer que le siège est dans la liste (avec son état)
     if (!allEtabs.find(e => e.est_siege) && siege.siret) {
-      allEtabs.unshift({ ...siege, est_siege: true });
+      allEtabs.unshift({ ...siege, est_siege: true, etat_administratif: siege.etat_administratif || 'A' });
     }
 
-    // Filtrer uniquement les actifs
-    allEtabs = allEtabs.filter(e => e.etat_administratif !== 'F' && e.etat_administratif !== 'C');
+    // Compléter les établissements fermés via INSEE (fetchInseeEtablissements ne retourne que les actifs)
+    try {
+      const proxyBase = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:3000' : '';
+      const qAll = 'siren:' + siren;
+      const respAll = await fetch(proxyBase + '/api/insee?path=/siret&q=' + encodeURIComponent(qAll) + '&nombre=1000&tri=true');
+      if (respAll.ok) {
+        const dataAll = await respAll.json();
+        const existingSirets = new Set(allEtabs.map(e => e.siret));
+        (dataAll.etablissements || []).forEach(e => {
+          if (!existingSirets.has(e.siret)) {
+            const addr = e.adresseEtablissement || {};
+            const per = (e.periodesEtablissement || [])[0] || {};
+            allEtabs.push({
+              siret: e.siret,
+              est_siege: per.etablissementSiege === 'true' || per.etablissementSiege === true,
+              activite_principale: per.activitePrincipaleEtablissement || '',
+              numero_voie: addr.numeroVoieEtablissement || '',
+              type_voie: addr.typeVoieEtablissement || '',
+              libelle_voie: addr.libelleVoieEtablissement || '',
+              complement_adresse: addr.complementAdresseEtablissement || '',
+              code_postal: addr.codePostalEtablissement || '',
+              libelle_commune: addr.libelleCommuneEtablissement || '',
+              adresse: [addr.numeroVoieEtablissement, addr.typeVoieEtablissement, addr.libelleVoieEtablissement].filter(Boolean).join(' '),
+              etat_administratif: per.etatAdministratifEtablissement || 'A',
+            });
+            existingSirets.add(e.siret);
+          } else {
+            // Mettre à jour l'état si on l'a déjà mais sans état
+            const existing = allEtabs.find(x => x.siret === e.siret);
+            if (existing && !existing.etat_administratif) {
+              const per = (e.periodesEtablissement || [])[0] || {};
+              existing.etat_administratif = per.etatAdministratifEtablissement || 'A';
+            }
+          }
+        });
+      }
+    } catch(e) { /* ignore si INSEE indisponible */ }
 
     // 3. Identifier l'établissement correspondant au SIRET saisi
     const etabCourant = allEtabs.find(e => e.siret === siret) || siege;
     const isSiege = etabCourant.est_siege || etabCourant.siret === siege.siret;
+    const etabEtat = etabCourant.etat_administratif || 'A';
+    const etabActif = etabEtat !== 'F' && etabEtat !== 'C';
 
     // 4. Construire les champs proposés depuis l'établissement courant
     const adrParts = [etabCourant.numero_voie, etabCourant.indice_repetition, etabCourant.type_voie, etabCourant.libelle_voie].filter(Boolean).join(' ');
@@ -5409,7 +5446,7 @@ async function refreshLegalFromSiret() {
       departement: etabCourant.code_postal ? deptName(etabCourant.code_postal.substring(0, 2)) : null,
       region: etabCourant.code_postal ? regionFromDept(etabCourant.code_postal.substring(0, 2)) : null,
       est_siege: isSiege,
-      etat_insee: entreprise.etat_administratif === 'A' ? 'A' : 'C',
+      etat_insee: etabActif ? 'A' : 'C',
     };
 
     // 5. Afficher la modale de comparaison
@@ -5423,6 +5460,33 @@ async function refreshLegalFromSiret() {
 }
 
 function showLegalUpdateModal(client, proposed, allEtabs, selectedSiret, entreprise) {
+  // Détecter l'état de l'établissement sélectionné
+  const etabSel = allEtabs.find(e => e.siret === selectedSiret);
+  const selIsSiege = proposed.est_siege === true;
+  const selEtat = etabSel ? etabSel.etat_administratif : null;
+  const selActif = selEtat !== 'F' && selEtat !== 'C';
+
+  // Bannière statut de l'établissement
+  const typeLabel = selIsSiege ? 'Siège social' : 'Établissement secondaire';
+  const etatLabel = selActif ? 'En activité' : 'Fermé';
+  const etatColor = selActif ? '#10b981' : '#dc2626';
+  const etatBg = selActif ? '#10b98115' : '#dc262615';
+  const typeIcon = selIsSiege
+    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/><path d="M9 21V12h6v9"/></svg>'
+    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22V12h6v10"/><path d="M8 6h.01M16 6h.01M12 6h.01M8 10h.01M16 10h.01M12 10h.01"/></svg>';
+  const bannerHtml = `<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;background:var(--accent)12;border:1px solid var(--accent)30;font-size:13px;font-weight:600;color:var(--accent)">
+      ${typeIcon} ${typeLabel}
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;background:${etatBg};border:1px solid ${etatColor}30;font-size:13px;font-weight:600;color:${etatColor}">
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${etatColor}"></span> ${etatLabel}
+    </div>
+    <div style="display:flex;align-items:center;padding:8px 14px;border-radius:8px;background:#f3f4f6;font-family:monospace;font-size:13px;color:#374151">
+      SIRET ${selectedSiret}
+    </div>
+  </div>`
+  + (!selActif ? '<div style="padding:10px 14px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;margin-bottom:16px;font-size:13px;color:#991b1b"><strong>Attention :</strong> Cet établissement est fermé. Les informations légales correspondent à son dernier état connu.</div>' : '');
+
   // Champs à comparer
   const fields = [
     { key: 'raison_sociale', label: 'Raison sociale' },
@@ -5466,16 +5530,26 @@ function showLegalUpdateModal(client, proposed, allEtabs, selectedSiret, entrepr
     etabsHtml = `<div style="margin-top:20px;border-top:2px solid var(--border);padding-top:16px">
       <div style="font-weight:600;font-size:14px;margin-bottom:10px">Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ${proposed.siren})</span></div>`;
 
+    // Helper état établissement
+    const etatBadge = (etat) => {
+      const actif = etat !== 'F' && etat !== 'C';
+      return actif
+        ? '<span style="display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;background:#10b98118;color:#10b981"><span style="width:6px;height:6px;border-radius:50%;background:#10b981"></span>Actif</span>'
+        : '<span style="display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;background:#dc262618;color:#dc2626"><span style="width:6px;height:6px;border-radius:50%;background:#dc2626"></span>Fermé</span>';
+    };
+
     // Siège
     if (siegeEtab) {
       const isCurrent = siegeEtab.siret === selectedSiret;
       const adr = [siegeEtab.numero_voie, siegeEtab.type_voie, siegeEtab.libelle_voie].filter(Boolean).join(' ') || siegeEtab.adresse || '';
-      etabsHtml += `<div style="padding:10px 12px;border:2px solid var(--accent);border-radius:8px;margin-bottom:8px;background:var(--accent)08">
+      const siegeFerme = siegeEtab.etat_administratif === 'F' || siegeEtab.etat_administratif === 'C';
+      etabsHtml += `<div style="padding:10px 12px;border:2px solid var(--accent);border-radius:8px;margin-bottom:8px;background:var(--accent)08;${siegeFerme ? 'opacity:.7' : ''}">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
-          <div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span style="font-weight:700;color:var(--accent);font-size:13px">Siège social</span>
-            <span style="font-family:monospace;font-size:12px;color:var(--t2);margin-left:8px">${siegeEtab.siret || '—'}</span>
-            ${isCurrent ? '<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:var(--accent);color:#fff;margin-left:6px">SÉLECTIONNÉ</span>' : ''}
+            ${etatBadge(siegeEtab.etat_administratif)}
+            <span style="font-family:monospace;font-size:12px;color:var(--t2)">${siegeEtab.siret || '—'}</span>
+            ${isCurrent ? '<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:var(--accent);color:#fff">SÉLECTIONNÉ</span>' : ''}
           </div>
           ${!isCurrent ? '<button class="btn" style="font-size:11px;padding:2px 8px" onclick="switchEtablissement(\'' + siegeEtab.siret + '\')">Utiliser ce SIRET</button>' : ''}
         </div>
@@ -5485,15 +5559,25 @@ function showLegalUpdateModal(client, proposed, allEtabs, selectedSiret, entrepr
 
     // Secondaires
     if (secondaires.length > 0) {
-      etabsHtml += '<div style="font-size:12px;font-weight:600;color:var(--t2);margin:10px 0 6px">Établissements secondaires <span style="font-weight:400;color:var(--t3)">(' + secondaires.length + ')</span></div>';
-      secondaires.forEach(e => {
+      const nbActifs = secondaires.filter(e => e.etat_administratif !== 'F' && e.etat_administratif !== 'C').length;
+      const nbFermes = secondaires.length - nbActifs;
+      etabsHtml += '<div style="font-size:12px;font-weight:600;color:var(--t2);margin:10px 0 6px">Établissements secondaires <span style="font-weight:400;color:var(--t3)">(' + nbActifs + ' actif' + (nbActifs > 1 ? 's' : '') + (nbFermes > 0 ? ', ' + nbFermes + ' fermé' + (nbFermes > 1 ? 's' : '') : '') + ')</span></div>';
+      // Trier : actifs d'abord, puis fermés
+      const sorted = [...secondaires].sort((a, b) => {
+        const aF = a.etat_administratif === 'F' || a.etat_administratif === 'C' ? 1 : 0;
+        const bF = b.etat_administratif === 'F' || b.etat_administratif === 'C' ? 1 : 0;
+        return aF - bF;
+      });
+      sorted.forEach(e => {
         const isCurrent = e.siret === selectedSiret;
         const adr = [e.numero_voie, e.type_voie, e.libelle_voie].filter(Boolean).join(' ') || e.adresse || '';
-        etabsHtml += `<div style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;margin-bottom:4px;${isCurrent ? 'border-color:var(--accent);background:var(--accent)08' : ''}">
+        const ferme = e.etat_administratif === 'F' || e.etat_administratif === 'C';
+        etabsHtml += `<div style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;margin-bottom:4px;${isCurrent ? 'border-color:var(--accent);background:var(--accent)08' : ''}${ferme && !isCurrent ? ';opacity:.6' : ''}">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">
-            <div>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
               <span style="font-family:monospace;font-size:12px;color:var(--t1)">${e.siret || '—'}</span>
-              ${isCurrent ? '<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:var(--accent);color:#fff;margin-left:6px">SÉLECTIONNÉ</span>' : ''}
+              ${etatBadge(e.etat_administratif)}
+              ${isCurrent ? '<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:var(--accent);color:#fff">SÉLECTIONNÉ</span>' : ''}
             </div>
             ${!isCurrent ? '<button class="btn" style="font-size:11px;padding:2px 8px" onclick="switchEtablissement(\'' + e.siret + '\')">Utiliser ce SIRET</button>' : ''}
           </div>
@@ -5515,6 +5599,7 @@ function showLegalUpdateModal(client, proposed, allEtabs, selectedSiret, entrepr
       <button onclick="document.getElementById('modal-legal-update').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--t3);padding:4px">✕</button>
     </div>
     <div style="padding:20px 24px">
+      ${bannerHtml}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <div style="font-size:13px;color:var(--t2)">Cochez les champs à mettre à jour :</div>
         <div style="display:flex;gap:6px">
