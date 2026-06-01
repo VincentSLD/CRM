@@ -5312,6 +5312,287 @@ function filtrerEtablissementsActifs() {
   });
 }
 
+// ═══ MISE À JOUR INFOS LÉGALES DEPUIS SIRET ═══
+async function refreshLegalFromSiret() {
+  const c = currentClient;
+  if (!c) return;
+  let siret = c.siret;
+  if (!siret) {
+    siret = prompt('Aucun SIRET renseigné. Entrez le SIRET (14 chiffres) :');
+    if (!siret) return;
+  }
+  siret = siret.replace(/\s/g, '');
+  if (!/^\d{14}$/.test(siret)) { toast('SIRET invalide (14 chiffres attendus)', 'error'); return; }
+  const siren = siret.substring(0, 9);
+
+  showSyncLoading(true);
+  setSyncText('Recherche SIRENE…');
+  try {
+    // 1. Chercher l'entreprise par SIREN via API publique
+    const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + siren + '&per_page=1');
+    if (!resp.ok) throw new Error('API SIRENE HTTP ' + resp.status);
+    const data = await resp.json();
+    const entreprise = (data.results || [])[0];
+    if (!entreprise) { toast('Aucune entreprise trouvée pour ce SIREN', 'error'); return; }
+
+    const siege = entreprise.siege || {};
+
+    // 2. Chercher TOUS les établissements actifs via API
+    let allEtabs = [];
+    try {
+      const resp2 = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + siren + '&per_page=25&mtm_campaign=crm');
+      if (resp2.ok) {
+        const d2 = await resp2.json();
+        const ent2 = (d2.results || [])[0];
+        if (ent2) {
+          // Le siège
+          if (ent2.siege) allEtabs.push({ ...ent2.siege, est_siege: true });
+          // Établissements secondaires
+          if (ent2.matching_etablissements) {
+            ent2.matching_etablissements.forEach(e => allEtabs.push({ ...e, est_siege: false }));
+          }
+        }
+      }
+    } catch(e) { /* ignore, on a au moins le siège */ }
+
+    // Compléter avec l'API INSEE si disponible
+    try {
+      const inseeEtabs = await fetchInseeEtablissements(siren);
+      if (inseeEtabs && inseeEtabs.length > 0) {
+        const existingSirets = new Set(allEtabs.map(e => e.siret));
+        inseeEtabs.forEach(e => {
+          if (!existingSirets.has(e.siret)) {
+            allEtabs.push({
+              siret: e.siret,
+              est_siege: e.est_siege,
+              activite_principale: e.activite_principale,
+              code_postal: e.code_postal,
+              libelle_commune: e.libelle_commune,
+              numero_voie: e.numero_voie,
+              type_voie: e.type_voie,
+              libelle_voie: e.libelle_voie,
+              complement_adresse: e.complement_adresse,
+              adresse: e.adresse,
+              etat_administratif: e.etat_administratif,
+            });
+          }
+        });
+      }
+    } catch(e) { /* ignore */ }
+
+    // S'assurer que le siège est dans la liste
+    if (!allEtabs.find(e => e.est_siege) && siege.siret) {
+      allEtabs.unshift({ ...siege, est_siege: true });
+    }
+
+    // Filtrer uniquement les actifs
+    allEtabs = allEtabs.filter(e => e.etat_administratif !== 'F' && e.etat_administratif !== 'C');
+
+    // 3. Identifier l'établissement correspondant au SIRET saisi
+    const etabCourant = allEtabs.find(e => e.siret === siret) || siege;
+    const isSiege = etabCourant.est_siege || etabCourant.siret === siege.siret;
+
+    // 4. Construire les champs proposés depuis l'établissement courant
+    const adrParts = [etabCourant.numero_voie, etabCourant.indice_repetition, etabCourant.type_voie, etabCourant.libelle_voie].filter(Boolean).join(' ');
+    const adresseFull = etabCourant.adresse || adrParts || null;
+    const proposed = {
+      raison_sociale: entreprise.nom_raison_sociale || entreprise.nom_complet || null,
+      siren: entreprise.siren || null,
+      siret: etabCourant.siret || siret,
+      ape: etabCourant.activite_principale || siege.activite_principale || entreprise.activite_principale || null,
+      forme_juridique: entreprise.nature_juridique || null,
+      tva_intracommunautaire: computeTVA(entreprise.siren) || null,
+      adresse_ligne1: adresseFull,
+      adresse_ligne2: etabCourant.complement_adresse || null,
+      code_postal: etabCourant.code_postal || null,
+      city: etabCourant.libelle_commune || null,
+      departement: etabCourant.code_postal ? deptName(etabCourant.code_postal.substring(0, 2)) : null,
+      region: etabCourant.code_postal ? regionFromDept(etabCourant.code_postal.substring(0, 2)) : null,
+      est_siege: isSiege,
+      etat_insee: entreprise.etat_administratif === 'A' ? 'A' : 'C',
+    };
+
+    // 5. Afficher la modale de comparaison
+    showLegalUpdateModal(c, proposed, allEtabs, siret, entreprise);
+  } catch (e) {
+    console.error('refreshLegalFromSiret:', e);
+    toast('Erreur : ' + e.message, 'error');
+  } finally {
+    showSyncLoading(false);
+  }
+}
+
+function showLegalUpdateModal(client, proposed, allEtabs, selectedSiret, entreprise) {
+  // Champs à comparer
+  const fields = [
+    { key: 'raison_sociale', label: 'Raison sociale' },
+    { key: 'siren', label: 'SIREN' },
+    { key: 'siret', label: 'SIRET' },
+    { key: 'est_siege', label: 'Type établissement', fmt: v => v === true ? 'Siège social' : v === false ? 'Établissement secondaire' : '—' },
+    { key: 'ape', label: 'Code APE', fmt: v => v ? v + (apeLabel(v) ? ' — ' + apeLabel(v) : '') : '—' },
+    { key: 'forme_juridique', label: 'Forme juridique' },
+    { key: 'tva_intracommunautaire', label: 'TVA intracom.' },
+    { key: 'adresse_ligne1', label: 'Adresse' },
+    { key: 'adresse_ligne2', label: 'Complément' },
+    { key: 'code_postal', label: 'Code postal' },
+    { key: 'city', label: 'Ville' },
+    { key: 'departement', label: 'Département' },
+    { key: 'region', label: 'Région' },
+    { key: 'etat_insee', label: 'État INSEE', fmt: v => v === 'A' ? '✓ Active' : v === 'C' ? '❌ Radiée' : '—' },
+  ];
+
+  // Construction des lignes de comparaison
+  let rowsHtml = '';
+  fields.forEach(f => {
+    const oldVal = client[f.key];
+    const newVal = proposed[f.key];
+    const fmtFn = f.fmt || (v => (v != null && v !== '') ? String(v) : '—');
+    const oldStr = fmtFn(oldVal);
+    const newStr = fmtFn(newVal);
+    const changed = newVal != null && newVal !== '' && String(newVal) !== String(oldVal || '');
+    rowsHtml += `<tr style="border-bottom:1px solid var(--border);${changed ? 'background:var(--hover)' : ''}">
+      <td style="padding:6px 10px;font-weight:500;font-size:12px;color:var(--t2);white-space:nowrap">${f.label}</td>
+      <td style="padding:6px 10px;font-size:13px;color:var(--t3)">${oldStr}</td>
+      <td style="padding:6px 10px;font-size:13px;${changed ? 'color:var(--accent);font-weight:600' : 'color:var(--t1)'}">${newStr}${changed ? ' <span style="font-size:10px;color:#10b981;font-weight:700">MAJ</span>' : ''}</td>
+      <td style="padding:6px 4px;text-align:center">${(newVal != null && newVal !== '') ? '<input type="checkbox" class="legal-update-cb" data-key="' + f.key + '" ' + (changed ? 'checked' : '') + ' style="cursor:pointer">' : ''}</td>
+    </tr>`;
+  });
+
+  // Établissements (siège + secondaires)
+  const siegeEtab = allEtabs.find(e => e.est_siege);
+  const secondaires = allEtabs.filter(e => !e.est_siege);
+  let etabsHtml = '';
+  if (allEtabs.length > 0) {
+    etabsHtml = `<div style="margin-top:20px;border-top:2px solid var(--border);padding-top:16px">
+      <div style="font-weight:600;font-size:14px;margin-bottom:10px">Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ${proposed.siren})</span></div>`;
+
+    // Siège
+    if (siegeEtab) {
+      const isCurrent = siegeEtab.siret === selectedSiret;
+      const adr = [siegeEtab.numero_voie, siegeEtab.type_voie, siegeEtab.libelle_voie].filter(Boolean).join(' ') || siegeEtab.adresse || '';
+      etabsHtml += `<div style="padding:10px 12px;border:2px solid var(--accent);border-radius:8px;margin-bottom:8px;background:var(--accent)08">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+          <div>
+            <span style="font-weight:700;color:var(--accent);font-size:13px">Siège social</span>
+            <span style="font-family:monospace;font-size:12px;color:var(--t2);margin-left:8px">${siegeEtab.siret || '—'}</span>
+            ${isCurrent ? '<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:var(--accent);color:#fff;margin-left:6px">SÉLECTIONNÉ</span>' : ''}
+          </div>
+          ${!isCurrent ? '<button class="btn" style="font-size:11px;padding:2px 8px" onclick="switchEtablissement(\'' + siegeEtab.siret + '\')">Utiliser ce SIRET</button>' : ''}
+        </div>
+        <div style="font-size:12px;color:var(--t2);margin-top:4px">${adr ? adr + ', ' : ''}${siegeEtab.code_postal || ''} ${siegeEtab.libelle_commune || ''}</div>
+      </div>`;
+    }
+
+    // Secondaires
+    if (secondaires.length > 0) {
+      etabsHtml += '<div style="font-size:12px;font-weight:600;color:var(--t2);margin:10px 0 6px">Établissements secondaires <span style="font-weight:400;color:var(--t3)">(' + secondaires.length + ')</span></div>';
+      secondaires.forEach(e => {
+        const isCurrent = e.siret === selectedSiret;
+        const adr = [e.numero_voie, e.type_voie, e.libelle_voie].filter(Boolean).join(' ') || e.adresse || '';
+        etabsHtml += `<div style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;margin-bottom:4px;${isCurrent ? 'border-color:var(--accent);background:var(--accent)08' : ''}">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">
+            <div>
+              <span style="font-family:monospace;font-size:12px;color:var(--t1)">${e.siret || '—'}</span>
+              ${isCurrent ? '<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:var(--accent);color:#fff;margin-left:6px">SÉLECTIONNÉ</span>' : ''}
+            </div>
+            ${!isCurrent ? '<button class="btn" style="font-size:11px;padding:2px 8px" onclick="switchEtablissement(\'' + e.siret + '\')">Utiliser ce SIRET</button>' : ''}
+          </div>
+          <div style="font-size:12px;color:var(--t2);margin-top:2px">${adr ? adr + ', ' : ''}${e.code_postal || ''} ${e.libelle_commune || ''}</div>
+        </div>`;
+      });
+    }
+    etabsHtml += '</div>';
+  }
+
+  // Modale
+  const modal = document.createElement('div');
+  modal.id = 'modal-legal-update';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);padding:20px';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = `<div style="background:var(--card);border-radius:12px;max-width:750px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:16px;font-weight:700;color:var(--t1)">Mise à jour informations légales</div>
+      <button onclick="document.getElementById('modal-legal-update').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--t3);padding:4px">✕</button>
+    </div>
+    <div style="padding:20px 24px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div style="font-size:13px;color:var(--t2)">Cochez les champs à mettre à jour :</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn" onclick="document.querySelectorAll('.legal-update-cb').forEach(cb=>cb.checked=true)" style="font-size:11px;padding:2px 8px">Tout cocher</button>
+          <button class="btn" onclick="document.querySelectorAll('.legal-update-cb').forEach(cb=>cb.checked=false)" style="font-size:11px;padding:2px 8px">Tout décocher</button>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="border-bottom:2px solid var(--border)">
+          <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--t3);font-weight:600">Champ</th>
+          <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--t3);font-weight:600">Actuel</th>
+          <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--t3);font-weight:600">Proposé</th>
+          <th style="padding:6px 4px;text-align:center;font-size:11px;color:var(--t3);font-weight:600">MAJ</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+      ${etabsHtml}
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <button class="btn" onclick="document.getElementById('modal-legal-update').remove()" style="font-size:13px;padding:8px 16px">Annuler</button>
+        <button class="btn btn-primary" onclick="applyLegalUpdate()" style="font-size:13px;padding:8px 20px">Appliquer les modifications</button>
+      </div>
+    </div>
+  </div>`;
+
+  // Stocker les données proposées pour l'application
+  window._legalUpdateProposed = proposed;
+  window._legalUpdateEntreprise = entreprise;
+  window._legalUpdateAllEtabs = allEtabs;
+
+  document.body.appendChild(modal);
+}
+
+async function switchEtablissement(newSiret) {
+  // Fermer la modale actuelle et relancer avec le nouveau SIRET
+  const modal = document.getElementById('modal-legal-update');
+  if (modal) modal.remove();
+  // Mettre à jour temporairement le SIRET et relancer
+  const origSiret = currentClient.siret;
+  currentClient.siret = newSiret;
+  await refreshLegalFromSiret();
+  // Si l'utilisateur annule, restaurer
+  if (!document.getElementById('modal-legal-update')) {
+    currentClient.siret = origSiret;
+  }
+}
+
+async function applyLegalUpdate() {
+  const proposed = window._legalUpdateProposed;
+  if (!proposed || !currentClient) return;
+  const checkboxes = document.querySelectorAll('.legal-update-cb:checked');
+  if (checkboxes.length === 0) { toast('Aucun champ sélectionné', 'warn'); return; }
+
+  const update = {};
+  checkboxes.forEach(cb => {
+    const key = cb.dataset.key;
+    if (proposed[key] != null && proposed[key] !== '') {
+      update[key] = proposed[key];
+    }
+  });
+
+  if (Object.keys(update).length === 0) { toast('Rien à mettre à jour', 'info'); return; }
+
+  try {
+    const { error } = await sb.from('clients').update(update).eq('id', currentClient.id);
+    if (error) throw error;
+    // Mettre à jour le client local
+    Object.assign(currentClient, update);
+    // Mettre à jour dans allClients aussi
+    const idx = allClients.findIndex(cl => cl.id === currentClient.id);
+    if (idx >= 0) Object.assign(allClients[idx], update);
+    document.getElementById('modal-legal-update').remove();
+    toast(Object.keys(update).length + ' champ(s) mis à jour', 'success');
+    renderPage(currentPage);
+  } catch (e) {
+    toast('Erreur : ' + e.message, 'error');
+  }
+}
+
 // ═══ MAJ ÉTAT ÉTABLISSEMENTS DEPUIS INSEE ═══
 async function majEtatEtablissements(siren, currentClientId) {
   showSyncLoading(true);
@@ -5748,24 +6029,35 @@ function renderClientDetail() {
       detailRow('Fax', c.fax || '—'),
       detailRow('Site web', c.site_web ? '<a href="' + (c.site_web.startsWith('http') ? c.site_web : 'https://'+c.site_web) + '" target="_blank" style="color:var(--accent)">' + c.site_web + '</a>' : '—'),
     ])}
-    ${detailSection('Informations légales', [
-      detailRow('Raison sociale', c.raison_sociale || '—'),
-      detailRow('Raison sociale 2', c.raison_sociale2 || '—'),
-      detailRow('SIREN', c.siren || '—'),
-      detailRow('SIRET', c.siret || '—'),
-      detailRow('Type établissement', c.est_siege === true ? '<span style="color:var(--accent);font-weight:600">Siège social</span>' : c.est_siege === false ? '<span style="color:var(--t2)">Établissement</span>' : '—'),
-      detailRow('TVA intracommunautaire', c.tva_intracommunautaire || computeTVA(c.siren) || '—'),
-      detailRow('Code APE', c.ape ? c.ape + (apeLabel(c.ape) ? ' <span style="color:var(--t3);font-size:11px">— ' + apeLabel(c.ape) + '</span>' : '') : '—'),
-      detailRow('Métier (APE)', apeLabel(c.ape) || '—'),
-      detailRow('Forme juridique', c.forme_juridique || '—'),
-      detailRow('Réf. externe', c.reference_externe || '—'),
-      detailRow('État INSEE', c.etat_insee === 'C'
-        ? '<strong style="color:#dc2626">❌ Radiée</strong>' + (c.date_fermeture_insee ? ' <span style="color:var(--t3);font-size:11px">— ' + fmtDateFR(c.date_fermeture_insee) + '</span>' : '')
-        : c.etat_insee === 'A' ? '<span style="color:var(--green)">✓ Active</span>' : '—'),
-      detailRow('Procédure collective', c.procedure_collective
-        ? '<strong style="color:' + (c.procedure_collective==='LJ'?'#dc2626':c.procedure_collective==='RJ'?'#ef4444':c.procedure_collective==='Sauvegarde'?'#f59e0b':'#6b7280') + '">' + (c.procedure_nature || c.procedure_collective) + '</strong>' + (c.procedure_date ? '<br><span style="color:var(--t3);font-size:11px">Jugement ' + fmtDateFR(c.procedure_date) + '</span>' : '') + (c.procedure_url ? ' <a href="'+c.procedure_url+'" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:none;font-size:11px">↗ BODACC</a>' : '')
-        : '—'),
-    ])}
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header" style="flex-wrap:wrap;gap:8px">
+        <div class="card-title">Informations légales</div>
+        <button class="btn" onclick="refreshLegalFromSiret()" style="font-size:11px;padding:3px 10px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:3px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          Mettre à jour (SIRET)
+        </button>
+      </div>
+      <div class="card-body">
+        ${[
+          detailRow('Raison sociale', c.raison_sociale || '—'),
+          detailRow('Raison sociale 2', c.raison_sociale2 || '—'),
+          detailRow('SIREN', c.siren || '—'),
+          detailRow('SIRET', c.siret || '—'),
+          detailRow('Type établissement', c.est_siege === true ? '<span style="color:var(--accent);font-weight:600">Siège social</span>' : c.est_siege === false ? '<span style="color:var(--t2)">Établissement secondaire</span>' : '—'),
+          detailRow('TVA intracommunautaire', c.tva_intracommunautaire || computeTVA(c.siren) || '—'),
+          detailRow('Code APE', c.ape ? c.ape + (apeLabel(c.ape) ? ' <span style="color:var(--t3);font-size:11px">— ' + apeLabel(c.ape) + '</span>' : '') : '—'),
+          detailRow('Métier (APE)', apeLabel(c.ape) || '—'),
+          detailRow('Forme juridique', c.forme_juridique || '—'),
+          detailRow('Réf. externe', c.reference_externe || '—'),
+          detailRow('État INSEE', c.etat_insee === 'C'
+            ? '<strong style="color:#dc2626">❌ Radiée</strong>' + (c.date_fermeture_insee ? ' <span style="color:var(--t3);font-size:11px">— ' + fmtDateFR(c.date_fermeture_insee) + '</span>' : '')
+            : c.etat_insee === 'A' ? '<span style="color:var(--green)">✓ Active</span>' : '—'),
+          detailRow('Procédure collective', c.procedure_collective
+            ? '<strong style="color:' + (c.procedure_collective==='LJ'?'#dc2626':c.procedure_collective==='RJ'?'#ef4444':c.procedure_collective==='Sauvegarde'?'#f59e0b':'#6b7280') + '">' + (c.procedure_nature || c.procedure_collective) + '</strong>' + (c.procedure_date ? '<br><span style="color:var(--t3);font-size:11px">Jugement ' + fmtDateFR(c.procedure_date) + '</span>' : '') + (c.procedure_url ? ' <a href="'+c.procedure_url+'" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:none;font-size:11px">↗ BODACC</a>' : '')
+            : '—'),
+        ].filter(r=>r).join('')}
+      </div>
+    </div>
   </div>
   ${c.siren ? `<div class="card" style="margin-bottom:16px">
     <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ${c.siren})</span></div>${c.est_siege === true && c.akuiteo_id ? '<button class="btn" onclick="syncSitesVersAkuiteo()" style="font-size:11px;padding:3px 10px">Synchroniser Sites → Akuiteo</button>' : ''}</div>
