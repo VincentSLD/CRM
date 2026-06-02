@@ -5727,8 +5727,11 @@ function downloadClientListPDF(type) {
   doc.setFontSize(16);
   doc.text(title + ' — ' + (c.name || ''), 14, 18);
   doc.setFontSize(10);
+  doc.setTextColor(80);
+  const locality = [c.code_postal, c.city].filter(Boolean).join(' ');
+  doc.text(locality || '', 14, 24);
   doc.setTextColor(120);
-  doc.text('Exporté le ' + now, 14, 25);
+  doc.text('Exporte le ' + now, 14, 29);
   doc.setTextColor(0);
 
   const affLabel = d => { const a = d.affaire_id ? DB.affaires.find(x=>x.id===d.affaire_id) : null; return a ? [a.code_projet, a.nom, a.code_postal, a.ville].filter(Boolean).join(' - ') : ''; };
@@ -5760,7 +5763,7 @@ function downloadClientListPDF(type) {
   }
 
   doc.autoTable({
-    head, body, startY: 30,
+    head, body, startY: 34,
     styles: { fontSize: 9, cellPadding: 3 },
     headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [245, 247, 250] },
