@@ -16847,12 +16847,14 @@ async function doSearch(q) {
 
   // Recherche clients côté serveur (Supabase)
   const { data: serverClients } = await sb.from('clients')
-    .select('id,name,code,sector,city')
+    .select('id,name,code,sector,city,est_siege')
     .or(`name.ilike.%${q}%,code.ilike.%${q}%,city.ilike.%${q}%,sector.ilike.%${q}%,raison_sociale.ilike.%${q}%,raison_sociale2.ilike.%${q}%`)
-    .limit(5);
+    .order('est_siege', { ascending: false, nullsFirst: false })
+    .limit(8);
   if (serverClients) {
     serverClients.forEach(c => {
-      results.push({type:'Client',name:c.name,meta:`${c.code} · ${c.sector||''} · ${c.city||''}`,action:`showClient('${c.id}')`});
+      const badge = c.est_siege === true ? ' · Siège' : c.est_siege === false ? ' · Étab.' : '';
+      results.push({type:'Client',name:c.name,meta:`${c.code} · ${c.sector||''} · ${c.city||''}${badge}`,action:`showClient('${c.id}')`});
     });
   }
 
