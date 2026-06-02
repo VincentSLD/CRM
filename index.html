@@ -5731,28 +5731,29 @@ function downloadClientListPDF(type) {
   doc.text('Exporté le ' + now, 14, 25);
   doc.setTextColor(0);
 
+  const affLabel = d => { const a = d.affaire_id ? DB.affaires.find(x=>x.id===d.affaire_id) : null; return a ? [a.code_projet, a.nom, a.code_postal, a.ville].filter(Boolean).join(' - ') : ''; };
   let head, body;
   if (type === 'devis') {
     const rows = DB.devis.filter(d => d.client === c.name);
-    head = [['Réf', 'Sujet', 'Montant', 'Statut', 'Date']];
+    head = [['Réf', 'Sujet', 'Affaire', 'Montant', 'Statut', 'Date']];
     body = rows.map(d => [
-      d.ref || '', d.sujet || '', fmtPDF(d.montant),
+      d.ref || '', d.sujet || '', affLabel(d), fmtPDF(d.montant),
       (devisStatusMap[d.statut] || {}).l || d.statut || '—',
       d.date || ''
     ]);
   } else if (type === 'commandes') {
     const rows = DB.commandes.filter(d => d.client === c.name);
-    head = [['Réf', 'Nom', 'Montant', 'Statut', 'Date', 'DLR']];
+    head = [['Réf', 'Nom', 'Affaire', 'Montant', 'Statut', 'Date', 'DLR']];
     body = rows.map(d => [
-      d.ref || '', d.nom || '', fmtPDF(d.montant),
+      d.ref || '', d.nom || '', affLabel(d), fmtPDF(d.montant),
       (cmdStatusMap[d.statut] || {}).l || d.statut || '—',
       d.date || '', d.livraison || ''
     ]);
   } else {
     const rows = DB.factures.filter(d => d.client === c.name);
-    head = [['Réf', 'Montant', 'Échéance', 'Statut', 'Reste à payer', 'Date']];
+    head = [['Réf', 'Affaire', 'Montant', 'Échéance', 'Statut', 'Reste à payer', 'Date']];
     body = rows.map(d => [
-      d.ref || '', fmtPDF(d.montant), d.echeance || '',
+      d.ref || '', affLabel(d), fmtPDF(d.montant), d.echeance || '',
       (facStatusMap[d.statut] || {}).l || d.statut || '—',
       fmtPDF(d.reste_a_payer), d.date || ''
     ]);
@@ -6339,31 +6340,37 @@ function renderClientDetail() {
     <div class="card">
       <div class="card-header"><div class="card-title">Devis</div><button class="btn" onclick="downloadClientListPDF('devis')" style="font-size:11px;padding:3px 10px" title="Télécharger en PDF">PDF</button></div>
       <div class="card-body" style="padding:0"><div class="table-wrap">
-        <table><thead><tr><th>Réf</th><th>Sujet</th><th>Montant</th><th>Statut</th></tr></thead>
+        <table><thead><tr><th>Réf</th><th>Sujet</th><th>Affaire</th><th>Montant</th><th>Statut</th></tr></thead>
         <tbody>${DB.devis.filter(d=>d.client===c.name).map(d => {
           const ds = devisStatusMap[d.statut] || {c:'',l:d.statut||'—'};
-          return `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer"><td class="mono">${d.ref}</td><td>${d.sujet}</td><td class="mono">${fmt(d.montant)}</td><td><span class="badge ${ds.c}">${ds.l}</span></td></tr>`;
-        }).join('') || '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis</td></tr>'}</tbody></table>
+          const aff = d.affaire_id ? DB.affaires.find(a=>a.id===d.affaire_id) : null;
+          const affLabel = aff ? [aff.code_projet, aff.nom, aff.code_postal, aff.ville].filter(Boolean).join(' · ') : '—';
+          return `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer"><td class="mono">${d.ref}</td><td>${d.sujet}</td><td style="font-size:12px">${affLabel}</td><td class="mono">${fmt(d.montant)}</td><td><span class="badge ${ds.c}">${ds.l}</span></td></tr>`;
+        }).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis</td></tr>'}</tbody></table>
       </div></div>
     </div>
     <div class="card">
       <div class="card-header"><div class="card-title">Commandes</div><button class="btn" onclick="downloadClientListPDF('commandes')" style="font-size:11px;padding:3px 10px" title="Télécharger en PDF">PDF</button></div>
       <div class="card-body" style="padding:0"><div class="table-wrap">
-        <table><thead><tr><th>Réf</th><th>Nom</th><th>Montant</th><th>Statut</th></tr></thead>
+        <table><thead><tr><th>Réf</th><th>Nom</th><th>Affaire</th><th>Montant</th><th>Statut</th></tr></thead>
         <tbody>${DB.commandes.filter(d=>d.client===c.name).map(d => {
           const cs2 = cmdStatusMap[d.statut] || {c:'',l:d.statut||'—'};
-          return `<tr onclick="showCommandeDetail('${d.id}')" style="cursor:pointer"><td class="mono">${d.ref}</td><td>${d.nom||''}</td><td class="mono">${fmt(d.montant)}</td><td><span class="badge ${cs2.c}">${cs2.l}</span></td></tr>`;
-        }).join('') || '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">Aucune commande</td></tr>'}</tbody></table>
+          const aff = d.affaire_id ? DB.affaires.find(a=>a.id===d.affaire_id) : null;
+          const affLabel = aff ? [aff.code_projet, aff.nom, aff.code_postal, aff.ville].filter(Boolean).join(' · ') : '—';
+          return `<tr onclick="showCommandeDetail('${d.id}')" style="cursor:pointer"><td class="mono">${d.ref}</td><td>${d.nom||''}</td><td style="font-size:12px">${affLabel}</td><td class="mono">${fmt(d.montant)}</td><td><span class="badge ${cs2.c}">${cs2.l}</span></td></tr>`;
+        }).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--t3)">Aucune commande</td></tr>'}</tbody></table>
       </div></div>
     </div>
     <div class="card">
       <div class="card-header"><div class="card-title">Factures</div><button class="btn" onclick="downloadClientListPDF('factures')" style="font-size:11px;padding:3px 10px" title="Télécharger en PDF">PDF</button></div>
       <div class="card-body" style="padding:0"><div class="table-wrap">
-        <table><thead><tr><th>Réf</th><th>Montant</th><th>Échéance</th><th>Statut</th></tr></thead>
+        <table><thead><tr><th>Réf</th><th>Affaire</th><th>Montant</th><th>Échéance</th><th>Statut</th></tr></thead>
         <tbody>${DB.factures.filter(f=>f.client===c.name).map(f => {
           const fs = facStatusMap[f.statut] || {c:'',l:f.statut||'—'};
-          return `<tr onclick="showFactureDetail('${f.id}')" style="cursor:pointer"><td class="mono">${f.ref}</td><td class="mono">${fmt(f.montant)}</td><td>${f.echeance}</td><td><span class="badge ${fs.c}">${fs.l}</span></td></tr>`;
-        }).join('') || '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">Aucune facture</td></tr>'}</tbody></table>
+          const aff = f.affaire_id ? DB.affaires.find(a=>a.id===f.affaire_id) : null;
+          const affLabel = aff ? [aff.code_projet, aff.nom, aff.code_postal, aff.ville].filter(Boolean).join(' · ') : '—';
+          return `<tr onclick="showFactureDetail('${f.id}')" style="cursor:pointer"><td class="mono">${f.ref}</td><td style="font-size:12px">${affLabel}</td><td class="mono">${fmt(f.montant)}</td><td>${f.echeance}</td><td><span class="badge ${fs.c}">${fs.l}</span></td></tr>`;
+        }).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--t3)">Aucune facture</td></tr>'}</tbody></table>
       </div></div>
     </div>
   </div>
