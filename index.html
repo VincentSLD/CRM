@@ -9,6 +9,8 @@
 <title>CRM Akuiteo — Tableau de Bord Commercial</title>
 <link rel="stylesheet" href="leaflet.css" />
 <script src="leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 /* ═══════════════════ DESIGN SYSTEM ═══════════════════ */
@@ -5711,6 +5713,62 @@ async function switchEtablissement(newSiret) {
   }
 }
 
+function downloadClientListPDF(type) {
+  if (!currentClient) return;
+  const c = currentClient;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const now = new Date().toLocaleDateString('fr-FR');
+  const titleMap = { devis: 'Devis', commandes: 'Commandes', factures: 'Factures' };
+  const title = titleMap[type] || type;
+
+  // En-tête
+  doc.setFontSize(16);
+  doc.text(title + ' — ' + (c.name || ''), 14, 18);
+  doc.setFontSize(10);
+  doc.setTextColor(120);
+  doc.text('Exporté le ' + now, 14, 25);
+  doc.setTextColor(0);
+
+  let head, body;
+  if (type === 'devis') {
+    const rows = DB.devis.filter(d => d.client === c.name);
+    head = [['Réf', 'Sujet', 'Montant', 'Statut', 'Date']];
+    body = rows.map(d => [
+      d.ref || '', d.sujet || '', fmt(d.montant),
+      (devisStatusMap[d.statut] || {}).l || d.statut || '—',
+      d.date || ''
+    ]);
+  } else if (type === 'commandes') {
+    const rows = DB.commandes.filter(d => d.client === c.name);
+    head = [['Réf', 'Nom', 'Montant', 'Statut', 'Date', 'DLR']];
+    body = rows.map(d => [
+      d.ref || '', d.nom || '', fmt(d.montant),
+      (cmdStatusMap[d.statut] || {}).l || d.statut || '—',
+      d.date || '', d.livraison || ''
+    ]);
+  } else {
+    const rows = DB.factures.filter(d => d.client === c.name);
+    head = [['Réf', 'Montant', 'Échéance', 'Statut', 'Reste à payer', 'Date']];
+    body = rows.map(d => [
+      d.ref || '', fmt(d.montant), d.echeance || '',
+      (facStatusMap[d.statut] || {}).l || d.statut || '—',
+      fmt(d.reste_a_payer), d.date || ''
+    ]);
+  }
+
+  doc.autoTable({
+    head, body, startY: 30,
+    styles: { fontSize: 9, cellPadding: 3 },
+    headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [245, 247, 250] },
+    margin: { left: 14, right: 14 }
+  });
+
+  const safeName = (c.name || 'client').replace(/[^a-zA-Z0-9àâäéèêëïîôùûüç_-]/g, '_').substring(0, 40);
+  doc.save(type + '_' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.pdf');
+}
+
 async function applyLegalUpdate() {
   const proposed = window._legalUpdateProposed;
   if (!proposed || !currentClient) return;
@@ -6276,24 +6334,34 @@ function renderClientDetail() {
     <div class="card"><div class="card-header"><div class="card-title">Habitudes Techniques</div></div><div class="card-body"><div style="font-size:13px;line-height:1.6;color:var(--t2)">${c.habitudes_techniques || '—'}</div></div></div>
     <div class="card"><div class="card-header"><div class="card-title">Habitudes Géotechniques</div></div><div class="card-body"><div style="font-size:13px;line-height:1.6;color:var(--t2)">${c.habitudes_geotechniques || '—'}</div></div></div>
   </div>
-  <div class="grid-2 equal">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
     <div class="card">
-      <div class="card-header"><div class="card-title">Devis</div></div>
+      <div class="card-header"><div class="card-title">Devis</div><button class="btn" onclick="downloadClientListPDF('devis')" style="font-size:11px;padding:3px 10px" title="Télécharger en PDF">PDF</button></div>
       <div class="card-body" style="padding:0"><div class="table-wrap">
         <table><thead><tr><th>Réf</th><th>Sujet</th><th>Montant</th><th>Statut</th></tr></thead>
         <tbody>${DB.devis.filter(d=>d.client===c.name).map(d => {
           const ds = devisStatusMap[d.statut] || {c:'',l:d.statut||'—'};
-          return `<tr><td class="mono">${d.ref}</td><td>${d.sujet}</td><td class="mono">${fmt(d.montant)}</td><td><span class="badge ${ds.c}">${ds.l}</span></td></tr>`;
+          return `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer"><td class="mono">${d.ref}</td><td>${d.sujet}</td><td class="mono">${fmt(d.montant)}</td><td><span class="badge ${ds.c}">${ds.l}</span></td></tr>`;
         }).join('') || '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis</td></tr>'}</tbody></table>
       </div></div>
     </div>
     <div class="card">
-      <div class="card-header"><div class="card-title">Factures</div></div>
+      <div class="card-header"><div class="card-title">Commandes</div><button class="btn" onclick="downloadClientListPDF('commandes')" style="font-size:11px;padding:3px 10px" title="Télécharger en PDF">PDF</button></div>
+      <div class="card-body" style="padding:0"><div class="table-wrap">
+        <table><thead><tr><th>Réf</th><th>Nom</th><th>Montant</th><th>Statut</th></tr></thead>
+        <tbody>${DB.commandes.filter(d=>d.client===c.name).map(d => {
+          const cs2 = cmdStatusMap[d.statut] || {c:'',l:d.statut||'—'};
+          return `<tr onclick="showCommandeDetail('${d.id}')" style="cursor:pointer"><td class="mono">${d.ref}</td><td>${d.nom||''}</td><td class="mono">${fmt(d.montant)}</td><td><span class="badge ${cs2.c}">${cs2.l}</span></td></tr>`;
+        }).join('') || '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">Aucune commande</td></tr>'}</tbody></table>
+      </div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">Factures</div><button class="btn" onclick="downloadClientListPDF('factures')" style="font-size:11px;padding:3px 10px" title="Télécharger en PDF">PDF</button></div>
       <div class="card-body" style="padding:0"><div class="table-wrap">
         <table><thead><tr><th>Réf</th><th>Montant</th><th>Échéance</th><th>Statut</th></tr></thead>
         <tbody>${DB.factures.filter(f=>f.client===c.name).map(f => {
           const fs = facStatusMap[f.statut] || {c:'',l:f.statut||'—'};
-          return `<tr><td class="mono">${f.ref}</td><td class="mono">${fmt(f.montant)}</td><td>${f.echeance}</td><td><span class="badge ${fs.c}">${fs.l}</span></td></tr>`;
+          return `<tr onclick="showFactureDetail('${f.id}')" style="cursor:pointer"><td class="mono">${f.ref}</td><td class="mono">${fmt(f.montant)}</td><td>${f.echeance}</td><td><span class="badge ${fs.c}">${fs.l}</span></td></tr>`;
         }).join('') || '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">Aucune facture</td></tr>'}</tbody></table>
       </div></div>
     </div>
