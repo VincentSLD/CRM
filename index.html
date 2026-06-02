@@ -11187,7 +11187,10 @@ async function showDevisDetail(id) {
   currentPage = 'devis-detail';
   document.getElementById('pageTitle').textContent = 'Devis ' + (d.ref || d.id);
   document.getElementById('contentArea').innerHTML = `<div class="page active">
-    <button class="btn" onclick="go('devis')" style="margin-bottom:16px">← Retour aux devis</button>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn" onclick="go('devis')">← Retour aux devis</button>
+      ${d.client_id ? '<button class="btn" onclick="showClient(&#39;'+d.client_id+'&#39;)">← Retour à la fiche '+((d.client||'').replace(/'/g,'&#39;'))+'</button>' : ''}
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       ${detailSection('Informations générales', [
         detailRow('Référence', d.ref),
@@ -11244,6 +11247,7 @@ async function showCommandeDetail(id) {
   document.getElementById('contentArea').innerHTML = `<div class="page active">
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
       <button class="btn" onclick="go('commandes')">← Retour aux commandes</button>
+      ${c.client_id ? '<button class="btn" onclick="showClient(&#39;'+c.client_id+'&#39;)">← Retour à la fiche '+((c.client||'').replace(/'/g,'&#39;'))+'</button>' : ''}
       ${aff ? '<button class="btn" onclick="showAffaireDetail(&#39;'+aff.id+'&#39;)">← Retour à l\'affaire '+(aff.ref||aff.nom||aff.code_projet||'')+'</button>' : ''}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
@@ -11318,7 +11322,10 @@ async function showFactureDetail(id) {
   currentPage = 'facture-detail';
   document.getElementById('pageTitle').textContent = 'Facture ' + (f.ref || f.id);
   document.getElementById('contentArea').innerHTML = `<div class="page active">
-    <button class="btn" onclick="go('factures')" style="margin-bottom:16px">← Retour aux factures</button>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn" onclick="go('factures')">← Retour aux factures</button>
+      ${f.client_id ? '<button class="btn" onclick="showClient(&#39;'+f.client_id+'&#39;)">← Retour à la fiche '+((f.client||'').replace(/'/g,'&#39;'))+'</button>' : ''}
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       ${detailSection('Informations générales', [
         detailRow('Référence', f.ref),
