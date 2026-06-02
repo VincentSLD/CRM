@@ -5716,7 +5716,7 @@ async function switchEtablissement(newSiret) {
 function downloadClientListPDF(type) {
   if (!currentClient) return;
   const c = currentClient;
-  const fmtPDF = v => { v = Number(v) || 0; return v >= 1e6 ? (v/1e6).toFixed(2).replace('.',',') + ' M EUR' : v.toLocaleString('fr-FR').replace(/\u00a0/g, ' ') + ' EUR'; };
+  const fmtPDF = v => { v = Number(v) || 0; const s = v >= 1e6 ? (v/1e6).toFixed(2).replace('.',',') + ' M' : Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' '); return s + ' EUR'; };
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const now = new Date().toLocaleDateString('fr-FR');
