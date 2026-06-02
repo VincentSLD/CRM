@@ -5732,9 +5732,6 @@ async function applyLegalUpdate() {
     if (error) throw error;
     // Mettre à jour le client local
     Object.assign(currentClient, update);
-    // Mettre à jour dans allClients aussi
-    const idx = allClients.findIndex(cl => cl.id === currentClient.id);
-    if (idx >= 0) Object.assign(allClients[idx], update);
     document.getElementById('modal-legal-update').remove();
     toast(Object.keys(update).length + ' champ(s) mis à jour', 'success');
     renderPage(currentPage);
