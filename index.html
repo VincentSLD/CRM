@@ -5223,6 +5223,20 @@ async function showClient(id) {
       } catch (e) { console.warn('[Akuiteo] Erreur customData client:', e.message); }
     }
   }
+  // Charger mode/condition de paiement depuis Akuiteo si absents (non retournés par search)
+  if (!currentClient.mode_paiement && !currentClient.condition_paiement && currentClient.akuiteo_id) {
+    akuiteoFetch('GET', '/crm/customers/' + currentClient.akuiteo_id).then(ak => {
+      if (!ak) return;
+      const update = {};
+      if (ak.methodOfPayment) update.mode_paiement = ak.methodOfPayment;
+      if (ak.conditionOfPayment) update.condition_paiement = ak.conditionOfPayment;
+      if (Object.keys(update).length > 0) {
+        Object.assign(currentClient, update);
+        sb.from('clients').update(update).eq('id', id).then(() => {});
+        renderPage(currentPage); // Rafraîchir la fiche
+      }
+    }).catch(() => {});
+  }
   currentPage = 'client-detail';
   document.getElementById('pageTitle').textContent = currentClient.name;
   renderPage('client-detail');
