@@ -1960,105 +1960,160 @@ tbody tr:last-child td { border-bottom: none; }
         </div>
         <div id="nc-sirene-results" style="display:none;margin-top:10px;max-height:50vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
       </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Identité</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg"><label class="fl">Nom *</label><input class="fi" id="nc-name" placeholder="Nom du client"></div>
-        <div class="fg"><label class="fl">Code</label><input class="fi" id="nc-code" placeholder="CLI-XXXX"></div>
-        <div class="fg"><label class="fl">Raison sociale</label><input class="fi" id="nc-raison"></div>
-        <div class="fg"><label class="fl">Raison sociale 2</label><input class="fi" id="nc-raison2"></div>
-        <div class="fg"><label class="fl">Forme juridique</label><input class="fi" id="nc-forme"></div>
-        <div class="fg"><label class="fl">Secteur</label><input class="fi" id="nc-sector" placeholder="Ex: Énergie"></div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Adresse</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg" style="grid-column:1/-1"><label class="fl">Ligne 1</label><input class="fi" id="nc-addr1"></div>
-        <div class="fg"><label class="fl">Ligne 2</label><input class="fi" id="nc-addr2"></div>
-        <div class="fg"><label class="fl">Ligne 3</label><input class="fi" id="nc-addr3"></div>
-        <div class="fg"><label class="fl">Code postal</label><input class="fi" id="nc-cp"></div>
-        <div class="fg"><label class="fl">Ville</label><input class="fi" id="nc-city"></div>
-        <div class="fg"><label class="fl">Département</label><input class="fi" id="nc-dept"></div>
-        <div class="fg"><label class="fl">Région</label><input class="fi" id="nc-region"></div>
-        <div class="fg"><label class="fl">Pays</label><input class="fi" id="nc-pays" value="FR"></div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Coordonnées</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg"><label class="fl">Email</label><input class="fi" id="nc-email" type="email"></div>
-        <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="nc-phone"></div>
-        <div class="fg"><label class="fl">Téléphone 2</label><input class="fi" id="nc-phone2"></div>
-        <div class="fg"><label class="fl">Mobile</label><input class="fi" id="nc-mobile"></div>
-        <div class="fg"><label class="fl">Fax</label><input class="fi" id="nc-fax"></div>
-        <div class="fg"><label class="fl">Site web</label><input class="fi" id="nc-web"></div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Informations légales</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg"><label class="fl">SIREN</label><input class="fi" id="nc-siren" oninput="const t=document.getElementById('nc-tva');if(t)t.value=computeTVA(this.value)||''"></div>
-        <div class="fg"><label class="fl">SIRET</label><input class="fi" id="nc-siret"></div>
-        <div class="fg"><label class="fl">TVA intracommunautaire</label><input class="fi" id="nc-tva" readonly style="background:var(--bg-3)"></div>
-        <div class="fg"><label class="fl">Code APE</label><input class="fi" id="nc-ape"></div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Commercial</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-        <div class="fg"><label class="fl">Commercial Novam</label><select class="fi" id="nc-mk-manager"></select></div>
-        <div class="fg"><label class="fl">Commercial GPH</label><select class="fi" id="nc-mk-salesman"></select></div>
-      </div>
-      <div class="fg" style="margin-bottom:16px">
-        <label class="fl">Réseaux professionnels</label>
-        <div id="nc-reseaux-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px"></div>
-        <div style="position:relative">
-          <input class="fi" id="nc-reseaux-input" placeholder="Ajouter un réseau..." autocomplete="off"
-            oninput="searchReseauxPro(this.value,'nc-reseaux-dd','nc-reseaux-chips')" onfocus="searchReseauxPro(this.value,'nc-reseaux-dd','nc-reseaux-chips')">
-          <div id="nc-reseaux-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.15)"></div>
-        </div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Infos Entreprise <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg"><label class="fl">Catégorie</label><select class="fi" id="nc-mk-categorie" onchange="document.getElementById('nc-mk-sous-categorie').innerHTML=akRefSubCatOptions('',this.value)"></select></div>
-        <div class="fg"><label class="fl">Sous-Catégorie</label><select class="fi" id="nc-mk-sous-categorie"></select></div>
-        <div class="fg"><label class="fl">Catégorie prof.</label><select class="fi" id="nc-mk-categorie-pro"></select></div>
-        <div class="fg"><label class="fl">Secteur</label><select class="fi" id="nc-mk-secteur"></select></div>
-        <div class="fg"><label class="fl">Type</label><select class="fi" id="nc-mk-type"></select></div>
-        <div class="fg"><label class="fl">Groupe</label><select class="fi" id="nc-mk-groupe"><option value="">Groupe...</option></select></div>
-        <div class="fg"><label class="fl">Origine</label><select class="fi" id="nc-mk-origine"><option value="">Origine...</option></select></div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Tarification GPH</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg"><label class="fl">Mode de tarification GPH</label><select class="fi" id="nc-mk-tarification"></select></div>
-        <div class="fg"><label class="fl">RFA applicable</label><input class="fi" id="nc-rfa-applicable" placeholder=""></div>
-        <div class="fg"><label class="fl">Date Remise convention</label><input class="fi" type="date" id="nc-date-remise-convention"></div>
-        <div class="fg"><label class="fl">Date Signature convention</label><input class="fi" type="date" id="nc-date-signature-convention"></div>
-        <div class="fg" style="grid-column:1/-1"><label class="fl">Commentaires tarif.</label><input class="fi" id="nc-commentaires-tarification" placeholder=""></div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Administratives</div>
-      <div class="fg"><textarea class="fi" id="nc-notes" rows="3" style="resize:vertical" placeholder="Habitudes administratives..."></textarea></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
-        <div>
-          <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Techniques</div>
-          <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
-            <div style="display:flex;gap:2px;padding:4px 6px;border-bottom:1px solid var(--border);background:var(--bg-2)">
-              <button class="tb" title="Gras" onclick="fmtRTE('nc-hab-tech','bold')"><b>B</b></button>
-              <button class="tb" title="Italique" onclick="fmtRTE('nc-hab-tech','italic')"><i>I</i></button>
-              <button class="tb" title="Souligné" onclick="fmtRTE('nc-hab-tech','underline')"><u>U</u></button>
-              <div class="tb-div"></div>
-              <button class="tb" title="Liste" onclick="fmtRTE('nc-hab-tech','insertUnorderedList')">☰</button>
-              <div class="tb-div"></div>
-              <button class="tb" title="Insérer une image" onclick="insertImageRTE('nc-hab-tech')">🖼</button>
-            </div>
-            <div class="editor-body" contenteditable="true" id="nc-hab-tech" style="min-height:100px;max-height:250px;overflow-y:auto"></div>
+      <!-- Identité -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header"><div class="card-title">Identité</div></div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div class="fg"><label class="fl">Nom *</label><input class="fi" id="nc-name" placeholder="Nom du client"></div>
+            <div class="fg"><label class="fl">Code</label><input class="fi" id="nc-code" placeholder="CLI-XXXX"></div>
+            <div class="fg"><label class="fl">Raison sociale</label><input class="fi" id="nc-raison"></div>
+            <div class="fg"><label class="fl">Raison sociale 2</label><input class="fi" id="nc-raison2"></div>
+            <div class="fg"><label class="fl">Forme juridique</label><input class="fi" id="nc-forme"></div>
+            <div class="fg"><label class="fl">Secteur</label><input class="fi" id="nc-sector" placeholder="Ex: Énergie"></div>
           </div>
         </div>
-        <div>
-          <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Géotechniques</div>
-          <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
-            <div style="display:flex;gap:2px;padding:4px 6px;border-bottom:1px solid var(--border);background:var(--bg-2)">
-              <button class="tb" title="Gras" onclick="fmtRTE('nc-hab-geo','bold')"><b>B</b></button>
-              <button class="tb" title="Italique" onclick="fmtRTE('nc-hab-geo','italic')"><i>I</i></button>
-              <button class="tb" title="Souligné" onclick="fmtRTE('nc-hab-geo','underline')"><u>U</u></button>
-              <div class="tb-div"></div>
-              <button class="tb" title="Liste" onclick="fmtRTE('nc-hab-geo','insertUnorderedList')">☰</button>
-              <div class="tb-div"></div>
-              <button class="tb" title="Insérer une image" onclick="insertImageRTE('nc-hab-geo')">🖼</button>
+      </div>
+      <!-- Adresse | Coordonnées | Informations légales -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Adresse</div></div>
+          <div class="card-body">
+            <div style="display:grid;gap:8px">
+              <div class="fg"><label class="fl">Ligne 1</label><input class="fi" id="nc-addr1"></div>
+              <div class="fg"><label class="fl">Ligne 2</label><input class="fi" id="nc-addr2"></div>
+              <div class="fg"><label class="fl">Ligne 3</label><input class="fi" id="nc-addr3"></div>
+              <div class="fg"><label class="fl">Code postal</label><input class="fi" id="nc-cp"></div>
+              <div class="fg"><label class="fl">Ville</label><input class="fi" id="nc-city"></div>
+              <div class="fg"><label class="fl">Département</label><input class="fi" id="nc-dept"></div>
+              <div class="fg"><label class="fl">Région</label><input class="fi" id="nc-region"></div>
+              <div class="fg"><label class="fl">Pays</label><input class="fi" id="nc-pays" value="FR"></div>
             </div>
-            <div class="editor-body" contenteditable="true" id="nc-hab-geo" style="min-height:100px;max-height:250px;overflow-y:auto"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Coordonnées</div></div>
+          <div class="card-body">
+            <div style="display:grid;gap:8px">
+              <div class="fg"><label class="fl">Email</label><input class="fi" id="nc-email" type="email"></div>
+              <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="nc-phone"></div>
+              <div class="fg"><label class="fl">Téléphone 2</label><input class="fi" id="nc-phone2"></div>
+              <div class="fg"><label class="fl">Mobile</label><input class="fi" id="nc-mobile"></div>
+              <div class="fg"><label class="fl">Fax</label><input class="fi" id="nc-fax"></div>
+              <div class="fg"><label class="fl">Site web</label><input class="fi" id="nc-web"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Informations légales</div></div>
+          <div class="card-body">
+            <div style="display:grid;gap:8px">
+              <div class="fg"><label class="fl">SIREN</label><input class="fi" id="nc-siren" oninput="const t=document.getElementById('nc-tva');if(t)t.value=computeTVA(this.value)||''"></div>
+              <div class="fg"><label class="fl">SIRET</label><input class="fi" id="nc-siret"></div>
+              <div class="fg"><label class="fl">TVA intracommunautaire</label><input class="fi" id="nc-tva" readonly style="background:var(--bg-3)"></div>
+              <div class="fg"><label class="fl">Code APE</label><input class="fi" id="nc-ape"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Commercial | Infos Entreprise | Tarification GPH -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Commercial</div></div>
+          <div class="card-body">
+            <div style="display:grid;gap:8px">
+              <div class="fg"><label class="fl">Commercial Novam</label><select class="fi" id="nc-mk-manager"></select></div>
+              <div class="fg"><label class="fl">Commercial GPH</label><select class="fi" id="nc-mk-salesman"></select></div>
+            </div>
+            <div class="fg" style="margin-top:10px">
+              <label class="fl">Réseaux professionnels</label>
+              <div id="nc-reseaux-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px"></div>
+              <div style="position:relative">
+                <input class="fi" id="nc-reseaux-input" placeholder="Ajouter un réseau..." autocomplete="off"
+                  oninput="searchReseauxPro(this.value,'nc-reseaux-dd','nc-reseaux-chips')" onfocus="searchReseauxPro(this.value,'nc-reseaux-dd','nc-reseaux-chips')">
+                <div id="nc-reseaux-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.15)"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Infos Entreprise <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div></div>
+          <div class="card-body">
+            <div style="display:grid;gap:8px">
+              <div class="fg"><label class="fl">Catégorie</label><select class="fi" id="nc-mk-categorie" onchange="document.getElementById('nc-mk-sous-categorie').innerHTML=akRefSubCatOptions('',this.value)"></select></div>
+              <div class="fg"><label class="fl">Sous-Catégorie</label><select class="fi" id="nc-mk-sous-categorie"></select></div>
+              <div class="fg"><label class="fl">Catégorie prof.</label><select class="fi" id="nc-mk-categorie-pro"></select></div>
+              <div class="fg"><label class="fl">Secteur</label><select class="fi" id="nc-mk-secteur"></select></div>
+              <div class="fg"><label class="fl">Type</label><select class="fi" id="nc-mk-type"></select></div>
+              <div class="fg"><label class="fl">Groupe</label><select class="fi" id="nc-mk-groupe"><option value="">Groupe...</option></select></div>
+              <div class="fg"><label class="fl">Origine</label><select class="fi" id="nc-mk-origine"><option value="">Origine...</option></select></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Tarification GPH</div></div>
+          <div class="card-body">
+            <div style="display:grid;gap:8px">
+              <div class="fg"><label class="fl">Mode de tarification GPH</label><select class="fi" id="nc-mk-tarification"></select></div>
+              <div class="fg"><label class="fl">RFA applicable</label><input class="fi" id="nc-rfa-applicable" placeholder=""></div>
+              <div class="fg"><label class="fl">Date Remise convention</label><input class="fi" type="date" id="nc-date-remise-convention"></div>
+              <div class="fg"><label class="fl">Date Signature convention</label><input class="fi" type="date" id="nc-date-signature-convention"></div>
+              <div class="fg"><label class="fl">Commentaires tarif.</label><input class="fi" id="nc-commentaires-tarification" placeholder=""></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Objectifs annuels -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header"><div class="card-title">Objectifs annuels</div></div>
+        <div class="card-body"><div style="font-size:12px;color:var(--t3);text-align:center;padding:8px">Disponible après création du client</div></div>
+      </div>
+      <!-- Habitudes Administratives -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header"><div class="card-title">Habitudes Administratives</div></div>
+        <div class="card-body">
+          <textarea class="fi" id="nc-notes" rows="3" style="resize:vertical" placeholder="Habitudes administratives..."></textarea>
+        </div>
+      </div>
+      <!-- Concurrents -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header"><div class="card-title">Concurrents qui travaillent avec ce compte</div></div>
+        <div class="card-body"><div style="font-size:12px;color:var(--t3);text-align:center;padding:8px">Disponible après création du client</div></div>
+      </div>
+      <!-- Habitudes Techniques | Habitudes Géotechniques -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Habitudes Techniques</div></div>
+          <div class="card-body">
+            <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+              <div style="display:flex;gap:2px;padding:4px 6px;border-bottom:1px solid var(--border);background:var(--bg-2)">
+                <button class="tb" title="Gras" onclick="fmtRTE('nc-hab-tech','bold')"><b>B</b></button>
+                <button class="tb" title="Italique" onclick="fmtRTE('nc-hab-tech','italic')"><i>I</i></button>
+                <button class="tb" title="Souligné" onclick="fmtRTE('nc-hab-tech','underline')"><u>U</u></button>
+                <div class="tb-div"></div>
+                <button class="tb" title="Liste" onclick="fmtRTE('nc-hab-tech','insertUnorderedList')">☰</button>
+                <div class="tb-div"></div>
+                <button class="tb" title="Insérer une image" onclick="insertImageRTE('nc-hab-tech')">🖼</button>
+              </div>
+              <div class="editor-body" contenteditable="true" id="nc-hab-tech" style="min-height:100px;max-height:250px;overflow-y:auto"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Habitudes Géotechniques</div></div>
+          <div class="card-body">
+            <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+              <div style="display:flex;gap:2px;padding:4px 6px;border-bottom:1px solid var(--border);background:var(--bg-2)">
+                <button class="tb" title="Gras" onclick="fmtRTE('nc-hab-geo','bold')"><b>B</b></button>
+                <button class="tb" title="Italique" onclick="fmtRTE('nc-hab-geo','italic')"><i>I</i></button>
+                <button class="tb" title="Souligné" onclick="fmtRTE('nc-hab-geo','underline')"><u>U</u></button>
+                <div class="tb-div"></div>
+                <button class="tb" title="Liste" onclick="fmtRTE('nc-hab-geo','insertUnorderedList')">☰</button>
+                <div class="tb-div"></div>
+                <button class="tb" title="Insérer une image" onclick="insertImageRTE('nc-hab-geo')">🖼</button>
+              </div>
+              <div class="editor-body" contenteditable="true" id="nc-hab-geo" style="min-height:100px;max-height:250px;overflow-y:auto"></div>
+            </div>
           </div>
         </div>
       </div>
