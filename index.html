@@ -11085,15 +11085,15 @@ async function loadAkuiteoRefs() {
       akRef.linkTypes = (linkTypes || []).map(c => ({ id: String(c.id), code: c.code, name: c.name }));
       akRef.pricingMethods = (pricingMethods || []).map(c => ({ id: c.id, code: c.code, name: c.name }));
       // Filtrer les comptes génériques (Dessinateur, Ingénieur, etc. déclinés par agence)
-      // et ajouter le code Akuiteo en suffixe pour les vrais doublons (même prénom+nom)
+      // et ajouter le code Akuiteo en suffixe pour les vrais doublons (même nom+prénom)
       const realEmployees = (employees || []).filter(e => !e.generic);
       const nameCount = {};
       for (const e of realEmployees) {
-        const fn = ((e.firstName||'') + ' ' + (e.name||'')).trim();
+        const fn = ((e.name||'') + ' ' + (e.firstName||'')).trim();
         nameCount[fn] = (nameCount[fn] || 0) + 1;
       }
       akRef.employees = realEmployees.map(e => {
-        const fn = ((e.firstName||'') + ' ' + (e.name||'')).trim();
+        const fn = ((e.name||'') + ' ' + (e.firstName||'')).trim();
         const label = nameCount[fn] > 1 ? `${fn} (${e.code || e.id})` : fn;
         return { id: e.id, code: e.code, name: label };
       }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -11162,7 +11162,7 @@ async function resolveEmployeeNames() {
     try {
       const emp = await akuiteoFetch('GET', '/workforce/employees/' + akId);
       if (emp && (emp.name || emp.firstName)) {
-        const fullName = ((emp.firstName || '') + ' ' + (emp.name || '')).trim();
+        const fullName = ((emp.name || '') + ' ' + (emp.firstName || '')).trim();
         _employeeNameCache[akId] = fullName;
         span.innerHTML = '<strong>' + fullName + '</strong> <span style="color:var(--t3);font-size:11px">(' + akId + ')</span>';
       }
@@ -17227,7 +17227,7 @@ async function syncAkuiteoQuick() {
         if (detail && Array.isArray(detail.salesmen) && detail.salesmen.length > 0) {
           const names = detail.salesmen.map(s => {
             const e = s.employee;
-            const name = e ? ((e.firstName||'') + ' ' + (e.name||'')).trim() : s.employeeId;
+            const name = e ? ((e.name||'') + ' ' + (e.firstName||'')).trim() : s.employeeId;
             return s.mainLinkedSalesman ? name + ' (principal)' : name;
           });
           salesmenUpdates.push({ id: crmClient.id, commerciaux_associes: names.join(', ') });
@@ -19238,7 +19238,7 @@ async function pullClientFromAkuiteo(clientId) {
     // Nom du responsable (accountManager)
     if (ak.accountManagerId) promises.push(
       akuiteoFetch('GET', '/workforce/employees/' + ak.accountManagerId)
-        .then(e => { if (e) managerName = ((e.firstName||'') + ' ' + (e.name||'')).trim(); })
+        .then(e => { if (e) managerName = ((e.name||'') + ' ' + (e.firstName||'')).trim(); })
         .catch(() => {})
     );
     // Modes de tarification
@@ -19293,7 +19293,7 @@ async function pullClientFromAkuiteo(clientId) {
     // Construire la liste des commerciaux associés (salesmen)
     const salesmenNames = salesmen.map(s => {
       const e = s.employee;
-      const name = e ? ((e.firstName||'') + ' ' + (e.name||'')).trim() : s.employeeId;
+      const name = e ? ((e.name||'') + ' ' + (e.firstName||'')).trim() : s.employeeId;
       return s.mainLinkedSalesman ? name + ' (principal)' : name;
     });
     const updates = {
