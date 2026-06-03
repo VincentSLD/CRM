@@ -6328,7 +6328,7 @@ function renderClientDetail() {
       detailRow('Mode de paiement', c.mode_paiement || '—'),
       detailRow('Conditions de paiement', c.condition_paiement || '—'),
     ])}
-    ${detailSection('Tarification', [
+    ${detailSection('Tarification GPH', [
       detailRow('Mode de tarification', c.mode_tarification_name || resolvePricingMethod(c.mode_tarification) || '—'),
       detailRow('RFA applicable', c.rfa_applicable || c.custom_data?.['1-alpha04']?.value || '—'),
       detailRow('Date de Remise de la convention', (c.date_remise_convention || c.custom_data?.['1-date01']?.value) ? fmtDateFR(c.date_remise_convention || c.custom_data['1-date01'].value) : '—'),
