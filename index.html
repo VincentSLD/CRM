@@ -2609,6 +2609,26 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
       <div id="pt-results" style="max-height:calc(100vh - 380px);overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
       <div id="pt-pagination" style="display:none;justify-content:center;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center"></div>
+      <details id="pt-enrich-panel" style="margin-top:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)">
+        <summary style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--accent);user-select:none">Enrichir avant ajout (commercial, catégorie, ...)</summary>
+        <div style="padding:12px 14px;border-top:1px solid var(--border)">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+            <div class="fg"><label class="fl" style="font-size:11px">Commercial GPH</label><select class="fi" id="pt-mk-salesman" style="font-size:12px;padding:5px 8px"></select></div>
+            <div class="fg"><label class="fl" style="font-size:11px">Commercial Novam</label><select class="fi" id="pt-mk-manager" style="font-size:12px;padding:5px 8px"></select></div>
+            <div class="fg"><label class="fl" style="font-size:11px">Catégorie</label><select class="fi" id="pt-mk-categorie" style="font-size:12px;padding:5px 8px" onchange="document.getElementById('pt-mk-sous-categorie').innerHTML=akRefSubCatOptions('',this.value)"></select></div>
+            <div class="fg"><label class="fl" style="font-size:11px">Sous-Catégorie</label><select class="fi" id="pt-mk-sous-categorie" style="font-size:12px;padding:5px 8px"></select></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px">
+            <div class="fg"><label class="fl" style="font-size:11px">Catégorie prof.</label><select class="fi" id="pt-mk-categorie-pro" style="font-size:12px;padding:5px 8px"></select></div>
+            <div class="fg"><label class="fl" style="font-size:11px">Secteur</label><select class="fi" id="pt-mk-secteur" style="font-size:12px;padding:5px 8px"></select></div>
+            <div class="fg"><label class="fl" style="font-size:11px">Type</label><select class="fi" id="pt-mk-type" style="font-size:12px;padding:5px 8px"></select></div>
+            <div class="fg"><label class="fl" style="font-size:11px">Groupe</label><select class="fi" id="pt-mk-groupe" style="font-size:12px;padding:5px 8px"><option value="">Groupe...</option></select></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-top:10px">
+            <div class="fg"><label class="fl" style="font-size:11px">Origine</label><select class="fi" id="pt-mk-origine" style="font-size:12px;padding:5px 8px"><option value="">Origine...</option></select></div>
+          </div>
+        </div>
+      </details>
     </div>
   </div>
 </div>
@@ -18625,6 +18645,8 @@ async function searchProspects(page) {
   const params = buildProspectQuery();
   if (!params) { toast('Renseignez au moins un filtre', 'warn'); return; }
   _prospectPage = typeof page === 'number' ? page : 0;
+  // Remplir les dropdowns d'enrichissement (une seule fois)
+  if (!window._ptDropdownsFilled) { fillAkuiteoDropdowns('pt', {}); window._ptDropdownsFilled = true; }
 
   const status = document.getElementById('pt-status');
   const resEl = document.getElementById('pt-results');
@@ -18840,6 +18862,10 @@ async function addSelectedProspects() {
   if (checks.length === 0) { toast('Aucun prospect sélectionné', 'warn'); return; }
   if (!confirm(`Ajouter ${checks.length} prospect(s) dans le CRM ?`)) return;
   showSyncLoading(true); setSyncText(`Ajout de ${checks.length} prospect(s)...`);
+  // Lire les champs d'enrichissement communs
+  const enrich = getAkuiteoFieldsFromModal('pt');
+  const enrichClean = {};
+  for (const [k, v] of Object.entries(enrich)) { if (v != null && v !== '') enrichClean[k] = v; }
   const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
   let added = 0;
   try {
@@ -18871,6 +18897,7 @@ async function addSelectedProspects() {
         status: 'nouveau',
         sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15,
         last_contact: new Date().toISOString().slice(0, 10),
+        ...enrichClean,
       };
       const { error } = await sb.from('clients').insert(row);
       if (!error) added++;
