@@ -11105,8 +11105,8 @@ function getAkuiteoFieldsFromModal(prefix) {
     mode_tarification: val('tarification'), mode_tarification_name: txt('tarification'),
     account_manager_id: val('manager'), account_manager_name: txt('manager'),
     salesman_id: val('salesman'), salesman_name: txt('salesman'),
-    mk_groupe: document.getElementById(prefix + '-mk-groupe').value || null,
-    mk_origine: document.getElementById(prefix + '-mk-origine').value || null,
+    mk_groupe: (document.getElementById(prefix + '-mk-groupe') || {}).value || null,
+    mk_origine: (document.getElementById(prefix + '-mk-origine') || {}).value || null,
   };
 }
 
@@ -15749,18 +15749,19 @@ function openModal(id) {
 async function fillAkuiteoDropdowns(prefix, client) {
   await loadAkuiteoRefs();
   const c = client || {};
-  document.getElementById(prefix + '-mk-categorie').innerHTML = akRefOptions(akRef.categories, c.mk_categorie_id, 'Catégorie...');
-  document.getElementById(prefix + '-mk-sous-categorie').innerHTML = akRefSubCatOptions(c.mk_sous_categorie_id, c.mk_categorie_id);
-  document.getElementById(prefix + '-mk-categorie-pro').innerHTML = akRefOptions(akRef.proCats, c.mk_categorie_pro_id, 'Catégorie prof...');
-  document.getElementById(prefix + '-mk-secteur').innerHTML = akRefOptions(akRef.sectors, c.mk_secteur_id, 'Secteur...');
-  document.getElementById(prefix + '-mk-type').innerHTML = akRefOptions(akRef.linkTypes, c.mk_type_id, 'Type...');
-  document.getElementById(prefix + '-mk-tarification').innerHTML = akRefOptions(akRef.pricingMethods, c.mode_tarification, 'Mode de tarification...');
-  document.getElementById(prefix + '-mk-manager').innerHTML = akRefOptions(akRef.employees, c.account_manager_id, 'Commercial Novam...');
-  document.getElementById(prefix + '-mk-salesman').innerHTML = akRefOptions(akRef.employees, c.salesman_id, 'Commercial GPH...');
+  const setHtml = (id, html) => { const el = document.getElementById(prefix + '-mk-' + id); if (el) el.innerHTML = html; };
+  setHtml('categorie', akRefOptions(akRef.categories, c.mk_categorie_id, 'Catégorie...'));
+  setHtml('sous-categorie', akRefSubCatOptions(c.mk_sous_categorie_id, c.mk_categorie_id));
+  setHtml('categorie-pro', akRefOptions(akRef.proCats, c.mk_categorie_pro_id, 'Catégorie prof...'));
+  setHtml('secteur', akRefOptions(akRef.sectors, c.mk_secteur_id, 'Secteur...'));
+  setHtml('type', akRefOptions(akRef.linkTypes, c.mk_type_id, 'Type...'));
+  setHtml('tarification', akRefOptions(akRef.pricingMethods, c.mode_tarification, 'Mode de tarification...'));
+  setHtml('manager', akRefOptions(akRef.employees, c.account_manager_id, 'Commercial Novam...'));
+  setHtml('salesman', akRefOptions(akRef.employees, c.salesman_id, 'Commercial GPH...'));
   // Groupe / Origine (dropdowns dynamiques)
   const [groupes, origines] = await Promise.all([loadDistinctValues('mk_groupe'), loadDistinctValues('mk_origine')]);
-  document.getElementById(prefix + '-mk-groupe').innerHTML = buildDistinctOptions(groupes, c.mk_groupe, 'Groupe...');
-  document.getElementById(prefix + '-mk-origine').innerHTML = buildDistinctOptions(origines, c.mk_origine, 'Origine...');
+  setHtml('groupe', buildDistinctOptions(groupes, c.mk_groupe, 'Groupe...'));
+  setHtml('origine', buildDistinctOptions(origines, c.mk_origine, 'Origine...'));
   // Tarification (champs directs)
   const el = id => document.getElementById(prefix + '-' + id);
   if (el('rfa-applicable')) el('rfa-applicable').value = c.rfa_applicable || c.custom_data?.['1-alpha04']?.value || '';
