@@ -2006,7 +2006,7 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Catégorie prof.</label><select class="fi" id="nc-mk-categorie-pro"></select></div>
         <div class="fg"><label class="fl">Secteur</label><select class="fi" id="nc-mk-secteur"></select></div>
         <div class="fg"><label class="fl">Type</label><select class="fi" id="nc-mk-type"></select></div>
-        <div class="fg"><label class="fl">Mode de tarification</label><select class="fi" id="nc-mk-tarification"></select></div>
+        <div class="fg"><label class="fl">Mode de tarification GPH</label><select class="fi" id="nc-mk-tarification"></select></div>
         <div class="fg"><label class="fl">RFA applicable</label><input class="fi" id="nc-rfa-applicable" placeholder=""></div>
         <div class="fg"><label class="fl">Date Remise convention</label><input class="fi" type="date" id="nc-date-remise-convention"></div>
         <div class="fg"><label class="fl">Date Signature convention</label><input class="fi" type="date" id="nc-date-signature-convention"></div>
@@ -2462,7 +2462,7 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Catégorie prof.</label><select class="fi" id="ec-mk-categorie-pro"></select></div>
         <div class="fg"><label class="fl">Secteur</label><select class="fi" id="ec-mk-secteur"></select></div>
         <div class="fg"><label class="fl">Type</label><select class="fi" id="ec-mk-type"></select></div>
-        <div class="fg"><label class="fl">Mode de tarification</label><select class="fi" id="ec-mk-tarification"></select></div>
+        <div class="fg"><label class="fl">Mode de tarification GPH</label><select class="fi" id="ec-mk-tarification"></select></div>
         <div class="fg"><label class="fl">RFA applicable</label><input class="fi" id="ec-rfa-applicable" placeholder=""></div>
         <div class="fg"><label class="fl">Date Remise convention</label><input class="fi" type="date" id="ec-date-remise-convention"></div>
         <div class="fg"><label class="fl">Date Signature convention</label><input class="fi" type="date" id="ec-date-signature-convention"></div>
@@ -6359,7 +6359,7 @@ function renderClientDetail() {
       detailRow('Conditions de paiement', c.condition_paiement || '—'),
     ])}
     ${detailSection('Tarification GPH', [
-      detailRow('Mode de tarification', c.mode_tarification_name || resolvePricingMethod(c.mode_tarification) || '—'),
+      detailRow('Mode de tarification GPH', c.mode_tarification_name || resolvePricingMethod(c.mode_tarification) || '—'),
       detailRow('RFA applicable', c.rfa_applicable || c.custom_data?.['1-alpha04']?.value || '—'),
       detailRow('Date de Remise de la convention', (c.date_remise_convention || c.custom_data?.['1-date01']?.value) ? fmtDateFR(c.date_remise_convention || c.custom_data['1-date01'].value) : '—'),
       detailRow('Date de signature de la convention', (c.date_signature_convention || c.custom_data?.['1-date02']?.value) ? fmtDateFR(c.date_signature_convention || c.custom_data['1-date02'].value) : '—'),
@@ -15785,7 +15785,7 @@ async function fillAkuiteoDropdowns(prefix, client) {
   setHtml('categorie-pro', akRefOptions(akRef.proCats, c.mk_categorie_pro_id, 'Catégorie prof...'));
   setHtml('secteur', akRefOptions(akRef.sectors, c.mk_secteur_id, 'Secteur...'));
   setHtml('type', akRefOptions(akRef.linkTypes, c.mk_type_id, 'Type...'));
-  setHtml('tarification', akRefOptions(akRef.pricingMethods, c.mode_tarification, 'Mode de tarification...'));
+  setHtml('tarification', akRefOptions(akRef.pricingMethods, c.mode_tarification, 'Mode de tarification GPH...'));
   setHtml('manager', akRefOptions(akRef.employees, c.account_manager_id, 'Commercial Novam...'));
   setHtml('salesman', akRefOptions(akRef.employees, c.salesman_id, 'Commercial GPH...'));
   // Groupe / Origine (dropdowns dynamiques)
