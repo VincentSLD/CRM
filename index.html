@@ -11257,6 +11257,7 @@ const CUSTOM_DATA_HIDDEN = new Set([
   'Date de Remise de la convention','Date de signature de la convention','RFA applicable','Commentaires',
   'Typologie de mission Everwin'
 ]);
+const CUSTOM_DATA_RENAME = {'Code AA':"Apporteur d'Affaire"};
 function renderCustomData(cd) {
   if (!cd || typeof cd !== 'object' || Object.keys(cd).length === 0) return '';
   const rows = Object.entries(cd).filter(([k, v]) => {
@@ -11273,7 +11274,8 @@ function renderCustomData(cd) {
       } else if (v.type === 'NUMBER' && displayVal != null) {
         displayVal = fmt(displayVal);
       }
-      return { order: v.realOrder || 999, html: detailRow(v.name || k, displayVal != null ? String(displayVal) : '—') };
+      const displayName = CUSTOM_DATA_RENAME[v.name] || v.name || k;
+      return { order: v.realOrder || 999, html: detailRow(displayName, displayVal != null ? String(displayVal) : '—') };
     }
     return { order: 999, html: detailRow(k, typeof v === 'object' ? JSON.stringify(v) : String(v)) };
   }).sort((a, b) => a.order - b.order).map(r => r.html);
