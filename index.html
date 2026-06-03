@@ -17155,6 +17155,7 @@ async function syncAkuiteoQuick() {
           mk_groupe: ak.level1grouping || null, mk_origine: ak.level2grouping || null,
           mode_tarification: ak.firstPricingMethodId || null,
           mode_tarification_name: ak.firstPricingMethodId ? akRefLabel(akRef.pricingMethods, ak.firstPricingMethodId) : null,
+          mode_paiement: ak.methodOfPayment || null, condition_paiement: ak.conditionOfPayment || null,
           ...(isNew ? { ini, color: colors[Math.floor(Math.random() * colors.length)], ca: 0, obj: 0, margin: 0, dso: 0, score: 50, status: 'nouveau', sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15 } : {}),
         };
       });
