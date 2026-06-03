@@ -11319,10 +11319,12 @@ async function showDevisDetail(id) {
   }
   currentPage = 'devis-detail';
   document.getElementById('pageTitle').textContent = 'Devis ' + (d.ref || d.id);
+  const dAff = d.affaire_id ? DB.affaires.find(a => a.id === d.affaire_id) : null;
   document.getElementById('contentArea').innerHTML = `<div class="page active">
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
       <button class="btn" onclick="go('devis')">← Retour aux devis</button>
       ${d.client_id ? '<button class="btn" onclick="showClient(&#39;'+d.client_id+'&#39;)">← Retour à la fiche '+((d.client||'').replace(/'/g,'&#39;'))+'</button>' : ''}
+      ${dAff ? '<button class="btn" onclick="showAffaireDetail(&#39;'+dAff.id+'&#39;)">← Retour à l\'affaire '+(dAff.ref||dAff.nom||dAff.code_projet||'')+'</button>' : ''}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       ${detailSection('Informations générales', [
@@ -11358,7 +11360,25 @@ async function showDevisDetail(id) {
         detailRow('Nombre de lignes', d.nb_lignes),
       ])}
       ${(() => { const addr = d.adresse || d.ville || d.code_postal ? d : (d.affaire_id ? DB.affaires.find(x=>x.id===d.affaire_id) : null); return addr && (addr.adresse || addr.ville || addr.code_postal) ? detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region)]) : ''; })()}
-      ${renderCustomData(d.custom_data)}
+      ${(() => {
+        if (!d.custom_data || !d.custom_data._lines || d.custom_data._lines.length === 0) return '';
+        const lines = d.custom_data._lines;
+        const billingModeLabel = m => ({FIXED_PRICE:'Forfait',TIME_AND_MATERIALS:'Régie',EXPENSE:'Frais'}[m]||m||'—');
+        return `<div style="grid-column:1/-1">${detailSection('Planification / Lignes de devis',
+          ['<table class="tbl-compact" style="width:100%"><thead><tr><th>#</th><th>Désignation</th><th>Mode</th><th style="text-align:right">Qté</th><th style="text-align:right">PU</th><th style="text-align:right">Total</th><th>Début</th><th>Fin</th><th>Livraison prévue</th><th>Facturation prévue</th></tr></thead><tbody>' +
+          lines.map(l => `<tr>
+            <td>${l.rankNumber||''}</td><td>${l.name||'—'}</td><td>${billingModeLabel(l.billingMode)}</td>
+            <td style="text-align:right" class="mono">${l.quantity!=null?l.quantity:''}</td>
+            <td style="text-align:right" class="mono">${l.unitPrice!=null?fmt(l.unitPrice):''}</td>
+            <td style="text-align:right" class="mono">${l.amountTotal!=null?fmt(l.amountTotal):''}</td>
+            <td>${l.startDate?fmtDateFR(l.startDate.substring(0,10)):''}</td>
+            <td>${l.endDate?fmtDateFR(l.endDate.substring(0,10)):''}</td>
+            <td>${l.estimatedDeliveryDate?fmtDateFR(l.estimatedDeliveryDate.substring(0,10)):''}</td>
+            <td>${l.estimatedBillingDate?fmtDateFR(l.estimatedBillingDate.substring(0,10)):(l.projectedBillingDate?fmtDateFR(l.projectedBillingDate.substring(0,10)):'')}</td>
+          </tr>`).join('') + '</tbody></table>']
+        )}</div>`;
+      })()}
+      ${renderCustomData(d.custom_data?(() => { const cd={...d.custom_data}; delete cd._lines; return Object.keys(cd).length>0?cd:null; })():null)}
     </div>
   </div>`;
 }
