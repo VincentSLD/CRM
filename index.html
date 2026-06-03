@@ -5224,19 +5224,37 @@ async function showClient(id) {
     }
   }
   // Charger mode/condition de paiement depuis Akuiteo si absents
-  // Note : methodOfPayment n'est retourné que via le endpoint read avec l'option METHOD_OF_PAYMENT
-  // conditionOfPayment n'est jamais retourné par l'API Akuiteo (null pour tous les clients)
-  if (!currentClient.mode_paiement && currentClient.akuiteo_id) {
-    akuiteoFetch('POST', '/crm/customers/' + currentClient.akuiteo_id + '/read', { options: ['METHOD_OF_PAYMENT'] }).then(ak => {
-      if (!ak) return;
-      const update = {};
-      if (ak.methodOfPayment) update.mode_paiement = ak.methodOfPayment;
-      if (Object.keys(update).length > 0) {
-        Object.assign(currentClient, update);
-        sb.from('clients').update(update).eq('id', id).then(() => {});
-        renderPage(currentPage);
-      }
-    }).catch(() => {});
+  // methodOfPayment : via read+METHOD_OF_PAYMENT sur la fiche client
+  // condition_paiement : via read+PAYMENT sur la dernière facture du client (non dispo sur fiche client)
+  if ((!currentClient.mode_paiement || !currentClient.condition_paiement) && currentClient.akuiteo_id) {
+    (async () => {
+      try {
+        const update = {};
+        // 1. Mode de paiement depuis fiche client
+        if (!currentClient.mode_paiement) {
+          const ak = await akuiteoFetch('POST', '/crm/customers/' + currentClient.akuiteo_id + '/read', { options: ['METHOD_OF_PAYMENT'] });
+          if (ak && ak.methodOfPayment) update.mode_paiement = ak.methodOfPayment;
+        }
+        // 2. Conditions de paiement depuis la dernière facture
+        if (!currentClient.condition_paiement) {
+          const factures = DB.factures.filter(f => f.client === currentClient.name);
+          if (factures.length > 0) {
+            const lastFact = factures[0]; // Déjà triées par date desc
+            if (lastFact.akuiteo_id) {
+              const inv = await akuiteoFetch('POST', '/sales/invoices/' + lastFact.akuiteo_id + '/read', { options: ['PAYMENT'] });
+              if (inv && inv.payment && inv.payment.code) {
+                update.condition_paiement = inv.payment.code;
+              }
+            }
+          }
+        }
+        if (Object.keys(update).length > 0) {
+          Object.assign(currentClient, update);
+          sb.from('clients').update(update).eq('id', id).then(() => {});
+          renderPage(currentPage);
+        }
+      } catch(e) { console.warn('[Akuiteo] Erreur paiement:', e.message); }
+    })();
   }
   currentPage = 'client-detail';
   document.getElementById('pageTitle').textContent = currentClient.name;
@@ -6340,7 +6358,7 @@ function renderClientDetail() {
       detailRow('Origine', c.mk_origine || '—'),
       detailRow('Effectif', c.effectif ? Number(c.effectif).toLocaleString('fr-FR') : '—'),
       detailRow('Chiffre d\'affaires', c.chiffre_affaires ? Number(c.chiffre_affaires).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }) : '—'),
-      detailRow('Mode de paiement', c.mode_paiement || '—'),
+      detailRow('Mode de paiement', ({BANK_TRANSFER:'Virement',CHECK:'Chèque',BANK_DRAFT:'Traite',CASH:'Espèces'})[c.mode_paiement] || c.mode_paiement || '—'),
       detailRow('Conditions de paiement', c.condition_paiement || '—'),
     ])}
     ${detailSection('Tarification GPH', [
@@ -17332,6 +17350,31 @@ async function syncAkuiteoQuick() {
       console.log(`[QuickSync] ${rows.length} factures`);
     }
 
+    // 3b. Extraire conditions de paiement depuis les factures récentes
+    // Regrouper par client, prendre la plus récente, lire PAYMENT
+    if (Array.isArray(rawInv) && rawInv.length > 0) {
+      const latestByCustomer = {};
+      for (const f of rawInv) {
+        const cid = String(f.thirdPartyId || f.customerId || '');
+        if (!cid || !akCMap[cid]) continue;
+        if (!latestByCustomer[cid] || (f.date || '') > (latestByCustomer[cid].date || '')) {
+          latestByCustomer[cid] = f;
+        }
+      }
+      let condUpdated = 0;
+      for (const [cid, f] of Object.entries(latestByCustomer)) {
+        try {
+          const inv = await akuiteoFetch('POST', '/sales/invoices/' + f.id + '/read', { options: ['PAYMENT'] });
+          if (inv && inv.payment && inv.payment.code) {
+            const cl = akCMap[cid];
+            await sb.from('clients').update({ condition_paiement: inv.payment.code }).eq('id', cl.id);
+            condUpdated++;
+          }
+        } catch(e) {}
+      }
+      if (condUpdated > 0) console.log(`[QuickSync] ${condUpdated} conditions de paiement mises à jour`);
+    }
+
     // 4. Nouveaux Marchés / Affaires (projets récents non présents en base)
     setSyncText('Sync incrémentale — Marchés & Affaires...');
     const currentYear = new Date().getFullYear().toString().slice(-2);
@@ -19242,6 +19285,15 @@ async function pullClientFromAkuiteo(clientId) {
         .catch(() => {})
     );
     await Promise.all(promises);
+    // Conditions de paiement : extraire depuis la dernière facture du client
+    let conditionPaiement = null;
+    try {
+      const factures = DB.factures.filter(f => f.client === client.name || f.client_id === clientId);
+      if (factures.length > 0 && factures[0].akuiteo_id) {
+        const inv = await akuiteoFetch('POST', '/sales/invoices/' + factures[0].akuiteo_id + '/read', { options: ['PAYMENT'] });
+        if (inv && inv.payment && inv.payment.code) conditionPaiement = inv.payment.code;
+      }
+    } catch(e) {}
     // Construire la liste des commerciaux associés (salesmen)
     const salesmenNames = salesmen.map(s => {
       const e = s.employee;
@@ -19274,6 +19326,7 @@ async function pullClientFromAkuiteo(clientId) {
       categorie: ak.category || null, profession: ak.profession || null,
       secteur_activite: ak.sector || null,
       mode_paiement: methodOfPaymentFromRead || null,
+      condition_paiement: conditionPaiement || null,
       mode_tarification: ak.firstPricingMethodId || null,
       mode_tarification_name: pricingName || null,
       mode_tarification_2: ak.secondPricingMethodId || null,
