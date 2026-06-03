@@ -2040,11 +2040,11 @@ tbody tr:last-child td { border-bottom: none; }
           <div class="card-header"><div class="card-title">Infos Entreprise <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div></div>
           <div class="card-body">
             <div style="display:grid;gap:8px">
-              <div class="fg"><label class="fl">Catégorie</label><select class="fi" id="nc-mk-categorie" onchange="document.getElementById('nc-mk-sous-categorie').innerHTML=akRefSubCatOptions('',this.value)"></select></div>
-              <div class="fg"><label class="fl">Sous-Catégorie</label><select class="fi" id="nc-mk-sous-categorie"></select></div>
+              <div class="fg"><label class="fl">Catégorie *</label><select class="fi" id="nc-mk-categorie" onchange="document.getElementById('nc-mk-sous-categorie').innerHTML=akRefSubCatOptions('',this.value)"></select></div>
+              <div class="fg"><label class="fl">Sous-Catégorie *</label><select class="fi" id="nc-mk-sous-categorie"></select></div>
               <div class="fg"><label class="fl">Catégorie prof.</label><select class="fi" id="nc-mk-categorie-pro"></select></div>
-              <div class="fg"><label class="fl">Secteur</label><select class="fi" id="nc-mk-secteur"></select></div>
-              <div class="fg"><label class="fl">Type</label><select class="fi" id="nc-mk-type"></select></div>
+              <div class="fg"><label class="fl">Secteur *</label><select class="fi" id="nc-mk-secteur"></select></div>
+              <div class="fg"><label class="fl">Type *</label><select class="fi" id="nc-mk-type"></select></div>
               <div class="fg"><label class="fl">Groupe</label><select class="fi" id="nc-mk-groupe"><option value="">Groupe...</option></select></div>
               <div class="fg"><label class="fl">Origine</label><select class="fi" id="nc-mk-origine"><option value="">Origine...</option></select></div>
             </div>
@@ -16523,7 +16523,20 @@ function updateNcEtabSelectedCount() {
 
 async function submitNewClient() {
   const name = document.getElementById('nc-name').value.trim();
-  if (!name) { toast('Le nom est obligatoire','error'); return; }
+  const reqFields = [
+    { id: 'nc-name', label: 'Nom', val: name },
+    { id: 'nc-mk-categorie', label: 'Catégorie', val: document.getElementById('nc-mk-categorie')?.value },
+    { id: 'nc-mk-sous-categorie', label: 'Sous-Catégorie', val: document.getElementById('nc-mk-sous-categorie')?.value },
+    { id: 'nc-mk-secteur', label: 'Secteur', val: document.getElementById('nc-mk-secteur')?.value },
+    { id: 'nc-mk-type', label: 'Type', val: document.getElementById('nc-mk-type')?.value },
+  ];
+  const missing = reqFields.filter(f => !f.val);
+  if (missing.length) {
+    toast('Champs obligatoires manquants : ' + missing.map(f => f.label).join(', '), 'error');
+    const firstEl = document.getElementById(missing[0].id);
+    if (firstEl) { firstEl.focus(); firstEl.style.borderColor = '#ef4444'; setTimeout(() => firstEl.style.borderColor = '', 3000); }
+    return;
+  }
 
   // Overlay de progression
   let overlay = document.getElementById('nc-progress-overlay');
