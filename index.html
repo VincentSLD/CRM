@@ -18910,7 +18910,25 @@ async function addSelectedProspects() {
         ...enrichClean,
       };
       const { error } = await sb.from('clients').insert(row);
-      if (!error) added++;
+      if (!error) {
+        added++;
+        // Vérification BODACC en arrière-plan (procédures collectives)
+        if (e.siren) {
+          pcFetchSiren(e.siren).then(annonces => {
+            if (!annonces || !annonces.length) return;
+            const last = annonces[0];
+            const j = last.jugement || {};
+            const url = last.id ? 'https://www.bodacc.fr/pages/annonces-commerciales-detail/?q.id=id:' + last.id : null;
+            sb.from('clients').update({
+              procedure_collective: _pcShortType(j.nature),
+              procedure_nature: j.nature || null,
+              procedure_date: j.date || last.dateparution || null,
+              procedure_url: url,
+              procedure_checked_at: new Date().toISOString(),
+            }).eq('id', row.id).then(() => {});
+          }).catch(() => {});
+        }
+      }
       else console.warn('Insert prospect err:', name, error.message);
     }
     toast(`${added} prospect(s) ajouté(s)`, 'success');
