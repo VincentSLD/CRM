@@ -1969,8 +1969,6 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Forme juridique</label><input class="fi" id="nc-forme"></div>
         <div class="fg"><label class="fl">Secteur</label><input class="fi" id="nc-sector" placeholder="Ex: Énergie"></div>
       </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Catégorie du compte <span style="font-weight:400;font-size:11px">(par agence)</span></div>
-      <div id="nc-categorie-compte" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Adresse</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
         <div class="fg" style="grid-column:1/-1"><label class="fl">Ligne 1</label><input class="fi" id="nc-addr1"></div>
@@ -1998,23 +1996,8 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">TVA intracommunautaire</label><input class="fi" id="nc-tva" readonly style="background:var(--bg-3)"></div>
         <div class="fg"><label class="fl">Code APE</label><input class="fi" id="nc-ape"></div>
       </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Infos Entreprise <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg"><label class="fl">Catégorie</label><select class="fi" id="nc-mk-categorie" onchange="document.getElementById('nc-mk-sous-categorie').innerHTML=akRefSubCatOptions('',this.value)"></select></div>
-        <div class="fg"><label class="fl">Sous-Catégorie</label><select class="fi" id="nc-mk-sous-categorie"></select></div>
-        <div class="fg"><label class="fl">Catégorie prof.</label><select class="fi" id="nc-mk-categorie-pro"></select></div>
-        <div class="fg"><label class="fl">Secteur</label><select class="fi" id="nc-mk-secteur"></select></div>
-        <div class="fg"><label class="fl">Type</label><select class="fi" id="nc-mk-type"></select></div>
-        <div class="fg"><label class="fl">Mode de tarification GPH</label><select class="fi" id="nc-mk-tarification"></select></div>
-        <div class="fg"><label class="fl">RFA applicable</label><input class="fi" id="nc-rfa-applicable" placeholder=""></div>
-        <div class="fg"><label class="fl">Date Remise convention</label><input class="fi" type="date" id="nc-date-remise-convention"></div>
-        <div class="fg"><label class="fl">Date Signature convention</label><input class="fi" type="date" id="nc-date-signature-convention"></div>
-        <div class="fg"><label class="fl">Commentaires tarif.</label><input class="fi" id="nc-commentaires-tarification" placeholder=""></div>
-        <div class="fg"><label class="fl">Groupe</label><select class="fi" id="nc-mk-groupe"><option value="">Groupe...</option></select></div>
-        <div class="fg"><label class="fl">Origine</label><select class="fi" id="nc-mk-origine"><option value="">Origine...</option></select></div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Commercial <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Commercial</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
         <div class="fg"><label class="fl">Commercial Novam</label><select class="fi" id="nc-mk-manager"></select></div>
         <div class="fg"><label class="fl">Commercial GPH</label><select class="fi" id="nc-mk-salesman"></select></div>
       </div>
@@ -2026,6 +2009,24 @@ tbody tr:last-child td { border-bottom: none; }
             oninput="searchReseauxPro(this.value,'nc-reseaux-dd','nc-reseaux-chips')" onfocus="searchReseauxPro(this.value,'nc-reseaux-dd','nc-reseaux-chips')">
           <div id="nc-reseaux-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.15)"></div>
         </div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Infos Entreprise <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">Catégorie</label><select class="fi" id="nc-mk-categorie" onchange="document.getElementById('nc-mk-sous-categorie').innerHTML=akRefSubCatOptions('',this.value)"></select></div>
+        <div class="fg"><label class="fl">Sous-Catégorie</label><select class="fi" id="nc-mk-sous-categorie"></select></div>
+        <div class="fg"><label class="fl">Catégorie prof.</label><select class="fi" id="nc-mk-categorie-pro"></select></div>
+        <div class="fg"><label class="fl">Secteur</label><select class="fi" id="nc-mk-secteur"></select></div>
+        <div class="fg"><label class="fl">Type</label><select class="fi" id="nc-mk-type"></select></div>
+        <div class="fg"><label class="fl">Groupe</label><select class="fi" id="nc-mk-groupe"><option value="">Groupe...</option></select></div>
+        <div class="fg"><label class="fl">Origine</label><select class="fi" id="nc-mk-origine"><option value="">Origine...</option></select></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Tarification GPH</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">Mode de tarification GPH</label><select class="fi" id="nc-mk-tarification"></select></div>
+        <div class="fg"><label class="fl">RFA applicable</label><input class="fi" id="nc-rfa-applicable" placeholder=""></div>
+        <div class="fg"><label class="fl">Date Remise convention</label><input class="fi" type="date" id="nc-date-remise-convention"></div>
+        <div class="fg"><label class="fl">Date Signature convention</label><input class="fi" type="date" id="nc-date-signature-convention"></div>
+        <div class="fg" style="grid-column:1/-1"><label class="fl">Commentaires tarif.</label><input class="fi" id="nc-commentaires-tarification" placeholder=""></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Administratives</div>
       <div class="fg"><textarea class="fi" id="nc-notes" rows="3" style="resize:vertical" placeholder="Habitudes administratives..."></textarea></div>
@@ -2424,8 +2425,6 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Forme juridique</label><input class="fi" id="ec-forme"></div>
         <div class="fg"><label class="fl">Secteur</label><input class="fi" id="ec-sector"></div>
       </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Catégorie du compte <span style="font-weight:400;font-size:11px">(par agence)</span></div>
-      <div id="ec-categorie-compte" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Adresse</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
         <div class="fg" style="grid-column:1/-1"><label class="fl">Ligne 1</label><input class="fi" id="ec-addr1"></div>
@@ -2453,23 +2452,8 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">TVA intracommunautaire</label><input class="fi" id="ec-tva" readonly style="background:var(--bg-3)"></div>
         <div class="fg"><label class="fl">Code APE</label><input class="fi" id="ec-ape"></div>
       </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Infos Entreprise <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="fg"><label class="fl">Catégorie</label><select class="fi" id="ec-mk-categorie" onchange="document.getElementById('ec-mk-sous-categorie').innerHTML=akRefSubCatOptions('',this.value)"></select></div>
-        <div class="fg"><label class="fl">Sous-Catégorie</label><select class="fi" id="ec-mk-sous-categorie"></select></div>
-        <div class="fg"><label class="fl">Catégorie prof.</label><select class="fi" id="ec-mk-categorie-pro"></select></div>
-        <div class="fg"><label class="fl">Secteur</label><select class="fi" id="ec-mk-secteur"></select></div>
-        <div class="fg"><label class="fl">Type</label><select class="fi" id="ec-mk-type"></select></div>
-        <div class="fg"><label class="fl">Mode de tarification GPH</label><select class="fi" id="ec-mk-tarification"></select></div>
-        <div class="fg"><label class="fl">RFA applicable</label><input class="fi" id="ec-rfa-applicable" placeholder=""></div>
-        <div class="fg"><label class="fl">Date Remise convention</label><input class="fi" type="date" id="ec-date-remise-convention"></div>
-        <div class="fg"><label class="fl">Date Signature convention</label><input class="fi" type="date" id="ec-date-signature-convention"></div>
-        <div class="fg"><label class="fl">Commentaires tarif.</label><input class="fi" id="ec-commentaires-tarification" placeholder=""></div>
-        <div class="fg"><label class="fl">Groupe</label><select class="fi" id="ec-mk-groupe"><option value="">Groupe...</option></select></div>
-        <div class="fg"><label class="fl">Origine</label><select class="fi" id="ec-mk-origine"><option value="">Origine...</option></select></div>
-      </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Commercial <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Commercial</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
         <div class="fg"><label class="fl">Commercial Novam</label><select class="fi" id="ec-mk-manager"></select></div>
         <div class="fg"><label class="fl">Commercial GPH</label><select class="fi" id="ec-mk-salesman"></select></div>
         <div class="fg"><label class="fl">Code CODIAL <span style="font-weight:400;color:var(--t3);font-size:10px">(local)</span></label><input class="fi" id="ec-code-codial" placeholder="Ex: T16-00123"></div>
@@ -2484,6 +2468,24 @@ tbody tr:last-child td { border-bottom: none; }
             oninput="searchReseauxPro(this.value,'ec-reseaux-dd','ec-reseaux-chips')" onfocus="searchReseauxPro(this.value,'ec-reseaux-dd','ec-reseaux-chips')">
           <div id="ec-reseaux-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.15)"></div>
         </div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Infos Entreprise <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">Catégorie</label><select class="fi" id="ec-mk-categorie" onchange="document.getElementById('ec-mk-sous-categorie').innerHTML=akRefSubCatOptions('',this.value)"></select></div>
+        <div class="fg"><label class="fl">Sous-Catégorie</label><select class="fi" id="ec-mk-sous-categorie"></select></div>
+        <div class="fg"><label class="fl">Catégorie prof.</label><select class="fi" id="ec-mk-categorie-pro"></select></div>
+        <div class="fg"><label class="fl">Secteur</label><select class="fi" id="ec-mk-secteur"></select></div>
+        <div class="fg"><label class="fl">Type</label><select class="fi" id="ec-mk-type"></select></div>
+        <div class="fg"><label class="fl">Groupe</label><select class="fi" id="ec-mk-groupe"><option value="">Groupe...</option></select></div>
+        <div class="fg"><label class="fl">Origine</label><select class="fi" id="ec-mk-origine"><option value="">Origine...</option></select></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Tarification GPH</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg"><label class="fl">Mode de tarification GPH</label><select class="fi" id="ec-mk-tarification"></select></div>
+        <div class="fg"><label class="fl">RFA applicable</label><input class="fi" id="ec-rfa-applicable" placeholder=""></div>
+        <div class="fg"><label class="fl">Date Remise convention</label><input class="fi" type="date" id="ec-date-remise-convention"></div>
+        <div class="fg"><label class="fl">Date Signature convention</label><input class="fi" type="date" id="ec-date-signature-convention"></div>
+        <div class="fg" style="grid-column:1/-1"><label class="fl">Commentaires tarif.</label><input class="fi" id="ec-commentaires-tarification" placeholder=""></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Habitudes Administratives</div>
       <div class="fg"><textarea class="fi" id="ec-notes" rows="3" style="resize:vertical"></textarea></div>
