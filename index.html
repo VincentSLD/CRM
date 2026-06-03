@@ -11257,7 +11257,7 @@ const CUSTOM_DATA_HIDDEN = new Set([
   'Date de Remise de la convention','Date de signature de la convention','RFA applicable','Commentaires',
   'Typologie de mission Everwin'
 ]);
-const CUSTOM_DATA_RENAME = {'Code AA':"Apporteur d'Affaire"};
+const CUSTOM_DATA_RENAME = {'Code AA':"Apporteur d'Affaire",'Code GO':'Gros-Oeuvre'};
 function renderCustomData(cd) {
   if (!cd || typeof cd !== 'object' || Object.keys(cd).length === 0) return '';
   const rows = Object.entries(cd).filter(([k, v]) => {
