@@ -16645,7 +16645,7 @@ async function submitNewClient() {
       siren: document.getElementById('nc-siren').value.trim() || null,
       siret: document.getElementById('nc-siret').value.trim() || null,
       ape: document.getElementById('nc-ape').value.trim() || null,
-      reference_externe: document.getElementById('nc-refext').value.trim() || null,
+      reference_externe: document.getElementById('nc-refext')?.value?.trim() || null,
       categorie_compte: readCategorieCompte('nc'),
       notes: document.getElementById('nc-notes').value.trim() || null,
       habitudes_techniques: document.getElementById('nc-hab-tech').innerHTML.trim() || null,
