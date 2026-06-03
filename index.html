@@ -11474,10 +11474,12 @@ async function showFactureDetail(id) {
   }
   currentPage = 'facture-detail';
   document.getElementById('pageTitle').textContent = 'Facture ' + (f.ref || f.id);
+  const fAff = f.affaire_id ? DB.affaires.find(a => a.id === f.affaire_id) : null;
   document.getElementById('contentArea').innerHTML = `<div class="page active">
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
       <button class="btn" onclick="go('factures')">← Retour aux factures</button>
       ${f.client_id ? '<button class="btn" onclick="showClient(&#39;'+f.client_id+'&#39;)">← Retour à la fiche '+((f.client||'').replace(/'/g,'&#39;'))+'</button>' : ''}
+      ${fAff ? '<button class="btn" onclick="showAffaireDetail(&#39;'+fAff.id+'&#39;)">← Retour à l\'affaire '+(fAff.ref||fAff.nom||fAff.code_projet||'')+'</button>' : ''}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       ${detailSection('Informations générales', [
@@ -11515,7 +11517,21 @@ async function showFactureDetail(id) {
         detailRow('Nombre de lignes', f.nb_lignes),
       ])}
       ${(() => { const addr = f.adresse || f.ville || f.code_postal ? f : (f.affaire_id ? DB.affaires.find(x=>x.id===f.affaire_id) : null); return addr && (addr.adresse || addr.ville || addr.code_postal) ? detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region)]) : ''; })()}
-      ${renderCustomData(f.custom_data)}
+      ${(() => {
+        if (!f.custom_data || !f.custom_data._lines || f.custom_data._lines.length === 0) return '';
+        const lines = f.custom_data._lines;
+        const billingModeLabel = m => ({FIXED_PRICE:'Forfait',TIME_AND_MATERIALS:'Régie',EXPENSE:'Frais'}[m]||m||'—');
+        return `<div style="grid-column:1/-1">${detailSection('Lignes de facture',
+          ['<table class="tbl-compact" style="width:100%"><thead><tr><th>#</th><th>Désignation</th><th>Mode</th><th style="text-align:right">Qté</th><th style="text-align:right">PU</th><th style="text-align:right">Total</th></tr></thead><tbody>' +
+          lines.map(l => `<tr>
+            <td>${l.rankNumber||''}</td><td>${l.name||'—'}</td><td>${billingModeLabel(l.billingMode)}</td>
+            <td style="text-align:right" class="mono">${l.quantity!=null?l.quantity:''}</td>
+            <td style="text-align:right" class="mono">${l.unitPrice!=null?fmt(l.unitPrice):''}</td>
+            <td style="text-align:right" class="mono">${l.amountTotal!=null?fmt(l.amountTotal):''}</td>
+          </tr>`).join('') + '</tbody></table>']
+        )}</div>`;
+      })()}
+      ${renderCustomData(f.custom_data?(() => { const cd={...f.custom_data}; delete cd._lines; return Object.keys(cd).length>0?cd:null; })():null)}
     </div>
   </div>`;
 }
