@@ -5223,17 +5223,18 @@ async function showClient(id) {
       } catch (e) { console.warn('[Akuiteo] Erreur customData client:', e.message); }
     }
   }
-  // Charger mode/condition de paiement depuis Akuiteo si absents (non retournés par search)
-  if (!currentClient.mode_paiement && !currentClient.condition_paiement && currentClient.akuiteo_id) {
-    akuiteoFetch('GET', '/crm/customers/' + currentClient.akuiteo_id).then(ak => {
+  // Charger mode/condition de paiement depuis Akuiteo si absents
+  // Note : methodOfPayment n'est retourné que via le endpoint read avec l'option METHOD_OF_PAYMENT
+  // conditionOfPayment n'est jamais retourné par l'API Akuiteo (null pour tous les clients)
+  if (!currentClient.mode_paiement && currentClient.akuiteo_id) {
+    akuiteoFetch('POST', '/crm/customers/' + currentClient.akuiteo_id + '/read', { options: ['METHOD_OF_PAYMENT'] }).then(ak => {
       if (!ak) return;
       const update = {};
       if (ak.methodOfPayment) update.mode_paiement = ak.methodOfPayment;
-      if (ak.conditionOfPayment) update.condition_paiement = ak.conditionOfPayment;
       if (Object.keys(update).length > 0) {
         Object.assign(currentClient, update);
         sb.from('clients').update(update).eq('id', id).then(() => {});
-        renderPage(currentPage); // Rafraîchir la fiche
+        renderPage(currentPage);
       }
     }).catch(() => {});
   }
@@ -17169,7 +17170,7 @@ async function syncAkuiteoQuick() {
           mk_groupe: ak.level1grouping || null, mk_origine: ak.level2grouping || null,
           mode_tarification: ak.firstPricingMethodId || null,
           mode_tarification_name: ak.firstPricingMethodId ? akRefLabel(akRef.pricingMethods, ak.firstPricingMethodId) : null,
-          mode_paiement: ak.methodOfPayment || null, condition_paiement: ak.conditionOfPayment || null,
+          // mode_paiement est chargé plus bas via read+METHOD_OF_PAYMENT (le search ne le retourne jamais)
           ...(isNew ? { ini, color: colors[Math.floor(Math.random() * colors.length)], ca: 0, obj: 0, margin: 0, dso: 0, score: 50, status: 'nouveau', sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15 } : {}),
         };
       });
@@ -17184,6 +17185,7 @@ async function syncAkuiteoQuick() {
     for (const ec of (existingClients || [])) { if (ec.akuiteo_id) clMap[ec.akuiteo_id] = ec; }
     for (const ak of akCustomers) { const akId = String(ak.id); if (!clMap[akId]) clMap[akId] = { id: existingMap[akId] || ('ak_' + akId.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20)), akuiteo_id: akId }; }
     const salesmenUpdates = [];
+    const paymentUpdates = [];
     for (let i = 0; i < akCustomers.length; i += 10) {
       setSyncText(`Sync rapide — Contacts & Commerciaux ${i}/${akCustomers.length}...`);
       const batch = akCustomers.slice(i, i + 10);
@@ -17194,7 +17196,7 @@ async function syncAkuiteoQuick() {
         // Contacts + salesmen en parallèle
         const [contacts, detail] = await Promise.all([
           akuiteoFetch('GET', '/crm/customers/' + akId + '/contacts').catch(() => []),
-          akuiteoFetch('POST', '/crm/customers/' + akId + '/read', { options: ['SALESMEN'] }).catch(() => null),
+          akuiteoFetch('POST', '/crm/customers/' + akId + '/read', { options: ['SALESMEN', 'METHOD_OF_PAYMENT'] }).catch(() => null),
         ]);
         if (Array.isArray(contacts)) {
           for (const ct of contacts) {
@@ -17216,6 +17218,10 @@ async function syncAkuiteoQuick() {
           });
           salesmenUpdates.push({ id: crmClient.id, commerciaux_associes: names.join(', ') });
         }
+        // Mode de paiement (retourné uniquement via read + METHOD_OF_PAYMENT)
+        if (detail && detail.methodOfPayment) {
+          paymentUpdates.push({ id: crmClient.id, mode_paiement: detail.methodOfPayment });
+        }
       }));
     }
     // Upsert commerciaux associés
@@ -17223,6 +17229,11 @@ async function syncAkuiteoQuick() {
       await sb.from('clients').update({ commerciaux_associes: u.commerciaux_associes }).eq('id', u.id);
     }
     console.log(`[QuickSync] ${salesmenUpdates.length} commerciaux associés`);
+    // Upsert modes de paiement
+    for (const u of paymentUpdates) {
+      await sb.from('clients').update({ mode_paiement: u.mode_paiement }).eq('id', u.id);
+    }
+    if (paymentUpdates.length > 0) console.log(`[QuickSync] ${paymentUpdates.length} modes de paiement`);
     if (contactRows.length > 0) {
       for (let i = 0; i < contactRows.length; i += 100) {
         await sb.from('contacts').upsert(contactRows.slice(i, i + 100), { onConflict: 'id' });
@@ -17475,8 +17486,10 @@ async function syncAkuiteo() {
         forme_juridique: ak.legalForm || null, notes: ak.notes || null,
         chiffre_affaires: ak.revenue || 0, capital: ak.equity || 0, effectif: ak.headcount || 0,
         categorie: ak.category || null, profession: ak.profession || null,
-        secteur_activite: ak.sector || null, condition_paiement: ak.conditionOfPayment || null,
-        mode_paiement: ak.methodOfPayment || null, mode_tarification: ak.firstPricingMethodId || null,
+        secteur_activite: ak.sector || null,
+        // Note : mode_paiement et condition_paiement ne sont PAS inclus ici car le endpoint search
+        // ne les retourne jamais. Ils sont chargés via QuickSync (read+METHOD_OF_PAYMENT) ou lazy-load.
+        mode_tarification: ak.firstPricingMethodId || null,
         mode_tarification_2: ak.secondPricingMethodId || null, reference_externe: ak.externalReference || null,
         statut_akuiteo: ak.status || null, langue: ak.languageCode || null,
         mots_cles: ak.keywords || null, code_societe: ak.companyCode || null,
@@ -19171,13 +19184,15 @@ async function pullClientFromAkuiteo(clientId) {
     let customData = null, salesmen = [];
     let managerName = null;
     let pricingName = null, pricingName2 = null;
+    let methodOfPaymentFromRead = null;
     const promises = [];
-    // customData + salesmen via POST /read
+    // customData + salesmen + methodOfPayment via POST /read
     promises.push(
-      akuiteoFetch('POST', '/crm/customers/' + client.akuiteo_id + '/read', { options: ['CUSTOM_DATA', 'SALESMEN'] })
+      akuiteoFetch('POST', '/crm/customers/' + client.akuiteo_id + '/read', { options: ['CUSTOM_DATA', 'SALESMEN', 'METHOD_OF_PAYMENT'] })
         .then(d => {
           if (d?.customData && Object.keys(d.customData).length > 0) customData = d.customData;
           if (Array.isArray(d?.salesmen)) salesmen = d.salesmen;
+          if (d?.methodOfPayment) methodOfPaymentFromRead = d.methodOfPayment;
         })
         .catch(() => {})
     );
@@ -19257,8 +19272,9 @@ async function pullClientFromAkuiteo(clientId) {
       forme_juridique: ak.legalForm || null, notes: ak.notes || null,
       chiffre_affaires: ak.revenue || 0, capital: ak.equity || 0, effectif: ak.headcount || 0,
       categorie: ak.category || null, profession: ak.profession || null,
-      secteur_activite: ak.sector || null, condition_paiement: ak.conditionOfPayment || null,
-      mode_paiement: ak.methodOfPayment || null, mode_tarification: ak.firstPricingMethodId || null,
+      secteur_activite: ak.sector || null,
+      mode_paiement: methodOfPaymentFromRead || null,
+      mode_tarification: ak.firstPricingMethodId || null,
       mode_tarification_name: pricingName || null,
       mode_tarification_2: ak.secondPricingMethodId || null,
       mode_tarification_2_name: pricingName2 || null,

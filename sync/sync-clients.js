@@ -63,8 +63,8 @@ async function syncClients() {
       categorie: ak.category || null,
       profession: ak.profession || null,
       secteur_activite: ak.activitySector || null,
-      condition_paiement: ak.conditionOfPayment || null,
-      mode_paiement: ak.methodOfPayment || null,
+      // mode_paiement et condition_paiement ne sont PAS inclus ici car le endpoint search
+      // ne les retourne jamais (toujours null). Ils sont chargés via QuickSync ou lazy-load.
       reference_externe: ak.externalReference || null,
       statut_akuiteo: ak.status || null,
       langue: ak.languageCode || null,
