@@ -1997,7 +1997,6 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">SIRET</label><input class="fi" id="nc-siret"></div>
         <div class="fg"><label class="fl">TVA intracommunautaire</label><input class="fi" id="nc-tva" readonly style="background:var(--bg-3)"></div>
         <div class="fg"><label class="fl">Code APE</label><input class="fi" id="nc-ape"></div>
-        <div class="fg"><label class="fl">Réf. externe</label><input class="fi" id="nc-refext"></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Infos Entreprise <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
@@ -2453,7 +2452,6 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">SIRET</label><input class="fi" id="ec-siret"></div>
         <div class="fg"><label class="fl">TVA intracommunautaire</label><input class="fi" id="ec-tva" readonly style="background:var(--bg-3)"></div>
         <div class="fg"><label class="fl">Code APE</label><input class="fi" id="ec-ape"></div>
-        <div class="fg"><label class="fl">Réf. externe</label><input class="fi" id="ec-refext"></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Infos Entreprise <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
@@ -6308,7 +6306,6 @@ function renderClientDetail() {
           detailRow('Code APE', c.ape ? c.ape + (apeLabel(c.ape) ? ' <span style="color:var(--t3);font-size:11px">— ' + apeLabel(c.ape) + '</span>' : '') : '—'),
           detailRow('Métier (APE)', apeLabel(c.ape) || '—'),
           detailRow('Forme juridique', c.forme_juridique || '—'),
-          detailRow('Réf. externe', c.reference_externe || '—'),
           detailRow('État INSEE', c.etat_insee === 'C'
             ? '<strong style="color:#dc2626">❌ Radiée</strong>' + (c.date_fermeture_insee ? ' <span style="color:var(--t3);font-size:11px">— ' + fmtDateFR(c.date_fermeture_insee) + '</span>' : '')
             : c.etat_insee === 'A' ? '<span style="color:var(--green)">✓ Active</span>' : '—'),
