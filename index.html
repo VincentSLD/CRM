@@ -18877,20 +18877,29 @@ async function addSelectedProspects() {
       const name = e.nom_complet || e.nom_raison_sociale || 'Sans nom';
       const id = name.toLowerCase().replace(/[^a-z0-9]/g,'_').substring(0,18) + '_' + (s.siret||'').slice(-6);
       const ini = name.split(' ').map(w => (w||'')[0]).join('').substring(0, 2).toUpperCase();
-      const dept = s.departement || '';
+      const dept = s.departement || s.code_postal?.substring(0,2) || '';
+      const adrParts = [s.numero_voie, s.indice_repetition, s.type_voie, s.libelle_voie].filter(Boolean).join(' ');
       const row = {
         id, name,
         code: ('PR' + (s.siret||'').slice(-6)).substring(0, 10),
         raison_sociale: e.nom_raison_sociale || name,
+        raison_sociale2: e.nom_complet !== e.nom_raison_sociale ? e.nom_complet || null : null,
         siret: s.siret || null, siren: e.siren || null,
         ape: s.activite_principale || e.activite_principale || null,
         forme_juridique: e.nature_juridique || null,
-        adresse_ligne1: [s.numero_voie, s.type_voie, s.libelle_voie].filter(Boolean).join(' ') || null,
+        tva_intracommunautaire: computeTVA(e.siren) || null,
+        adresse_ligne1: adrParts || null,
+        adresse_ligne2: s.complement_adresse || null,
         code_postal: s.code_postal || null,
         city: s.libelle_commune || '',
         departement: deptName(dept),
         region: regionFromDept(dept),
         pays: 'FR',
+        est_siege: s.est_siege != null ? s.est_siege : true,
+        etat_insee: e.etat_administratif === 'A' ? 'A' : 'C',
+        categorie_entreprise: e.categorie_entreprise || null,
+        tranche_effectif: e.tranche_effectif_salarie || null,
+        date_creation_entreprise: e.date_creation || null,
         sector: '', email: '', phone: '',
         effectif: 0,
         ini, color: colors[Math.floor(Math.random() * colors.length)],
