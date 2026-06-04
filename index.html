@@ -16244,7 +16244,7 @@ function openModal(id) {
     document.getElementById('ec-siren').value = c.siren||'';
     document.getElementById('ec-siret').value = c.siret||'';
     document.getElementById('ec-ape').value = c.ape||'';
-    document.getElementById('ec-refext').value = c.reference_externe||'';
+    const ecRefext = document.getElementById('ec-refext'); if (ecRefext) ecRefext.value = c.reference_externe||'';
     document.getElementById('ec-notes').value = c.notes||'';
     document.getElementById('ec-hab-tech').innerHTML = c.habitudes_techniques||'';
     document.getElementById('ec-hab-geo').innerHTML = c.habitudes_geotechniques||'';
