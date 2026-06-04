@@ -3990,7 +3990,7 @@ function renderPage(page) {
   if (page === 'clients' && !clientsFilterOptsLoaded) {
     loadClientsFilterOpts().then(() => { if (currentPage === 'clients') renderPage('clients'); });
   }
-  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
+  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); }, 50);
   if (page === 'dashboard') setTimeout(() => renderDashObjectifsAgences(), 50);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
   if (page === 'collaborateurs-lucca') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); renderCollaborateursLuccaRefresh(); }, 50);
@@ -11512,6 +11512,7 @@ async function showCommandeDetail(id) {
               <button class="btn btn-sm" onclick="cmdSaveDossierChemin()">Sauvegarder</button>
               <button class="btn btn-primary btn-sm" id="cmdScanBtn" onclick="cmdScanDirectory()">Parcourir le dossier</button>
             </div>
+            <div id="cmdPathShortcuts" style="display:none;margin-bottom:8px;gap:6px;flex-wrap:wrap;align-items:center"></div>
             <div class="cmd-docs-files" id="cmdDocsFileList">
               <div class="cmd-docs-empty">Cliquez « Parcourir le dossier » pour scanner un répertoire.</div>
             </div>
@@ -11543,6 +11544,30 @@ async function showCommandeDetail(id) {
   cmdScannedFiles = [];
   cmdDocCorpus = [];
   cmdDocChatHistory = [];
+  // Auto-fill dossier chemin from société config
+  (async () => {
+    const resolved = await cmdGetResolvedPaths(c);
+    if (!resolved) return;
+    const paths = [resolved.chemin1, resolved.chemin2].filter(Boolean);
+    if (paths.length === 0) return;
+    const shortcutsEl = document.getElementById('cmdPathShortcuts');
+    if (shortcutsEl) {
+      shortcutsEl.style.display = 'flex';
+      shortcutsEl.innerHTML = '<span style="font-size:11px;color:var(--t3);align-self:center">Chemins configurés :</span>' +
+        paths.map(p => {
+          const pEsc = cmdEsc(p);
+          const label = p.length > 60 ? '...' + p.slice(-57) : p;
+          const active = c.dossier_chemin === p ? ' btn-primary' : '';
+          return '<button class="btn btn-sm' + active + '" data-path="' + pEsc + '" onclick="cmdSelectConfiguredPath(\'' + pEsc.replace(/'/g, "\\'") + '\')" style="font-family:monospace;font-size:11px" title="' + pEsc + '">' + cmdEsc(label) + '</button>';
+        }).join('');
+    }
+    if (!c.dossier_chemin && paths.length > 0) {
+      const pathInput = document.getElementById('cmdDossierChemin');
+      if (pathInput) pathInput.value = paths[0];
+      c.dossier_chemin = paths[0];
+      await sb.from('commandes').update({ dossier_chemin: paths[0] }).eq('id', id);
+    }
+  })();
 }
 
 // ═══ DOSSIER CHANTIER — Scanning / Parsing / Q&A documentaire ═══
@@ -11552,6 +11577,7 @@ let cmdScannedFiles = [];
 let cmdDocCorpus = [];
 let cmdDocChatHistory = [];
 let cmdCurrentCommandeId = null;
+let _dossierCheminsSocietes = null;
 
 const CMD_MAX_CHARS = 15000;
 function cmdTruncate(text){
@@ -11568,6 +11594,32 @@ async function cmdSaveDossierChemin(){
   if(c) c.dossier_chemin = val;
   await sb.from('commandes').update({ dossier_chemin: val }).eq('id', cmdCurrentCommandeId);
   toast('Chemin du dossier sauvegardé','success');
+}
+
+async function cmdGetResolvedPaths(commande) {
+  if (!_dossierCheminsSocietes) await loadDossierCheminsSocietes();
+  const societe = commande.societe;
+  if (!societe || !_dossierCheminsSocietes[societe]) return null;
+  const config = _dossierCheminsSocietes[societe];
+  const aff = commande.affaire_id ? DB.affaires.find(a => a.id === commande.affaire_id) : null;
+  const codeProjet = aff?.code_projet;
+  if (!codeProjet) return null;
+  const resolve = (tpl) => tpl ? tpl.replace(/\{code_projet\}/g, codeProjet) : '';
+  const c1 = resolve(config.chemin1);
+  const c2 = resolve(config.chemin2);
+  return (c1 || c2) ? { chemin1: c1, chemin2: c2 } : null;
+}
+
+function cmdSelectConfiguredPath(path) {
+  const input = document.getElementById('cmdDossierChemin');
+  if (input) input.value = path;
+  cmdSaveDossierChemin();
+  const shortcuts = document.getElementById('cmdPathShortcuts');
+  if (shortcuts) {
+    shortcuts.querySelectorAll('button').forEach(btn => {
+      btn.classList.toggle('btn-primary', btn.getAttribute('data-path') === path);
+    });
+  }
 }
 
 async function cmdScanDirectory(){
@@ -11592,6 +11644,10 @@ async function cmdScanDirectory(){
     if(scanBtn) scanBtn.disabled = false;
     document.getElementById('cmdDocsActions').style.display = cmdScannedFiles.length > 0 ? 'flex' : 'none';
     cmdRenderFiles();
+    // Auto-index all scanned files
+    if (cmdScannedFiles.length > 0) {
+      await cmdIndexSelected();
+    }
   } catch(e){
     if(e.name==='AbortError') return;
     toast('Erreur : '+e.message, 'error');
@@ -13945,6 +14001,15 @@ function renderAdmin() {
       </p>
       <div id="siegeResultsContainer"></div>
     </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <div class="card-title">Chemins dossiers chantier par société</div>
+      <button class="btn btn-primary" onclick="addDossierCheminSociete()" style="font-size:12px">+ Ajouter une société</button>
+    </div>
+    <div class="card-body" style="padding:0">
+      <div id="dossierCheminsSocietesList" style="padding:14px;font-size:13px;color:var(--t3)">Chargement...</div>
+    </div>
   </div>`;
 }
 
@@ -15059,7 +15124,7 @@ async function autoLinkCommerciaux() {
   if (linkedAk > 0) msgs.push(`${linkedAk} ID Akuiteo rempli(s)`);
   toast(msgs.length > 0 ? msgs.join(', ') : 'Aucune nouvelle liaison trouvée', msgs.length > 0 ? 'success' : 'info');
   renderPage('admin');
-  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
+  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); }, 50);
 }
 
 let linkCommercialLuccaForId = null;
@@ -15075,7 +15140,7 @@ function openManualLinkCommercialLucca(commId, commName) {
     closeModal('link-lucca');
     toast('Liaison effectuée', 'success');
     renderPage('admin');
-    setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
+    setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); }, 50);
   };
   renderLinkLuccaList();
   openModal('link-lucca');
@@ -15088,7 +15153,7 @@ async function unlinkCommercialLucca(commId) {
   if (comm) comm.lucca_id = null;
   toast('Liaison supprimée', 'success');
   renderPage('admin');
-  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); }, 50);
+  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); }, 50);
 }
 
 async function updateCommercialRole(commercialId, role) {
@@ -17278,6 +17343,135 @@ async function saveDeletePassword() {
     else localStorage.removeItem('crm_delete_pwd');
     toast('Enregistré localement (table crm_config absente)', 'warn');
   }
+}
+
+// ═══ CHEMINS DOSSIERS CHANTIER PAR SOCIÉTÉ (Supabase crm_config) ═══
+async function loadDossierCheminsSocietes() {
+  try {
+    const { data } = await sb.from('crm_config').select('value').eq('key', 'dossier_chemins_societes').maybeSingle();
+    const raw = data?.value;
+    _dossierCheminsSocietes = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+  } catch (e) {
+    console.error('loadDossierCheminsSocietes error:', e);
+    _dossierCheminsSocietes = {};
+  }
+  return _dossierCheminsSocietes;
+}
+
+async function saveDossierCheminsSocietes() {
+  try {
+    await sb.from('crm_config').upsert({
+      key: 'dossier_chemins_societes',
+      value: _dossierCheminsSocietes,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'key' });
+    toast('Chemins des dossiers chantier enregistrés', 'success');
+  } catch (e) {
+    toast('Erreur : ' + e.message, 'error');
+  }
+}
+
+async function renderDossierCheminsSocietes() {
+  const el = document.getElementById('dossierCheminsSocietesList');
+  if (!el) return;
+  if (!_dossierCheminsSocietes) await loadDossierCheminsSocietes();
+  const entries = Object.entries(_dossierCheminsSocietes).sort((a, b) => a[0].localeCompare(b[0]));
+  if (entries.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:14px;color:var(--t3)">Aucun chemin configuré. Cliquez « + Ajouter une société » pour configurer.</div>';
+    return;
+  }
+  el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+    '<thead><tr style="background:var(--bg-2);border-bottom:2px solid var(--border)">' +
+    '<th style="padding:8px 10px;text-align:left">Société</th>' +
+    '<th style="padding:8px 10px;text-align:left">Chemin 1</th>' +
+    '<th style="padding:8px 10px;text-align:left">Chemin 2</th>' +
+    '<th style="padding:8px 10px;text-align:right">Actions</th>' +
+    '</tr></thead><tbody>' +
+    entries.map(([societe, paths]) => {
+      const sEsc = societe.replace(/'/g, "\\'");
+      return '<tr style="border-bottom:1px solid var(--border)">' +
+        '<td style="padding:6px 10px;font-weight:500">' + societe + '</td>' +
+        '<td style="padding:6px 10px;font-family:monospace;font-size:11px;word-break:break-all">' + (paths.chemin1 || '<span style="color:var(--t3)">—</span>') + '</td>' +
+        '<td style="padding:6px 10px;font-family:monospace;font-size:11px;word-break:break-all">' + (paths.chemin2 || '<span style="color:var(--t3)">—</span>') + '</td>' +
+        '<td style="padding:6px 10px;text-align:right;white-space:nowrap">' +
+          '<button class="btn" onclick="editDossierCheminSociete(\'' + sEsc + '\')" style="font-size:11px">Modifier</button> ' +
+          '<button class="btn" onclick="deleteDossierCheminSociete(\'' + sEsc + '\')" style="font-size:11px;color:var(--red)">Supprimer</button>' +
+        '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+async function addDossierCheminSociete() {
+  const list = document.getElementById('dossierCheminsSocietesList');
+  if (!list || document.getElementById('dcsNewForm')) return;
+  const agences = await getAgencesDispo();
+  const existing = Object.keys(_dossierCheminsSocietes || {});
+  const available = agences.filter(a => !existing.includes(a));
+  if (available.length === 0) { toast('Toutes les sociétés sont déjà configurées.', 'info'); return; }
+  list.insertAdjacentHTML('afterbegin', '<div id="dcsNewForm" style="padding:14px;background:var(--bg-2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px">' +
+    '<div style="display:grid;grid-template-columns:1fr 2fr 2fr;gap:10px;margin-bottom:10px">' +
+      '<div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Société *</label>' +
+        '<select id="dcs-new-societe" class="fi" style="padding:6px 8px;font-size:12px;width:100%">' +
+          available.map(a => '<option value="' + a + '">' + a + '</option>').join('') +
+        '</select></div>' +
+      '<div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Chemin 1</label>' +
+        '<input type="text" id="dcs-new-chemin1" placeholder="\\\\SERVEUR\\Projets\\{code_projet}\\" class="fi" style="padding:6px 8px;font-size:12px;width:100%;font-family:monospace"></div>' +
+      '<div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Chemin 2</label>' +
+        '<input type="text" id="dcs-new-chemin2" placeholder="\\\\SERVEUR\\Archives\\{code_projet}\\" class="fi" style="padding:6px 8px;font-size:12px;width:100%;font-family:monospace"></div>' +
+    '</div>' +
+    '<p style="font-size:11px;color:var(--t3);margin:0 0 8px">Utilisez <code>{code_projet}</code> comme variable. Elle sera remplacée par le code projet de l\'affaire.</p>' +
+    '<div style="display:flex;gap:6px;justify-content:flex-end">' +
+      '<button class="btn" onclick="document.getElementById(\'dcsNewForm\').remove()" style="font-size:12px">Annuler</button>' +
+      '<button class="btn btn-primary" onclick="saveDossierCheminSocieteNew()" style="font-size:12px">Enregistrer</button>' +
+    '</div>' +
+  '</div>');
+}
+
+async function saveDossierCheminSocieteNew() {
+  const societe = document.getElementById('dcs-new-societe').value;
+  const chemin1 = document.getElementById('dcs-new-chemin1').value.trim();
+  const chemin2 = document.getElementById('dcs-new-chemin2').value.trim();
+  if (!societe) { toast('Sélectionnez une société', 'error'); return; }
+  if (!chemin1 && !chemin2) { toast('Renseignez au moins un chemin', 'error'); return; }
+  _dossierCheminsSocietes[societe] = { chemin1: chemin1 || '', chemin2: chemin2 || '' };
+  await saveDossierCheminsSocietes();
+  renderDossierCheminsSocietes();
+}
+
+async function editDossierCheminSociete(societe) {
+  const paths = _dossierCheminsSocietes[societe];
+  if (!paths) return;
+  const list = document.getElementById('dossierCheminsSocietesList');
+  if (!list || document.getElementById('dcsEditForm')) return;
+  list.insertAdjacentHTML('afterbegin', '<div id="dcsEditForm" style="padding:14px;background:var(--bg-2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px">' +
+    '<div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:8px">Modifier : ' + societe + '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">' +
+      '<div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Chemin 1</label>' +
+        '<input type="text" id="dcs-edit-chemin1" value="' + (paths.chemin1 || '').replace(/"/g, '&quot;') + '" class="fi" style="padding:6px 8px;font-size:12px;width:100%;font-family:monospace"></div>' +
+      '<div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Chemin 2</label>' +
+        '<input type="text" id="dcs-edit-chemin2" value="' + (paths.chemin2 || '').replace(/"/g, '&quot;') + '" class="fi" style="padding:6px 8px;font-size:12px;width:100%;font-family:monospace"></div>' +
+    '</div>' +
+    '<p style="font-size:11px;color:var(--t3);margin:0 0 8px">Utilisez <code>{code_projet}</code> comme variable.</p>' +
+    '<div style="display:flex;gap:6px;justify-content:flex-end">' +
+      '<button class="btn" onclick="document.getElementById(\'dcsEditForm\').remove()" style="font-size:12px">Annuler</button>' +
+      '<button class="btn btn-primary" onclick="saveDossierCheminSocieteEdit(\'' + societe.replace(/'/g, "\\'") + '\')" style="font-size:12px">Enregistrer</button>' +
+    '</div>' +
+  '</div>');
+}
+
+async function saveDossierCheminSocieteEdit(societe) {
+  const chemin1 = document.getElementById('dcs-edit-chemin1').value.trim();
+  const chemin2 = document.getElementById('dcs-edit-chemin2').value.trim();
+  if (!chemin1 && !chemin2) { toast('Renseignez au moins un chemin', 'error'); return; }
+  _dossierCheminsSocietes[societe] = { chemin1: chemin1 || '', chemin2: chemin2 || '' };
+  await saveDossierCheminsSocietes();
+  renderDossierCheminsSocietes();
+}
+
+async function deleteDossierCheminSociete(societe) {
+  if (!confirm('Supprimer la configuration pour « ' + societe + ' » ?')) return;
+  delete _dossierCheminsSocietes[societe];
+  await saveDossierCheminsSocietes();
+  renderDossierCheminsSocietes();
 }
 
 // ═══ API INSEE SIRENE (via proxy Vercel /api/insee) ═══
