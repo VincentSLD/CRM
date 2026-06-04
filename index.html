@@ -11639,11 +11639,28 @@ async function cmdScanDirectory(){
 
     document.getElementById('cmdDocsFileList').innerHTML = '<div class="cmd-docs-empty"><span class="cmd-docs-spin"></span> Parcours du répertoire…</div>';
 
-    await cmdScanRecursive(dirHandle, '');
+    // Detect subfolder starting with code_projet
+    let targetHandle = dirHandle;
+    let targetLabel = dirHandle.name;
+    const cmd = cmdCurrentCommandeId ? DB.commandes.find(x => x.id === cmdCurrentCommandeId) : null;
+    const aff = cmd?.affaire_id ? DB.affaires.find(a => a.id === cmd.affaire_id) : null;
+    const codeProjet = aff?.code_projet;
+    if (codeProjet) {
+      for await (const entry of dirHandle.values()) {
+        if (entry.kind === 'directory' && entry.name.startsWith(codeProjet)) {
+          targetHandle = entry;
+          targetLabel = dirHandle.name + '/' + entry.name;
+          toast('Dossier détecté : ' + entry.name, 'success');
+          break;
+        }
+      }
+    }
+
+    await cmdScanRecursive(targetHandle, '');
 
     // Update path input with directory name
     const pathInput = document.getElementById('cmdDossierChemin');
-    if(pathInput && !pathInput.value) pathInput.value = dirHandle.name;
+    if(pathInput && !pathInput.value) pathInput.value = targetLabel;
 
     if(scanBtn) scanBtn.disabled = false;
     document.getElementById('cmdDocsActions').style.display = cmdScannedFiles.length > 0 ? 'flex' : 'none';
