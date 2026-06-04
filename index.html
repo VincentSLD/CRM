@@ -11639,20 +11639,19 @@ async function cmdScanDirectory(){
 
     document.getElementById('cmdDocsFileList').innerHTML = '<div class="cmd-docs-empty"><span class="cmd-docs-spin"></span> Parcours du répertoire…</div>';
 
-    // Detect subfolder starting with code_projet
+    // Detect subfolder starting with code_projet (recursive search)
     let targetHandle = dirHandle;
     let targetLabel = dirHandle.name;
     const cmd = cmdCurrentCommandeId ? DB.commandes.find(x => x.id === cmdCurrentCommandeId) : null;
     const aff = cmd?.affaire_id ? DB.affaires.find(a => a.id === cmd.affaire_id) : null;
     const codeProjet = aff?.code_projet;
     if (codeProjet) {
-      for await (const entry of dirHandle.values()) {
-        if (entry.kind === 'directory' && entry.name.startsWith(codeProjet)) {
-          targetHandle = entry;
-          targetLabel = dirHandle.name + '/' + entry.name;
-          toast('Dossier détecté : ' + entry.name, 'success');
-          break;
-        }
+      document.getElementById('cmdDocsFileList').innerHTML = '<div class="cmd-docs-empty"><span class="cmd-docs-spin"></span> Recherche du dossier ' + cmdEsc(codeProjet) + '…</div>';
+      const found = await cmdFindSubfolder(dirHandle, codeProjet, '', 5);
+      if (found) {
+        targetHandle = found.handle;
+        targetLabel = dirHandle.name + '/' + found.path;
+        toast('Dossier détecté : ' + found.path, 'success');
       }
     }
 
@@ -11673,6 +11672,25 @@ async function cmdScanDirectory(){
     if(e.name==='AbortError') return;
     toast('Erreur : '+e.message, 'error');
   }
+}
+
+async function cmdFindSubfolder(dirHandle, codeProjet, currentPath, maxDepth) {
+  if (maxDepth <= 0) return null;
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind !== 'directory') continue;
+    if (entry.name.startsWith(codeProjet)) {
+      const fullPath = currentPath ? currentPath + '/' + entry.name : entry.name;
+      return { handle: entry, path: fullPath };
+    }
+  }
+  // Not found at this level, search deeper
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind !== 'directory') continue;
+    const subPath = currentPath ? currentPath + '/' + entry.name : entry.name;
+    const found = await cmdFindSubfolder(entry, codeProjet, subPath, maxDepth - 1);
+    if (found) return found;
+  }
+  return null;
 }
 
 async function cmdScanRecursive(dirHandle, path, depth=0){
