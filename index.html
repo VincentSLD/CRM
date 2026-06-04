@@ -11645,9 +11645,14 @@ async function cmdScanDirectory(){
     const cmd = cmdCurrentCommandeId ? DB.commandes.find(x => x.id === cmdCurrentCommandeId) : null;
     const aff = cmd?.affaire_id ? DB.affaires.find(a => a.id === cmd.affaire_id) : null;
     const codeProjet = aff?.code_projet;
+    console.log('[Dossier] cmdCurrentCommandeId:', cmdCurrentCommandeId);
+    console.log('[Dossier] cmd:', cmd?.id, 'affaire_id:', cmd?.affaire_id, 'societe:', cmd?.societe);
+    console.log('[Dossier] aff:', aff?.id, 'code_projet:', codeProjet, 'nom:', aff?.nom);
+    console.log('[Dossier] dirHandle.name:', dirHandle.name);
     if (codeProjet) {
       document.getElementById('cmdDocsFileList').innerHTML = '<div class="cmd-docs-empty"><span class="cmd-docs-spin"></span> Recherche du dossier ' + cmdEsc(codeProjet) + '…</div>';
       const found = await cmdFindSubfolder(dirHandle, codeProjet, '', 5);
+      console.log('[Dossier] found:', found);
       if (found) {
         targetHandle = found.handle;
         foundAffaire = true;
@@ -11689,16 +11694,22 @@ async function cmdScanDirectory(){
 
 async function cmdFindSubfolder(dirHandle, codeProjet, currentPath, maxDepth) {
   if (maxDepth <= 0) return null;
+  // Collect all subdirectories first
+  const dirs = [];
   for await (const entry of dirHandle.values()) {
-    if (entry.kind !== 'directory') continue;
+    if (entry.kind === 'directory') dirs.push(entry);
+  }
+  console.log('[Dossier] Scanning "' + currentPath + '" — ' + dirs.length + ' sous-dossiers:', dirs.map(d => d.name));
+  // Check direct match
+  for (const entry of dirs) {
     if (entry.name.startsWith(codeProjet)) {
       const fullPath = currentPath ? currentPath + '/' + entry.name : entry.name;
+      console.log('[Dossier] MATCH: ' + fullPath);
       return { handle: entry, path: fullPath };
     }
   }
   // Not found at this level, search deeper
-  for await (const entry of dirHandle.values()) {
-    if (entry.kind !== 'directory') continue;
+  for (const entry of dirs) {
     const subPath = currentPath ? currentPath + '/' + entry.name : entry.name;
     const found = await cmdFindSubfolder(entry, codeProjet, subPath, maxDepth - 1);
     if (found) return found;
