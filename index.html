@@ -11553,13 +11553,17 @@ async function showCommandeDetail(id) {
     const shortcutsEl = document.getElementById('cmdPathShortcuts');
     if (shortcutsEl) {
       shortcutsEl.style.display = 'flex';
-      shortcutsEl.innerHTML = '<span style="font-size:11px;color:var(--t3);align-self:center">Chemins configurés :</span>' +
-        paths.map(p => {
-          const pEsc = cmdEsc(p);
-          const label = p.length > 60 ? '...' + p.slice(-57) : p;
-          const active = c.dossier_chemin === p ? ' btn-primary' : '';
-          return '<button class="btn btn-sm' + active + '" data-path="' + pEsc + '" onclick="cmdSelectConfiguredPath(\'' + pEsc.replace(/'/g, "\\'") + '\')" style="font-family:monospace;font-size:11px" title="' + pEsc + '">' + cmdEsc(label) + '</button>';
-        }).join('');
+      shortcutsEl.innerHTML = '<span style="font-size:11px;color:var(--t3);align-self:center">Chemins configurés :</span>';
+      paths.forEach((p, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-sm' + (c.dossier_chemin === p ? ' btn-primary' : '');
+        btn.style.cssText = 'font-family:monospace;font-size:11px';
+        btn.title = p;
+        btn.setAttribute('data-path', p);
+        btn.textContent = p.length > 60 ? '...' + p.slice(-57) : p;
+        btn.onclick = () => cmdSelectConfiguredPath(p);
+        shortcutsEl.appendChild(btn);
+      });
     }
     if (!c.dossier_chemin && paths.length > 0) {
       const pathInput = document.getElementById('cmdDossierChemin');
