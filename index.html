@@ -1619,6 +1619,43 @@ tbody tr:last-child td { border-bottom: none; }
   display: none;
 }
 .login-error.show { display: block; }
+
+/* === DOSSIER CHANTIER (panneau documents commande) === */
+.cmd-docs-path{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.cmd-docs-path input{flex:1;min-width:200px;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg2)}
+.cmd-docs-path input:focus{outline:none;border-color:var(--accent)}
+.cmd-docs-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.cmd-docs-files{max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px}
+.cmd-doc-file{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border);font-size:12px;transition:.12s}
+.cmd-doc-file:last-child{border-bottom:none}
+.cmd-doc-file:hover{background:var(--bg2)}
+.cmd-doc-file input[type=checkbox]{accent-color:var(--accent);margin:0}
+.cmd-doc-file .df-icon{font-size:14px;flex-shrink:0}
+.cmd-doc-file .df-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.cmd-doc-file .df-path{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--t3);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmd-doc-file .df-size{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--t3);white-space:nowrap}
+.cmd-doc-file .df-status{font-family:'IBM Plex Mono',monospace;font-size:10px;white-space:nowrap}
+.df-status.pending{color:var(--t3)}
+.df-status.indexing{color:var(--warning)}
+.df-status.done{color:var(--success)}
+.df-status.error{color:var(--error)}
+.cmd-doc-file.is-msg{background:rgba(245,158,11,.06)}
+.cmd-docs-progress{width:100%;height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin:6px 0}
+.cmd-docs-progress-bar{height:100%;background:var(--accent);transition:width .3s ease;width:0}
+.cmd-docs-chat{border:1px solid var(--border);border-radius:var(--radius);margin-top:12px;background:var(--bg2)}
+.cmd-docs-chat-header{padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:6px}
+.cmd-docs-chat-msgs{max-height:300px;overflow-y:auto;padding:10px 12px;scroll-behavior:smooth}
+.cmd-chat-q{background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:8px 8px 2px 8px;padding:7px 10px;margin:0 0 8px 40px;font-size:12px;color:var(--accent)}
+.cmd-chat-a{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:12.5px;line-height:1.55;margin-bottom:8px}
+.cmd-chat-a .srcs{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}
+.cmd-chat-a .src-chip{font-family:'IBM Plex Mono',monospace;font-size:9px;background:rgba(99,102,241,.1);color:var(--accent);border:1px solid rgba(99,102,241,.25);padding:1px 6px;border-radius:3px}
+.cmd-chat-a .conf{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--t3);margin-top:4px}
+.cmd-docs-chat-input{display:flex;gap:6px;padding:8px 12px;border-top:1px solid var(--border)}
+.cmd-docs-chat-input input{flex:1;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)}
+.cmd-docs-chat-input input:focus{outline:none;border-color:var(--accent)}
+.cmd-docs-empty{padding:12px;color:var(--t3);font-size:12px;font-style:italic;text-align:center}
+.cmd-docs-spin{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:cmdspin .7s linear infinite;vertical-align:-2px}
+@keyframes cmdspin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -11394,6 +11431,12 @@ async function showCommandeDetail(id) {
     const { data } = await sb.from('commandes').select('custom_data,description').eq('id', id).maybeSingle();
     if (data) { c.custom_data = data.custom_data; c.description = data.description; }
   }
+  if (c.dossier_chemin === undefined) {
+    try {
+      const { data: dData } = await sb.from('commandes').select('dossier_chemin').eq('id', id).maybeSingle();
+      if (dData) c.dossier_chemin = dData.dossier_chemin;
+    } catch(e) { c.dossier_chemin = ''; }
+  }
   if (!c.custom_data && c.akuiteo_id) {
     c.custom_data = await fetchAkuiteoCustomData('commandes', id, c.akuiteo_id, '/sales/orders');
   }
@@ -11460,8 +11503,341 @@ async function showCommandeDetail(id) {
         )}</div>`;
       })()}
       ${renderCustomData(c.custom_data?(() => { const d={...c.custom_data}; delete d._lines; return Object.keys(d).length>0?d:null; })():null)}
+      <div style="grid-column:1/-1">
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header"><div class="card-title">Dossier chantier — Documents &amp; Assistant IA</div></div>
+          <div class="card-body">
+            <div class="cmd-docs-path">
+              <input type="text" id="cmdDossierChemin" placeholder="\\\\SERVEUR\\Projets\\..." value="${cmdEsc(c.dossier_chemin||'')}" title="Chemin du dossier réseau">
+              <button class="btn btn-sm" onclick="cmdSaveDossierChemin()">Sauvegarder</button>
+              <button class="btn btn-primary btn-sm" id="cmdScanBtn" onclick="cmdScanDirectory()">Parcourir le dossier</button>
+            </div>
+            <div class="cmd-docs-files" id="cmdDocsFileList">
+              <div class="cmd-docs-empty">Cliquez « Parcourir le dossier » pour scanner un répertoire.</div>
+            </div>
+            <div class="cmd-docs-actions" id="cmdDocsActions" style="display:none">
+              <label style="font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px">
+                <input type="checkbox" id="cmdSelectAll" onchange="cmdToggleSelectAll()" checked> Tout
+              </label>
+              <button class="btn btn-primary btn-sm" id="cmdIndexBtn" onclick="cmdIndexSelected()">Indexer la sélection</button>
+              <button class="btn btn-sm" onclick="cmdResetScan()">Réinitialiser</button>
+              <div class="cmd-docs-progress" id="cmdProgress" style="display:none"><div class="cmd-docs-progress-bar" id="cmdProgressBar"></div></div>
+            </div>
+            <div class="cmd-docs-chat" id="cmdDocsChat">
+              <div class="cmd-docs-chat-header">💬 Assistant documentaire</div>
+              <div class="cmd-docs-chat-msgs" id="cmdDocsChatMsgs">
+                <div class="cmd-docs-empty">Indexez des documents pour pouvoir les interroger.</div>
+              </div>
+              <div class="cmd-docs-chat-input">
+                <input type="text" id="cmdDocsInput" placeholder="Posez une question sur les documents…" onkeydown="if(event.key==='Enter')cmdAskDocQuestion()">
+                <button class="btn btn-primary btn-sm" id="cmdDocsAskBtn" onclick="cmdAskDocQuestion()">→</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>`;
+  // Initialize state for this commande
+  cmdCurrentCommandeId = id;
+  cmdScannedFiles = [];
+  cmdDocCorpus = [];
+  cmdDocChatHistory = [];
+}
+
+// ═══ DOSSIER CHANTIER — Scanning / Parsing / Q&A documentaire ═══
+const CMD_SUPPORTED_EXT = ['pdf','docx','msg','eml','txt','csv'];
+const CMD_EXT_ICONS = {pdf:'\u{1F4C4}',docx:'\u{1F4C4}',msg:'\u2709\uFE0F',eml:'\u2709\uFE0F',txt:'\u{1F4DD}',csv:'\u{1F4CA}'};
+let cmdScannedFiles = [];
+let cmdDocCorpus = [];
+let cmdDocChatHistory = [];
+let cmdCurrentCommandeId = null;
+
+const CMD_MAX_CHARS = 15000;
+function cmdTruncate(text){
+  if(text.length > CMD_MAX_CHARS) return text.substring(0, CMD_MAX_CHARS) + '\n\n[… tronqué à ' + CMD_MAX_CHARS + ' car.]';
+  return text;
+}
+
+function cmdEsc(s){ const d=document.createElement('div'); d.textContent=String(s||''); return d.innerHTML; }
+
+async function cmdSaveDossierChemin(){
+  if(!cmdCurrentCommandeId) return;
+  const val = document.getElementById('cmdDossierChemin')?.value?.trim() || '';
+  const c = DB.commandes.find(x => x.id === cmdCurrentCommandeId);
+  if(c) c.dossier_chemin = val;
+  await sb.from('commandes').update({ dossier_chemin: val }).eq('id', cmdCurrentCommandeId);
+  toast('Chemin du dossier sauvegardé','success');
+}
+
+async function cmdScanDirectory(){
+  if(!window.showDirectoryPicker){
+    toast('Navigateur non supporté. Utilisez Chrome ou Edge.','error');
+    return;
+  }
+  try {
+    const dirHandle = await window.showDirectoryPicker({ mode:'read' });
+    cmdScannedFiles = [];
+    const scanBtn = document.getElementById('cmdScanBtn');
+    if(scanBtn) scanBtn.disabled = true;
+
+    document.getElementById('cmdDocsFileList').innerHTML = '<div class="cmd-docs-empty"><span class="cmd-docs-spin"></span> Parcours du répertoire…</div>';
+
+    await cmdScanRecursive(dirHandle, '');
+
+    // Update path input with directory name
+    const pathInput = document.getElementById('cmdDossierChemin');
+    if(pathInput && !pathInput.value) pathInput.value = dirHandle.name;
+
+    if(scanBtn) scanBtn.disabled = false;
+    document.getElementById('cmdDocsActions').style.display = cmdScannedFiles.length > 0 ? 'flex' : 'none';
+    cmdRenderFiles();
+  } catch(e){
+    if(e.name==='AbortError') return;
+    toast('Erreur : '+e.message, 'error');
+  }
+}
+
+async function cmdScanRecursive(dirHandle, path, depth=0){
+  if(depth > 5) return;
+  for await (const entry of dirHandle.values()){
+    if(entry.kind === 'file'){
+      const name = entry.name;
+      const ext = name.split('.').pop().toLowerCase();
+      if(CMD_SUPPORTED_EXT.includes(ext)){
+        try {
+          const file = await entry.getFile();
+          cmdScannedFiles.push({ file, path: path ? path+'/'+name : name, name, ext, size: file.size, selected: true, status:'pending', text:'', metadata:{}, errorMsg:'' });
+        } catch(e){}
+      }
+    } else if(entry.kind === 'directory'){
+      await cmdScanRecursive(entry, path ? path+'/'+entry.name : entry.name, depth+1);
+    }
+  }
+}
+
+function cmdRenderFiles(){
+  const box = document.getElementById('cmdDocsFileList');
+  if(!box) return;
+  if(cmdScannedFiles.length===0){
+    box.innerHTML='<div class="cmd-docs-empty">Aucun fichier supporté trouvé (pdf, docx, msg, eml, txt, csv).</div>';
+    return;
+  }
+  box.innerHTML = cmdScannedFiles.map((f,i)=>{
+    const sizeStr = f.size<1024 ? f.size+'o' : f.size<1048576 ? (f.size/1024).toFixed(0)+'Ko' : (f.size/1048576).toFixed(1)+'Mo';
+    const statusHtml = f.status==='done' ? '<span class="df-status done">✓ Indexé</span>'
+      : f.status==='indexing' ? '<span class="df-status indexing"><span class="cmd-docs-spin"></span></span>'
+      : f.status==='error' ? '<span class="df-status error" title="'+cmdEsc(f.errorMsg||'Erreur')+'">✗ '+cmdEsc((f.errorMsg||'Erreur').substring(0,30))+'</span>'
+      : '<span class="df-status pending">—</span>';
+    return `<div class="cmd-doc-file${f.ext==='msg'?' is-msg':''}">
+      <input type="checkbox" ${f.selected?'checked':''} onchange="cmdScannedFiles[${i}].selected=this.checked">
+      <span class="df-icon">${CMD_EXT_ICONS[f.ext]||'\u{1F4C4}'}</span>
+      <span class="df-name" title="${cmdEsc(f.path)}">${cmdEsc(f.name)}</span>
+      <span class="df-path">${cmdEsc(f.path.includes('/')?f.path.substring(0,f.path.lastIndexOf('/')):'/')}</span>
+      <span class="df-size">${sizeStr}</span>
+      ${statusHtml}
+    </div>`;
+  }).join('');
+}
+
+function cmdToggleSelectAll(){
+  const checked = document.getElementById('cmdSelectAll')?.checked;
+  cmdScannedFiles.forEach(f=>f.selected=checked);
+  cmdRenderFiles();
+}
+
+// Client-side parsing (PDF, DOCX, TXT, CSV, EML)
+async function cmdParseClientSide(file, ext){
+  switch(ext){
+    case 'txt': case 'csv':
+      return { text: cmdTruncate(await file.text()), metadata:{ type:ext, filename:file.name } };
+    case 'eml': {
+      const raw = await file.text();
+      const subMatch = raw.match(/^Subject:\s*(.+)$/mi);
+      const fromMatch = raw.match(/^From:\s*(.+)$/mi);
+      const meta = { type:'eml', filename:file.name, subject:subMatch?.[1]?.trim()||'', from:fromMatch?.[1]?.trim()||'' };
+      const bs = raw.indexOf('\n\n');
+      return { text:cmdTruncate(bs>0?raw.substring(bs+2):raw), metadata:meta };
+    }
+    case 'pdf': {
+      if(!window._pdfjsLib){
+        window._pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs');
+        window._pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+      }
+      const buf = await file.arrayBuffer();
+      const doc = await window._pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+      let text = '';
+      for(let i=1;i<=doc.numPages;i++){
+        const page = await doc.getPage(i);
+        const content = await page.getTextContent();
+        text += content.items.map(item=>item.str).join(' ') + '\n';
+        if(text.length > CMD_MAX_CHARS){ text = cmdTruncate(text); break; }
+      }
+      return { text:text.trim(), metadata:{ type:'pdf', filename:file.name, pages:doc.numPages } };
+    }
+    case 'docx': {
+      if(!window._mammoth){
+        window._mammoth = await import('https://cdn.jsdelivr.net/npm/mammoth@1.8.0/+esm');
+      }
+      const buf = await file.arrayBuffer();
+      const result = await window._mammoth.extractRawText({ arrayBuffer:buf });
+      return { text:cmdTruncate(result.value||''), metadata:{ type:'docx', filename:file.name } };
+    }
+    default: return null;
+  }
+}
+
+async function cmdParseViaServer(file, ext){
+  const MAX_SERVER = 3 * 1024 * 1024;
+  if(file.size > MAX_SERVER) throw new Error('Fichier trop volumineux (>3 Mo). Format .'+ext+' non supporté en local.');
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  for(let i=0;i<bytes.length;i+=8192){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i+8192, bytes.length)));
+  }
+  const r = await fetch('/api/parse', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ file:btoa(binary), filename:file.name })
+  });
+  if(!r.ok){
+    if(r.status===413) throw new Error('Fichier trop volumineux pour le serveur');
+    const err = await r.json().catch(()=>({}));
+    throw new Error(err.error || 'Erreur serveur '+r.status);
+  }
+  return await r.json();
+}
+
+async function cmdIndexSelected(){
+  const toIndex = cmdScannedFiles.filter(f=>f.selected && f.status!=='done');
+  if(toIndex.length===0){ toast('Aucun nouveau fichier à indexer.','warning'); return; }
+
+  const btn = document.getElementById('cmdIndexBtn');
+  if(btn) btn.disabled = true;
+  const progressBar = document.getElementById('cmdProgressBar');
+  const progressWrap = document.getElementById('cmdProgress');
+  if(progressWrap) progressWrap.style.display = '';
+  if(progressBar) progressBar.style.width = '0%';
+
+  let done = 0;
+  for(const f of toIndex){
+    f.status = 'indexing';
+    f.errorMsg = '';
+    cmdRenderFiles();
+    try {
+      let data = await cmdParseClientSide(f.file, f.ext);
+      if(!data) data = await cmdParseViaServer(f.file, f.ext);
+      f.text = data.text || '';
+      f.metadata = data.metadata || {};
+      f.status = f.text ? 'done' : 'error';
+      if(!f.text) f.errorMsg = 'Aucun texte extrait';
+    } catch(e){
+      f.status = 'error';
+      f.text = '';
+      f.errorMsg = e.message;
+    }
+    done++;
+    if(progressBar) progressBar.style.width = (done/toIndex.length*100).toFixed(0)+'%';
+    cmdRenderFiles();
+  }
+
+  // Build corpus
+  cmdDocCorpus = cmdScannedFiles.filter(f=>f.status==='done' && f.text).map(f=>{
+    let name = f.name.replace(/\.[^.]+$/,'');
+    if(f.metadata.subject) name = f.metadata.subject;
+    return { name, path:f.path, text:f.text };
+  });
+
+  if(btn) btn.disabled = false;
+  if(progressWrap) setTimeout(()=>{ progressWrap.style.display='none'; }, 1200);
+
+  // Update chat area
+  const chatMsgs = document.getElementById('cmdDocsChatMsgs');
+  if(chatMsgs && cmdDocCorpus.length > 0){
+    chatMsgs.innerHTML = '<div class="cmd-docs-empty" style="color:var(--success);font-style:normal"><strong>'+cmdDocCorpus.length+' document(s) indexé(s)</strong> — Posez vos questions ci-dessous.</div>';
+  }
+
+  toast(cmdDocCorpus.length + ' document(s) indexé(s) avec succès', 'success');
+}
+
+function cmdResetScan(){
+  cmdScannedFiles = [];
+  cmdDocCorpus = [];
+  cmdDocChatHistory = [];
+  const fileList = document.getElementById('cmdDocsFileList');
+  if(fileList) fileList.innerHTML = '<div class="cmd-docs-empty">Cliquez « Parcourir le dossier » pour scanner un répertoire.</div>';
+  const actions = document.getElementById('cmdDocsActions');
+  if(actions) actions.style.display = 'none';
+  const chatMsgs = document.getElementById('cmdDocsChatMsgs');
+  if(chatMsgs) chatMsgs.innerHTML = '<div class="cmd-docs-empty">Indexez des documents pour pouvoir les interroger.</div>';
+}
+
+function cmdDocCorpusText(){
+  return cmdDocCorpus.map(d=>'['+d.name+' — '+d.path+']\n'+d.text).join('\n\n');
+}
+
+async function cmdAskDocQuestion(){
+  const input = document.getElementById('cmdDocsInput');
+  const q = input?.value?.trim();
+  if(!q) return;
+  if(cmdDocCorpus.length === 0){ toast('Indexez des documents avant de poser une question.','warning'); return; }
+
+  const chatMsgs = document.getElementById('cmdDocsChatMsgs');
+  const askBtn = document.getElementById('cmdDocsAskBtn');
+  if(askBtn) askBtn.disabled = true;
+  input.value = '';
+
+  // Show question
+  cmdDocChatHistory.push({ question:q, answer:'<span class="cmd-docs-spin"></span> Recherche en cours…', sources:[], confiance:0, loading:true });
+  cmdRenderDocChat();
+
+  try {
+    const sys = "Tu es un assistant documentaire pour un bureau d'études. Réponds UNIQUEMENT à partir des documents fournis. Si l'information n'y figure pas, dis-le clairement. Réponds en JSON strict sans Markdown : {\"reponse\": string (HTML simple autorisé: <b>, <br>, <ul><li>), \"sources\": string[] (noms exacts des documents utilisés), \"confiance\": number 0-100}.";
+    const user = "DOCUMENTS :\n" + cmdDocCorpusText() + "\n\nQUESTION : " + q;
+
+    const r = await fetch('/api/ai-docs', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ system:sys, user })
+    });
+    if(!r.ok){
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err.error || 'Erreur serveur '+r.status);
+    }
+    const data = await r.json();
+    const txt = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    const cleaned = txt.replace(/```json|```/g,'').trim();
+    const o = JSON.parse(cleaned);
+
+    const last = cmdDocChatHistory[cmdDocChatHistory.length-1];
+    last.answer = o.reponse || 'Pas de réponse.';
+    last.sources = o.sources || [];
+    last.confiance = o.confiance || 0;
+    last.loading = false;
+  } catch(e){
+    const last = cmdDocChatHistory[cmdDocChatHistory.length-1];
+    last.answer = 'Erreur : ' + cmdEsc(e.message);
+    last.loading = false;
+  }
+
+  cmdRenderDocChat();
+  if(askBtn) askBtn.disabled = false;
+}
+
+function cmdRenderDocChat(){
+  const box = document.getElementById('cmdDocsChatMsgs');
+  if(!box) return;
+  if(cmdDocChatHistory.length === 0){
+    box.innerHTML = '<div class="cmd-docs-empty">Indexez des documents pour pouvoir les interroger.</div>';
+    return;
+  }
+  box.innerHTML = cmdDocChatHistory.map(h=>
+    `<div class="cmd-chat-q">${cmdEsc(h.question)}</div>
+     <div class="cmd-chat-a">${h.loading ? h.answer : h.answer}
+       ${!h.loading && h.sources.length ? '<div class="srcs">'+h.sources.map(s=>'<span class="src-chip">'+cmdEsc(s)+'</span>').join('')+'</div>' : ''}
+       ${!h.loading && h.confiance ? '<div class="conf">Confiance : '+h.confiance+'%</div>' : ''}
+     </div>`
+  ).join('');
+  box.scrollTop = box.scrollHeight;
 }
 
 // ═══ FICHE FACTURE ═══
