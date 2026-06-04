@@ -17200,7 +17200,7 @@ async function submitEditClient() {
     siren: document.getElementById('ec-siren').value.trim() || null,
     siret: document.getElementById('ec-siret').value.trim() || null,
     ape: document.getElementById('ec-ape').value.trim() || null,
-    reference_externe: document.getElementById('ec-refext').value.trim() || null,
+    reference_externe: document.getElementById('ec-refext')?.value?.trim() || null,
     tva_intracommunautaire: document.getElementById('ec-tva').value.trim() || null,
     categorie_compte: readCategorieCompte('ec'),
     notes: document.getElementById('ec-notes').value.trim() || null,
