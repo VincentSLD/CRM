@@ -11641,7 +11641,7 @@ async function cmdScanDirectory(){
 
     // Detect subfolder starting with code_projet (recursive search)
     let targetHandle = dirHandle;
-    let targetLabel = dirHandle.name;
+    let foundAffaire = false;
     const cmd = cmdCurrentCommandeId ? DB.commandes.find(x => x.id === cmdCurrentCommandeId) : null;
     const aff = cmd?.affaire_id ? DB.affaires.find(a => a.id === cmd.affaire_id) : null;
     const codeProjet = aff?.code_projet;
@@ -11650,16 +11650,29 @@ async function cmdScanDirectory(){
       const found = await cmdFindSubfolder(dirHandle, codeProjet, '', 5);
       if (found) {
         targetHandle = found.handle;
-        targetLabel = dirHandle.name + '/' + found.path;
+        foundAffaire = true;
         toast('Dossier détecté : ' + found.path, 'success');
+        // Update path input with full detected path
+        const pathInput = document.getElementById('cmdDossierChemin');
+        const currentBase = pathInput?.value?.replace(/[/\\]+$/, '') || dirHandle.name;
+        const fullPath = currentBase + '\\' + found.path.replace(/\//g, '\\');
+        if (pathInput) pathInput.value = fullPath;
+        // Save to DB
+        if (cmd) cmd.dossier_chemin = fullPath;
+        await sb.from('commandes').update({ dossier_chemin: fullPath }).eq('id', cmdCurrentCommandeId);
+      } else {
+        toast('Aucun dossier commençant par « ' + codeProjet + ' » trouvé dans ce répertoire.', 'warning');
       }
     }
 
+    document.getElementById('cmdDocsFileList').innerHTML = '<div class="cmd-docs-empty"><span class="cmd-docs-spin"></span> Parcours du répertoire…</div>';
     await cmdScanRecursive(targetHandle, '');
 
-    // Update path input with directory name
-    const pathInput = document.getElementById('cmdDossierChemin');
-    if(pathInput && !pathInput.value) pathInput.value = targetLabel;
+    // Update path input with directory name if not already set
+    if (!foundAffaire) {
+      const pathInput = document.getElementById('cmdDossierChemin');
+      if(pathInput && !pathInput.value) pathInput.value = dirHandle.name;
+    }
 
     if(scanBtn) scanBtn.disabled = false;
     document.getElementById('cmdDocsActions').style.display = cmdScannedFiles.length > 0 ? 'flex' : 'none';
