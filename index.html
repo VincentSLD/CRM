@@ -2029,7 +2029,7 @@ tbody tr:last-child td { border-bottom: none; }
           </div>
         </div>
         <div class="card">
-          <div class="card-header"><div class="card-title">Adresse de facturation</div></div>
+          <div class="card-header"><div class="card-title">Adresse de facturation</div><button class="btn btn-sm" type="button" onclick="copyAdresseSiteToFact('nc')" style="font-size:11px">Reprendre l'adresse du site</button></div>
           <div class="card-body">
             <div style="display:grid;gap:8px">
               <div class="fg"><label class="fl">Ligne 1</label><input class="fi" id="nc-fact-addr1"></div>
@@ -2543,7 +2543,7 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Région</label><input class="fi" id="ec-region"></div>
         <div class="fg"><label class="fl">Pays</label><input class="fi" id="ec-pays"></div>
       </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Adresse de facturation</div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">Adresse de facturation <button class="btn btn-sm" type="button" onclick="copyAdresseSiteToFact('ec')" style="font-size:11px">Reprendre l'adresse du site</button></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
         <div class="fg" style="grid-column:1/-1"><label class="fl">Ligne 1</label><input class="fi" id="ec-fact-addr1"></div>
         <div class="fg"><label class="fl">Ligne 2</label><input class="fi" id="ec-fact-addr2"></div>
@@ -19130,6 +19130,16 @@ function autoFillFromCP(cpValue, deptId, regionId, paysId) {
   if (dEl) dEl.value = deptName(deptCode);
   if (rEl) rEl.value = regionFromDept(deptCode);
   if (pEl && !pEl.value) pEl.value = 'FR';
+}
+
+// Copier l'adresse du site vers l'adresse de facturation
+function copyAdresseSiteToFact(prefix) {
+  const map = [['addr1','fact-addr1'],['addr2','fact-addr2'],['addr3','fact-addr3'],['cp','fact-cp'],['city','fact-city'],['dept','fact-dept'],['region','fact-region'],['pays','fact-pays']];
+  map.forEach(([src, dst]) => {
+    const s = document.getElementById(prefix + '-' + src);
+    const d = document.getElementById(prefix + '-' + dst);
+    if (s && d) d.value = s.value;
+  });
 }
 
 async function doSearchSirene() {
