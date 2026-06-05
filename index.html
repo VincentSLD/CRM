@@ -20052,13 +20052,15 @@ async function pullClientFromAkuiteo(clientId) {
     let pricingName = null, pricingName2 = null;
     let methodOfPaymentFromRead = null;
     const promises = [];
-    // customData + salesmen + methodOfPayment via POST /read
+    // customData + salesmen + methodOfPayment + address via POST /read
+    let readAddress = null;
     promises.push(
-      akuiteoFetch('POST', '/crm/customers/' + client.akuiteo_id + '/read', { options: ['CUSTOM_DATA', 'SALESMEN', 'METHOD_OF_PAYMENT'] })
+      akuiteoFetch('POST', '/crm/customers/' + client.akuiteo_id + '/read', { options: ['CUSTOM_DATA', 'SALESMEN', 'METHOD_OF_PAYMENT', 'ADDRESS'] })
         .then(d => {
           if (d?.customData && Object.keys(d.customData).length > 0) customData = d.customData;
           if (Array.isArray(d?.salesmen)) salesmen = d.salesmen;
           if (d?.methodOfPayment) methodOfPaymentFromRead = d.methodOfPayment;
+          if (d?.address) readAddress = d.address;
         })
         .catch(() => {})
     );
@@ -20123,25 +20125,27 @@ async function pullClientFromAkuiteo(clientId) {
       const name = e ? ((e.name||'') + ' ' + (e.firstName||'')).trim() : s.employeeId;
       return s.mainLinkedSalesman ? name + ' (principal)' : name;
     });
+    // Utiliser l'adresse du POST /read en priorité, sinon celle du GET
+    const addr = readAddress || ak.address || {};
     const updates = {
       name: ak.name || ak.legalName || client.name,
       code: ak.code || client.code,
       sector: ak.profession || ak.category || client.sector || '',
-      city: ak.address?.city || client.city || '',
+      city: addr.city || client.city || '',
       contact: ak.accountManager || ak.salesman || client.contact || '',
-      email: ak.address?.email || ak.email || client.email || '',
-      phone: ak.address?.phone || ak.phone || client.phone || '',
+      email: addr.email || ak.email || client.email || '',
+      phone: addr.phone || ak.phone || client.phone || '',
       account_manager_id: ak.accountManagerId || null,
       account_manager_name: managerName || null,
       commerciaux_associes: salesmenNames.length > 0 ? salesmenNames.join(', ') : null,
-      fact_adresse_ligne1: ak.address?.line1 || null, fact_adresse_ligne2: ak.address?.line2 || null,
-      fact_adresse_ligne3: ak.address?.line3 || null, fact_code_postal: ak.address?.postalCode || null,
-      fact_ville: ak.address?.city || null,
-      fact_pays: ak.address?.countryName || ak.address?.country || null,
-      fact_departement: ak.address?.geographicalDepartmentName || ak.address?.department || null,
-      fact_region: ak.address?.regionName || ak.address?.region || null,
-      telephone2: ak.address?.phone2 || null, mobile: ak.address?.mobilePhone || null,
-      fax: ak.address?.fax || null, site_web: ak.address?.webSite || null,
+      fact_adresse_ligne1: addr.line1 || null, fact_adresse_ligne2: addr.line2 || null,
+      fact_adresse_ligne3: addr.line3 || null, fact_code_postal: addr.postalCode || null,
+      fact_ville: addr.city || null,
+      fact_pays: addr.countryName || addr.country || null,
+      fact_departement: addr.geographicalDepartmentName || addr.department || null,
+      fact_region: addr.regionName || addr.region || null,
+      telephone2: addr.phone2 || null, mobile: addr.mobilePhone || null,
+      fax: addr.fax || null, site_web: addr.webSite || null,
       raison_sociale: ak.legalName || null, raison_sociale2: ak.legalName2 || null,
       siren: ak.SIREN || null, siret: ak.SIRET || null, ape: ak.APE || null,
       tva_intracommunautaire: ak.vatIdentificationNumber || null,
@@ -20169,7 +20173,6 @@ async function pullClientFromAkuiteo(clientId) {
     let { error } = await sb.from('clients').update(updates).eq('id', clientId);
     if (error) {
       console.warn('pullClientFromAkuiteo update error:', error.code, error.message);
-      toast('[debug] Erreur update: ' + error.code + ' — ' + error.message, 'error', 8000);
       // Fallback : retirer les champs fact_* si colonnes pas encore créées
       const safe = { ...updates };
       ['fact_adresse_ligne1','fact_adresse_ligne2','fact_adresse_ligne3','fact_code_postal','fact_ville','fact_departement','fact_region','fact_pays'].forEach(k => delete safe[k]);
@@ -20178,14 +20181,8 @@ async function pullClientFromAkuiteo(clientId) {
     }
     if (error) { toast('Erreur mise à jour: ' + error.message, 'error'); return; }
     toast('Société mise à jour depuis Akuiteo', 'success');
-    // Debug: montrer ce que Akuiteo retourne pour l'adresse
-    toast('[debug] Akuiteo address: ' + JSON.stringify(ak.address || 'NULL'), 'info', 10000);
-    toast('[debug] fact_ligne1 envoyé: ' + (updates.fact_adresse_ligne1 || 'null') + ' | fact_ville: ' + (updates.fact_ville || 'null'), 'info', 10000);
     const { data: refreshed } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
-    if (refreshed) {
-      currentClient = refreshed;
-      toast('[debug] fact_ligne1 en DB: ' + (refreshed.fact_adresse_ligne1 || 'null') + ' | fact_ville: ' + (refreshed.fact_ville || 'null'), 'info', 10000);
-    }
+    if (refreshed) currentClient = refreshed;
     await loadDB();
     renderPage(currentPage);
     if (currentPage === 'client-detail') {
