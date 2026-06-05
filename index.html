@@ -20178,8 +20178,14 @@ async function pullClientFromAkuiteo(clientId) {
     }
     if (error) { toast('Erreur mise à jour: ' + error.message, 'error'); return; }
     toast('Société mise à jour depuis Akuiteo', 'success');
+    // Debug: montrer ce que Akuiteo retourne pour l'adresse
+    toast('[debug] Akuiteo address: ' + JSON.stringify(ak.address || 'NULL'), 'info', 10000);
+    toast('[debug] fact_ligne1 envoyé: ' + (updates.fact_adresse_ligne1 || 'null') + ' | fact_ville: ' + (updates.fact_ville || 'null'), 'info', 10000);
     const { data: refreshed } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
-    if (refreshed) currentClient = refreshed;
+    if (refreshed) {
+      currentClient = refreshed;
+      toast('[debug] fact_ligne1 en DB: ' + (refreshed.fact_adresse_ligne1 || 'null') + ' | fact_ville: ' + (refreshed.fact_ville || 'null'), 'info', 10000);
+    }
     await loadDB();
     renderPage(currentPage);
     if (currentPage === 'client-detail') {
