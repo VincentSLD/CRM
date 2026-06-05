@@ -11589,8 +11589,6 @@ function cmdTruncate(text){
   return text;
 }
 
-// ── Cache mémoire des handles de répertoire par société (session) ──
-const _cmdDirHandles = new Map();
 
 function cmdEsc(s){ const d=document.createElement('div'); d.textContent=String(s||''); return d.innerHTML; }
 
@@ -11611,7 +11609,12 @@ async function cmdGetResolvedPaths(commande) {
   const aff = commande.affaire_id ? DB.affaires.find(a => a.id === commande.affaire_id) : null;
   const codeProjet = aff?.code_projet;
   if (!codeProjet) return null;
-  const resolve = (tpl) => tpl ? tpl.replace(/\{code_projet\}/g, codeProjet) : '';
+  // Build full folder name: code_projet_NomAffaire (e.g. 26.0752.01_GEOCEA)
+  const folderName = codeProjet + (aff.nom ? '_' + aff.nom : '');
+  const resolve = (tpl) => {
+    if (!tpl) return '';
+    return tpl.replace(/[/\\]+$/, '') + '\\' + folderName;
+  };
   const c1 = resolve(config.chemin1);
   const c2 = resolve(config.chemin2);
   return (c1 || c2) ? { chemin1: c1, chemin2: c2 } : null;
@@ -11635,62 +11638,17 @@ async function cmdScanDirectory(){
     return;
   }
   try {
-    const cmd = cmdCurrentCommandeId ? DB.commandes.find(x => x.id === cmdCurrentCommandeId) : null;
-    const societe = cmd?.societe || '';
-    const aff = cmd?.affaire_id ? DB.affaires.find(a => a.id === cmd.affaire_id) : null;
-    const codeProjet = aff?.code_projet;
-
-    // Try to re-use a cached handle for this société (same session)
-    let dirHandle = societe ? _cmdDirHandles.get(societe) : null;
-    if (dirHandle) {
-      // Verify permission is still valid
-      try {
-        const perm = await dirHandle.requestPermission({ mode: 'read' });
-        if (perm !== 'granted') dirHandle = null;
-      } catch(e) { dirHandle = null; }
-    }
-
-    // No cached handle: show directory picker
-    if (!dirHandle) {
-      dirHandle = await window.showDirectoryPicker({ mode: 'read' });
-      if (societe) _cmdDirHandles.set(societe, dirHandle);
-    }
-
+    const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
     cmdScannedFiles = [];
     const scanBtn = document.getElementById('cmdScanBtn');
     if(scanBtn) scanBtn.disabled = true;
 
-    // Detect subfolder starting with code_projet (recursive search)
-    let targetHandle = dirHandle;
-    let foundAffaire = false;
-    if (codeProjet) {
-      document.getElementById('cmdDocsFileList').innerHTML = '<div class="cmd-docs-empty"><span class="cmd-docs-spin"></span> Recherche du dossier ' + cmdEsc(codeProjet) + '…</div>';
-      const found = await cmdFindSubfolder(dirHandle, codeProjet, '', 5);
-      if (found) {
-        targetHandle = found.handle;
-        foundAffaire = true;
-        toast('Dossier détecté : ' + found.path, 'success');
-        // Update path input with full detected path
-        const pathInput = document.getElementById('cmdDossierChemin');
-        const currentBase = pathInput?.value?.replace(/[/\\]+$/, '') || dirHandle.name;
-        const fullPath = currentBase + '\\' + found.path.replace(/\//g, '\\');
-        if (pathInput) pathInput.value = fullPath;
-        // Save to DB
-        if (cmd) cmd.dossier_chemin = fullPath;
-        await sb.from('commandes').update({ dossier_chemin: fullPath }).eq('id', cmdCurrentCommandeId);
-      } else {
-        toast('Aucun dossier commençant par « ' + codeProjet + ' » trouvé dans ce répertoire.', 'warning');
-      }
-    }
-
     document.getElementById('cmdDocsFileList').innerHTML = '<div class="cmd-docs-empty"><span class="cmd-docs-spin"></span> Parcours du répertoire…</div>';
-    await cmdScanRecursive(targetHandle, '');
+    await cmdScanRecursive(dirHandle, '');
 
     // Update path input with directory name if not already set
-    if (!foundAffaire) {
-      const pathInput = document.getElementById('cmdDossierChemin');
-      if(pathInput && !pathInput.value) pathInput.value = dirHandle.name;
-    }
+    const pathInput = document.getElementById('cmdDossierChemin');
+    if(pathInput && !pathInput.value) pathInput.value = dirHandle.name;
 
     if(scanBtn) scanBtn.disabled = false;
     document.getElementById('cmdDocsActions').style.display = cmdScannedFiles.length > 0 ? 'flex' : 'none';
@@ -11705,28 +11663,6 @@ async function cmdScanDirectory(){
   }
 }
 
-async function cmdFindSubfolder(dirHandle, codeProjet, currentPath, maxDepth) {
-  if (maxDepth <= 0) return null;
-  // Collect all subdirectories first
-  const dirs = [];
-  for await (const entry of dirHandle.values()) {
-    if (entry.kind === 'directory') dirs.push(entry);
-  }
-  // Check direct match
-  for (const entry of dirs) {
-    if (entry.name.startsWith(codeProjet)) {
-      const fullPath = currentPath ? currentPath + '/' + entry.name : entry.name;
-      return { handle: entry, path: fullPath };
-    }
-  }
-  // Not found at this level, search deeper
-  for (const entry of dirs) {
-    const subPath = currentPath ? currentPath + '/' + entry.name : entry.name;
-    const found = await cmdFindSubfolder(entry, codeProjet, subPath, maxDepth - 1);
-    if (found) return found;
-  }
-  return null;
-}
 
 async function cmdScanRecursive(dirHandle, path, depth=0){
   if(depth > 5) return;
@@ -17488,11 +17424,11 @@ async function addDossierCheminSociete() {
           available.map(a => '<option value="' + a + '">' + a + '</option>').join('') +
         '</select></div>' +
       '<div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Chemin 1</label>' +
-        '<input type="text" id="dcs-new-chemin1" placeholder="\\\\SERVEUR\\Projets\\{code_projet}\\" class="fi" style="padding:6px 8px;font-size:12px;width:100%;font-family:monospace"></div>' +
+        '<input type="text" id="dcs-new-chemin1" placeholder="\\\\SERVEUR\\Projets\\Affaires en cours" class="fi" style="padding:6px 8px;font-size:12px;width:100%;font-family:monospace"></div>' +
       '<div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Chemin 2</label>' +
-        '<input type="text" id="dcs-new-chemin2" placeholder="\\\\SERVEUR\\Archives\\{code_projet}\\" class="fi" style="padding:6px 8px;font-size:12px;width:100%;font-family:monospace"></div>' +
+        '<input type="text" id="dcs-new-chemin2" placeholder="\\\\SERVEUR\\Archives\\Affaires" class="fi" style="padding:6px 8px;font-size:12px;width:100%;font-family:monospace"></div>' +
     '</div>' +
-    '<p style="font-size:11px;color:var(--t3);margin:0 0 8px">Utilisez <code>{code_projet}</code> comme variable. Elle sera remplacée par le code projet de l\'affaire.</p>' +
+    '<p style="font-size:11px;color:var(--t3);margin:0 0 8px">Saisissez le chemin racine. Le dossier de l\'affaire (<code>code_projet_NomAffaire</code>) sera ajouté automatiquement.</p>' +
     '<div style="display:flex;gap:6px;justify-content:flex-end">' +
       '<button class="btn" onclick="document.getElementById(\'dcsNewForm\').remove()" style="font-size:12px">Annuler</button>' +
       '<button class="btn btn-primary" onclick="saveDossierCheminSocieteNew()" style="font-size:12px">Enregistrer</button>' +
@@ -17524,7 +17460,7 @@ async function editDossierCheminSociete(societe) {
       '<div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Chemin 2</label>' +
         '<input type="text" id="dcs-edit-chemin2" value="' + (paths.chemin2 || '').replace(/"/g, '&quot;') + '" class="fi" style="padding:6px 8px;font-size:12px;width:100%;font-family:monospace"></div>' +
     '</div>' +
-    '<p style="font-size:11px;color:var(--t3);margin:0 0 8px">Utilisez <code>{code_projet}</code> comme variable.</p>' +
+    '<p style="font-size:11px;color:var(--t3);margin:0 0 8px">Saisissez le chemin racine. Le dossier de l\'affaire sera ajouté automatiquement.</p>' +
     '<div style="display:flex;gap:6px;justify-content:flex-end">' +
       '<button class="btn" onclick="document.getElementById(\'dcsEditForm\').remove()" style="font-size:12px">Annuler</button>' +
       '<button class="btn btn-primary" onclick="saveDossierCheminSocieteEdit(\'' + societe.replace(/'/g, "\\'") + '\')" style="font-size:12px">Enregistrer</button>' +
