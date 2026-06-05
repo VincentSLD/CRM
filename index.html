@@ -11637,6 +11637,13 @@ async function cmdScanDirectory(){
     toast('Navigateur non supporté. Utilisez Chrome ou Edge.','error');
     return;
   }
+  // Auto-copier le chemin affiché pour faciliter la navigation
+  const cheminInput = document.getElementById('cmdDossierChemin');
+  const cheminVal = cheminInput?.value?.trim();
+  if (cheminVal) {
+    try { await navigator.clipboard.writeText(cheminVal); } catch(_){}
+    toast('Chemin copié ! Collez-le (Ctrl+V) dans la barre d\'adresse du sélecteur.', 'info', 5000);
+  }
   try {
     const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
     cmdScannedFiles = [];
@@ -20445,13 +20452,13 @@ function setSyncText(text) {
   if (el) el.textContent = text;
 }
 
-function toast(msg, type='info') {
+function toast(msg, type='info', duration=3500) {
   const c = document.getElementById('toasts');
   const t = document.createElement('div');
   t.className = 'toast '+type;
   t.textContent = msg;
   c.appendChild(t);
-  setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity 0.3s';setTimeout(()=>t.remove(),300)},3500);
+  setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity 0.3s';setTimeout(()=>t.remove(),300)}, duration);
 }
 
 // ═══ AUTHENTICATION ═══
