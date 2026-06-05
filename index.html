@@ -2014,7 +2014,7 @@ tbody tr:last-child td { border-bottom: none; }
       <!-- Adresse | Coordonnées | Informations légales -->
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
         <div class="card">
-          <div class="card-header"><div class="card-title">Adresse</div></div>
+          <div class="card-header"><div class="card-title">Adresse du site</div></div>
           <div class="card-body">
             <div style="display:grid;gap:8px">
               <div class="fg"><label class="fl">Ligne 1</label><input class="fi" id="nc-addr1"></div>
@@ -2035,8 +2035,11 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="fg"><label class="fl">Ligne 1</label><input class="fi" id="nc-fact-addr1"></div>
               <div class="fg"><label class="fl">Ligne 2</label><input class="fi" id="nc-fact-addr2"></div>
               <div class="fg"><label class="fl">Ligne 3</label><input class="fi" id="nc-fact-addr3"></div>
-              <div class="fg"><label class="fl">Code postal</label><input class="fi" id="nc-fact-cp"></div>
+              <div class="fg"><label class="fl">Code postal</label><input class="fi" id="nc-fact-cp" oninput="autoFillFromCP(this.value,'nc-fact-dept','nc-fact-region','nc-fact-pays')"></div>
               <div class="fg"><label class="fl">Ville</label><input class="fi" id="nc-fact-city"></div>
+              <div class="fg"><label class="fl">Département</label><input class="fi" id="nc-fact-dept"></div>
+              <div class="fg"><label class="fl">Région</label><input class="fi" id="nc-fact-region"></div>
+              <div class="fg"><label class="fl">Pays</label><input class="fi" id="nc-fact-pays" value="FR"></div>
             </div>
           </div>
         </div>
@@ -2529,7 +2532,7 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Forme juridique</label><input class="fi" id="ec-forme"></div>
         <div class="fg"><label class="fl">Secteur</label><input class="fi" id="ec-sector"></div>
       </div>
-      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Adresse</div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Adresse du site</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
         <div class="fg" style="grid-column:1/-1"><label class="fl">Ligne 1</label><input class="fi" id="ec-addr1"></div>
         <div class="fg"><label class="fl">Ligne 2</label><input class="fi" id="ec-addr2"></div>
@@ -2545,8 +2548,11 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg" style="grid-column:1/-1"><label class="fl">Ligne 1</label><input class="fi" id="ec-fact-addr1"></div>
         <div class="fg"><label class="fl">Ligne 2</label><input class="fi" id="ec-fact-addr2"></div>
         <div class="fg"><label class="fl">Ligne 3</label><input class="fi" id="ec-fact-addr3"></div>
-        <div class="fg"><label class="fl">Code postal</label><input class="fi" id="ec-fact-cp"></div>
+        <div class="fg"><label class="fl">Code postal</label><input class="fi" id="ec-fact-cp" oninput="autoFillFromCP(this.value,'ec-fact-dept','ec-fact-region','ec-fact-pays')"></div>
         <div class="fg"><label class="fl">Ville</label><input class="fi" id="ec-fact-city"></div>
+        <div class="fg"><label class="fl">Département</label><input class="fi" id="ec-fact-dept"></div>
+        <div class="fg"><label class="fl">Région</label><input class="fi" id="ec-fact-region"></div>
+        <div class="fg"><label class="fl">Pays</label><input class="fi" id="ec-fact-pays"></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Coordonnées</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
@@ -6374,7 +6380,7 @@ function renderClientDetail() {
     </div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
-    ${detailSection('Adresse', [
+    ${detailSection('Adresse du site', [
       detailRow('Ligne 1', c.adresse_ligne1 || '—'),
       detailRow('Ligne 2', c.adresse_ligne2 || '—'),
       detailRow('Ligne 3', c.adresse_ligne3 || '—'),
@@ -6390,6 +6396,9 @@ function renderClientDetail() {
       detailRow('Ligne 3', c.fact_adresse_ligne3 || '—'),
       detailRow('Code postal', c.fact_code_postal || '—'),
       detailRow('Ville', c.fact_ville || '—'),
+      detailRow('Département', c.fact_departement || '—'),
+      detailRow('Région', c.fact_region || '—'),
+      detailRow('Pays', c.fact_pays || '—'),
     ])}
     ${detailSection('Coordonnées', [
       detailRow('Email', c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : '—'),
@@ -16377,6 +16386,9 @@ function openModal(id) {
     document.getElementById('ec-fact-addr3').value = c.fact_adresse_ligne3||'';
     document.getElementById('ec-fact-cp').value = c.fact_code_postal||'';
     document.getElementById('ec-fact-city').value = c.fact_ville||'';
+    document.getElementById('ec-fact-dept').value = c.fact_departement||'';
+    document.getElementById('ec-fact-region').value = c.fact_region||'';
+    document.getElementById('ec-fact-pays').value = c.fact_pays||'';
     document.getElementById('ec-email').value = c.email||'';
     document.getElementById('ec-phone').value = c.phone||'';
     document.getElementById('ec-phone2').value = c.telephone2||'';
@@ -16620,7 +16632,7 @@ async function sendReport() {
 function clearNewClientForm() {
   const ids = ['nc-sirene-search','nc-name','nc-code','nc-raison','nc-raison2','nc-forme','nc-sector',
     'nc-addr1','nc-addr2','nc-addr3','nc-cp','nc-city','nc-dept','nc-region',
-    'nc-fact-addr1','nc-fact-addr2','nc-fact-addr3','nc-fact-cp','nc-fact-city',
+    'nc-fact-addr1','nc-fact-addr2','nc-fact-addr3','nc-fact-cp','nc-fact-city','nc-fact-dept','nc-fact-region','nc-fact-pays',
     'nc-email','nc-phone','nc-phone2','nc-mobile','nc-fax','nc-web',
     'nc-siren','nc-siret','nc-ape','nc-refext','nc-revenue','nc-capital','nc-headcount','nc-notes'];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -17160,6 +17172,9 @@ async function submitNewClient() {
       fact_adresse_ligne3: document.getElementById('nc-fact-addr3').value.trim() || null,
       fact_code_postal: document.getElementById('nc-fact-cp').value.trim() || null,
       fact_ville: document.getElementById('nc-fact-city').value.trim() || null,
+      fact_departement: document.getElementById('nc-fact-dept').value.trim() || null,
+      fact_region: document.getElementById('nc-fact-region').value.trim() || null,
+      fact_pays: document.getElementById('nc-fact-pays').value.trim() || null,
       email: document.getElementById('nc-email').value.trim() || '',
       phone: document.getElementById('nc-phone').value.trim() || '',
       telephone2: document.getElementById('nc-phone2').value.trim() || null,
@@ -17344,6 +17359,9 @@ async function submitEditClient() {
     fact_adresse_ligne3: document.getElementById('ec-fact-addr3').value.trim() || null,
     fact_code_postal: document.getElementById('ec-fact-cp').value.trim() || null,
     fact_ville: document.getElementById('ec-fact-city').value.trim() || null,
+    fact_departement: document.getElementById('ec-fact-dept').value.trim() || null,
+    fact_region: document.getElementById('ec-fact-region').value.trim() || null,
+    fact_pays: document.getElementById('ec-fact-pays').value.trim() || null,
     email: document.getElementById('ec-email').value.trim(),
     phone: document.getElementById('ec-phone').value.trim(),
     telephone2: document.getElementById('ec-phone2').value.trim() || null,
@@ -19099,6 +19117,19 @@ function regionFromDept(deptCode) {
   if (!deptCode) return '';
   const regCode = DEPT_TO_REGION[deptCode];
   return regCode ? REGION_NAMES[regCode] || '' : '';
+}
+
+// Auto-fill département, région, pays à partir du code postal
+function autoFillFromCP(cpValue, deptId, regionId, paysId) {
+  const cp = (cpValue || '').trim();
+  if (cp.length < 2) return;
+  const deptCode = cp.length >= 3 && cp.startsWith('97') ? cp.substring(0, 3) : cp.substring(0, 2);
+  const dEl = document.getElementById(deptId);
+  const rEl = document.getElementById(regionId);
+  const pEl = document.getElementById(paysId);
+  if (dEl) dEl.value = deptName(deptCode);
+  if (rEl) rEl.value = regionFromDept(deptCode);
+  if (pEl && !pEl.value) pEl.value = 'FR';
 }
 
 async function doSearchSirene() {
