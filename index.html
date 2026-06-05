@@ -20125,8 +20125,8 @@ async function pullClientFromAkuiteo(clientId) {
       const name = e ? ((e.name||'') + ' ' + (e.firstName||'')).trim() : s.employeeId;
       return s.mainLinkedSalesman ? name + ' (principal)' : name;
     });
-    // Utiliser l'adresse du POST /read en priorité, sinon celle du GET
-    const addr = readAddress || ak.address || {};
+    // Merger adresse GET + POST /read (GET est la source principale)
+    const addr = { ...(ak.address || {}), ...(readAddress && Object.keys(readAddress).length > 1 ? readAddress : {}) };
     const updates = {
       name: ak.name || ak.legalName || client.name,
       code: ak.code || client.code,
