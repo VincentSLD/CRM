@@ -20052,15 +20052,13 @@ async function pullClientFromAkuiteo(clientId) {
     let pricingName = null, pricingName2 = null;
     let methodOfPaymentFromRead = null;
     const promises = [];
-    // customData + salesmen + methodOfPayment + address via POST /read
-    let readAddress = null;
+    // customData + salesmen + methodOfPayment via POST /read
     promises.push(
-      akuiteoFetch('POST', '/crm/customers/' + client.akuiteo_id + '/read', { options: ['CUSTOM_DATA', 'SALESMEN', 'METHOD_OF_PAYMENT', 'ADDRESS'] })
+      akuiteoFetch('POST', '/crm/customers/' + client.akuiteo_id + '/read', { options: ['CUSTOM_DATA', 'SALESMEN', 'METHOD_OF_PAYMENT'] })
         .then(d => {
           if (d?.customData && Object.keys(d.customData).length > 0) customData = d.customData;
           if (Array.isArray(d?.salesmen)) salesmen = d.salesmen;
           if (d?.methodOfPayment) methodOfPaymentFromRead = d.methodOfPayment;
-          if (d?.address) readAddress = d.address;
         })
         .catch(() => {})
     );
@@ -20125,27 +20123,25 @@ async function pullClientFromAkuiteo(clientId) {
       const name = e ? ((e.name||'') + ' ' + (e.firstName||'')).trim() : s.employeeId;
       return s.mainLinkedSalesman ? name + ' (principal)' : name;
     });
-    // Merger adresse GET + POST /read (GET est la source principale)
-    const addr = { ...(ak.address || {}), ...(readAddress && Object.keys(readAddress).length > 1 ? readAddress : {}) };
     const updates = {
       name: ak.name || ak.legalName || client.name,
       code: ak.code || client.code,
       sector: ak.profession || ak.category || client.sector || '',
-      city: addr.city || client.city || '',
+      city: ak.address?.city || client.city || '',
       contact: ak.accountManager || ak.salesman || client.contact || '',
-      email: addr.email || ak.email || client.email || '',
-      phone: addr.phone || ak.phone || client.phone || '',
+      email: ak.address?.email || ak.email || client.email || '',
+      phone: ak.address?.phone || ak.phone || client.phone || '',
       account_manager_id: ak.accountManagerId || null,
       account_manager_name: managerName || null,
       commerciaux_associes: salesmenNames.length > 0 ? salesmenNames.join(', ') : null,
-      fact_adresse_ligne1: addr.line1 || null, fact_adresse_ligne2: addr.line2 || null,
-      fact_adresse_ligne3: addr.line3 || null, fact_code_postal: addr.postalCode || null,
-      fact_ville: addr.city || null,
-      fact_pays: addr.countryName || addr.country || null,
-      fact_departement: addr.geographicalDepartmentName || addr.department || null,
-      fact_region: addr.regionName || addr.region || null,
-      telephone2: addr.phone2 || null, mobile: addr.mobilePhone || null,
-      fax: addr.fax || null, site_web: addr.webSite || null,
+      fact_adresse_ligne1: ak.address?.line1 || null, fact_adresse_ligne2: ak.address?.line2 || null,
+      fact_adresse_ligne3: ak.address?.line3 || null, fact_code_postal: ak.address?.postalCode || null,
+      fact_ville: ak.address?.city || null,
+      fact_pays: ak.address?.countryName || ak.address?.country || null,
+      fact_departement: ak.address?.geographicalDepartmentName || ak.address?.department || null,
+      fact_region: ak.address?.regionName || ak.address?.region || null,
+      telephone2: ak.address?.phone2 || null, mobile: ak.address?.mobilePhone || null,
+      fax: ak.address?.fax || null, site_web: ak.address?.webSite || null,
       raison_sociale: ak.legalName || null, raison_sociale2: ak.legalName2 || null,
       siren: ak.SIREN || null, siret: ak.SIRET || null, ape: ak.APE || null,
       tva_intracommunautaire: ak.vatIdentificationNumber || null,
