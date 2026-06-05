@@ -20167,7 +20167,9 @@ async function pullClientFromAkuiteo(clientId) {
     };
     if (customData) updates.custom_data = customData;
     let { error } = await sb.from('clients').update(updates).eq('id', clientId);
-    if (error && (error.code === 'PGRST204' || (error.message && error.message.includes('400')))) {
+    if (error) {
+      console.warn('pullClientFromAkuiteo update error:', error.code, error.message);
+      toast('[debug] Erreur update: ' + error.code + ' — ' + error.message, 'error', 8000);
       // Fallback : retirer les champs fact_* si colonnes pas encore créées
       const safe = { ...updates };
       ['fact_adresse_ligne1','fact_adresse_ligne2','fact_adresse_ligne3','fact_code_postal','fact_ville','fact_departement','fact_region','fact_pays'].forEach(k => delete safe[k]);
