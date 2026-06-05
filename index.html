@@ -11669,13 +11669,17 @@ async function cmdScanDirectory(){
     let dirHandle = null;
     if (societe) {
       const stored = await cmdLoadHandle(societe);
+      toast('[debug] Handle stocké pour ' + societe + ' : ' + (stored ? 'OUI' : 'NON'), 'info');
       if (stored) {
         try {
           const perm = await stored.requestPermission({ mode: 'read' });
+          toast('[debug] Permission: ' + perm, 'info');
           if (perm === 'granted') {
             dirHandle = stored;
           }
-        } catch(e) { /* permission denied or handle expired */ }
+        } catch(e) {
+          toast('[debug] requestPermission erreur: ' + e.message, 'error');
+        }
       }
     }
 
@@ -11683,7 +11687,10 @@ async function cmdScanDirectory(){
     if (!dirHandle) {
       dirHandle = await window.showDirectoryPicker({ mode: 'read' });
       // Store the handle for next time
-      if (societe) await cmdSaveHandle(societe, dirHandle);
+      if (societe) {
+        await cmdSaveHandle(societe, dirHandle);
+        toast('[debug] Handle sauvegardé pour ' + societe, 'success');
+      }
     }
 
     cmdScannedFiles = [];
