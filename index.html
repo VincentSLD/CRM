@@ -11603,18 +11603,30 @@ async function cmdSaveHandle(societe, handle) {
     const db = await cmdOpenHandleDB();
     const tx = db.transaction('handles', 'readwrite');
     tx.objectStore('handles').put(handle, societe);
-    await new Promise((r, e) => { tx.oncomplete = r; tx.onerror = e; });
+    await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = (ev) => reject(ev.target.error); });
     db.close();
-  } catch(e) { console.warn('cmdSaveHandle:', e); }
+    toast('[debug] IndexedDB SAVE OK pour ' + societe, 'success');
+  } catch(e) {
+    toast('[debug] IndexedDB SAVE ERREUR: ' + e.message, 'error');
+    console.warn('cmdSaveHandle:', e);
+  }
 }
 async function cmdLoadHandle(societe) {
   try {
     const db = await cmdOpenHandleDB();
     const tx = db.transaction('handles', 'readonly');
-    const handle = await new Promise((r, e) => { const req = tx.objectStore('handles').get(societe); req.onsuccess = () => r(req.result); req.onerror = e; });
+    const handle = await new Promise((resolve, reject) => {
+      const req = tx.objectStore('handles').get(societe);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = (ev) => reject(ev.target.error);
+    });
     db.close();
+    toast('[debug] IndexedDB LOAD ' + societe + ': ' + (handle ? handle.name : 'VIDE'), 'info');
     return handle || null;
-  } catch(e) { return null; }
+  } catch(e) {
+    toast('[debug] IndexedDB LOAD ERREUR: ' + e.message, 'error');
+    return null;
+  }
 }
 
 function cmdEsc(s){ const d=document.createElement('div'); d.textContent=String(s||''); return d.innerHTML; }
