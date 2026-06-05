@@ -17967,7 +17967,8 @@ async function syncAkuiteoQuick() {
           contact: ak.accountManager || ak.salesman || '', email: ak.address?.email || ak.email || '',
           phone: ak.address?.phone || ak.phone || '', akuiteo_id: akId,
           account_manager_id: ak.accountManagerId || null, salesman_id: ak.salesmanId || null,
-          fact_adresse_ligne1: ak.address?.line1 || null, fact_code_postal: ak.address?.postalCode || null,
+          fact_adresse_ligne1: ak.address?.line1 || null, fact_adresse_ligne2: ak.address?.line2 || null,
+          fact_adresse_ligne3: ak.address?.line3 || null, fact_code_postal: ak.address?.postalCode || null,
           fact_ville: ak.address?.city || null,
           fact_pays: ak.address?.countryName || null, fact_departement: ak.address?.geographicalDepartmentName || null,
           fact_region: ak.address?.regionName || null, raison_sociale: ak.legalName || null,
@@ -20134,9 +20135,6 @@ async function pullClientFromAkuiteo(clientId) {
       account_manager_id: ak.accountManagerId || null,
       account_manager_name: managerName || null,
       commerciaux_associes: salesmenNames.length > 0 ? salesmenNames.join(', ') : null,
-      // DEBUG: écrire aussi dans adresse_ligne1 pour comparer
-      adresse_ligne1: ak.address?.line1 || null,
-      adresse_ligne2: '[DEBUG] ak.address=' + (ak.address ? JSON.stringify(Object.keys(ak.address)) : 'NULL'),
       fact_adresse_ligne1: ak.address?.line1 || null, fact_adresse_ligne2: ak.address?.line2 || null,
       fact_adresse_ligne3: ak.address?.line3 || null, fact_code_postal: ak.address?.postalCode || null,
       fact_ville: ak.address?.city || null,
@@ -20171,7 +20169,8 @@ async function pullClientFromAkuiteo(clientId) {
     if (customData) updates.custom_data = customData;
     let { error } = await sb.from('clients').update(updates).eq('id', clientId);
     if (error) {
-      console.warn('pullClientFromAkuiteo update error:', error.code, error.message);
+      console.warn('pullClientFromAkuiteo update error:', error.code, error.message, error.details);
+      toast('Erreur Supabase (fallback sans fact_*): ' + error.message, 'error', 8000);
       // Fallback : retirer les champs fact_* si colonnes pas encore créées
       const safe = { ...updates };
       ['fact_adresse_ligne1','fact_adresse_ligne2','fact_adresse_ligne3','fact_code_postal','fact_ville','fact_departement','fact_region','fact_pays'].forEach(k => delete safe[k]);
