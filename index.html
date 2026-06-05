@@ -20134,6 +20134,9 @@ async function pullClientFromAkuiteo(clientId) {
       account_manager_id: ak.accountManagerId || null,
       account_manager_name: managerName || null,
       commerciaux_associes: salesmenNames.length > 0 ? salesmenNames.join(', ') : null,
+      // DEBUG: écrire aussi dans adresse_ligne1 pour comparer
+      adresse_ligne1: ak.address?.line1 || null,
+      adresse_ligne2: '[DEBUG] ak.address=' + (ak.address ? JSON.stringify(Object.keys(ak.address)) : 'NULL'),
       fact_adresse_ligne1: ak.address?.line1 || null, fact_adresse_ligne2: ak.address?.line2 || null,
       fact_adresse_ligne3: ak.address?.line3 || null, fact_code_postal: ak.address?.postalCode || null,
       fact_ville: ak.address?.city || null,
