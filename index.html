@@ -11575,8 +11575,8 @@ async function showCommandeDetail(id) {
 }
 
 // ═══ DOSSIER CHANTIER — Scanning / Parsing / Q&A documentaire ═══
-const CMD_SUPPORTED_EXT = ['pdf','docx','msg','eml','txt','csv'];
-const CMD_EXT_ICONS = {pdf:'\u{1F4C4}',docx:'\u{1F4C4}',msg:'\u2709\uFE0F',eml:'\u2709\uFE0F',txt:'\u{1F4DD}',csv:'\u{1F4CA}'};
+const CMD_SUPPORTED_EXT = ['pdf','docx','msg','eml','txt','csv','jpg','jpeg','png','tiff','tif','bmp','webp'];
+const CMD_EXT_ICONS = {pdf:'\u{1F4C4}',docx:'\u{1F4C4}',msg:'\u2709\uFE0F',eml:'\u2709\uFE0F',txt:'\u{1F4DD}',csv:'\u{1F4CA}',jpg:'\u{1F5BC}\uFE0F',jpeg:'\u{1F5BC}\uFE0F',png:'\u{1F5BC}\uFE0F',tiff:'\u{1F5BC}\uFE0F',tif:'\u{1F5BC}\uFE0F',bmp:'\u{1F5BC}\uFE0F',webp:'\u{1F5BC}\uFE0F'};
 let cmdScannedFiles = [];
 let cmdDocCorpus = [];
 let cmdDocChatHistory = [];
@@ -11719,8 +11719,36 @@ function cmdToggleSelectAll(){
   cmdRenderFiles();
 }
 
-// Client-side parsing (PDF, DOCX, TXT, CSV, EML)
+// Client-side parsing (PDF, DOCX, TXT, CSV, EML, images)
+const CMD_IMAGE_EXT = ['jpg','jpeg','png','tiff','tif','bmp','webp'];
+const CMD_IMAGE_MIME = {jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',tiff:'image/tiff',tif:'image/tiff',bmp:'image/bmp',webp:'image/webp'};
+
 async function cmdParseClientSide(file, ext){
+  // OCR pour les images via Claude Vision
+  if(CMD_IMAGE_EXT.includes(ext)){
+    const MAX_IMG = 10 * 1024 * 1024;
+    if(file.size > MAX_IMG) throw new Error('Image trop volumineuse (>10 Mo).');
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let binary = '';
+    for(let i=0;i<bytes.length;i+=8192){
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i+8192, bytes.length)));
+    }
+    const b64 = btoa(binary);
+    const mediaType = CMD_IMAGE_MIME[ext] || 'image/jpeg';
+    const r = await fetch('/api/ocr', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ image:b64, media_type:mediaType, filename:file.name })
+    });
+    if(!r.ok){
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err.error || 'Erreur OCR serveur '+r.status);
+    }
+    const data = await r.json();
+    const text = data.text || '';
+    if(text.includes('[Aucun texte détecté]')) return { text:'', metadata:{ type:'image-ocr', filename:file.name } };
+    return { text:cmdTruncate(text), metadata:{ type:'image-ocr', filename:file.name } };
+  }
   switch(ext){
     case 'txt': case 'csv':
       return { text: cmdTruncate(await file.text()), metadata:{ type:ext, filename:file.name } };
