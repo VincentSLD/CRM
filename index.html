@@ -17966,9 +17966,10 @@ async function syncAkuiteoQuick() {
           contact: ak.accountManager || ak.salesman || '', email: ak.address?.email || ak.email || '',
           phone: ak.address?.phone || ak.phone || '', akuiteo_id: akId,
           account_manager_id: ak.accountManagerId || null, salesman_id: ak.salesmanId || null,
-          adresse_ligne1: ak.address?.line1 || null, code_postal: ak.address?.postalCode || null,
-          pays: ak.address?.countryName || null, departement: ak.address?.geographicalDepartmentName || null,
-          region: ak.address?.regionName || null, raison_sociale: ak.legalName || null,
+          fact_adresse_ligne1: ak.address?.line1 || null, fact_code_postal: ak.address?.postalCode || null,
+          fact_ville: ak.address?.city || null,
+          fact_pays: ak.address?.countryName || null, fact_departement: ak.address?.geographicalDepartmentName || null,
+          fact_region: ak.address?.regionName || null, raison_sociale: ak.legalName || null,
           siren: ak.SIREN || null, siret: ak.SIRET || null, ape: ak.APE || null,
           forme_juridique: ak.legalForm || null,
           // Infos Entreprise (Marketing) — IDs + noms résolus depuis les refs Akuiteo
@@ -18313,11 +18314,12 @@ async function syncAkuiteo() {
         account_manager_id: ak.accountManagerId || null,
         salesman_id: ak.salesmanId || null,
         last_contact: new Date().toISOString().slice(0, 10),
-        adresse_ligne1: ak.address?.line1 || null, adresse_ligne2: ak.address?.line2 || null,
-        adresse_ligne3: ak.address?.line3 || null, code_postal: ak.address?.postalCode || null,
-        pays: ak.address?.countryName || ak.address?.country || null,
-        departement: ak.address?.geographicalDepartmentName || null,
-        region: ak.address?.regionName || null,
+        fact_adresse_ligne1: ak.address?.line1 || null, fact_adresse_ligne2: ak.address?.line2 || null,
+        fact_adresse_ligne3: ak.address?.line3 || null, fact_code_postal: ak.address?.postalCode || null,
+        fact_ville: ak.address?.city || null,
+        fact_pays: ak.address?.countryName || ak.address?.country || null,
+        fact_departement: ak.address?.geographicalDepartmentName || null,
+        fact_region: ak.address?.regionName || null,
         telephone2: ak.address?.phone2 || null, mobile: ak.address?.mobilePhone || null,
         fax: ak.address?.fax || null, site_web: ak.address?.webSite || null,
         raison_sociale: ak.legalName || null, raison_sociale2: ak.legalName2 || null,
@@ -20131,11 +20133,12 @@ async function pullClientFromAkuiteo(clientId) {
       account_manager_id: ak.accountManagerId || null,
       account_manager_name: managerName || null,
       commerciaux_associes: salesmenNames.length > 0 ? salesmenNames.join(', ') : null,
-      adresse_ligne1: ak.address?.line1 || null, adresse_ligne2: ak.address?.line2 || null,
-      adresse_ligne3: ak.address?.line3 || null, code_postal: ak.address?.postalCode || null,
-      pays: ak.address?.countryName || ak.address?.country || null,
-      departement: ak.address?.geographicalDepartmentName || ak.address?.department || null,
-      region: ak.address?.regionName || ak.address?.region || null,
+      fact_adresse_ligne1: ak.address?.line1 || null, fact_adresse_ligne2: ak.address?.line2 || null,
+      fact_adresse_ligne3: ak.address?.line3 || null, fact_code_postal: ak.address?.postalCode || null,
+      fact_ville: ak.address?.city || null,
+      fact_pays: ak.address?.countryName || ak.address?.country || null,
+      fact_departement: ak.address?.geographicalDepartmentName || ak.address?.department || null,
+      fact_region: ak.address?.regionName || ak.address?.region || null,
       telephone2: ak.address?.phone2 || null, mobile: ak.address?.mobilePhone || null,
       fax: ak.address?.fax || null, site_web: ak.address?.webSite || null,
       raison_sociale: ak.legalName || null, raison_sociale2: ak.legalName2 || null,
@@ -20228,13 +20231,13 @@ async function pushClientToAkuiteo(clientId) {
       if (full.salesman_id) akData.salesmanId = full.salesman_id;
       if (full.mk_groupe) akData.level1grouping = full.mk_groupe;
       if (full.mk_origine) akData.level2grouping = full.mk_origine;
-      // Adresse : merger sur l'adresse existante
+      // Adresse : envoyer facturation, fallback sur adresse du site
       if (!akData.address) akData.address = {};
-      if (full.adresse_ligne1) akData.address.line1 = full.adresse_ligne1;
-      if (full.adresse_ligne2) akData.address.line2 = full.adresse_ligne2;
-      if (full.adresse_ligne3) akData.address.line3 = full.adresse_ligne3;
-      if (full.code_postal) akData.address.postalCode = full.code_postal;
-      if (full.city) akData.address.city = full.city;
+      if (full.fact_adresse_ligne1 || full.adresse_ligne1) akData.address.line1 = full.fact_adresse_ligne1 || full.adresse_ligne1;
+      if (full.fact_adresse_ligne2 || full.adresse_ligne2) akData.address.line2 = full.fact_adresse_ligne2 || full.adresse_ligne2;
+      if (full.fact_adresse_ligne3 || full.adresse_ligne3) akData.address.line3 = full.fact_adresse_ligne3 || full.adresse_ligne3;
+      if (full.fact_code_postal || full.code_postal) akData.address.postalCode = full.fact_code_postal || full.code_postal;
+      if (full.fact_ville || full.city) akData.address.city = full.fact_ville || full.city;
       if (full.phone) akData.address.phone = full.phone;
       if (full.telephone2) akData.address.phone2 = full.telephone2;
       if (full.mobile) akData.address.mobilePhone = full.mobile;
@@ -20253,10 +20256,12 @@ async function pushClientToAkuiteo(clientId) {
         languageCode: full.langue || null,
         notes: full.notes || null,
         address: {
-          line1: full.adresse_ligne1 || null,
-          postalCode: full.code_postal || null,
-          city: full.city || null,
-          country: (full.pays && /^[A-Z]{2}$/.test(full.pays.trim())) ? full.pays.trim() : 'FR',
+          line1: full.fact_adresse_ligne1 || full.adresse_ligne1 || null,
+          line2: full.fact_adresse_ligne2 || full.adresse_ligne2 || null,
+          line3: full.fact_adresse_ligne3 || full.adresse_ligne3 || null,
+          postalCode: full.fact_code_postal || full.code_postal || null,
+          city: full.fact_ville || full.city || null,
+          country: (full.fact_pays || full.pays || 'FR').trim().match(/^[A-Z]{2}$/) ? (full.fact_pays || full.pays || 'FR').trim() : 'FR',
           phone: full.phone || null,
           email: full.email || null,
         },
