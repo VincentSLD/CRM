@@ -11589,6 +11589,34 @@ function cmdTruncate(text){
   return text;
 }
 
+// ── IndexedDB storage for directory handles per société ──
+function cmdOpenHandleDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('crm_dir_handles', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('handles');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function cmdSaveHandle(societe, handle) {
+  try {
+    const db = await cmdOpenHandleDB();
+    const tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').put(handle, societe);
+    await new Promise((r, e) => { tx.oncomplete = r; tx.onerror = e; });
+    db.close();
+  } catch(e) { console.warn('cmdSaveHandle:', e); }
+}
+async function cmdLoadHandle(societe) {
+  try {
+    const db = await cmdOpenHandleDB();
+    const tx = db.transaction('handles', 'readonly');
+    const handle = await new Promise((r, e) => { const req = tx.objectStore('handles').get(societe); req.onsuccess = () => r(req.result); req.onerror = e; });
+    db.close();
+    return handle || null;
+  } catch(e) { return null; }
+}
+
 function cmdEsc(s){ const d=document.createElement('div'); d.textContent=String(s||''); return d.innerHTML; }
 
 async function cmdSaveDossierChemin(){
@@ -11632,19 +11660,39 @@ async function cmdScanDirectory(){
     return;
   }
   try {
-    const dirHandle = await window.showDirectoryPicker({ mode:'read' });
+    const cmd = cmdCurrentCommandeId ? DB.commandes.find(x => x.id === cmdCurrentCommandeId) : null;
+    const societe = cmd?.societe || '';
+    const aff = cmd?.affaire_id ? DB.affaires.find(a => a.id === cmd.affaire_id) : null;
+    const codeProjet = aff?.code_projet;
+
+    // Try to re-use a stored handle for this société
+    let dirHandle = null;
+    if (societe) {
+      const stored = await cmdLoadHandle(societe);
+      if (stored) {
+        try {
+          const perm = await stored.requestPermission({ mode: 'read' });
+          if (perm === 'granted') {
+            dirHandle = stored;
+          }
+        } catch(e) { /* permission denied or handle expired */ }
+      }
+    }
+
+    // Fallback: show directory picker
+    if (!dirHandle) {
+      dirHandle = await window.showDirectoryPicker({ mode: 'read' });
+      // Store the handle for next time
+      if (societe) await cmdSaveHandle(societe, dirHandle);
+    }
+
     cmdScannedFiles = [];
     const scanBtn = document.getElementById('cmdScanBtn');
     if(scanBtn) scanBtn.disabled = true;
 
-    document.getElementById('cmdDocsFileList').innerHTML = '<div class="cmd-docs-empty"><span class="cmd-docs-spin"></span> Parcours du répertoire…</div>';
-
     // Detect subfolder starting with code_projet (recursive search)
     let targetHandle = dirHandle;
     let foundAffaire = false;
-    const cmd = cmdCurrentCommandeId ? DB.commandes.find(x => x.id === cmdCurrentCommandeId) : null;
-    const aff = cmd?.affaire_id ? DB.affaires.find(a => a.id === cmd.affaire_id) : null;
-    const codeProjet = aff?.code_projet;
     if (codeProjet) {
       document.getElementById('cmdDocsFileList').innerHTML = '<div class="cmd-docs-empty"><span class="cmd-docs-spin"></span> Recherche du dossier ' + cmdEsc(codeProjet) + '…</div>';
       const found = await cmdFindSubfolder(dirHandle, codeProjet, '', 5);
