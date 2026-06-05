@@ -17396,6 +17396,7 @@ async function submitEditClient() {
     // Fallback : ne garder que les colonnes de base connues
     const safeCols = ['name','code','sector','city','email','phone','raison_sociale','raison_sociale2','forme_juridique',
       'adresse_ligne1','adresse_ligne2','adresse_ligne3','code_postal','departement','region','pays',
+      'fact_adresse_ligne1','fact_adresse_ligne2','fact_adresse_ligne3','fact_code_postal','fact_ville','fact_departement','fact_region','fact_pays',
       'telephone2','mobile','fax','site_web','siren','siret','ape','reference_externe',
       'notes','habitudes_techniques','habitudes_geotechniques','code_codial','compta_codial','id_plateforme','categorie_compte',
       'mode_tarification','rfa_applicable','date_remise_convention','date_signature_convention','commentaires_tarification'];
@@ -20165,7 +20166,14 @@ async function pullClientFromAkuiteo(clientId) {
       mk_groupe: ak.level1grouping || null, mk_origine: ak.level2grouping || null,
     };
     if (customData) updates.custom_data = customData;
-    const { error } = await sb.from('clients').update(updates).eq('id', clientId);
+    let { error } = await sb.from('clients').update(updates).eq('id', clientId);
+    if (error && (error.code === 'PGRST204' || (error.message && error.message.includes('400')))) {
+      // Fallback : retirer les champs fact_* si colonnes pas encore créées
+      const safe = { ...updates };
+      ['fact_adresse_ligne1','fact_adresse_ligne2','fact_adresse_ligne3','fact_code_postal','fact_ville','fact_departement','fact_region','fact_pays'].forEach(k => delete safe[k]);
+      const r2 = await sb.from('clients').update(safe).eq('id', clientId);
+      error = r2.error;
+    }
     if (error) { toast('Erreur mise à jour: ' + error.message, 'error'); return; }
     toast('Société mise à jour depuis Akuiteo', 'success');
     const { data: refreshed } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
