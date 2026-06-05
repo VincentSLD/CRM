@@ -2029,6 +2029,18 @@ tbody tr:last-child td { border-bottom: none; }
           </div>
         </div>
         <div class="card">
+          <div class="card-header"><div class="card-title">Adresse de facturation</div></div>
+          <div class="card-body">
+            <div style="display:grid;gap:8px">
+              <div class="fg"><label class="fl">Ligne 1</label><input class="fi" id="nc-fact-addr1"></div>
+              <div class="fg"><label class="fl">Ligne 2</label><input class="fi" id="nc-fact-addr2"></div>
+              <div class="fg"><label class="fl">Ligne 3</label><input class="fi" id="nc-fact-addr3"></div>
+              <div class="fg"><label class="fl">Code postal</label><input class="fi" id="nc-fact-cp"></div>
+              <div class="fg"><label class="fl">Ville</label><input class="fi" id="nc-fact-city"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
           <div class="card-header"><div class="card-title">Coordonnées</div></div>
           <div class="card-body">
             <div style="display:grid;gap:8px">
@@ -2527,6 +2539,14 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Département</label><input class="fi" id="ec-dept"></div>
         <div class="fg"><label class="fl">Région</label><input class="fi" id="ec-region"></div>
         <div class="fg"><label class="fl">Pays</label><input class="fi" id="ec-pays"></div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Adresse de facturation</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="fg" style="grid-column:1/-1"><label class="fl">Ligne 1</label><input class="fi" id="ec-fact-addr1"></div>
+        <div class="fg"><label class="fl">Ligne 2</label><input class="fi" id="ec-fact-addr2"></div>
+        <div class="fg"><label class="fl">Ligne 3</label><input class="fi" id="ec-fact-addr3"></div>
+        <div class="fg"><label class="fl">Code postal</label><input class="fi" id="ec-fact-cp"></div>
+        <div class="fg"><label class="fl">Ville</label><input class="fi" id="ec-fact-city"></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Coordonnées</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
@@ -6363,6 +6383,13 @@ function renderClientDetail() {
       detailRow('Département', c.departement || '—'),
       detailRow('Région', c.region || '—'),
       detailRow('Pays', c.pays || '—'),
+    ])}
+    ${detailSection('Adresse de facturation', [
+      detailRow('Ligne 1', c.fact_adresse_ligne1 || '—'),
+      detailRow('Ligne 2', c.fact_adresse_ligne2 || '—'),
+      detailRow('Ligne 3', c.fact_adresse_ligne3 || '—'),
+      detailRow('Code postal', c.fact_code_postal || '—'),
+      detailRow('Ville', c.fact_ville || '—'),
     ])}
     ${detailSection('Coordonnées', [
       detailRow('Email', c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : '—'),
@@ -16345,6 +16372,11 @@ function openModal(id) {
     document.getElementById('ec-dept').value = c.departement||'';
     document.getElementById('ec-region').value = c.region||'';
     document.getElementById('ec-pays').value = c.pays||'';
+    document.getElementById('ec-fact-addr1').value = c.fact_adresse_ligne1||'';
+    document.getElementById('ec-fact-addr2').value = c.fact_adresse_ligne2||'';
+    document.getElementById('ec-fact-addr3').value = c.fact_adresse_ligne3||'';
+    document.getElementById('ec-fact-cp').value = c.fact_code_postal||'';
+    document.getElementById('ec-fact-city').value = c.fact_ville||'';
     document.getElementById('ec-email').value = c.email||'';
     document.getElementById('ec-phone').value = c.phone||'';
     document.getElementById('ec-phone2').value = c.telephone2||'';
@@ -16588,6 +16620,7 @@ async function sendReport() {
 function clearNewClientForm() {
   const ids = ['nc-sirene-search','nc-name','nc-code','nc-raison','nc-raison2','nc-forme','nc-sector',
     'nc-addr1','nc-addr2','nc-addr3','nc-cp','nc-city','nc-dept','nc-region',
+    'nc-fact-addr1','nc-fact-addr2','nc-fact-addr3','nc-fact-cp','nc-fact-city',
     'nc-email','nc-phone','nc-phone2','nc-mobile','nc-fax','nc-web',
     'nc-siren','nc-siret','nc-ape','nc-refext','nc-revenue','nc-capital','nc-headcount','nc-notes'];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -17122,6 +17155,11 @@ async function submitNewClient() {
       departement: document.getElementById('nc-dept').value.trim() || null,
       region: document.getElementById('nc-region').value.trim() || null,
       pays: document.getElementById('nc-pays').value.trim() || null,
+      fact_adresse_ligne1: document.getElementById('nc-fact-addr1').value.trim() || null,
+      fact_adresse_ligne2: document.getElementById('nc-fact-addr2').value.trim() || null,
+      fact_adresse_ligne3: document.getElementById('nc-fact-addr3').value.trim() || null,
+      fact_code_postal: document.getElementById('nc-fact-cp').value.trim() || null,
+      fact_ville: document.getElementById('nc-fact-city').value.trim() || null,
       email: document.getElementById('nc-email').value.trim() || '',
       phone: document.getElementById('nc-phone').value.trim() || '',
       telephone2: document.getElementById('nc-phone2').value.trim() || null,
@@ -17301,6 +17339,11 @@ async function submitEditClient() {
     departement: document.getElementById('ec-dept').value.trim() || null,
     region: document.getElementById('ec-region').value.trim() || null,
     pays: document.getElementById('ec-pays').value.trim() || null,
+    fact_adresse_ligne1: document.getElementById('ec-fact-addr1').value.trim() || null,
+    fact_adresse_ligne2: document.getElementById('ec-fact-addr2').value.trim() || null,
+    fact_adresse_ligne3: document.getElementById('ec-fact-addr3').value.trim() || null,
+    fact_code_postal: document.getElementById('ec-fact-cp').value.trim() || null,
+    fact_ville: document.getElementById('ec-fact-city').value.trim() || null,
     email: document.getElementById('ec-email').value.trim(),
     phone: document.getElementById('ec-phone').value.trim(),
     telephone2: document.getElementById('ec-phone2').value.trim() || null,
