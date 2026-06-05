@@ -11761,8 +11761,8 @@ async function cmdParseClientSide(file, ext){
 }
 
 async function cmdParseViaServer(file, ext){
-  const MAX_SERVER = 3 * 1024 * 1024;
-  if(file.size > MAX_SERVER) throw new Error('Fichier trop volumineux (>3 Mo). Format .'+ext+' non supporté en local.');
+  const MAX_SERVER = 10 * 1024 * 1024;
+  if(file.size > MAX_SERVER) throw new Error('Fichier trop volumineux (>10 Mo). Format .'+ext+' non supporté en local.');
   const buf = await file.arrayBuffer();
   const bytes = new Uint8Array(buf);
   let binary = '';
