@@ -16434,6 +16434,13 @@ async function fillAkuiteoDropdowns(prefix, client) {
   setHtml('salesman', akRefOptions(akRef.employees, c.salesman_id, 'Commercial GPH...'));
   const factResp = document.getElementById(prefix + '-fact-responsable');
   if (factResp) factResp.innerHTML = akRefOptions(akRef.employees, c.responsable_site_id, 'Responsable du site...');
+  // Par défaut, copier le Commercial GPH vers le Responsable du site
+  const salesmanSel = document.getElementById(prefix + '-mk-salesman');
+  if (salesmanSel && factResp) {
+    salesmanSel.addEventListener('change', function() {
+      if (this.value && factResp.value === '') factResp.value = this.value;
+    });
+  }
   // Groupe / Origine (dropdowns dynamiques)
   const [groupes, origines] = await Promise.all([loadDistinctValues('mk_groupe'), loadDistinctValues('mk_origine')]);
   setHtml('groupe', buildDistinctOptions(groupes, c.mk_groupe, 'Groupe...'));
