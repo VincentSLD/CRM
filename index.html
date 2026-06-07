@@ -20054,14 +20054,13 @@ async function pullClientFromAkuiteo(clientId) {
     let methodOfPaymentFromRead = null;
     let siteAddress = null; // adresse du site principal Akuiteo
     const promises = [];
-    // Sites : récupérer l'adresse du site principal
+    // Sites : récupérer l'adresse de facturation (useForBillingAddress), sinon site principal
     promises.push(
       akuiteoFetch('GET', '/crm/customers/' + client.akuiteo_id + '/sites')
         .then(sites => {
-          console.log('[DIAG] Tous les sites Akuiteo:', JSON.stringify(sites, null, 2));
           if (Array.isArray(sites) && sites.length > 0) {
-            const mainSite = sites.find(s => s.main) || sites[0];
-            if (mainSite?.address) siteAddress = mainSite.address;
+            const billingSite = sites.find(s => s.useForBillingAddress) || sites.find(s => s.main) || sites[0];
+            if (billingSite?.address) siteAddress = billingSite.address;
           }
         })
         .catch(() => {})
