@@ -17994,6 +17994,31 @@ async function syncAkuiteoQuick() {
       });
       await sb.from('clients').upsert(rows, { onConflict: 'id' });
       console.log(`[QuickSync] ${rows.length} sociétés upsertées avec infos marketing`);
+
+      // Mettre à jour fact_* avec l'adresse du site de facturation (useForBillingAddress)
+      setSyncText('Sync rapide — Adresses de facturation (sites)...');
+      const akIds = akCustomers.map(ak => String(ak.id || ak.code));
+      for (let i = 0; i < akIds.length; i += 10) {
+        const batch = akIds.slice(i, i + 10);
+        await Promise.allSettled(batch.map(async (akId) => {
+          const sites = await akuiteoFetch('GET', '/crm/customers/' + akId + '/sites').catch(() => []);
+          if (!Array.isArray(sites) || sites.length === 0) return;
+          const billingSite = sites.find(s => s.useForBillingAddress) || sites.find(s => s.main) || sites[0];
+          const a = billingSite?.address;
+          if (!a) return;
+          const crmId = existingMap[akId];
+          if (!crmId) return;
+          await sb.from('clients').update({
+            fact_adresse_ligne1: a.line1 || null, fact_adresse_ligne2: a.line2 || null,
+            fact_adresse_ligne3: a.line3 || null, fact_code_postal: a.postalCode || null,
+            fact_ville: a.city || null,
+            fact_pays: a.countryName || a.country || null,
+            fact_departement: a.geographicalDepartmentName || a.department || null,
+            fact_region: a.regionName || a.region || null,
+          }).eq('id', crmId);
+        }));
+      }
+      console.log(`[QuickSync] Adresses de facturation mises à jour via sites`);
     }
 
     // 2. Contacts + commerciaux associés (salesmen) des clients récupérés
@@ -18356,7 +18381,34 @@ async function syncAkuiteo() {
     }
 
     console.log(`[Akuiteo] Clients : ${created} créés, ${updated} mis à jour`);
-    toast(`Clients : ${created} créés, ${updated} mis à jour. Sync contacts...`, 'info');
+    toast(`Clients : ${created} créés, ${updated} mis à jour. Adresses facturation...`, 'info');
+
+    // Mettre à jour fact_* avec l'adresse du site de facturation (useForBillingAddress)
+    setSyncText('Sync complète — Adresses de facturation (sites)...');
+    const allAkIds = allClientsBatch.map(c => c.akuiteo_id).filter(Boolean);
+    for (let i = 0; i < allAkIds.length; i += 10) {
+      if (i % 50 === 0) setSyncText(`Adresses facturation ${i}/${allAkIds.length}...`);
+      const batch = allAkIds.slice(i, i + 10);
+      await Promise.allSettled(batch.map(async (akId) => {
+        const sites = await akuiteoFetch('GET', '/crm/customers/' + akId + '/sites').catch(() => []);
+        if (!Array.isArray(sites) || sites.length === 0) return;
+        const billingSite = sites.find(s => s.useForBillingAddress) || sites.find(s => s.main) || sites[0];
+        const a = billingSite?.address;
+        if (!a) return;
+        const crmId = allClientsBatch.find(c => c.akuiteo_id === akId)?.id;
+        if (!crmId) return;
+        await sb.from('clients').update({
+          fact_adresse_ligne1: a.line1 || null, fact_adresse_ligne2: a.line2 || null,
+          fact_adresse_ligne3: a.line3 || null, fact_code_postal: a.postalCode || null,
+          fact_ville: a.city || null,
+          fact_pays: a.countryName || a.country || null,
+          fact_departement: a.geographicalDepartmentName || a.department || null,
+          fact_region: a.regionName || a.region || null,
+        }).eq('id', crmId);
+      }));
+    }
+    console.log(`[Akuiteo] Adresses de facturation mises à jour via sites: ${allAkIds.length}`);
+    toast(`Adresses facturation OK. Sync contacts...`, 'info');
 
     // --- ETAPE 2 : Sync contacts (uniquement nouveaux clients ou modifiés) ---
     console.log('[Akuiteo] === ETAPE 2 : Sync contacts ===');
