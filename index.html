@@ -20055,15 +20055,19 @@ async function pullClientFromAkuiteo(clientId) {
     let siteAddress = null; // adresse du site principal Akuiteo
     const promises = [];
     // Sites : récupérer l'adresse du site principal
+    let sitesDebug = '';
     promises.push(
       akuiteoFetch('GET', '/crm/customers/' + client.akuiteo_id + '/sites')
         .then(sites => {
           if (Array.isArray(sites) && sites.length > 0) {
+            sitesDebug = sites.length + ' sites: ' + sites.map(s => s.name + '(main=' + !!s.main + ',addr=' + !!(s.address?.line1) + ')').join(', ');
             const mainSite = sites.find(s => s.main) || sites[0];
             if (mainSite?.address) siteAddress = mainSite.address;
+          } else {
+            sitesDebug = 'aucun site trouvé (reponse=' + JSON.stringify(sites).substring(0, 100) + ')';
           }
         })
-        .catch(() => {})
+        .catch(e => { sitesDebug = 'erreur: ' + e.message; })
     );
     // customData + salesmen + methodOfPayment via POST /read
     promises.push(
@@ -20197,7 +20201,7 @@ async function pullClientFromAkuiteo(clientId) {
     const src = siteAddress ? 'SITE' : 'CLIENT';
     const sent = updates.fact_adresse_ligne1 ?? '(null)';
     const got = verif?.fact_adresse_ligne1 ?? '(null)';
-    toast('DIAG [' + src + ']: envoyé="' + sent + '" lu="' + got + '"', 'info', 15000);
+    toast('DIAG [' + src + ']: envoyé="' + sent + '" lu="' + got + '" | ' + sitesDebug, 'info', 20000);
     toast('Société mise à jour depuis Akuiteo', 'success');
     const { data: refreshed } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
     if (refreshed) currentClient = refreshed;
