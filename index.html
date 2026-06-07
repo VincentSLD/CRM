@@ -20180,11 +20180,11 @@ async function pullClientFromAkuiteo(clientId) {
     if (error) { toast('Erreur mise à jour: ' + error.message, 'error'); return; }
     // Vérification : relire la ligne pour confirmer que fact_* a été écrit
     const { data: verif } = await sb.from('clients').select('fact_adresse_ligne1,fact_code_postal,fact_ville').eq('id', clientId).maybeSingle();
-    const sent = updates.fact_adresse_ligne1 || '(vide)';
-    const got = verif?.fact_adresse_ligne1 || '(vide)';
-    if (sent !== got) {
-      toast('DIAGNOSTIC: envoyé fact_ligne1="' + sent + '" mais lu="' + got + '"', 'error', 12000);
-    }
+    const sent = updates.fact_adresse_ligne1 ?? '(null)';
+    const got = verif?.fact_adresse_ligne1 ?? '(null)';
+    const sentCP = updates.fact_code_postal ?? '(null)';
+    const gotCP = verif?.fact_code_postal ?? '(null)';
+    toast('DIAG: L1 envoyé="' + sent + '" lu="' + got + '" | CP envoyé="' + sentCP + '" lu="' + gotCP + '"', 'info', 15000);
     toast('Société mise à jour depuis Akuiteo', 'success');
     const { data: refreshed } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
     if (refreshed) currentClient = refreshed;
