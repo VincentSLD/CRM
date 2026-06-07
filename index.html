@@ -18402,10 +18402,10 @@ async function syncAkuiteo() {
 
     // Mettre à jour fact_* avec l'adresse du site de facturation (useForBillingAddress)
     setSyncText('Sync complète — Adresses de facturation (sites)...');
-    const allAkIds = allClientsBatch.map(c => c.akuiteo_id).filter(Boolean);
-    for (let i = 0; i < allAkIds.length; i += 10) {
-      if (i % 50 === 0) setSyncText(`Adresses facturation ${i}/${allAkIds.length}...`);
-      const batch = allAkIds.slice(i, i + 10);
+    const billingAkIds = allClientsBatch.map(c => c.akuiteo_id).filter(Boolean);
+    for (let i = 0; i < billingAkIds.length; i += 10) {
+      if (i % 50 === 0) setSyncText(`Adresses facturation ${i}/${billingAkIds.length}...`);
+      const batch = billingAkIds.slice(i, i + 10);
       await Promise.allSettled(batch.map(async (akId) => {
         const sites = await akuiteoFetch('GET', '/crm/customers/' + akId + '/sites').catch(() => []);
         if (!Array.isArray(sites) || sites.length === 0) return;
@@ -18424,7 +18424,7 @@ async function syncAkuiteo() {
         }).eq('id', crmId);
       }));
     }
-    console.log(`[Akuiteo] Adresses de facturation mises à jour via sites: ${allAkIds.length}`);
+    console.log(`[Akuiteo] Adresses de facturation mises à jour via sites: ${billingAkIds.length}`);
     toast(`Adresses facturation OK. Sync contacts...`, 'info');
 
     // --- ETAPE 2 : Sync contacts (uniquement nouveaux clients ou modifiés) ---
