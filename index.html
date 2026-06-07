@@ -18442,8 +18442,8 @@ async function syncAkuiteo() {
     const clientIdsWithContacts = new Set((clientsWithContacts || []).map(c => c.client_id));
 
     // Clients modifiés depuis le dernier sync (updated_at > lastSyncDate via upsert Supabase)
-    const allAkIds = akCustomers.map(c => String(c.id)).filter(id => akClientMapForContacts[id]);
-    const akClientIdsForContacts = allAkIds.filter(akId => {
+    const allAkIdsContacts = akCustomers.map(c => String(c.id)).filter(id => akClientMapForContacts[id]);
+    const akClientIdsForContacts = allAkIdsContacts.filter(akId => {
       const crmClient = akClientMapForContacts[akId];
       if (!crmClient) return false;
       // Nouveau client (pas de contacts en base)
@@ -18453,11 +18453,11 @@ async function syncAkuiteo() {
     });
 
     // Limiter aux clients vraiment nouveaux + ceux modifiés dans ce sync
-    const newClientIds = allAkIds.filter(akId => {
+    const newClientIds = allAkIdsContacts.filter(akId => {
       const crmClient = akClientMapForContacts[akId];
       return crmClient && !clientIdsWithContacts.has(crmClient.id);
     });
-    const updatedClientIds = allAkIds.filter(akId => !newClientIds.includes(akId) && akClientMapForContacts[akId]);
+    const updatedClientIds = allAkIdsContacts.filter(akId => !newClientIds.includes(akId) && akClientMapForContacts[akId]);
 
     // Prioriser : d'abord les nouveaux, puis les 50 premiers modifiés (pour ne pas tout refaire)
     const priorityIds = [...newClientIds, ...updatedClientIds.slice(0, 50)];
