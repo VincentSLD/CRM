@@ -20055,19 +20055,15 @@ async function pullClientFromAkuiteo(clientId) {
     let siteAddress = null; // adresse du site principal Akuiteo
     const promises = [];
     // Sites : récupérer l'adresse du site principal
-    let sitesDebug = '';
     promises.push(
       akuiteoFetch('GET', '/crm/customers/' + client.akuiteo_id + '/sites')
         .then(sites => {
           if (Array.isArray(sites) && sites.length > 0) {
-            sitesDebug = sites.length + ' sites: ' + sites.map(s => s.name + '(main=' + !!s.main + ',addr=' + !!(s.address?.line1) + ')').join(', ');
             const mainSite = sites.find(s => s.main) || sites[0];
             if (mainSite?.address) siteAddress = mainSite.address;
-          } else {
-            sitesDebug = 'aucun site trouvé (reponse=' + JSON.stringify(sites).substring(0, 100) + ')';
           }
         })
-        .catch(e => { sitesDebug = 'erreur: ' + e.message; })
+        .catch(() => {})
     );
     // customData + salesmen + methodOfPayment via POST /read
     promises.push(
@@ -20188,7 +20184,6 @@ async function pullClientFromAkuiteo(clientId) {
     let { error } = await sb.from('clients').update(updates).eq('id', clientId);
     if (error) {
       console.warn('pullClientFromAkuiteo update error:', error.code, error.message, error.details);
-      toast('Erreur Supabase (fallback sans fact_*): ' + error.message, 'error', 8000);
       // Fallback : retirer les champs fact_* si colonnes pas encore créées
       const safe = { ...updates };
       ['fact_adresse_ligne1','fact_adresse_ligne2','fact_adresse_ligne3','fact_code_postal','fact_ville','fact_departement','fact_region','fact_pays'].forEach(k => delete safe[k]);
@@ -20196,13 +20191,6 @@ async function pullClientFromAkuiteo(clientId) {
       error = r2.error;
     }
     if (error) { toast('Erreur mise à jour: ' + error.message, 'error'); return; }
-    // Vérification : relire la ligne pour confirmer que fact_* a été écrit
-    const { data: verif } = await sb.from('clients').select('fact_adresse_ligne1,fact_code_postal,fact_ville').eq('id', clientId).maybeSingle();
-    const src = siteAddress ? 'SITE' : 'CLIENT';
-    const sent = updates.fact_adresse_ligne1 ?? '(null)';
-    const got = verif?.fact_adresse_ligne1 ?? '(null)';
-    console.log('[DIAG pullAkuiteo]', { src, sent, got, sitesDebug, siteAddress, akAddress: ak.address });
-    toast('DIAG [' + src + ']: envoyé="' + sent + '" lu="' + got + '" | ' + sitesDebug, 'info', 20000);
     toast('Société mise à jour depuis Akuiteo', 'success');
     const { data: refreshed } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
     if (refreshed) currentClient = refreshed;
