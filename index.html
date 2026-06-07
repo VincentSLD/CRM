@@ -20047,12 +20047,24 @@ async function pullClientFromAkuiteo(clientId) {
   try {
     const ak = await akuiteoFetch('GET', '/crm/customers/' + client.akuiteo_id);
     if (!ak || !ak.id) { toast('Société non trouvée dans Akuiteo', 'error'); return; }
-    // Récupérer customData + salesmen, nom du manager et modes de tarification en parallèle
+    // Récupérer customData + salesmen, nom du manager, modes de tarification et sites en parallèle
     let customData = null, salesmen = [];
     let managerName = null;
     let pricingName = null, pricingName2 = null;
     let methodOfPaymentFromRead = null;
+    let siteAddress = null; // adresse du site principal Akuiteo
     const promises = [];
+    // Sites : récupérer l'adresse du site principal
+    promises.push(
+      akuiteoFetch('GET', '/crm/customers/' + client.akuiteo_id + '/sites')
+        .then(sites => {
+          if (Array.isArray(sites) && sites.length > 0) {
+            const mainSite = sites.find(s => s.main) || sites[0];
+            if (mainSite?.address) siteAddress = mainSite.address;
+          }
+        })
+        .catch(() => {})
+    );
     // customData + salesmen + methodOfPayment via POST /read
     promises.push(
       akuiteoFetch('POST', '/crm/customers/' + client.akuiteo_id + '/read', { options: ['CUSTOM_DATA', 'SALESMEN', 'METHOD_OF_PAYMENT'] })
@@ -20135,12 +20147,14 @@ async function pullClientFromAkuiteo(clientId) {
       account_manager_id: ak.accountManagerId || null,
       account_manager_name: managerName || null,
       commerciaux_associes: salesmenNames.length > 0 ? salesmenNames.join(', ') : null,
-      fact_adresse_ligne1: ak.address?.line1 || null, fact_adresse_ligne2: ak.address?.line2 || null,
-      fact_adresse_ligne3: ak.address?.line3 || null, fact_code_postal: ak.address?.postalCode || null,
-      fact_ville: ak.address?.city || null,
-      fact_pays: ak.address?.countryName || ak.address?.country || null,
-      fact_departement: ak.address?.geographicalDepartmentName || ak.address?.department || null,
-      fact_region: ak.address?.regionName || ak.address?.region || null,
+      fact_adresse_ligne1: siteAddress?.line1 || ak.address?.line1 || null,
+      fact_adresse_ligne2: siteAddress?.line2 || ak.address?.line2 || null,
+      fact_adresse_ligne3: siteAddress?.line3 || ak.address?.line3 || null,
+      fact_code_postal: siteAddress?.postalCode || ak.address?.postalCode || null,
+      fact_ville: siteAddress?.city || ak.address?.city || null,
+      fact_pays: siteAddress?.countryName || siteAddress?.country || ak.address?.countryName || ak.address?.country || null,
+      fact_departement: siteAddress?.geographicalDepartmentName || siteAddress?.department || ak.address?.geographicalDepartmentName || ak.address?.department || null,
+      fact_region: siteAddress?.regionName || siteAddress?.region || ak.address?.regionName || ak.address?.region || null,
       telephone2: ak.address?.phone2 || null, mobile: ak.address?.mobilePhone || null,
       fax: ak.address?.fax || null, site_web: ak.address?.webSite || null,
       raison_sociale: ak.legalName || null, raison_sociale2: ak.legalName2 || null,
@@ -20180,11 +20194,10 @@ async function pullClientFromAkuiteo(clientId) {
     if (error) { toast('Erreur mise à jour: ' + error.message, 'error'); return; }
     // Vérification : relire la ligne pour confirmer que fact_* a été écrit
     const { data: verif } = await sb.from('clients').select('fact_adresse_ligne1,fact_code_postal,fact_ville').eq('id', clientId).maybeSingle();
+    const src = siteAddress ? 'SITE' : 'CLIENT';
     const sent = updates.fact_adresse_ligne1 ?? '(null)';
     const got = verif?.fact_adresse_ligne1 ?? '(null)';
-    const sentCP = updates.fact_code_postal ?? '(null)';
-    const gotCP = verif?.fact_code_postal ?? '(null)';
-    toast('DIAG: L1 envoyé="' + sent + '" lu="' + got + '" | CP envoyé="' + sentCP + '" lu="' + gotCP + '"', 'info', 15000);
+    toast('DIAG [' + src + ']: envoyé="' + sent + '" lu="' + got + '"', 'info', 15000);
     toast('Société mise à jour depuis Akuiteo', 'success');
     const { data: refreshed } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
     if (refreshed) currentClient = refreshed;
