@@ -17340,96 +17340,103 @@ async function submitNewFacture() {
 async function submitEditClient() {
   if (!currentClient) return;
   showSyncLoading(true); setSyncText('Enregistrement en cours...');
-  const fields = {
-    name: document.getElementById('ec-name').value.trim(),
-    code: document.getElementById('ec-code').value.trim(),
-    raison_sociale: document.getElementById('ec-raison').value.trim() || null,
-    raison_sociale2: document.getElementById('ec-raison2').value.trim() || null,
-    forme_juridique: document.getElementById('ec-forme').value.trim() || null,
-    sector: document.getElementById('ec-sector').value.trim(),
-    adresse_ligne1: document.getElementById('ec-addr1').value.trim() || null,
-    adresse_ligne2: document.getElementById('ec-addr2').value.trim() || null,
-    adresse_ligne3: document.getElementById('ec-addr3').value.trim() || null,
-    code_postal: document.getElementById('ec-cp').value.trim() || null,
-    city: document.getElementById('ec-city').value.trim(),
-    departement: document.getElementById('ec-dept').value.trim() || null,
-    region: document.getElementById('ec-region').value.trim() || null,
-    pays: document.getElementById('ec-pays').value.trim() || null,
-    fact_adresse_ligne1: document.getElementById('ec-fact-addr1').value.trim() || null,
-    fact_adresse_ligne2: document.getElementById('ec-fact-addr2').value.trim() || null,
-    fact_adresse_ligne3: document.getElementById('ec-fact-addr3').value.trim() || null,
-    fact_code_postal: document.getElementById('ec-fact-cp').value.trim() || null,
-    fact_ville: document.getElementById('ec-fact-city').value.trim() || null,
-    fact_departement: document.getElementById('ec-fact-dept').value.trim() || null,
-    fact_region: document.getElementById('ec-fact-region').value.trim() || null,
-    fact_pays: document.getElementById('ec-fact-pays').value.trim() || null,
-    email: document.getElementById('ec-email').value.trim(),
-    phone: document.getElementById('ec-phone').value.trim(),
-    telephone2: document.getElementById('ec-phone2').value.trim() || null,
-    mobile: document.getElementById('ec-mobile').value.trim() || null,
-    fax: document.getElementById('ec-fax').value.trim() || null,
-    site_web: document.getElementById('ec-web').value.trim() || null,
-    siren: document.getElementById('ec-siren').value.trim() || null,
-    siret: document.getElementById('ec-siret').value.trim() || null,
-    ape: document.getElementById('ec-ape').value.trim() || null,
-    reference_externe: document.getElementById('ec-refext')?.value?.trim() || null,
-    tva_intracommunautaire: document.getElementById('ec-tva').value.trim() || null,
-    categorie_compte: readCategorieCompte('ec'),
-    notes: document.getElementById('ec-notes').value.trim() || null,
-    habitudes_techniques: document.getElementById('ec-hab-tech').innerHTML.trim() || null,
-    habitudes_geotechniques: document.getElementById('ec-hab-geo').innerHTML.trim() || null,
-    code_codial: document.getElementById('ec-code-codial')?.value.trim() || null,
-    compta_codial: document.getElementById('ec-compta-codial')?.value.trim() || null,
-    id_plateforme: document.getElementById('ec-id-plateforme')?.value.trim() || null,
-    rfa_applicable: document.getElementById('ec-rfa-applicable')?.value.trim() || null,
-    date_remise_convention: document.getElementById('ec-date-remise-convention')?.value || null,
-    date_signature_convention: document.getElementById('ec-date-signature-convention')?.value || null,
-    commentaires_tarification: document.getElementById('ec-commentaires-tarification')?.value.trim() || null,
-    reseaux_pro: _rpSelected.length > 0 ? _rpSelected : null,
-    ...getAkuiteoFieldsFromModal('ec'),
-  };
-  invalidateReseauxProCache();
-  invalidateGroupeOrigineCache();
-  // Tenter l'update complet, si 400 (colonne inexistante) retirer les champs problématiques
-  let toSend = { ...fields };
-  let { error } = await sb.from('clients').update(toSend).eq('id', currentClient.id);
-  if (error && error.code === 'PGRST204' || (error && error.message && error.message.includes('400'))) {
-    // Fallback : ne garder que les colonnes de base connues
-    const safeCols = ['name','code','sector','city','email','phone','raison_sociale','raison_sociale2','forme_juridique',
-      'adresse_ligne1','adresse_ligne2','adresse_ligne3','code_postal','departement','region','pays',
-      'fact_adresse_ligne1','fact_adresse_ligne2','fact_adresse_ligne3','fact_code_postal','fact_ville','fact_departement','fact_region','fact_pays',
-      'telephone2','mobile','fax','site_web','siren','siret','ape','reference_externe',
-      'notes','habitudes_techniques','habitudes_geotechniques','code_codial','compta_codial','id_plateforme','categorie_compte',
-      'mode_tarification','rfa_applicable','date_remise_convention','date_signature_convention','commentaires_tarification'];
-    toSend = {};
-    for (const k of safeCols) { if (k in fields) toSend[k] = fields[k]; }
-    const r2 = await sb.from('clients').update(toSend).eq('id', currentClient.id);
-    error = r2.error;
-  }
-  if (error) { showSyncLoading(false); toast(`Erreur: ${error.message}`, 'error'); return; }
-  closeModal('edit-client');
-  setSyncText('Rafraîchissement...');
-  // Rafraîchir le client localement (sans recharger toute la base)
-  const { data: refreshed } = await sb.from('clients').select('*').eq('id', currentClient.id).maybeSingle();
-  if (refreshed) {
-    currentClient = refreshed;
-    const mapped = mapClient(refreshed);
-    const idx = DB.clients.findIndex(c => c.id === currentClient.id);
-    if (idx >= 0) DB.clients[idx] = mapped; else DB.clients.push(mapped);
-  }
-  renderPage(currentPage);
-  showSyncLoading(false);
-  toast('Mis à jour avec succès', 'success');
-  if (currentClient.akuiteo_id) {
-    if (confirm('Voulez-vous mettre à jour la fiche dans Akuiteo ?')) {
-      showSyncLoading(true); setSyncText('Envoi vers Akuiteo...');
-      await pushClientToAkuiteo(currentClient.id);
-      showSyncLoading(false);
-    } else {
-      await sb.from('clients').update({ akuiteo_dirty: true }).eq('id', currentClient.id);
-      currentClient.akuiteo_dirty = true;
-      renderPage(currentPage);
+  try {
+    const fields = {
+      name: document.getElementById('ec-name').value.trim(),
+      code: document.getElementById('ec-code').value.trim(),
+      raison_sociale: document.getElementById('ec-raison').value.trim() || null,
+      raison_sociale2: document.getElementById('ec-raison2').value.trim() || null,
+      forme_juridique: document.getElementById('ec-forme').value.trim() || null,
+      sector: document.getElementById('ec-sector').value.trim(),
+      adresse_ligne1: document.getElementById('ec-addr1').value.trim() || null,
+      adresse_ligne2: document.getElementById('ec-addr2').value.trim() || null,
+      adresse_ligne3: document.getElementById('ec-addr3').value.trim() || null,
+      code_postal: document.getElementById('ec-cp').value.trim() || null,
+      city: document.getElementById('ec-city').value.trim(),
+      departement: document.getElementById('ec-dept').value.trim() || null,
+      region: document.getElementById('ec-region').value.trim() || null,
+      pays: document.getElementById('ec-pays').value.trim() || null,
+      fact_adresse_ligne1: document.getElementById('ec-fact-addr1').value.trim() || null,
+      fact_adresse_ligne2: document.getElementById('ec-fact-addr2').value.trim() || null,
+      fact_adresse_ligne3: document.getElementById('ec-fact-addr3').value.trim() || null,
+      fact_code_postal: document.getElementById('ec-fact-cp').value.trim() || null,
+      fact_ville: document.getElementById('ec-fact-city').value.trim() || null,
+      fact_departement: document.getElementById('ec-fact-dept').value.trim() || null,
+      fact_region: document.getElementById('ec-fact-region').value.trim() || null,
+      fact_pays: document.getElementById('ec-fact-pays').value.trim() || null,
+      email: document.getElementById('ec-email').value.trim(),
+      phone: document.getElementById('ec-phone').value.trim(),
+      telephone2: document.getElementById('ec-phone2').value.trim() || null,
+      mobile: document.getElementById('ec-mobile').value.trim() || null,
+      fax: document.getElementById('ec-fax').value.trim() || null,
+      site_web: document.getElementById('ec-web').value.trim() || null,
+      siren: document.getElementById('ec-siren').value.trim() || null,
+      siret: document.getElementById('ec-siret').value.trim() || null,
+      ape: document.getElementById('ec-ape').value.trim() || null,
+      reference_externe: document.getElementById('ec-refext')?.value?.trim() || null,
+      tva_intracommunautaire: document.getElementById('ec-tva').value.trim() || null,
+      categorie_compte: readCategorieCompte('ec'),
+      notes: document.getElementById('ec-notes').value.trim() || null,
+      habitudes_techniques: document.getElementById('ec-hab-tech').innerHTML.trim() || null,
+      habitudes_geotechniques: document.getElementById('ec-hab-geo').innerHTML.trim() || null,
+      code_codial: document.getElementById('ec-code-codial')?.value.trim() || null,
+      compta_codial: document.getElementById('ec-compta-codial')?.value.trim() || null,
+      id_plateforme: document.getElementById('ec-id-plateforme')?.value.trim() || null,
+      rfa_applicable: document.getElementById('ec-rfa-applicable')?.value.trim() || null,
+      date_remise_convention: document.getElementById('ec-date-remise-convention')?.value || null,
+      date_signature_convention: document.getElementById('ec-date-signature-convention')?.value || null,
+      commentaires_tarification: document.getElementById('ec-commentaires-tarification')?.value.trim() || null,
+      reseaux_pro: _rpSelected.length > 0 ? _rpSelected : null,
+      ...getAkuiteoFieldsFromModal('ec'),
+    };
+    invalidateReseauxProCache();
+    invalidateGroupeOrigineCache();
+    // Tenter l'update complet, si 400 (colonne inexistante) retirer les champs problématiques
+    let toSend = { ...fields };
+    let { error } = await sb.from('clients').update(toSend).eq('id', currentClient.id);
+    if (error && error.code === 'PGRST204' || (error && error.message && error.message.includes('400'))) {
+      // Fallback : ne garder que les colonnes de base connues
+      const safeCols = ['name','code','sector','city','email','phone','raison_sociale','raison_sociale2','forme_juridique',
+        'adresse_ligne1','adresse_ligne2','adresse_ligne3','code_postal','departement','region','pays',
+        'fact_adresse_ligne1','fact_adresse_ligne2','fact_adresse_ligne3','fact_code_postal','fact_ville','fact_departement','fact_region','fact_pays',
+        'telephone2','mobile','fax','site_web','siren','siret','ape','reference_externe',
+        'notes','habitudes_techniques','habitudes_geotechniques','code_codial','compta_codial','id_plateforme','categorie_compte',
+        'mode_tarification','rfa_applicable','date_remise_convention','date_signature_convention','commentaires_tarification'];
+      toSend = {};
+      for (const k of safeCols) { if (k in fields) toSend[k] = fields[k]; }
+      const r2 = await sb.from('clients').update(toSend).eq('id', currentClient.id);
+      error = r2.error;
     }
+    if (error) { toast(`Erreur: ${error.message}`, 'error'); return; }
+    closeModal('edit-client');
+    setSyncText('Rafraîchissement...');
+    // Rafraîchir le client localement (sans recharger toute la base)
+    const { data: refreshed } = await sb.from('clients').select('*').eq('id', currentClient.id).maybeSingle();
+    if (refreshed) {
+      currentClient = refreshed;
+      const mapped = mapClient(refreshed);
+      const idx = DB.clients.findIndex(c => c.id === currentClient.id);
+      if (idx >= 0) DB.clients[idx] = mapped; else DB.clients.push(mapped);
+    }
+    renderPage(currentPage);
+    showSyncLoading(false);
+    toast('Mis à jour avec succès', 'success');
+    if (currentClient.akuiteo_id) {
+      if (confirm('Voulez-vous mettre à jour la fiche dans Akuiteo ?')) {
+        showSyncLoading(true); setSyncText('Envoi vers Akuiteo...');
+        await pushClientToAkuiteo(currentClient.id);
+        showSyncLoading(false);
+      } else {
+        await sb.from('clients').update({ akuiteo_dirty: true }).eq('id', currentClient.id);
+        currentClient.akuiteo_dirty = true;
+        renderPage(currentPage);
+      }
+    }
+  } catch (e) {
+    console.error('submitEditClient error:', e);
+    toast('Erreur: ' + e.message, 'error');
+  } finally {
+    showSyncLoading(false);
   }
 }
 
