@@ -20058,6 +20058,7 @@ async function pullClientFromAkuiteo(clientId) {
     promises.push(
       akuiteoFetch('GET', '/crm/customers/' + client.akuiteo_id + '/sites')
         .then(sites => {
+          console.log('[DIAG] Tous les sites Akuiteo:', JSON.stringify(sites, null, 2));
           if (Array.isArray(sites) && sites.length > 0) {
             const mainSite = sites.find(s => s.main) || sites[0];
             if (mainSite?.address) siteAddress = mainSite.address;
