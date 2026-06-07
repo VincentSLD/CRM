@@ -20324,13 +20324,7 @@ async function pushClientToAkuiteo(clientId) {
       if (full.salesman_id) akData.salesmanId = full.salesman_id;
       if (full.mk_groupe) akData.level1grouping = full.mk_groupe;
       if (full.mk_origine) akData.level2grouping = full.mk_origine;
-      // Adresse : envoyer facturation, fallback sur adresse du site
-      if (!akData.address) akData.address = {};
-      if (full.fact_adresse_ligne1 || full.adresse_ligne1) akData.address.line1 = full.fact_adresse_ligne1 || full.adresse_ligne1;
-      if (full.fact_adresse_ligne2 || full.adresse_ligne2) akData.address.line2 = full.fact_adresse_ligne2 || full.adresse_ligne2;
-      if (full.fact_adresse_ligne3 || full.adresse_ligne3) akData.address.line3 = full.fact_adresse_ligne3 || full.adresse_ligne3;
-      if (full.fact_code_postal || full.code_postal) akData.address.postalCode = full.fact_code_postal || full.code_postal;
-      if (full.fact_ville || full.city) akData.address.city = full.fact_ville || full.city;
+      // Coordonnées sur la fiche client (pas l'adresse de facturation, qui va sur le site)
       if (full.phone) akData.address.phone = full.phone;
       if (full.telephone2) akData.address.phone2 = full.telephone2;
       if (full.mobile) akData.address.mobilePhone = full.mobile;
@@ -20349,12 +20343,12 @@ async function pushClientToAkuiteo(clientId) {
         languageCode: full.langue || null,
         notes: full.notes || null,
         address: {
-          line1: full.fact_adresse_ligne1 || full.adresse_ligne1 || null,
-          line2: full.fact_adresse_ligne2 || full.adresse_ligne2 || null,
-          line3: full.fact_adresse_ligne3 || full.adresse_ligne3 || null,
-          postalCode: full.fact_code_postal || full.code_postal || null,
-          city: full.fact_ville || full.city || null,
-          country: (full.fact_pays || full.pays || 'FR').trim().match(/^[A-Z]{2}$/) ? (full.fact_pays || full.pays || 'FR').trim() : 'FR',
+          line1: full.adresse_ligne1 || null,
+          line2: full.adresse_ligne2 || null,
+          line3: full.adresse_ligne3 || null,
+          postalCode: full.code_postal || null,
+          city: full.city || null,
+          country: (full.pays || 'FR').trim().match(/^[A-Z]{2}$/) ? (full.pays || 'FR').trim() : 'FR',
           phone: full.phone || null,
           email: full.email || null,
         },
@@ -20436,6 +20430,29 @@ async function pushClientToAkuiteo(clientId) {
         renderPage(currentPage);
       }
       toast('Client créé dans Akuiteo', 'success');
+    }
+    // --- Mettre à jour l'adresse de facturation sur le site Akuiteo (useForBillingAddress) ---
+    if (customerAkId && (full.fact_adresse_ligne1 || full.fact_code_postal || full.fact_ville)) {
+      try {
+        setSyncText('Mise à jour adresse de facturation (site)...');
+        const sites = await akuiteoFetch('GET', '/crm/customers/' + customerAkId + '/sites');
+        if (Array.isArray(sites) && sites.length > 0) {
+          const billingSite = sites.find(s => s.useForBillingAddress) || sites.find(s => s.main) || sites[0];
+          if (billingSite) {
+            const siteBody = { ...billingSite };
+            delete siteBody.contacts; delete siteBody.taxInformation;
+            if (!siteBody.address) siteBody.address = {};
+            siteBody.address.line1 = full.fact_adresse_ligne1 || siteBody.address.line1 || null;
+            siteBody.address.line2 = full.fact_adresse_ligne2 || siteBody.address.line2 || null;
+            siteBody.address.line3 = full.fact_adresse_ligne3 || siteBody.address.line3 || null;
+            siteBody.address.postalCode = full.fact_code_postal || siteBody.address.postalCode || null;
+            siteBody.address.city = full.fact_ville || siteBody.address.city || null;
+            const pays = full.fact_pays || full.pays || siteBody.address.country || 'FR';
+            siteBody.address.country = pays.trim().match(/^[A-Z]{2}$/) ? pays.trim() : 'FR';
+            await akuiteoFetch('POST', '/crm/customers/' + customerAkId + '/sites/' + billingSite.id, siteBody, { accept: 'text/plain' });
+          }
+        }
+      } catch (e) { console.warn('Push site facturation:', e.message); }
     }
     // --- Synchroniser aussi les contacts du client vers Akuiteo ---
     if (customerAkId) {
