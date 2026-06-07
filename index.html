@@ -20201,6 +20201,7 @@ async function pullClientFromAkuiteo(clientId) {
     const src = siteAddress ? 'SITE' : 'CLIENT';
     const sent = updates.fact_adresse_ligne1 ?? '(null)';
     const got = verif?.fact_adresse_ligne1 ?? '(null)';
+    console.log('[DIAG pullAkuiteo]', { src, sent, got, sitesDebug, siteAddress, akAddress: ak.address });
     toast('DIAG [' + src + ']: envoyé="' + sent + '" lu="' + got + '" | ' + sitesDebug, 'info', 20000);
     toast('Société mise à jour depuis Akuiteo', 'success');
     const { data: refreshed } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
