@@ -16392,6 +16392,10 @@ function openModal(id) {
     document.getElementById('ec-fact-dept').value = c.fact_departement||'';
     document.getElementById('ec-fact-region').value = c.fact_region||'';
     document.getElementById('ec-fact-pays').value = c.fact_pays||'';
+    // Par défaut : copier l'adresse générale vers facturation si facturation vide
+    if (!c.fact_adresse_ligne1 && !c.fact_code_postal && !c.fact_ville && (c.adresse_ligne1 || c.code_postal || c.city)) {
+      copyAdresseSiteToFact('ec');
+    }
     document.getElementById('ec-email').value = c.email||'';
     document.getElementById('ec-phone').value = c.phone||'';
     document.getElementById('ec-phone2').value = c.telephone2||'';
@@ -16418,6 +16422,7 @@ function openModal(id) {
   if (id === 'new-client') {
     fillAkuiteoDropdowns('nc', null);
     initNcSireneFilters();
+    setupAdresseAutoFact('nc');
   }
 }
 async function fillAkuiteoDropdowns(prefix, client) {
@@ -19230,6 +19235,15 @@ function copyAdresseSiteToFact(prefix) {
     const s = document.getElementById(prefix + '-' + src);
     const d = document.getElementById(prefix + '-' + dst);
     if (s && d) d.value = s.value;
+  });
+}
+// Auto-copier l'adresse du site vers facturation si facturation vide
+function setupAdresseAutoFact(prefix) {
+  const map = [['addr1','fact-addr1'],['addr2','fact-addr2'],['addr3','fact-addr3'],['cp','fact-cp'],['city','fact-city'],['dept','fact-dept'],['region','fact-region'],['pays','fact-pays']];
+  map.forEach(([src, dst]) => {
+    const s = document.getElementById(prefix + '-' + src);
+    const d = document.getElementById(prefix + '-' + dst);
+    if (s && d) s.addEventListener('input', () => { if (!d.value) d.value = s.value; });
   });
 }
 
