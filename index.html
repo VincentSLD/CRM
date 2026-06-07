@@ -17339,6 +17339,7 @@ async function submitNewFacture() {
 
 async function submitEditClient() {
   if (!currentClient) return;
+  showSyncLoading(true); setSyncText('Enregistrement en cours...');
   const fields = {
     name: document.getElementById('ec-name').value.trim(),
     code: document.getElementById('ec-code').value.trim(),
@@ -17405,16 +17406,25 @@ async function submitEditClient() {
     const r2 = await sb.from('clients').update(toSend).eq('id', currentClient.id);
     error = r2.error;
   }
-  if (error) { toast(`Erreur: ${error.message}`, 'error'); return; }
-  toast('Mis à jour avec succès', 'success');
+  if (error) { showSyncLoading(false); toast(`Erreur: ${error.message}`, 'error'); return; }
   closeModal('edit-client');
+  setSyncText('Rafraîchissement...');
+  // Rafraîchir le client localement (sans recharger toute la base)
   const { data: refreshed } = await sb.from('clients').select('*').eq('id', currentClient.id).maybeSingle();
-  if (refreshed) currentClient = refreshed;
-  await loadDB();
+  if (refreshed) {
+    currentClient = refreshed;
+    const mapped = mapClient(refreshed);
+    const idx = DB.clients.findIndex(c => c.id === currentClient.id);
+    if (idx >= 0) DB.clients[idx] = mapped; else DB.clients.push(mapped);
+  }
   renderPage(currentPage);
+  showSyncLoading(false);
+  toast('Mis à jour avec succès', 'success');
   if (currentClient.akuiteo_id) {
     if (confirm('Voulez-vous mettre à jour la fiche dans Akuiteo ?')) {
+      showSyncLoading(true); setSyncText('Envoi vers Akuiteo...');
       await pushClientToAkuiteo(currentClient.id);
+      showSyncLoading(false);
     } else {
       await sb.from('clients').update({ akuiteo_dirty: true }).eq('id', currentClient.id);
       currentClient.akuiteo_dirty = true;
