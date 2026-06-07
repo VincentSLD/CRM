@@ -2040,6 +2040,7 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="fg"><label class="fl">Département</label><input class="fi" id="nc-fact-dept"></div>
               <div class="fg"><label class="fl">Région</label><input class="fi" id="nc-fact-region"></div>
               <div class="fg"><label class="fl">Pays</label><input class="fi" id="nc-fact-pays" value="FR"></div>
+              <div class="fg"><label class="fl">Responsable du site</label><select class="fi" id="nc-fact-responsable"></select></div>
             </div>
           </div>
         </div>
@@ -2553,6 +2554,7 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="fg"><label class="fl">Département</label><input class="fi" id="ec-fact-dept"></div>
         <div class="fg"><label class="fl">Région</label><input class="fi" id="ec-fact-region"></div>
         <div class="fg"><label class="fl">Pays</label><input class="fi" id="ec-fact-pays"></div>
+        <div class="fg"><label class="fl">Responsable du site</label><select class="fi" id="ec-fact-responsable"></select></div>
       </div>
       <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:8px">Coordonnées</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
@@ -6399,6 +6401,7 @@ function renderClientDetail() {
       detailRow('Département', c.fact_departement || '—'),
       detailRow('Région', c.fact_region || '—'),
       detailRow('Pays', c.fact_pays || '—'),
+      detailRow('Responsable du site', c.responsable_site_name ? '<strong>' + c.responsable_site_name + '</strong>' : resolveManagerName(c.responsable_site_id) || '—'),
     ])}
     ${detailSection('Coordonnées', [
       detailRow('Email', c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : '—'),
@@ -16429,6 +16432,8 @@ async function fillAkuiteoDropdowns(prefix, client) {
   setHtml('tarification', akRefOptions(akRef.pricingMethods, c.mode_tarification, 'Mode de tarification GPH...'));
   setHtml('manager', akRefOptions(akRef.employees, c.account_manager_id, 'Commercial Novam...'));
   setHtml('salesman', akRefOptions(akRef.employees, c.salesman_id, 'Commercial GPH...'));
+  const factResp = document.getElementById(prefix + '-fact-responsable');
+  if (factResp) factResp.innerHTML = akRefOptions(akRef.employees, c.responsable_site_id, 'Responsable du site...');
   // Groupe / Origine (dropdowns dynamiques)
   const [groupes, origines] = await Promise.all([loadDistinctValues('mk_groupe'), loadDistinctValues('mk_origine')]);
   setHtml('groupe', buildDistinctOptions(groupes, c.mk_groupe, 'Groupe...'));
@@ -17175,6 +17180,8 @@ async function submitNewClient() {
       fact_departement: document.getElementById('nc-fact-dept').value.trim() || null,
       fact_region: document.getElementById('nc-fact-region').value.trim() || null,
       fact_pays: document.getElementById('nc-fact-pays').value.trim() || null,
+      responsable_site_id: document.getElementById('nc-fact-responsable')?.value || null,
+      responsable_site_name: document.getElementById('nc-fact-responsable')?.selectedOptions?.[0]?.text !== 'Responsable du site...' ? document.getElementById('nc-fact-responsable')?.selectedOptions?.[0]?.text || null : null,
       email: document.getElementById('nc-email').value.trim() || '',
       phone: document.getElementById('nc-phone').value.trim() || '',
       telephone2: document.getElementById('nc-phone2').value.trim() || null,
@@ -17364,6 +17371,8 @@ async function submitEditClient() {
       fact_departement: document.getElementById('ec-fact-dept').value.trim() || null,
       fact_region: document.getElementById('ec-fact-region').value.trim() || null,
       fact_pays: document.getElementById('ec-fact-pays').value.trim() || null,
+      responsable_site_id: document.getElementById('ec-fact-responsable')?.value || null,
+      responsable_site_name: document.getElementById('ec-fact-responsable')?.selectedOptions?.[0]?.text !== 'Responsable du site...' ? document.getElementById('ec-fact-responsable')?.selectedOptions?.[0]?.text || null : null,
       email: document.getElementById('ec-email').value.trim(),
       phone: document.getElementById('ec-phone').value.trim(),
       telephone2: document.getElementById('ec-phone2').value.trim() || null,
@@ -17398,7 +17407,7 @@ async function submitEditClient() {
       // Fallback : ne garder que les colonnes de base connues
       const safeCols = ['name','code','sector','city','email','phone','raison_sociale','raison_sociale2','forme_juridique',
         'adresse_ligne1','adresse_ligne2','adresse_ligne3','code_postal','departement','region','pays',
-        'fact_adresse_ligne1','fact_adresse_ligne2','fact_adresse_ligne3','fact_code_postal','fact_ville','fact_departement','fact_region','fact_pays',
+        'fact_adresse_ligne1','fact_adresse_ligne2','fact_adresse_ligne3','fact_code_postal','fact_ville','fact_departement','fact_region','fact_pays','responsable_site_id','responsable_site_name',
         'telephone2','mobile','fax','site_web','siren','siret','ape','reference_externe',
         'notes','habitudes_techniques','habitudes_geotechniques','code_codial','compta_codial','id_plateforme','categorie_compte',
         'mode_tarification','rfa_applicable','date_remise_convention','date_signature_convention','commentaires_tarification'];
@@ -18032,6 +18041,7 @@ async function syncAkuiteoQuick() {
             fact_pays: a.countryName || a.country || null,
             fact_departement: a.geographicalDepartmentName || a.department || null,
             fact_region: a.regionName || a.region || null,
+            responsable_site_id: billingSite.managerId || null,
           }).eq('id', crmId);
         }));
       }
@@ -18421,6 +18431,7 @@ async function syncAkuiteo() {
           fact_pays: a.countryName || a.country || null,
           fact_departement: a.geographicalDepartmentName || a.department || null,
           fact_region: a.regionName || a.region || null,
+          responsable_site_id: billingSite.managerId || null,
         }).eq('id', crmId);
       }));
     }
@@ -20121,7 +20132,8 @@ async function pullClientFromAkuiteo(clientId) {
     let managerName = null;
     let pricingName = null, pricingName2 = null;
     let methodOfPaymentFromRead = null;
-    let siteAddress = null; // adresse du site principal Akuiteo
+    let siteAddress = null; // adresse du site de facturation Akuiteo
+    let billingSiteObj = null; // objet site complet (pour managerId)
     const promises = [];
     // Sites : récupérer l'adresse de facturation (useForBillingAddress), sinon site principal
     promises.push(
@@ -20130,6 +20142,7 @@ async function pullClientFromAkuiteo(clientId) {
           if (Array.isArray(sites) && sites.length > 0) {
             const billingSite = sites.find(s => s.useForBillingAddress) || sites.find(s => s.main) || sites[0];
             if (billingSite?.address) siteAddress = billingSite.address;
+            billingSiteObj = billingSite;
           }
         })
         .catch(() => {})
@@ -20224,6 +20237,7 @@ async function pullClientFromAkuiteo(clientId) {
       fact_pays: siteAddress?.countryName || siteAddress?.country || ak.address?.countryName || ak.address?.country || null,
       fact_departement: siteAddress?.geographicalDepartmentName || siteAddress?.department || ak.address?.geographicalDepartmentName || ak.address?.department || null,
       fact_region: siteAddress?.regionName || siteAddress?.region || ak.address?.regionName || ak.address?.region || null,
+      responsable_site_id: billingSiteObj?.managerId || null,
       telephone2: ak.address?.phone2 || null, mobile: ak.address?.mobilePhone || null,
       fax: ak.address?.fax || null, site_web: ak.address?.webSite || null,
       raison_sociale: ak.legalName || null, raison_sociale2: ak.legalName2 || null,
@@ -20432,7 +20446,7 @@ async function pushClientToAkuiteo(clientId) {
       toast('Client créé dans Akuiteo', 'success');
     }
     // --- Mettre à jour l'adresse de facturation sur le site Akuiteo (useForBillingAddress) ---
-    if (customerAkId && (full.fact_adresse_ligne1 || full.fact_code_postal || full.fact_ville)) {
+    if (customerAkId && (full.fact_adresse_ligne1 || full.fact_code_postal || full.fact_ville || full.responsable_site_id)) {
       try {
         setSyncText('Mise à jour adresse de facturation (site)...');
         const sites = await akuiteoFetch('GET', '/crm/customers/' + customerAkId + '/sites');
@@ -20449,6 +20463,7 @@ async function pushClientToAkuiteo(clientId) {
             siteBody.address.city = full.fact_ville || siteBody.address.city || null;
             const pays = full.fact_pays || full.pays || siteBody.address.country || 'FR';
             siteBody.address.country = pays.trim().match(/^[A-Z]{2}$/) ? pays.trim() : 'FR';
+            if (full.responsable_site_id) siteBody.managerId = full.responsable_site_id;
             await akuiteoFetch('POST', '/crm/customers/' + customerAkId + '/sites/' + billingSite.id, siteBody, { accept: 'text/plain' });
           }
         }
