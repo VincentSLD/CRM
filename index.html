@@ -7,10 +7,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <title>CRM Akuiteo — Tableau de Bord Commercial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="leaflet.css" />
-<script src="leaflet.js"></script>
-<script src="jspdf.umd.min.js"></script>
-<script src="jspdf.plugin.autotable.min.js"></script>
+<script defer src="leaflet.js"></script>
+<script defer src="jspdf.umd.min.js"></script>
+<script defer src="jspdf.plugin.autotable.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 /* ═══════════════════ DESIGN SYSTEM ═══════════════════ */
@@ -3152,9 +3154,9 @@ async function reloadClientsForView() {
   clientsLetter = '';
   clientsSearch = '';
   DB.clients = (cRes.data || []).map(mapClient);
-  DB.clients.forEach(c => { c.devis = DB.devis.filter(d => d.client_id === c.id).length; });
-  // Recharger les top clients et stats portefeuille
-  await Promise.all([loadTopClients(), loadPortfolioStats()]);
+  const devCountMap = new Map();
+  for (const d of DB.devis) { devCountMap.set(d.client_id, (devCountMap.get(d.client_id) || 0) + 1); }
+  DB.clients.forEach(c => { c.devis = devCountMap.get(c.id) || 0; });
 }
 
 // Filtre par société (companyCode Akuiteo)
@@ -3387,23 +3389,16 @@ async function loadDB() {
       return res;
     }
 
-    // Tout en parallèle, 1 seul appel par table
+    // ── Phase 1 : données essentielles (dashboard) ──
     const t0 = Date.now();
-    const [cRes, dAll, cmAll, fAll, rAll, nAll, coAll, maAll, afAll, luccaAll, akAll] = await Promise.all([
+    const [cRes, dAll, cmAll, fAll, coAll] = await Promise.all([
       fetchClientsWithRetry(clientQuery),
       fetchFast('devis', DEVIS_LITE),
       fetchFast('commandes', CMD_LITE),
       fetchFast('factures', FACT_LITE),
-      (async () => { const RCOLS = 'id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at'; let all=[],off=0; while(true){ const {data}=await sb.from('reports').select(RCOLS).order('date',{ascending:false}).range(off,off+999); if(!data||!data.length) break; all=all.concat(data); if(data.length<1000) break; off+=1000; } return all; })(),
-      sb.from('notifications').select('id,type,text,time_label,read,created_at').order('created_at', {ascending:false}).limit(100).then(r => r.data || []),
       sb.from('commerciaux').select('*').then(r => r.data || []),
-      fetchFast('marches', MARCHE_LITE, 'date_debut', true),
-      fetchFast('affaires', AFFAIRE_LITE, 'date_debut', true),
-      sb.from('collaborateurs_lucca').select('id,lucca_id,nom,prenom,email,etablissement,poste').order('nom').then(r => r.data || []),
-      sb.from('collaborateurs').select('id,lucca_id,akuiteo_id,nom,prenom,code,email,telephone,mobile').order('nom').then(r => r.data || []),
     ]);
-    console.log(`[loadDB] Fetch en ${Date.now()-t0}ms : ${dAll.length} devis, ${cmAll.length} cmd, ${fAll.length} fact, ${maAll.length} marchés, ${afAll.length} affaires`);
-    console.log(`[loadDB] Marchés: ${maAll.length}, Affaires: ${afAll.length}`);
+    console.log(`[loadDB] Phase 1 en ${Date.now()-t0}ms : ${dAll.length} devis, ${cmAll.length} cmd, ${fAll.length} fact`);
 
     clientsTotalCount = cRes.count || 0;
     clientsPage = 0;
@@ -3413,39 +3408,61 @@ async function loadDB() {
 
     DB.devis = dAll.map(d => ({ ...d, client: d.client_name, date_raw: d.date, date: fmtDateFR(d.date) }));
     DB.devis.sort((a,b) => (b.date_raw||'').localeCompare(a.date_raw||''));
-    DB.clients.forEach(c => { c.devis = DB.devis.filter(d => d.client_id === c.id).length; });
+    const devCountMap = new Map();
+    for (const d of DB.devis) { devCountMap.set(d.client_id, (devCountMap.get(d.client_id) || 0) + 1); }
+    DB.clients.forEach(c => { c.devis = devCountMap.get(c.id) || 0; });
 
     DB.commandes = cmAll.map(c => ({ ...c, client: c.client_name, date_raw: c.date, date: fmtDateFR(c.date), livraison: fmtDateFR(c.livraison) }));
     DB.commandes.sort((a,b) => (b.date_raw||'').localeCompare(a.date_raw||''));
     DB.factures = fAll.map(f => ({ ...f, client: f.client_name, date_raw: f.date, date: fmtDateFR(f.date), echeance: fmtDateFR(f.echeance), jours: f.jours_retard }));
     DB.factures.sort((a,b) => (b.date_raw||'').localeCompare(a.date_raw||''));
-    DB.reports = rAll.map(r => ({
-      ...r, client: r.client_name, text: r.contenu || '', date_raw: r.date, date: timeAgo(r.date), titre: r.titre,
-      clients_list: r.clients_list && r.clients_list.length ? r.clients_list : (r.client_id ? [{id: r.client_id, name: r.client_name}] : []),
-      contacts_list: r.contacts_list && r.contacts_list.length ? r.contacts_list : (r.contact_id ? [{id: r.contact_id, name: r.contact_name}] : []),
-    }));
-    DB.notifications = nAll.map(n => ({ ...n, time: n.time_label }));
     DB.commerciaux = coAll;
-    collaborateursLuccaData = luccaAll;
-    collaborateursData = akAll;
-    // Construire un mapping commerciaux → Lucca (par email ou nom) pour affichage NOM + Prénom
-    _buildCommerciauxLuccaMap();
-    DB.marches = maAll.map(m => ({ ...m, client: m.client_name, date_raw: m.date_debut, date: fmtDateFR(m.date_debut) }));
-    DB.affaires = afAll.map(a => ({ ...a, client: a.client_name, date_raw: a.date_debut, date: fmtDateFR(a.date_debut) }));
-    // Enrichir marchés/affaires avec le champ societe (déduit des devis/commandes/factures liés)
-    const allDocs = [...DB.devis, ...DB.commandes, ...DB.factures];
-    DB.marches.forEach(m => { if (!m.societe) { const d = allDocs.find(x => x.marche_id === m.id && x.societe); if (d) m.societe = d.societe; } });
-    DB.affaires.forEach(a => { if (!a.societe) { const d = allDocs.find(x => x.affaire_id === a.id && x.societe); if (d) a.societe = d.societe; } });
 
     DB.alerts = generateAlerts();
-
-    // Charger les top clients et stats portefeuille (indépendant de la pagination)
-    await Promise.all([loadTopClients(), loadPortfolioStats()]);
-
-    console.log(`Données chargées depuis Supabase (${DB.clients.length} clients affichés / ${clientsTotalCount} total)`, DB);
-    // Sélectionner toutes les sociétés par défaut
     selectedSocietes = new Set(getAllSocietes());
     updateNavBadges();
+    console.log(`[loadDB] Phase 1 prête (${DB.clients.length} clients / ${clientsTotalCount} total)`);
+
+    // ── Phase 2 : données secondaires (CR, marchés, affaires, collaborateurs) — en arrière-plan ──
+    _deferredDataLoaded = false;
+    _deferredLoadPromise = (async () => {
+      const t1 = Date.now();
+      const [rAll, nAll, maAll, afAll, luccaAll, akAll] = await Promise.all([
+        (async () => { const RCOLS = 'id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at'; let all=[],off=0; while(true){ const {data}=await sb.from('reports').select(RCOLS).order('date',{ascending:false}).range(off,off+999); if(!data||!data.length) break; all=all.concat(data); if(data.length<1000) break; off+=1000; } return all; })(),
+        sb.from('notifications').select('id,type,text,time_label,read,created_at').order('created_at', {ascending:false}).limit(100).then(r => r.data || []),
+        fetchFast('marches', MARCHE_LITE, 'date_debut', true),
+        fetchFast('affaires', AFFAIRE_LITE, 'date_debut', true),
+        sb.from('collaborateurs_lucca').select('id,lucca_id,nom,prenom,email,etablissement,poste').order('nom').then(r => r.data || []),
+        sb.from('collaborateurs').select('id,lucca_id,akuiteo_id,nom,prenom,code,email,telephone,mobile').order('nom').then(r => r.data || []),
+      ]);
+      DB.reports = rAll.map(r => ({
+        ...r, client: r.client_name, text: r.contenu || '', date_raw: r.date, date: timeAgo(r.date), titre: r.titre,
+        clients_list: r.clients_list && r.clients_list.length ? r.clients_list : (r.client_id ? [{id: r.client_id, name: r.client_name}] : []),
+        contacts_list: r.contacts_list && r.contacts_list.length ? r.contacts_list : (r.contact_id ? [{id: r.contact_id, name: r.contact_name}] : []),
+      }));
+      DB.notifications = nAll.map(n => ({ ...n, time: n.time_label }));
+      collaborateursLuccaData = luccaAll;
+      collaborateursData = akAll;
+      _buildCommerciauxLuccaMap();
+      DB.marches = maAll.map(m => ({ ...m, client: m.client_name, date_raw: m.date_debut, date: fmtDateFR(m.date_debut) }));
+      DB.affaires = afAll.map(a => ({ ...a, client: a.client_name, date_raw: a.date_debut, date: fmtDateFR(a.date_debut) }));
+      // Enrichir marchés/affaires societe via Map (O(n) au lieu de O(n*m))
+      const societeByMarche = new Map(), societeByAffaire = new Map();
+      for (const d of [...DB.devis, ...DB.commandes, ...DB.factures]) {
+        if (d.societe) {
+          if (d.marche_id && !societeByMarche.has(d.marche_id)) societeByMarche.set(d.marche_id, d.societe);
+          if (d.affaire_id && !societeByAffaire.has(d.affaire_id)) societeByAffaire.set(d.affaire_id, d.societe);
+        }
+      }
+      DB.marches.forEach(m => { if (!m.societe) m.societe = societeByMarche.get(m.id) || null; });
+      DB.affaires.forEach(a => { if (!a.societe) a.societe = societeByAffaire.get(a.id) || null; });
+      // Mettre à jour sociétés et badges avec données complètes
+      selectedSocietes = new Set(getAllSocietes());
+      updateNavBadges();
+      _deferredDataLoaded = true;
+      console.log(`[loadDB] Phase 2 en ${Date.now()-t1}ms : ${rAll.length} CR, ${maAll.length} marchés, ${afAll.length} affaires`);
+    })();
+
     return true;
   } catch (err) {
     console.error('Erreur chargement Supabase:', err);
@@ -3962,6 +3979,9 @@ const facStatusMap = { payee:{l:'Payée',c:'green'}, attente:{l:'En attente',c:'
 // ═══ NAVIGATION ═══
 let currentPage = 'dashboard';
 let currentReport = null;
+let _deferredDataLoaded = false;
+let _deferredLoadPromise = null;
+const _DEFERRED_PAGES = new Set(['cr', 'marches', 'affaires', 'marche-detail', 'affaire-detail', 'carte-affaires', 'alertes', 'collaborateurs', 'collaborateurs-lucca', 'annuaire']);
 
 function go(page) {
   currentPage = page;
@@ -4060,6 +4080,12 @@ function renderPage(page) {
     admin: renderAdmin,
     endev: renderEnDev,
   };
+  // Attendre les données différées si la page en a besoin
+  if (_DEFERRED_PAGES.has(page) && !_deferredDataLoaded && _deferredLoadPromise) {
+    C.innerHTML = '<div class="page active"><div style="text-align:center;padding:40px;color:var(--t3)">Chargement des données...</div></div>';
+    _deferredLoadPromise.then(() => { if (currentPage === page) renderPage(page); });
+    return;
+  }
   // Charger les données envois si nécessaire
   if (page === 'envois' && !envoisCache) {
     C.innerHTML = '<div class="page active"><div style="text-align:center;padding:40px;color:var(--t3)">Chargement...</div></div>';
