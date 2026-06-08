@@ -2608,6 +2608,12 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="fg"><label class="fl">Compta CODIAL <span style="font-weight:400;color:var(--t3);font-size:10px">(local)</span></label><input class="fi" id="ec-compta-codial" placeholder="Ex: 411-00123"></div>
               <div class="fg"><label class="fl">ID Plateforme <span style="font-weight:400;color:var(--t3);font-size:10px">(local)</span></label><input class="fi" id="ec-id-plateforme" placeholder=""></div>
             </div>
+            <div id="ec-propager-commercial-wrap" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+                <input type="checkbox" id="ec-propager-commercial">
+                Propager aux établissements liés
+              </label>
+            </div>
             <div class="fg" style="margin-top:10px">
               <label class="fl">Réseaux professionnels</label>
               <div id="ec-reseaux-chips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px"></div>
@@ -2648,6 +2654,12 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="fg"><label class="fl">Date Remise convention</label><input class="fi" type="date" id="ec-date-remise-convention"></div>
               <div class="fg"><label class="fl">Date Signature convention</label><input class="fi" type="date" id="ec-date-signature-convention"></div>
               <div class="fg"><label class="fl">Commentaires tarif.</label><input class="fi" id="ec-commentaires-tarification" placeholder=""></div>
+            </div>
+            <div id="ec-propager-tarification-wrap" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+                <input type="checkbox" id="ec-propager-tarification">
+                Propager aux établissements liés
+              </label>
             </div>
           </div>
         </div>
@@ -16473,11 +16485,14 @@ function openModal(id) {
     renderReseauxProChips('ec-reseaux-chips');
     // Remplir les dropdowns Akuiteo
     fillAkuiteoDropdowns('ec', c);
-    // Checkbox "Propager infos entreprise" visible uniquement pour les sièges avec SIREN
-    const propWrap = document.getElementById('ec-propager-infos-wrap');
-    if (propWrap) propWrap.style.display = (c.est_siege && c.siren) ? '' : 'none';
-    const propCb = document.getElementById('ec-propager-infos');
-    if (propCb) propCb.checked = false;
+    // Checkboxes "Propager" visibles uniquement pour les sièges avec SIREN
+    const isSiege = c.est_siege && c.siren;
+    ['ec-propager-infos', 'ec-propager-commercial', 'ec-propager-tarification'].forEach(id => {
+      const wrap = document.getElementById(id + '-wrap');
+      if (wrap) wrap.style.display = isSiege ? '' : 'none';
+      const cb = document.getElementById(id);
+      if (cb) cb.checked = false;
+    });
   }
   if (id === 'new-client') {
     fillAkuiteoDropdowns('nc', null);
@@ -17504,6 +17519,33 @@ async function submitEditClient() {
         .eq('siren', currentClient.siren).eq('est_siege', false);
       if (propErr) console.warn('Propagation infos:', propErr.message);
       else toast(`Infos entreprise propagées à ${count || 0} établissement(s)`, 'info');
+    }
+    // Propager Commercial aux établissements liés si demandé
+    if (document.getElementById('ec-propager-commercial')?.checked && currentClient.est_siege && currentClient.siren) {
+      setSyncText('Propagation commerciaux aux établissements...');
+      const commercialFields = {
+        account_manager_id: fields.account_manager_id, account_manager_name: fields.account_manager_name,
+        salesman_id: fields.salesman_id, salesman_name: fields.salesman_name,
+        responsable_site_id: fields.responsable_site_id, responsable_site_name: fields.responsable_site_name,
+      };
+      const { error: propErr2, count: count2 } = await sb.from('clients').update(commercialFields, { count: 'exact' })
+        .eq('siren', currentClient.siren).eq('est_siege', false);
+      if (propErr2) console.warn('Propagation commercial:', propErr2.message);
+      else toast(`Commerciaux propagés à ${count2 || 0} établissement(s)`, 'info');
+    }
+    // Propager Tarification GPH aux établissements liés si demandé
+    if (document.getElementById('ec-propager-tarification')?.checked && currentClient.est_siege && currentClient.siren) {
+      setSyncText('Propagation tarification aux établissements...');
+      const tarifFields = {
+        mode_tarification: fields.mode_tarification, mode_tarification_name: fields.mode_tarification_name,
+        rfa_applicable: fields.rfa_applicable,
+        date_remise_convention: fields.date_remise_convention, date_signature_convention: fields.date_signature_convention,
+        commentaires_tarification: fields.commentaires_tarification,
+      };
+      const { error: propErr3, count: count3 } = await sb.from('clients').update(tarifFields, { count: 'exact' })
+        .eq('siren', currentClient.siren).eq('est_siege', false);
+      if (propErr3) console.warn('Propagation tarification:', propErr3.message);
+      else toast(`Tarification propagée à ${count3 || 0} établissement(s)`, 'info');
     }
     closeModal('edit-client');
     setSyncText('Rafraîchissement...');
