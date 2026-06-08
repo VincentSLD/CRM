@@ -3228,9 +3228,9 @@ document.addEventListener('click', e => {
 
 function filterByDateRange(items, from, to) {
   return items.filter(item => {
-    const raw = item.date_raw || item.date_debut || item.date;
+    const raw = item.date_raw || item.date_debut || null;
     const d = raw ? String(raw).substring(0, 10) : '';
-    if (!d) return true;
+    if (!d || !/^\d{4}-/.test(d)) return false;
     if (from && d < from) return false;
     if (to && d > to) return false;
     return true;
@@ -4215,7 +4215,7 @@ function renderDashboard() {
     <label style="font-size:12px;color:var(--t3)">au</label>
     <input type="date" value="${dashDateTo}" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--t1)" onchange="dashDateTo=this.value;renderDashboardRefresh()">
     ${renderSocieteFilter(() => renderDashboardRefresh())}
-    <span style="font-size:11px;color:var(--t3);margin-left:6px">${myDevis.length} devis, ${myFactures.length} factures sur la période</span>
+    <span style="font-size:11px;color:var(--t3);margin-left:6px">${myDevis.length} devis, ${myCommandes.length} commandes, ${myFactures.length} factures sur la période</span>
   </div>
   ${alertsHTML}
   <div class="kpi-grid">
