@@ -3327,14 +3327,14 @@ async function loadDB() {
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
     const dateFilter = oneYearAgo.toISOString().slice(0, 10);
 
-    // Chargement séquentiel adaptatif : pages de 500 par défaut, divisé par 2 sur timeout (jusqu'à 100)
+    // Chargement paginé adaptatif : pages de 1000 (max PostgREST), tri par id (index PK natif)
     // useOrNull = true : utilise .or(date_debut.gte.X,date_debut.is.null) pour marches/affaires
     async function fetchPage(table, cols, dateCol, from, to, attempt = 0, useOrNull = false) {
       try {
         let q = sb.from(table).select(cols);
         if (useOrNull) q = q.or(`${dateCol}.gte.${dateFilter},${dateCol}.is.null`);
         else q = q.gte(dateCol, dateFilter);
-        const { data, error } = await q.order(dateCol, {ascending: false}).range(from, to);
+        const { data, error } = await q.order('id').range(from, to);
         if (error) {
           if (attempt < 3 && (error.message?.includes('timeout') || error.code === '57014')) {
             console.warn(`[loadDB] Retry ${table} page ${from}-${to} (tentative ${attempt+1})`);
@@ -3351,17 +3351,16 @@ async function loadDB() {
       }
     }
     async function fetchFast(table, cols, dateCol = 'date', useOrNull = false) {
-      let all = [], off = 0, pageSize = 6000;
+      let all = [], off = 0, pageSize = 1000;
       while (true) {
         const data = await fetchPage(table, cols, dateCol, off, off + pageSize - 1, 0, useOrNull);
         if (data === null) {
-          // Page échouée même après 3 retries : on réduit la taille de page et on retente cette même page
           if (pageSize > 500) {
             pageSize = Math.max(500, Math.floor(pageSize / 2));
-            console.warn(`[loadDB] ${table} page ${off} : timeout persistant, on réduit pageSize à ${pageSize}`);
+            console.warn(`[loadDB] ${table} page ${off} : timeout, réduit pageSize à ${pageSize}`);
             continue;
           }
-          console.warn(`[loadDB] ${table} : page ${off} abandonnée à pageSize=${pageSize}, on garde ce qu'on a (${all.length})`);
+          console.warn(`[loadDB] ${table} : page ${off} abandonnée, on garde ${all.length} lignes`);
           break;
         }
         if (data.length === 0) break;
