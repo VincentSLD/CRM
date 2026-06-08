@@ -3351,7 +3351,7 @@ async function loadDB() {
       }
     }
     async function fetchFast(table, cols, dateCol = 'date', useOrNull = false) {
-      let all = [], off = 0, pageSize = 250;
+      let all = [], off = 0, pageSize = 1000;
       while (true) {
         const data = await fetchPage(table, cols, dateCol, off, off + pageSize - 1, 0, useOrNull);
         if (data === null) {
