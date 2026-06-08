@@ -3482,7 +3482,7 @@ function updateNavBadges() {
     navBadgeClients: clientsTotalCount || DB.clients.length,
     navBadgeContacts: _navContactsCount || null,
     navBadgeConcurrence: _navConcurrentsCount || null,
-    navBadgeCollaborateurs: (collaborateursData || []).length || null,
+    navBadgeCollaborateurs: (() => { const s = new Set(); for (const ak of (collaborateursData || [])) { if (ak.lucca_id && !s.has(ak.lucca_id)) s.add(ak.lucca_id); } return s.size || null; })(),
     navBadgeMarches: filterByCommercial(DB.marches).length,
     navBadgeAffaires: filterByCommercial(DB.affaires).length,
     navBadgeDevis: filterByCommercial(DB.devis).length,
