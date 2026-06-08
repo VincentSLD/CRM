@@ -3484,6 +3484,14 @@ async function loadDB() {
 }
 
 function updateNavBadges() {
+  // Client IDs liés aux agences sélectionnées (pour filtrer CR et contacts par agence)
+  let acIds = null;
+  if (selectedSocietes.size > 0) {
+    acIds = new Set();
+    for (const arr of [DB.devis, DB.commandes, DB.factures]) {
+      for (const d of arr) { if (d.client_id && selectedSocietes.has(d.societe)) acIds.add(d.client_id); }
+    }
+  }
   const badges = {
     navBadgeClients: clientsTotalCount || DB.clients.length,
     navBadgeContacts: _navContactsCount || null,
@@ -3494,7 +3502,7 @@ function updateNavBadges() {
     navBadgeDevis: filterBySociete(filterByCommercial(DB.devis)).length,
     navBadgeCommandes: filterBySociete(filterByCommercial(DB.commandes)).length,
     navBadgeFactures: filterBySociete(filterByCommercial(DB.factures)).length,
-    navBadgeCR: filterBySociete(DB.reports).length,
+    navBadgeCR: acIds ? DB.reports.filter(r => (r.clients_list || []).some(c => acIds.has(c.id))).length : DB.reports.length,
     navBadgeAlertes: DB.alerts.length,
     navBadgeCampagnes: _navCampagnesCount || null,
   };
