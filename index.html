@@ -15672,16 +15672,40 @@ function dictCancel() {
 }
 function buildDictationGlossary() {
   const terms = new Set();
+  // Noms de clients du CRM
   if (Array.isArray(DB.clients)) for (const c of DB.clients) {
     if (c.name) terms.add(c.name);
     if (c.raison_sociale) terms.add(c.raison_sociale);
   }
+  // Noms de clients depuis les documents (couverture plus large que DB.clients paginé)
+  for (const arr of [DB.devis, DB.commandes, DB.factures]) {
+    for (const d of (arr || [])) { if (d.client_name) terms.add(d.client_name); }
+  }
+  // Client actuel (contexte prioritaire)
   if (currentClient?.name) terms.add(currentClient.name);
   if (currentClient?.raison_sociale) terms.add(currentClient.raison_sociale);
-  ['GPH', 'Novam', 'Akuiteo', 'CODIAL', 'géotechnique', 'hydrogéologie', 'piézomètre', 'piézométrie',
+  // Groupe et outils
+  ['GPH', 'GPH-R', 'GPH64', 'GPH85', 'SA85', 'Novam', 'Akuiteo', 'CODIAL',
+  // Missions géotechniques NF P 94-500
+   'G1', 'G1 PGC', 'G1 ES', 'G2', 'G2 AVP', 'G2 PRO', 'G2 DCE', 'G3', 'G4', 'G5',
+   'NF P 94-500', 'AVP', 'PRO', 'DCE', 'ACT', 'CCTP', 'DPGF', 'OPC', 'DPE',
+  // Géotechnique
+   'géotechnique', 'hydrogéologie', 'piézomètre', 'piézométrie',
    'sondage', 'forage', 'essai pressiométrique', 'reconnaissance de sol', 'terrassement',
    'fondation', 'micropieux', 'tirants d\'ancrage', 'rabattement de nappe', 'étude de sol',
-   'G1', 'G2', 'G3', 'G4', 'G5', 'AVP', 'PRO', 'DCE', 'NF P 94-500'].forEach(t => terms.add(t));
+   'remblai', 'déblai', 'talus', 'nappe phréatique',
+  // Structure
+   'béton armé', 'charpente métallique', 'charpente bois', 'prédimensionnement',
+   'note de calcul', 'plan de coffrage', 'plan de ferraillage', 'voile', 'poteau', 'poutre', 'dalle',
+  // Thermique / Fluides
+   'RT 2012', 'RE 2020', 'audit énergétique', 'CVC', 'SSI', 'chauffage', 'ventilation', 'climatisation',
+  // VRD
+   'VRD', 'assainissement', 'eau potable', 'voirie', 'réseaux secs', 'réseaux humides',
+  // Économie de la construction
+   'économie de la construction', 'métrés', 'quantitatif', 'estimatif',
+  // Autres métiers
+   'paysage', 'environnement', 'topographie', 'levé topographique',
+   'étude d\'impact', 'étude écologique'].forEach(t => terms.add(t));
   return [...terms].join(', ');
 }
 async function dictCorrect() {
@@ -15719,13 +15743,29 @@ function _autoResizeAIInput() {
 }
 
 let _aiDictRec = null, _aiDictOn = false;
+async function _aiDictAutoCorrect() {
+  const input = document.getElementById('aiChatInput');
+  if (!input || !input.value.trim()) return;
+  const btn = document.getElementById('aiDictBtn');
+  if (btn) { btn.disabled = true; btn.title = 'Correction IA...'; }
+  try {
+    const resp = await fetch('/api/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'correct_dictation', text: input.value, glossary: buildDictationGlossary(), clientName: currentClient?.name || '' })
+    });
+    const data = await resp.json();
+    if (data.result) { input.value = data.result.replace(/<[^>]+>/g, ''); _autoResizeAIInput(); }
+  } catch (e) { console.warn('Auto-correct dictée chat:', e.message); }
+  if (btn) { btn.disabled = false; btn.title = 'Dictée vocale'; }
+}
 function toggleAIDictation() {
   const btn = document.getElementById('aiDictBtn');
   const input = document.getElementById('aiChatInput');
-  if (_aiDictOn) { _aiDictOn = false; if (_aiDictRec) _aiDictRec.stop(); _aiDictRec = null; btn.classList.remove('recording'); btn.style.color = ''; return; }
+  if (_aiDictOn) { _aiDictOn = false; if (_aiDictRec) _aiDictRec.stop(); _aiDictRec = null; btn.classList.remove('recording'); btn.style.color = ''; _aiDictAutoCorrect(); return; }
   _aiDictRec = _startSpeechRec({
     onFinal: text => { if (input) { input.value += (input.value && !input.value.endsWith(' ') ? ' ' : '') + text; _autoResizeAIInput(); } },
-    onStop: () => { _aiDictOn = false; btn.classList.remove('recording'); btn.style.color = ''; },
+    onStop: () => { _aiDictOn = false; btn.classList.remove('recording'); btn.style.color = ''; _aiDictAutoCorrect(); },
     shouldRestart: () => _aiDictOn
   });
   if (!_aiDictRec) return;
@@ -16311,7 +16351,7 @@ async function askAIChat(presetQuestion) {
     const resp = await fetch('/api/ai-chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, history: _aiChatHistory, userProfile: _getAIUserProfile(), stream: true })
+      body: JSON.stringify({ question, history: _aiChatHistory, userProfile: _getAIUserProfile(), stream: true, glossary: buildDictationGlossary() })
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
