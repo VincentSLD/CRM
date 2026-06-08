@@ -13352,16 +13352,16 @@ function renderAnnuaire() {
         style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg-1);color:var(--t1);box-sizing:border-box"
         oninput="annuaireSearch=this.value;renderAnnuaireRefresh()">
     </div>
-    <div style="font-size:12px;color:var(--t3);margin-bottom:10px">${list.length} collaborateur(s)${_annuaireAbsentsToday.size ? (() => { let am=0,pm=0,full=0; for(const v of _annuaireAbsentsToday.values()){if(v==='AM')am++;else if(v==='PM')pm++;else full++;} const parts=[]; if(full)parts.push(full+' journée'); if(am)parts.push(am+' matin'); if(pm)parts.push(pm+' après-midi'); return ' · <span style="color:var(--red)">' + _annuaireAbsentsToday.size + ' absent(s) ('+parts.join(', ')+')</span>'; })() : ''}</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px">${list.length} collaborateur(s)${_annuaireAbsentsToday.size ? (() => { let am=0,pm=0,full=0; for(const v of _annuaireAbsentsToday.values()){if(v==='AM')am++;else if(v==='PM')pm++;else full++;} const parts=[]; if(full)parts.push(full+' journée'); if(am)parts.push(am+' matin'); if(pm)parts.push(pm+' après-midi'); return ' · <span style="color:var(--red)">' + _annuaireAbsentsToday.size + ' absence(s) ('+parts.join(', ')+')</span>'; })() : ''}</div>
     ${list.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--t3)">Aucun résultat</div>' :
       list.map(c => {
         const telFmt = formatPhone(c.telephone);
         const mobFmt = formatPhone(c.mobile);
-        return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px${c.absent ? ';opacity:0.55' : ''}">
+        return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px${c.absence === 'FULL' ? ';opacity:0.5' : c.absence ? ';opacity:0.7' : ''}">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
             <strong style="font-size:14px">${c.nom} ${c.prenom}</strong>
-            ${c.absent
-              ? '<span style="color:var(--red);font-size:11px;font-weight:600">Absent</span>'
+            ${c.absence
+              ? '<span style="color:var(--red);font-size:11px;font-weight:600">' + (c.absence === 'AM' ? 'Absence matin' : c.absence === 'PM' ? 'Absence après-midi' : 'Absence journée') + '</span>'
               : '<span style="color:var(--green);font-size:11px">Présent</span>'}
           </div>
           ${c.poste ? '<div style="font-size:12px;color:var(--t2);margin-bottom:4px">' + c.poste + '</div>' : ''}
@@ -13380,7 +13380,7 @@ function renderAnnuaire() {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:8px;align-items:center">
       <span style="font-size:12px;color:var(--t3)">${list.length} collaborateur(s)</span>
-      <span style="font-size:11px;color:var(--red)">${_annuaireAbsentsToday.size ? _annuaireAbsentsToday.size + " absent(s) aujourd'hui" : ''}</span>
+      <span style="font-size:11px;color:var(--red)">${_annuaireAbsentsToday.size ? _annuaireAbsentsToday.size + " absence(s) aujourd'hui" : ''}</span>
       ${hasFilters ? '<button class="btn" style="font-size:10px;padding:2px 8px;color:var(--red)" onclick="annResetFilters()">Reinitialiser filtres</button>' : ''}
     </div>
     <div style="display:flex;gap:8px;align-items:center">
@@ -13416,10 +13416,10 @@ function renderAnnuaire() {
             <td><select id="annFPresence" style="${fStyle}" onchange="annFPresence=this.value;renderAnnuaireRefresh()">
               <option value="">Tous</option>
               <option value="present" ${annFPresence==='present'?'selected':''}>Présent</option>
-              <option value="absent" ${annFPresence==='absent'?'selected':''}>Tous absents</option>
-              <option value="absent_am" ${annFPresence==='absent_am'?'selected':''}>Absent matin</option>
-              <option value="absent_pm" ${annFPresence==='absent_pm'?'selected':''}>Absent après-midi</option>
-              <option value="absent_full" ${annFPresence==='absent_full'?'selected':''}>Absent journée</option>
+              <option value="absent" ${annFPresence==='absent'?'selected':''}>Toutes absences</option>
+              <option value="absent_am" ${annFPresence==='absent_am'?'selected':''}>Absence matin</option>
+              <option value="absent_pm" ${annFPresence==='absent_pm'?'selected':''}>Absence après-midi</option>
+              <option value="absent_full" ${annFPresence==='absent_full'?'selected':''}>Absence journée</option>
             </select></td>
             <td></td>
           </tr>
@@ -13443,7 +13443,7 @@ function renderAnnuaire() {
               : `<span style="font-size:12px">${mobFmt || '—'}</span>`}</td>
             <td>${c.agence || '—'}</td>
             <td style="text-align:center">${c.absence
-              ? '<span style="color:var(--red);font-weight:600;font-size:12px">' + (c.absence === 'AM' ? 'Absent matin' : c.absence === 'PM' ? 'Absent après-midi' : 'Absent journée') + '</span>'
+              ? '<span style="color:var(--red);font-weight:600;font-size:12px">' + (c.absence === 'AM' ? 'Absence matin' : c.absence === 'PM' ? 'Absence après-midi' : 'Absence journée') + '</span>'
               : '<span style="color:var(--green);font-size:12px">Présent</span>'}</td>
             <td>${editing
               ? `<button class="btn btn-primary" style="font-size:10px;padding:2px 8px" onclick="annSavePhone('${c.akId}')">Valider</button>
