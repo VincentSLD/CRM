@@ -3471,6 +3471,8 @@ async function loadDB() {
       // Mettre à jour sociétés et badges avec données complètes
       selectedSocietes = new Set(getAllSocietes());
       updateNavBadges();
+      // Regénérer les alertes avec les CR disponibles (alerte "clients sans CR")
+      DB.alerts = generateAlerts();
       _deferredDataLoaded = true;
       console.log(`[loadDB] Phase 2 en ${Date.now()-t1}ms : ${rAll.length} CR, ${maAll.length} marchés, ${afAll.length} affaires`);
     })();
@@ -3903,25 +3905,85 @@ async function saveEditContact() {
 
 function generateAlerts() {
   const alerts = [];
-  const overdueInvoices = DB.factures.filter(f => f.statut === 'retard');
+  const now = new Date();
+
+  // ── Factures en retard ──
+  const overdueInvoices = DB.factures.filter(f => f.statut === 'retard').sort((a, b) => Number(b.montant || 0) - Number(a.montant || 0));
   if (overdueInvoices.length) {
     alerts.push({
       type:'danger', title:'Factures en retard',
       desc: `${overdueInvoices.length} facture(s) en retard pour un total de ${fmt(overdueInvoices.reduce((a,f)=>a+Number(f.montant),0))}`,
-      items: overdueInvoices.map(f => `${f.ref} — ${f.client} — ${fmt(Number(f.montant))}${f.jours ? ' — '+f.jours+' jours de retard' : ''}`)
+      items: overdueInvoices.slice(0, 30).map(f => `${f.ref} — ${f.client} — ${fmt(Number(f.montant))}${f.jours ? ' — '+f.jours+' jours de retard' : ''}`)
     });
   }
-  const dormant = DB.clients.filter(c => {
-    const d = new Date(c.last_contact);
-    return (new Date() - d) / (1000*60*60*24) > 10;
-  });
-  if (dormant.length) {
+
+  // ── Clients devenus dormants / proches du dormant (basé sur toutes les factures + commandes) ──
+  const sixMAgo = new Date(now); sixMAgo.setMonth(now.getMonth() - 6);
+  const fourMAgo = new Date(now); fourMAgo.setMonth(now.getMonth() - 4);
+  const twoYAgo = new Date(now); twoYAgo.setFullYear(now.getFullYear() - 2);
+  const sixM = sixMAgo.toISOString().slice(0, 10);
+  const fourM = fourMAgo.toISOString().slice(0, 10);
+  const twoY = twoYAgo.toISOString().slice(0, 10);
+  const lastAct = new Map();
+  for (const arr of [DB.factures, DB.commandes]) {
+    for (const d of arr) {
+      if (!d.client_id || !d.date_raw) continue;
+      const cur = lastAct.get(d.client_id);
+      if (!cur || d.date_raw > cur.date) {
+        lastAct.set(d.client_id, { name: d.client_name || d.client || '—', date: d.date_raw, societe: d.societe || '' });
+      }
+    }
+  }
+  const newDormant = [], nearDormant = [];
+  for (const [id, info] of lastAct) {
+    const days = Math.round((now - new Date(info.date)) / (1000*60*60*24));
+    if (info.date >= twoY && info.date < sixM) {
+      newDormant.push({ ...info, id, days });
+    } else if (info.date < fourM && info.date >= sixM) {
+      nearDormant.push({ ...info, id, days });
+    }
+  }
+  if (newDormant.length) {
+    newDormant.sort((a, b) => a.days - b.days);
     alerts.push({
-      type:'warn', title:'Clients sans contact > 10 jours',
-      desc: `${dormant.length} société(s) n'ont pas été contactés depuis plus de 10 jours`,
-      items: dormant.map(c => `${c.name} — dernier contact ${c.lastContact}`)
+      type:'danger', title:'Clients devenus dormants',
+      desc: `${newDormant.length} client(s) sans activité (facture/commande) depuis plus de 6 mois`,
+      items: newDormant.slice(0, 30).map(c => `<span onclick="showClient('${c.id}')" style="cursor:pointer;text-decoration:underline">${c.name}</span> — dernière activité il y a ${c.days} jours${c.societe ? ' — ' + c.societe : ''}`)
     });
   }
+  if (nearDormant.length) {
+    nearDormant.sort((a, b) => b.days - a.days);
+    alerts.push({
+      type:'warn', title:'Clients en risque de dormance',
+      desc: `${nearDormant.length} client(s) sans activité depuis 4 à 6 mois — à relancer rapidement`,
+      items: nearDormant.slice(0, 30).map(c => `<span onclick="showClient('${c.id}')" style="cursor:pointer;text-decoration:underline">${c.name}</span> — dernière activité il y a ${c.days} jours${c.societe ? ' — ' + c.societe : ''}`)
+    });
+  }
+
+  // ── Clients actifs récents sans compte-rendu (nécessite DB.reports — Phase 2) ──
+  if (DB.reports.length > 0) {
+    const clientsWithCR = new Set(DB.reports.map(r => r.client_id).filter(Boolean));
+    const recentClients = new Map();
+    for (const arr of [DB.devis, DB.commandes]) {
+      for (const d of arr) {
+        if (!d.client_id || !d.date_raw || d.date_raw < sixM) continue;
+        if (clientsWithCR.has(d.client_id)) continue;
+        if (!recentClients.has(d.client_id)) {
+          recentClients.set(d.client_id, { name: d.client_name || d.client || '—', id: d.client_id, date: d.date_raw, societe: d.societe || '' });
+        }
+      }
+    }
+    const noCR = [...recentClients.values()].sort((a, b) => b.date.localeCompare(a.date));
+    if (noCR.length) {
+      alerts.push({
+        type:'warn', title:'Clients actifs sans compte-rendu',
+        desc: `${noCR.length} client(s) avec devis/commandes récents mais aucun CR — visite à planifier`,
+        items: noCR.slice(0, 30).map(c => `<span onclick="showClient('${c.id}')" style="cursor:pointer;text-decoration:underline">${c.name}</span>${c.societe ? ' — ' + c.societe : ''}`)
+      });
+    }
+  }
+
+  // ── Alertes basées sur DB.clients (page courante) ──
   const lowScore = DB.clients.filter(c => c.score < 50);
   if (lowScore.length) {
     alerts.push({
