@@ -11300,9 +11300,11 @@ async function loadAkuiteoRefs() {
       akRef.sectors = (sectors || []).map(c => ({ id: c.id, code: c.code, name: c.name }));
       akRef.linkTypes = (linkTypes || []).map(c => ({ id: String(c.id), code: c.code, name: c.name }));
       akRef.pricingMethods = (pricingMethods || []).map(c => ({ id: c.id, code: c.code, name: c.name }));
-      // Filtrer les comptes génériques (Dessinateur, Ingénieur, etc. déclinés par agence)
-      // et ajouter le code Akuiteo en suffixe pour les vrais doublons (même nom+prénom)
-      const realEmployees = (employees || []).filter(e => !e.generic);
+      // Ne garder que les employés liés entre Akuiteo et Lucca (pas de doublons ni comptes obsolètes)
+      const linkedAkIds = new Set(
+        (collaborateursData || []).filter(c => c.akuiteo_id && c.lucca_id).map(c => String(c.akuiteo_id))
+      );
+      const realEmployees = (employees || []).filter(e => !e.generic && (linkedAkIds.size === 0 || linkedAkIds.has(String(e.id))));
       const nameCount = {};
       for (const e of realEmployees) {
         const fn = ((e.name||'') + ' ' + (e.firstName||'')).trim();
