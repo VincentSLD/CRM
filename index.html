@@ -3318,7 +3318,7 @@ async function loadDB() {
     const CMD_LITE = 'id,ref,client_id,client_name,nom,montant,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id,marche_id,affaire_id,akuiteo_id,adresse,ville,code_postal,surface_facturee';
     const FACT_LITE = 'id,ref,client_id,client_name,montant,date,echeance,statut,jours_retard,projet,agence,societe,responsable_id,type_facture,reste_a_payer,date_paiement,marche_id,affaire_id,akuiteo_id,adresse,ville,code_postal';
     const MARCHE_LITE = 'id,nom,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,adresse,code_postal,ville,lat,lng,nb_affaires,responsable_id';
-    const AFFAIRE_LITE = 'id,nom,marche_id,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,code_projet,apporteur_affaire,responsable,adresse,ville,code_postal,departement,region';
+    const AFFAIRE_LITE = 'id,nom,marche_id,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,code_projet,apporteur_affaire,architecte,responsable,adresse,ville,code_postal,departement,region';
 
     // Filtre : 1 an glissant pour les tables volumineuses
     const oneYearAgo = new Date();
@@ -7368,6 +7368,7 @@ function renderAffaireDetail() {
       detailRow('Code projet', a.code_projet),
       detailRow('Société', a.client_name ? '<a href="#" onclick="showClient(&#39;'+a.client_id+'&#39;);return false" style="color:var(--accent)">'+a.client_name+'</a>' : null),
       detailRow('Apporteur d\'affaire', a.apporteur_affaire),
+      detailRow('Architecte', a.architecte),
       detailRow('Responsable', a.responsable),
       detailRow('Marché', marche ? '<a href="#" onclick="showMarcheDetail(&#39;'+marche.id+'&#39;);return false" style="color:var(--accent)">'+( marche.ref||'')+' - '+(marche.nom||'')+'</a>' : '—'),
       detailRow('Statut', marcheStatutBadge(a.statut)),
@@ -11500,6 +11501,7 @@ async function showDevisDetail(id) {
         detailRow('Marché', d.marche_id ? (() => { const m = DB.marches.find(x=>x.id===d.marche_id); return m ? '<a href="#" onclick="showMarcheDetail(&#39;'+m.id+'&#39;);return false" style="color:var(--accent)">'+(m.ref||'')+' - '+(m.nom||'')+'</a>' : d.marche_id; })() : null),
         detailRow('Affaire', d.affaire_id ? (() => { const a = DB.affaires.find(x=>x.id===d.affaire_id); return a ? '<a href="#" onclick="showAffaireDetail(&#39;'+a.id+'&#39;);return false" style="color:var(--accent)">'+(a.ref||'')+' - '+(a.nom||'')+'</a>' : d.affaire_id; })() : null),
         detailRow('Apporteur d\'affaire', d.apporteur_affaire),
+        detailRow('Architecte', d.architecte),
         detailRow('Projet', d.projet),
         detailRow('Agence', d.agence),
         detailRow('Responsable', resolveManagerName(d.responsable_id)),
@@ -11583,6 +11585,7 @@ async function showCommandeDetail(id) {
         detailRow('Marché', c.marche_id ? (() => { const m = DB.marches.find(x=>x.id===c.marche_id); return m ? '<a href="#" onclick="showMarcheDetail(&#39;'+m.id+'&#39;);return false" style="color:var(--accent)">'+(m.ref||'')+' - '+(m.nom||'')+'</a>' : c.marche_id; })() : null),
         detailRow('Affaire', c.affaire_id ? (() => { const a = DB.affaires.find(x=>x.id===c.affaire_id); return a ? '<a href="#" onclick="showAffaireDetail(&#39;'+a.id+'&#39;);return false" style="color:var(--accent)">'+(a.ref||'')+' - '+(a.nom||'')+'</a>' : c.affaire_id; })() : null),
         detailRow('Apporteur d\'affaire', c.apporteur_affaire),
+        detailRow('Architecte', c.architecte),
         detailRow('Projet', c.projet),
         detailRow('Agence', c.agence),
         detailRow('Responsable', resolveManagerName(c.responsable_id)),
@@ -12099,6 +12102,7 @@ async function showFactureDetail(id) {
         detailRow('Marché', f.marche_id ? (() => { const m = DB.marches.find(x=>x.id===f.marche_id); return m ? '<a href="#" onclick="showMarcheDetail(&#39;'+m.id+'&#39;);return false" style="color:var(--accent)">'+(m.ref||'')+' - '+(m.nom||'')+'</a>' : f.marche_id; })() : null),
         detailRow('Affaire', f.affaire_id ? (() => { const a = DB.affaires.find(x=>x.id===f.affaire_id); return a ? '<a href="#" onclick="showAffaireDetail(&#39;'+a.id+'&#39;);return false" style="color:var(--accent)">'+(a.ref||'')+' - '+(a.nom||'')+'</a>' : f.affaire_id; })() : null),
         detailRow('Apporteur d\'affaire', f.apporteur_affaire),
+        detailRow('Architecte', f.architecte),
         detailRow('Projet', f.projet),
         detailRow('Agence', f.agence),
         detailRow('Mode de paiement', f.mode_paiement === 'BANK_TRANSFER' ? 'Virement bancaire' : f.mode_paiement === 'CHECK' ? 'Chèque' : f.mode_paiement === 'CASH' ? 'Espèces' : f.mode_paiement),
@@ -18956,6 +18960,7 @@ async function syncAkuiteo() {
               const a = affairesByProject[pid];
               if (proj.name) a.nom = proj.name;
               if (proj.projectSubCategory?.name) a.apporteur = proj.projectSubCategory.name;
+              if (proj.projectSubCategoryLevel2?.name) a.architecte = proj.projectSubCategoryLevel2.name;
               if (proj.manager?.name) a.responsable = [proj.manager.name, proj.manager.firstName].filter(Boolean).join(' ');
               // Adresse du site depuis le projet (option ADDRESS)
               const addr = proj.address || null;
@@ -18975,7 +18980,7 @@ async function syncAkuiteo() {
       for (const [pid, aff] of Object.entries(affairesByProject)) {
         const affId = 'aka_' + pid.replace(/[^a-zA-Z0-9.]/g, '_');
         projectToAffaire[pid] = affId;
-        affairesBatch.push({ id: affId, akuiteo_id: pid, ref: pid, nom: aff.nom || ('Affaire ' + pid), marche_id: projectToMarche[pid] || null, client_id: aff.client_id, client_name: aff.client_name, date_debut: aff.minDate, date_fin: aff.maxDate, montant: aff.montant, montant_ttc: aff.montant_ttc, statut: 'en_cours', agence: aff.agence, code_projet: pid, apporteur_affaire: aff.apporteur || null, responsable: aff.responsable || null, adresse: aff.adresse || null, ville: aff.ville || null, code_postal: aff.code_postal || null });
+        affairesBatch.push({ id: affId, akuiteo_id: pid, ref: pid, nom: aff.nom || ('Affaire ' + pid), marche_id: projectToMarche[pid] || null, client_id: aff.client_id, client_name: aff.client_name, date_debut: aff.minDate, date_fin: aff.maxDate, montant: aff.montant, montant_ttc: aff.montant_ttc, statut: 'en_cours', agence: aff.agence, code_projet: pid, apporteur_affaire: aff.apporteur || null, architecte: aff.architecte || null, responsable: aff.responsable || null, adresse: aff.adresse || null, ville: aff.ville || null, code_postal: aff.code_postal || null });
       }
       if (affairesBatch.length > 0) {
         for (let i = 0; i < affairesBatch.length; i += 100) {
@@ -18998,7 +19003,8 @@ async function syncAkuiteo() {
               const mId = projectToMarche[pid] || null;
               const aff = affairesByProject[pid];
               const apporteur = aff?.apporteur || null;
-              const updateData = { affaire_id: affId, marche_id: mId, apporteur_affaire: apporteur };
+              const architecte = aff?.architecte || null;
+              const updateData = { affaire_id: affId, marche_id: mId, apporteur_affaire: apporteur, architecte };
               await Promise.allSettled([
                 sb.from('devis').update(updateData).eq('projet', pid),
                 sb.from('commandes').update(updateData).eq('projet', pid),
