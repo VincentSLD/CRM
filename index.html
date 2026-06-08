@@ -2631,6 +2631,12 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="fg"><label class="fl">Groupe</label><select class="fi" id="ec-mk-groupe"><option value="">Groupe...</option></select></div>
               <div class="fg"><label class="fl">Origine</label><select class="fi" id="ec-mk-origine"><option value="">Origine...</option></select></div>
             </div>
+            <div id="ec-propager-infos-wrap" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+                <input type="checkbox" id="ec-propager-infos">
+                Propager ces infos à tous les établissements liés
+              </label>
+            </div>
           </div>
         </div>
         <div class="card">
@@ -16467,6 +16473,11 @@ function openModal(id) {
     renderReseauxProChips('ec-reseaux-chips');
     // Remplir les dropdowns Akuiteo
     fillAkuiteoDropdowns('ec', c);
+    // Checkbox "Propager infos entreprise" visible uniquement pour les sièges avec SIREN
+    const propWrap = document.getElementById('ec-propager-infos-wrap');
+    if (propWrap) propWrap.style.display = (c.est_siege && c.siren) ? '' : 'none';
+    const propCb = document.getElementById('ec-propager-infos');
+    if (propCb) propCb.checked = false;
   }
   if (id === 'new-client') {
     fillAkuiteoDropdowns('nc', null);
@@ -17478,6 +17489,22 @@ async function submitEditClient() {
       error = r2.error;
     }
     if (error) { toast(`Erreur: ${error.message}`, 'error'); return; }
+    // Propager les infos entreprise aux établissements liés si demandé
+    if (document.getElementById('ec-propager-infos')?.checked && currentClient.est_siege && currentClient.siren) {
+      setSyncText('Propagation aux établissements liés...');
+      const infosEntreprise = {
+        mk_categorie_id: fields.mk_categorie_id, mk_categorie: fields.mk_categorie,
+        mk_sous_categorie_id: fields.mk_sous_categorie_id, mk_sous_categorie: fields.mk_sous_categorie,
+        mk_categorie_pro_id: fields.mk_categorie_pro_id, mk_categorie_pro: fields.mk_categorie_pro,
+        mk_secteur_id: fields.mk_secteur_id, mk_secteur: fields.mk_secteur,
+        mk_type_id: fields.mk_type_id, mk_type: fields.mk_type,
+        mk_groupe: fields.mk_groupe, mk_origine: fields.mk_origine,
+      };
+      const { error: propErr, count } = await sb.from('clients').update(infosEntreprise, { count: 'exact' })
+        .eq('siren', currentClient.siren).eq('est_siege', false);
+      if (propErr) console.warn('Propagation infos:', propErr.message);
+      else toast(`Infos entreprise propagées à ${count || 0} établissement(s)`, 'info');
+    }
     closeModal('edit-client');
     setSyncText('Rafraîchissement...');
     // Rafraîchir le client localement (sans recharger toute la base)
