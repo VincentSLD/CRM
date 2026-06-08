@@ -3351,13 +3351,13 @@ async function loadDB() {
       }
     }
     async function fetchFast(table, cols, dateCol = 'date', useOrNull = false) {
-      let all = [], off = 0, pageSize = 1000;
+      let all = [], off = 0, pageSize = 6000;
       while (true) {
         const data = await fetchPage(table, cols, dateCol, off, off + pageSize - 1, 0, useOrNull);
         if (data === null) {
           // Page échouée même après 3 retries : on réduit la taille de page et on retente cette même page
-          if (pageSize > 100) {
-            pageSize = Math.max(100, Math.floor(pageSize / 2));
+          if (pageSize > 500) {
+            pageSize = Math.max(500, Math.floor(pageSize / 2));
             console.warn(`[loadDB] ${table} page ${off} : timeout persistant, on réduit pageSize à ${pageSize}`);
             continue;
           }
