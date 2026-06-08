@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
   if (!ANTHROPIC_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
-  const { action, text, clientName } = req.body || {};
+  const { action, text, clientName, glossary } = req.body || {};
   if (!text || !action) return res.status(400).json({ error: 'Missing action or text' });
 
   const prompts = {
@@ -64,6 +64,21 @@ Produis un compte-rendu professionnel structuré de cet appel :
 Réponds en HTML structuré (utilise <strong>, <ul><li>, <br>). Sois concis et factuel, ne rajoute pas d'informations inventées.
 
 Transcription :
+${text}`,
+
+    correct_dictation: `Tu es un correcteur de transcription vocale. Corrige le texte dicté ci-dessous en te basant sur le glossaire fourni.
+
+RÈGLES STRICTES :
+- Corrige UNIQUEMENT les erreurs de reconnaissance vocale (noms propres mal transcrits, acronymes, termes techniques)
+- Ne reformule PAS les phrases, garde le style oral tel quel
+- Ne rajoute PAS de ponctuation excessive, juste les points et virgules évidents
+- Si un mot ressemble phonétiquement à un terme du glossaire, remplace-le par le terme correct
+- Réponds UNIQUEMENT avec le texte corrigé en texte brut, sans commentaire, sans balise HTML
+
+GLOSSAIRE (noms de sociétés et termes à respecter) :
+${glossary || '(aucun)'}
+
+Texte à corriger :
 ${text}`
   };
 

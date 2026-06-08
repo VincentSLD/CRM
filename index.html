@@ -15422,6 +15422,7 @@ function toggleDictation() {
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
       <button class="btn" onclick="dictCancel()" style="font-size:12px">Annuler</button>
       <button class="btn" onclick="toggleDictation()" style="font-size:12px;color:var(--red)">⏹ Arrêter</button>
+      <button class="btn" onclick="dictCorrect()" id="dictCorrectBtn" style="font-size:12px">Corriger avec l'IA</button>
       <button class="btn btn-primary" onclick="dictInsert()" style="font-size:12px">Insérer dans le CR</button>
     </div>
   </div>`;
@@ -15458,6 +15459,46 @@ function dictCancel() {
   if (btn) btn.classList.remove('recording');
   document.getElementById('editorStatus').textContent = 'Prêt';
   zone.style.display = 'none';
+}
+function buildDictationGlossary() {
+  const terms = new Set();
+  if (Array.isArray(DB.clients)) for (const c of DB.clients) {
+    if (c.name) terms.add(c.name);
+    if (c.raison_sociale) terms.add(c.raison_sociale);
+  }
+  if (currentClient?.name) terms.add(currentClient.name);
+  if (currentClient?.raison_sociale) terms.add(currentClient.raison_sociale);
+  ['GPH', 'Novam', 'Akuiteo', 'CODIAL', 'géotechnique', 'hydrogéologie', 'piézomètre', 'piézométrie',
+   'sondage', 'forage', 'essai pressiométrique', 'reconnaissance de sol', 'terrassement',
+   'fondation', 'micropieux', 'tirants d\'ancrage', 'rabattement de nappe', 'étude de sol',
+   'G1', 'G2', 'G3', 'G4', 'G5', 'AVP', 'PRO', 'DCE', 'NF P 94-500'].forEach(t => terms.add(t));
+  return [...terms].join(', ');
+}
+async function dictCorrect() {
+  const ta = document.getElementById('dictText');
+  if (!ta || !ta.value.trim()) { toast('Rien à corriger', 'info'); return; }
+  const btn = document.getElementById('dictCorrectBtn');
+  btn.disabled = true; btn.textContent = 'Correction...';
+  try {
+    const resp = await fetch('/api/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'correct_dictation',
+        text: ta.value,
+        glossary: buildDictationGlossary(),
+        clientName: currentClient?.name || ''
+      })
+    });
+    const data = await resp.json();
+    if (data.result) {
+      ta.value = data.result.replace(/<[^>]+>/g, '');
+      toast('Texte corrigé par l\'IA', 'success');
+    } else if (data.error) {
+      toast('Erreur: ' + data.error, 'error');
+    }
+  } catch (e) { toast('Erreur correction: ' + e.message, 'error'); }
+  btn.disabled = false; btn.textContent = 'Corriger avec l\'IA';
 }
 
 function _autoResizeAIInput() {
