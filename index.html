@@ -3486,16 +3486,30 @@ async function loadDB() {
 }
 
 function updateNavBadges() {
-  // Client IDs liés aux agences sélectionnées (pour filtrer CR et contacts par agence)
-  // Ne filtrer que si l'utilisateur a désélectionné au moins une agence
-  let acIds = null;
+  // Filtrage par agence : ne filtrer que si l'utilisateur a désélectionné au moins une agence
   const allSoc = getAllSocietes();
-  if (selectedSocietes.size > 0 && selectedSocietes.size < allSoc.length) {
-    acIds = new Set();
+  const filteringByAgency = selectedSocietes.size > 0 && selectedSocietes.size < allSoc.length;
+
+  // CR : filtrer par agence du rédacteur (redacteur_id → commerciaux.akuiteo_manager_id → document.societe)
+  let crCount;
+  if (filteringByAgency && DB.reports.length > 0) {
+    // Map akuiteo_manager_id → societe (depuis les documents)
+    const mgrSociete = new Map();
     for (const arr of [DB.devis, DB.commandes, DB.factures]) {
-      for (const d of arr) { if (d.client_id && selectedSocietes.has(d.societe)) acIds.add(d.client_id); }
+      for (const d of arr) {
+        if (d.responsable_id && d.societe && !mgrSociete.has(d.responsable_id)) mgrSociete.set(d.responsable_id, d.societe);
+      }
     }
+    // Map commerciaux.id → societe
+    const redSociete = new Map();
+    for (const co of (DB.commerciaux || [])) {
+      if (co.akuiteo_manager_id && mgrSociete.has(co.akuiteo_manager_id)) redSociete.set(co.id, mgrSociete.get(co.akuiteo_manager_id));
+    }
+    crCount = DB.reports.filter(r => r.redacteur_id && selectedSocietes.has(redSociete.get(r.redacteur_id))).length;
+  } else {
+    crCount = DB.reports.length;
   }
+
   const badges = {
     navBadgeClients: clientsTotalCount || DB.clients.length,
     navBadgeContacts: _navContactsCount || null,
@@ -3506,7 +3520,7 @@ function updateNavBadges() {
     navBadgeDevis: filterBySociete(filterByDateRange(filterByCommercial(DB.devis), devisDateFrom, devisDateTo)).length,
     navBadgeCommandes: filterBySociete(filterByDateRange(filterByCommercial(DB.commandes), cmdDateFrom, cmdDateTo)).length,
     navBadgeFactures: filterBySociete(filterByDateRange(filterByCommercial(DB.factures), factDateFrom, factDateTo)).length,
-    navBadgeCR: acIds ? DB.reports.filter(r => (r.clients_list || []).some(c => acIds.has(c.id))).length : DB.reports.length,
+    navBadgeCR: crCount,
     navBadgeAlertes: DB.alerts.length,
     navBadgeCampagnes: _navCampagnesCount || null,
   };
