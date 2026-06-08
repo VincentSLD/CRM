@@ -11999,7 +11999,7 @@ async function cmdAskDocQuestion(){
   cmdRenderDocChat();
 
   try {
-    const sys = "Tu es un assistant documentaire pour un bureau d'études. Réponds UNIQUEMENT à partir des documents fournis. Si l'information n'y figure pas, dis-le clairement. Réponds en JSON strict sans Markdown : {\"reponse\": string (HTML simple autorisé: <b>, <br>, <ul><li>), \"sources\": string[] (noms exacts des documents utilisés), \"confiance\": number 0-100}.";
+    const sys = "Tu es un assistant documentaire expert pour un bureau d'études en géotechnique et ingénierie. Tu analyses les documents techniques avec rigueur.\n\nRÈGLES :\n- Base tes réponses UNIQUEMENT sur les documents fournis. Ne jamais inventer ou supposer des informations absentes des documents.\n- Sois pertinent et précis : va droit au but, cite les passages ou données clés des documents.\n- Analyse critique : signale toute erreur, incohérence, contradiction ou contre-indication que tu détectes dans les documents (ex: valeurs contradictoires, normes non respectées, données manquantes critiques).\n- Force de proposition : suggère des actions, des vérifications complémentaires ou des points d'attention que le commercial ou l'ingénieur devrait considérer.\n- Si l'information demandée ne figure pas dans les documents, dis-le clairement et indique quels documents pourraient contenir cette information.\n\nRéponds en JSON strict sans Markdown : {\"reponse\": string (HTML simple autorisé: <b>, <br>, <ul><li>, <h4>), \"sources\": string[] (noms exacts des documents utilisés), \"confiance\": number 0-100, \"alertes\": string[] (erreurs, incohérences ou contre-indications détectées, tableau vide si aucune)}.";
     const user = "DOCUMENTS :\n" + cmdDocCorpusText() + "\n\nQUESTION : " + q;
 
     const r = await fetch('/api/ai-docs', {
@@ -12019,6 +12019,7 @@ async function cmdAskDocQuestion(){
     last.answer = o.reponse || 'Pas de réponse.';
     last.sources = o.sources || [];
     last.confiance = o.confiance || 0;
+    last.alertes = o.alertes || [];
     last.loading = false;
   } catch(e){
     const last = cmdDocChatHistory[cmdDocChatHistory.length-1];
@@ -12040,6 +12041,7 @@ function cmdRenderDocChat(){
   box.innerHTML = cmdDocChatHistory.map(h=>
     `<div class="cmd-chat-q">${cmdEsc(h.question)}</div>
      <div class="cmd-chat-a">${h.loading ? h.answer : h.answer}
+       ${!h.loading && h.alertes && h.alertes.length ? '<div style="margin-top:6px;padding:6px 10px;background:#fef3c7;border-left:3px solid #f59e0b;border-radius:4px;font-size:11px;color:#92400e"><b>Alertes :</b><ul style="margin:4px 0 0 16px;padding:0">'+h.alertes.map(a=>'<li>'+cmdEsc(a)+'</li>').join('')+'</ul></div>' : ''}
        ${!h.loading && h.sources.length ? '<div class="srcs">'+h.sources.map(s=>'<span class="src-chip">'+cmdEsc(s)+'</span>').join('')+'</div>' : ''}
        ${!h.loading && h.confiance ? '<div class="conf">Confiance : '+h.confiance+'%</div>' : ''}
      </div>`
