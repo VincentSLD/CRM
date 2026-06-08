@@ -3181,6 +3181,29 @@ function filterBySociete(items) {
   return items.filter(d => selectedSocietes.has(d.societe));
 }
 
+// Map commerciaux.id (redacteur_id) → societe via documents
+// Chaîne : redacteur_id → commerciaux.akuiteo_manager_id → document.responsable_id → document.societe
+function _getRedacteurSocieteMap() {
+  const mgrSoc = new Map();
+  for (const arr of [DB.devis, DB.commandes, DB.factures]) {
+    for (const d of arr) {
+      if (d.responsable_id && d.societe && !mgrSoc.has(d.responsable_id)) mgrSoc.set(d.responsable_id, d.societe);
+    }
+  }
+  const map = new Map();
+  for (const co of (DB.commerciaux || [])) {
+    if (co.akuiteo_manager_id && mgrSoc.has(co.akuiteo_manager_id)) map.set(co.id, mgrSoc.get(co.akuiteo_manager_id));
+  }
+  return map;
+}
+
+function filterCRBySociete(reports) {
+  const allSoc = getAllSocietes();
+  if (selectedSocietes.size === 0 || selectedSocietes.size >= allSoc.length) return reports;
+  const redSoc = _getRedacteurSocieteMap();
+  return reports.filter(r => r.redacteur_id && selectedSocietes.has(redSoc.get(r.redacteur_id)));
+}
+
 function societeSelect(code) {
   const all = getAllSocietes();
   if (code === '__ALL__') {
@@ -3486,30 +3509,6 @@ async function loadDB() {
 }
 
 function updateNavBadges() {
-  // Filtrage par agence : ne filtrer que si l'utilisateur a désélectionné au moins une agence
-  const allSoc = getAllSocietes();
-  const filteringByAgency = selectedSocietes.size > 0 && selectedSocietes.size < allSoc.length;
-
-  // CR : filtrer par agence du rédacteur (redacteur_id → commerciaux.akuiteo_manager_id → document.societe)
-  let crCount;
-  if (filteringByAgency && DB.reports.length > 0) {
-    // Map akuiteo_manager_id → societe (depuis les documents)
-    const mgrSociete = new Map();
-    for (const arr of [DB.devis, DB.commandes, DB.factures]) {
-      for (const d of arr) {
-        if (d.responsable_id && d.societe && !mgrSociete.has(d.responsable_id)) mgrSociete.set(d.responsable_id, d.societe);
-      }
-    }
-    // Map commerciaux.id → societe
-    const redSociete = new Map();
-    for (const co of (DB.commerciaux || [])) {
-      if (co.akuiteo_manager_id && mgrSociete.has(co.akuiteo_manager_id)) redSociete.set(co.id, mgrSociete.get(co.akuiteo_manager_id));
-    }
-    crCount = DB.reports.filter(r => r.redacteur_id && selectedSocietes.has(redSociete.get(r.redacteur_id))).length;
-  } else {
-    crCount = DB.reports.length;
-  }
-
   const badges = {
     navBadgeClients: clientsTotalCount || DB.clients.length,
     navBadgeContacts: _navContactsCount || null,
@@ -3520,7 +3519,7 @@ function updateNavBadges() {
     navBadgeDevis: filterBySociete(filterByDateRange(filterByCommercial(DB.devis), devisDateFrom, devisDateTo)).length,
     navBadgeCommandes: filterBySociete(filterByDateRange(filterByCommercial(DB.commandes), cmdDateFrom, cmdDateTo)).length,
     navBadgeFactures: filterBySociete(filterByDateRange(filterByCommercial(DB.factures), factDateFrom, factDateTo)).length,
-    navBadgeCR: crCount,
+    navBadgeCR: filterCRBySociete(DB.reports).length,
     navBadgeAlertes: DB.alerts.length,
     navBadgeCampagnes: _navCampagnesCount || null,
   };
@@ -12596,7 +12595,7 @@ function crGetRedacteurNom(r) {
 
 function renderCRList() {
   const myId = currentCommercial?.id || '';
-  let filteredReports = [...DB.reports];
+  let filteredReports = filterCRBySociete(DB.reports);
   // Filtre auteur (select global)
   if (crFilterAuteur === '__mine__') {
     filteredReports = filteredReports.filter(r => r.redacteur_id == myId);
@@ -12641,6 +12640,7 @@ function renderCRList() {
     // ═══ MOBILE : cartes CR ═══
     return `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px">
+      ${renderSocieteFilter(() => { crPage=0; renderPage('cr'); })}
       <select style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1);flex:1"
         onchange="crFilterAuteur=this.value;crPage=0;renderPage('cr')">
         <option value="__mine__" ${crFilterAuteur==='__mine__'?'selected':''}>Mes CR</option>
@@ -12701,6 +12701,7 @@ function renderCRList() {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:10px;align-items:center">
       <div style="font-size:13px;color:var(--t2)">Comptes-rendus</div>
+      ${renderSocieteFilter(() => { crPage=0; renderPage('cr'); })}
       <select style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--bg-1);color:var(--t1)"
         onchange="crFilterAuteur=this.value;crPage=0;renderPage('cr')">
         <option value="__mine__" ${crFilterAuteur==='__mine__'?'selected':''}>Mes CR</option>
