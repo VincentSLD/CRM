@@ -3487,8 +3487,10 @@ async function loadDB() {
 
 function updateNavBadges() {
   // Client IDs liés aux agences sélectionnées (pour filtrer CR et contacts par agence)
+  // Ne filtrer que si l'utilisateur a désélectionné au moins une agence
   let acIds = null;
-  if (selectedSocietes.size > 0) {
+  const allSoc = getAllSocietes();
+  if (selectedSocietes.size > 0 && selectedSocietes.size < allSoc.length) {
     acIds = new Set();
     for (const arr of [DB.devis, DB.commandes, DB.factures]) {
       for (const d of arr) { if (d.client_id && selectedSocietes.has(d.societe)) acIds.add(d.client_id); }
