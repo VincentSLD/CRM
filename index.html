@@ -1739,6 +1739,7 @@ tbody tr:last-child td { border-bottom: none; }
       <div class="nav-item" data-page="annuaire" onclick="go('annuaire')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Collaborateurs
+        <span class="nav-badge" id="navBadgeCollaborateurs" style="display:none"></span>
       </div>
     </div>
     <div class="nav-section">
@@ -1789,6 +1790,7 @@ tbody tr:last-child td { border-bottom: none; }
       <div class="nav-item" data-page="campagnes" onclick="go('campagnes')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M2 10l3 3"/><path d="M22 10l-3 3"/></svg>
         Campagnes
+        <span class="nav-badge" id="navBadgeCampagnes" style="display:none"></span>
       </div>
     </div>
     <div class="nav-section">
@@ -3425,13 +3427,16 @@ async function loadDB() {
     _deferredDataLoaded = false;
     _deferredLoadPromise = (async () => {
       const t1 = Date.now();
-      const [rAll, nAll, maAll, afAll, luccaAll, akAll] = await Promise.all([
+      const [rAll, nAll, maAll, afAll, luccaAll, akAll, contactsCount, concurrentsCount, campagnesCount] = await Promise.all([
         (async () => { const RCOLS = 'id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at'; let all=[],off=0; while(true){ const {data}=await sb.from('reports').select(RCOLS).order('date',{ascending:false}).range(off,off+999); if(!data||!data.length) break; all=all.concat(data); if(data.length<1000) break; off+=1000; } return all; })(),
         sb.from('notifications').select('id,type,text,time_label,read,created_at').order('created_at', {ascending:false}).limit(100).then(r => r.data || []),
         fetchFast('marches', MARCHE_LITE, 'date_debut', true),
         fetchFast('affaires', AFFAIRE_LITE, 'date_debut', true),
         sb.from('collaborateurs_lucca').select('id,lucca_id,nom,prenom,email,etablissement,poste').order('nom').then(r => r.data || []),
         sb.from('collaborateurs').select('id,lucca_id,akuiteo_id,nom,prenom,code,email,telephone,mobile').order('nom').then(r => r.data || []),
+        sb.from('contacts').select('id', { count: 'exact', head: true }).then(r => r.count || 0),
+        sb.from('concurrents').select('id', { count: 'exact', head: true }).then(r => r.count || 0),
+        sb.from('campagnes').select('id', { count: 'exact', head: true }).then(r => r.count || 0),
       ]);
       DB.reports = rAll.map(r => ({
         ...r, client: r.client_name, text: r.contenu || '', date_raw: r.date, date: timeAgo(r.date), titre: r.titre,
@@ -3454,6 +3459,9 @@ async function loadDB() {
       }
       DB.marches.forEach(m => { if (!m.societe) m.societe = societeByMarche.get(m.id) || null; });
       DB.affaires.forEach(a => { if (!a.societe) a.societe = societeByAffaire.get(a.id) || null; });
+      _navContactsCount = contactsCount;
+      _navConcurrentsCount = concurrentsCount;
+      _navCampagnesCount = campagnesCount;
       // Mettre à jour sociétés et badges avec données complètes
       selectedSocietes = new Set(getAllSocietes());
       updateNavBadges();
@@ -3472,13 +3480,17 @@ async function loadDB() {
 function updateNavBadges() {
   const badges = {
     navBadgeClients: clientsTotalCount || DB.clients.length,
-    navBadgeContacts: null, // chargé à la demande
+    navBadgeContacts: _navContactsCount || null,
+    navBadgeConcurrence: _navConcurrentsCount || null,
+    navBadgeCollaborateurs: (collaborateursData || []).length || null,
     navBadgeMarches: filterByCommercial(DB.marches).length,
+    navBadgeAffaires: filterByCommercial(DB.affaires).length,
     navBadgeDevis: filterByCommercial(DB.devis).length,
     navBadgeCommandes: filterByCommercial(DB.commandes).length,
     navBadgeFactures: filterByCommercial(DB.factures).length,
     navBadgeCR: DB.reports.length,
     navBadgeAlertes: DB.alerts.length,
+    navBadgeCampagnes: _navCampagnesCount || null,
   };
   for (const [id, count] of Object.entries(badges)) {
     const el = document.getElementById(id);
@@ -3978,6 +3990,7 @@ const facStatusMap = { payee:{l:'Payée',c:'green'}, attente:{l:'En attente',c:'
 let currentPage = 'dashboard';
 let currentReport = null;
 let _deferredDataLoaded = false;
+let _navContactsCount = 0, _navConcurrentsCount = 0, _navCampagnesCount = 0;
 let _deferredLoadPromise = null;
 const _DEFERRED_PAGES = new Set(['cr', 'marches', 'affaires', 'marche-detail', 'affaire-detail', 'carte-affaires', 'alertes', 'collaborateurs', 'collaborateurs-lucca', 'annuaire']);
 
