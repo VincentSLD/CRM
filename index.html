@@ -4128,7 +4128,7 @@ function renderPage(page) {
     loadClientsFilterOpts().then(() => { if (currentPage === 'clients') renderPage('clients'); });
   }
   if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); }, 50);
-  if (page === 'dashboard') setTimeout(() => renderDashObjectifsAgences(), 50);
+  if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); }, 50);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
   if (page === 'collaborateurs-lucca') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); renderCollaborateursLuccaRefresh(); }, 50);
   if (page === 'annuaire') setTimeout(async () => { await loadAnnuaireAbsences(); renderAnnuaireRefresh(); }, 50);
@@ -4140,8 +4140,8 @@ function renderPage(page) {
 // ═══════════════════════════════════════════════════════════
 function renderDashboardRefresh() {
   document.getElementById('contentArea').innerHTML = '<div class="page active">' + renderDashboard() + '</div>';
-  // Charger les objectifs par agence en async (a besoin de Supabase)
-  setTimeout(() => renderDashObjectifsAgences(), 50);
+  // Charger les objectifs par agence et les listes clients en async
+  setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); }, 50);
 }
 function renderDashboard() {
   const myDevis = filterBySociete(filterByDateRange(filterByCommercial(DB.devis), dashDateFrom, dashDateTo));
@@ -4307,7 +4307,8 @@ function renderDashboard() {
       <div class="card-header"><div class="card-title">Factures par statut</div></div>
       <div class="card-body">${renderDashDonutFactures(myFactures)}</div>
     </div>
-  </div>`;
+  </div>
+  <div id="dashClientLists" style="margin-top:16px"><div style="text-align:center;padding:20px;color:var(--t3)">Chargement des listes clients...</div></div>`;
 }
 
 async function renderDashObjectifsAgences() {
@@ -4394,6 +4395,110 @@ async function renderDashObjectifsAgences() {
         </div>` : ''}
       </div>`;
     }).join('') + '</div>';
+}
+
+async function renderDashClientLists() {
+  const el = document.getElementById('dashClientLists');
+  if (!el) return;
+
+  // Documents filtrés par agence (sans filtre date pour lier clients ↔ agences)
+  const allDocsAgency = [...filterBySociete(filterByCommercial(DB.devis)),
+                         ...filterBySociete(filterByCommercial(DB.commandes)),
+                         ...filterBySociete(filterByCommercial(DB.factures))];
+  const agencyClientIds = new Set(allDocsAgency.map(d => d.client_id).filter(Boolean));
+
+  // Documents filtrés par agence + période (pour le CA)
+  const myFactures = filterBySociete(filterByDateRange(filterByCommercial(DB.factures), dashDateFrom, dashDateTo));
+  const myCommandes = filterBySociete(filterByDateRange(filterByCommercial(DB.commandes), dashDateFrom, dashDateTo));
+
+  // --- Top 100 par CA facturé ---
+  const clientCA = {};
+  for (const f of myFactures) {
+    if (!f.client_id) continue;
+    if (!clientCA[f.client_id]) clientCA[f.client_id] = { id: f.client_id, name: f.client_name || 'Inconnu', ca: 0, nbFact: 0, caCmd: 0, nbCmd: 0 };
+    clientCA[f.client_id].ca += (f.montant || 0);
+    clientCA[f.client_id].nbFact++;
+  }
+  for (const c of myCommandes) {
+    if (!c.client_id) continue;
+    if (!clientCA[c.client_id]) clientCA[c.client_id] = { id: c.client_id, name: c.client_name || 'Inconnu', ca: 0, nbFact: 0, caCmd: 0, nbCmd: 0 };
+    clientCA[c.client_id].caCmd += Number(c.montant || 0);
+    clientCA[c.client_id].nbCmd++;
+  }
+  const top100 = Object.values(clientCA).sort((a, b) => b.ca - a.ca).slice(0, 100);
+
+  // --- Nouveaux et dormants depuis Supabase ---
+  let nouveaux = [], dormants = [];
+  try {
+    const [nRes, dRes] = await Promise.all([
+      sb.from('clients').select('id,name,city,code_postal,account_manager_name,created_at').eq('status', 'nouveau').order('created_at', { ascending: false }).limit(500),
+      sb.from('clients').select('id,name,city,code_postal,account_manager_name,last_contact').eq('status', 'dormant').order('last_contact', { ascending: true }).limit(500),
+    ]);
+    nouveaux = (nRes.data || []);
+    dormants = (dRes.data || []);
+    // Filtrer par agence si filtre actif
+    if (selectedSocietes.size > 0) {
+      nouveaux = nouveaux.filter(c => agencyClientIds.has(c.id));
+      dormants = dormants.filter(c => agencyClientIds.has(c.id));
+    }
+  } catch (e) { console.warn('Erreur chargement listes clients:', e.message); }
+
+  function clientRow(c, extra) {
+    const dept = c.code_postal ? c.code_postal.slice(0, 2) : '';
+    return `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
+      <td style="font-size:12px;font-weight:500">${c.name || '—'}</td>
+      <td style="font-size:11px">${c.city || '—'}</td>
+      <td style="font-size:11px;text-align:center" class="mono">${dept}</td>
+      <td style="font-size:11px">${c.account_manager_name || '—'}</td>
+      ${extra}
+    </tr>`;
+  }
+
+  // Render Top 100
+  const top100HTML = top100.length === 0
+    ? '<div style="padding:14px;text-align:center;color:var(--t3)">Aucune facture sur la période</div>'
+    : `<div class="table-wrap"><table class="tbl-compact">
+      <thead><tr><th>#</th><th>Client</th><th style="text-align:right">CA facturé</th><th style="text-align:right">CA commandé</th></tr></thead>
+      <tbody>${top100.map((c, i) => `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
+        <td style="font-size:11px;color:var(--t3);text-align:center">${i + 1}</td>
+        <td style="font-size:12px;font-weight:500">${c.name}</td>
+        <td style="font-size:12px;text-align:right;font-weight:600">${fmt(c.ca)}<span style="color:var(--t3);font-weight:400;font-size:10px;margin-left:4px">(${c.nbFact})</span></td>
+        <td style="font-size:12px;text-align:right">${c.caCmd ? fmt(c.caCmd) + '<span style="color:var(--t3);font-size:10px;margin-left:4px">(' + c.nbCmd + ')</span>' : '—'}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+
+  // Render Nouveaux
+  const nouveauxHTML = nouveaux.length === 0
+    ? '<div style="padding:14px;text-align:center;color:var(--t3)">Aucun nouveau client</div>'
+    : `<div class="table-wrap"><table class="tbl-compact">
+      <thead><tr><th>Client</th><th>Ville</th><th style="text-align:center">Dpt</th><th>Commercial</th><th>Créé le</th></tr></thead>
+      <tbody>${nouveaux.map(c => clientRow(c, `<td style="font-size:11px">${c.created_at ? new Date(c.created_at).toLocaleDateString('fr-FR') : '—'}</td>`)).join('')}</tbody></table></div>`;
+
+  // Render Dormants
+  const dormantsHTML = dormants.length === 0
+    ? '<div style="padding:14px;text-align:center;color:var(--t3)">Aucun client dormant</div>'
+    : `<div class="table-wrap"><table class="tbl-compact">
+      <thead><tr><th>Client</th><th>Ville</th><th style="text-align:center">Dpt</th><th>Commercial</th><th>Dernier contact</th></tr></thead>
+      <tbody>${dormants.map(c => clientRow(c, `<td style="font-size:11px">${c.last_contact ? new Date(c.last_contact).toLocaleDateString('fr-FR') : '—'}</td>`)).join('')}</tbody></table></div>`;
+
+  el.innerHTML = `
+  <details class="card" style="margin-bottom:10px">
+    <summary class="card-header" style="cursor:pointer;user-select:none">
+      <div class="card-title">Top 100 clients par CA facturé <span style="font-weight:400;color:var(--t3);font-size:12px">(${top100.length})</span></div>
+    </summary>
+    <div class="card-body" style="padding:0">${top100HTML}</div>
+  </details>
+  <details class="card" style="margin-bottom:10px">
+    <summary class="card-header" style="cursor:pointer;user-select:none">
+      <div class="card-title">Nouveaux clients <span style="font-weight:400;color:var(--t3);font-size:12px">(${nouveaux.length})</span></div>
+    </summary>
+    <div class="card-body" style="padding:0">${nouveauxHTML}</div>
+  </details>
+  <details class="card" style="margin-bottom:10px">
+    <summary class="card-header" style="cursor:pointer;user-select:none">
+      <div class="card-title">Clients dormants <span style="font-weight:400;color:var(--t3);font-size:12px">(${dormants.length})</span></div>
+    </summary>
+    <div class="card-body" style="padding:0">${dormantsHTML}</div>
+  </details>`;
 }
 
 function renderDashChartCA(factures) {
