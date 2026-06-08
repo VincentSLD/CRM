@@ -11300,20 +11300,19 @@ async function loadAkuiteoRefs() {
       akRef.sectors = (sectors || []).map(c => ({ id: c.id, code: c.code, name: c.name }));
       akRef.linkTypes = (linkTypes || []).map(c => ({ id: String(c.id), code: c.code, name: c.name }));
       akRef.pricingMethods = (pricingMethods || []).map(c => ({ id: c.id, code: c.code, name: c.name }));
-      // Ne garder que les employés liés entre Akuiteo et Lucca (pas de doublons ni comptes obsolètes)
-      const linkedAkIds = new Set(
-        (collaborateursData || []).filter(c => c.akuiteo_id && c.lucca_id).map(c => String(c.akuiteo_id))
-      );
-      const realEmployees = (employees || []).filter(e => !e.generic && (linkedAkIds.size === 0 || linkedAkIds.has(String(e.id))));
-      const nameCount = {};
-      for (const e of realEmployees) {
-        const fn = ((e.name||'') + ' ' + (e.firstName||'')).trim();
-        nameCount[fn] = (nameCount[fn] || 0) + 1;
+      // Ne garder qu'un seul employé Akuiteo par collaborateur Lucca (dédupliquer par lucca_id)
+      const linkedCollabs = (collaborateursData || []).filter(c => c.akuiteo_id && c.lucca_id);
+      const seenLuccaId = new Set();
+      const uniqueAkIds = new Set();
+      for (const c of linkedCollabs) {
+        if (seenLuccaId.has(c.lucca_id)) continue;
+        seenLuccaId.add(c.lucca_id);
+        uniqueAkIds.add(String(c.akuiteo_id));
       }
+      const realEmployees = (employees || []).filter(e => !e.generic && (uniqueAkIds.size === 0 || uniqueAkIds.has(String(e.id))));
       akRef.employees = realEmployees.map(e => {
         const fn = ((e.name||'') + ' ' + (e.firstName||'')).trim();
-        const label = nameCount[fn] > 1 ? `${fn} (${e.code || e.id})` : fn;
-        return { id: e.id, code: e.code, name: label };
+        return { id: e.id, code: e.code, name: fn };
       }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       console.log('[AkRef] Chargé:', akRef.categories.length, 'cats,', akRef.subCategories.length, 'subCats,', akRef.employees.length, 'employees');
     } catch (e) { console.error('[AkRef] Erreur chargement:', e.message); }
