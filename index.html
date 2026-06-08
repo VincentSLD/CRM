@@ -3917,6 +3917,23 @@ function generateAlerts() {
     });
   }
 
+  // ── Factures impayées depuis plus de 3 mois ──
+  const threeMAgo = new Date(now); threeMAgo.setMonth(now.getMonth() - 3);
+  const threeM = threeMAgo.toISOString().slice(0, 10);
+  const unpaid3m = DB.factures.filter(f => f.statut !== 'payee' && f.date_raw && f.date_raw < threeM && Number(f.reste_a_payer || f.montant || 0) > 0)
+    .sort((a, b) => Number(b.reste_a_payer || b.montant || 0) - Number(a.reste_a_payer || a.montant || 0));
+  if (unpaid3m.length) {
+    const total = unpaid3m.reduce((a, f) => a + Number(f.reste_a_payer || f.montant || 0), 0);
+    alerts.push({
+      type:'danger', title:'Factures impayées > 3 mois',
+      desc: `${unpaid3m.length} facture(s) non réglée(s) depuis plus de 3 mois pour un total de ${fmt(total)}`,
+      items: unpaid3m.slice(0, 30).map(f => {
+        const days = Math.round((now - new Date(f.date_raw)) / (1000*60*60*24));
+        return `${f.ref} — <span onclick="showClient('${f.client_id}')" style="cursor:pointer;text-decoration:underline">${f.client}</span> — ${fmt(Number(f.reste_a_payer || f.montant || 0))} — ${days} jours`;
+      })
+    });
+  }
+
   // ── Clients devenus dormants / proches du dormant (basé sur toutes les factures + commandes) ──
   const sixMAgo = new Date(now); sixMAgo.setMonth(now.getMonth() - 6);
   const fourMAgo = new Date(now); fourMAgo.setMonth(now.getMonth() - 4);
