@@ -3434,7 +3434,7 @@ async function loadDB() {
     _deferredLoadPromise = (async () => {
       const t1 = Date.now();
       const [rAll, nAll, maAll, afAll, luccaAll, akAll, contactsCount, concurrentsCount, campagnesCount] = await Promise.all([
-        (async () => { const RCOLS = 'id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at,societe'; let all=[],off=0; while(true){ const {data}=await sb.from('reports').select(RCOLS).order('date',{ascending:false}).range(off,off+999); if(!data||!data.length) break; all=all.concat(data); if(data.length<1000) break; off+=1000; } return all; })(),
+        (async () => { const RCOLS = 'id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at'; let all=[],off=0; while(true){ const {data}=await sb.from('reports').select(RCOLS).order('date',{ascending:false}).range(off,off+999); if(!data||!data.length) break; all=all.concat(data); if(data.length<1000) break; off+=1000; } return all; })(),
         sb.from('notifications').select('id,type,text,time_label,read,created_at').order('created_at', {ascending:false}).limit(100).then(r => r.data || []),
         fetchFast('marches', MARCHE_LITE, 'date_debut', true),
         fetchFast('affaires', AFFAIRE_LITE, 'date_debut', true),
@@ -4439,13 +4439,13 @@ async function renderDashClientLists() {
   // --- Nouveaux et dormants depuis Supabase ---
   let nouveaux = [], dormants = [];
   try {
-    const [nRes, dRes] = await Promise.all([
-      sb.from('clients').select('id,name,city,code_postal,account_manager_name,created_at').eq('status', 'nouveau').order('created_at', { ascending: false }).limit(500),
-      sb.from('clients').select('id,name,city,code_postal,account_manager_name,last_contact').eq('status', 'dormant').order('last_contact', { ascending: true }).limit(500),
-    ]);
-    nouveaux = (nRes.data || []);
-    dormants = (dRes.data || []);
-    // Filtrer par agence si filtre actif
+    const { data } = await sb.from('clients')
+      .select('id,name,city,code_postal,account_manager_name,created_at,last_contact,status')
+      .in('status', ['nouveau', 'dormant'])
+      .limit(300);
+    const all = data || [];
+    nouveaux = all.filter(c => c.status === 'nouveau').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    dormants = all.filter(c => c.status === 'dormant').sort((a, b) => (a.last_contact || '').localeCompare(b.last_contact || ''));
     if (selectedSocietes.size > 0) {
       nouveaux = nouveaux.filter(c => agencyClientIds.has(c.id));
       dormants = dormants.filter(c => agencyClientIds.has(c.id));
