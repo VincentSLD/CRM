@@ -18609,18 +18609,23 @@ async function syncAkuiteo() {
     // Mettre à jour fact_* avec l'adresse du site de facturation (useForBillingAddress)
     setSyncText('Sync complète — Adresses de facturation (sites)...');
     const billingAkIds = allClientsBatch.map(c => c.akuiteo_id).filter(Boolean);
-    for (let i = 0; i < billingAkIds.length; i += 10) {
-      if (i % 50 === 0) setSyncText(`Adresses facturation ${i}/${billingAkIds.length}...`);
-      const batch = billingAkIds.slice(i, i + 10);
+    const akIdToClientId = {};
+    for (const c of allClientsBatch) { if (c.akuiteo_id) akIdToClientId[c.akuiteo_id] = c.id; }
+    const billingUpdates = [];
+    const t1Billing = Date.now();
+    for (let i = 0; i < billingAkIds.length; i += 50) {
+      if (i % 500 === 0) setSyncText(`Adresses facturation ${i}/${billingAkIds.length}...`);
+      const batch = billingAkIds.slice(i, i + 50);
       await Promise.allSettled(batch.map(async (akId) => {
         const sites = await akuiteoFetch('GET', '/crm/customers/' + akId + '/sites').catch(() => []);
         if (!Array.isArray(sites) || sites.length === 0) return;
         const billingSite = sites.find(s => s.useForBillingAddress) || sites.find(s => s.main) || sites[0];
         const a = billingSite?.address;
         if (!a) return;
-        const crmId = allClientsBatch.find(c => c.akuiteo_id === akId)?.id;
+        const crmId = akIdToClientId[akId];
         if (!crmId) return;
-        await sb.from('clients').update({
+        billingUpdates.push({
+          id: crmId,
           fact_adresse_ligne1: a.line1 || null, fact_adresse_ligne2: a.line2 || null,
           fact_adresse_ligne3: a.line3 || null, fact_code_postal: a.postalCode || null,
           fact_ville: a.city || null,
@@ -18628,10 +18633,14 @@ async function syncAkuiteo() {
           fact_departement: a.geographicalDepartmentName || a.department || null,
           fact_region: a.regionName || a.region || null,
           responsable_site_id: billingSite.managerId || null,
-        }).eq('id', crmId);
+        });
       }));
     }
-    console.log(`[Akuiteo] Adresses de facturation mises à jour via sites: ${billingAkIds.length}`);
+    // Batch upsert des adresses (au lieu d'updates individuels)
+    for (let i = 0; i < billingUpdates.length; i += 500) {
+      await sb.from('clients').upsert(billingUpdates.slice(i, i + 500), { onConflict: 'id' });
+    }
+    console.log(`[Akuiteo] Adresses facturation: ${billingUpdates.length}/${billingAkIds.length} en ${((Date.now()-t1Billing)/1000).toFixed(1)}s`);
     toast(`Adresses facturation OK. Sync contacts...`, 'info');
 
     // --- ETAPE 2 : Sync contacts (uniquement nouveaux clients ou modifiés) ---
@@ -18774,7 +18783,7 @@ async function syncAkuiteo() {
     const allFetchedDocs = [];
     const projectDeliverySite = {};
     const bulkCrit = { companyCode: { operator: 'IS_NOT_NULL' } };
-    const BULK_PAGE = 200;
+    const BULK_PAGE = 2000;
 
     // Fonction paginée bulk (tri par ID décroissant)
     async function fetchAllBulk(path, criteria) {
@@ -18829,8 +18838,8 @@ async function syncAkuiteo() {
       if (!row.custom_data) delete row.custom_data;
       return row;
     });
-    for (let i = 0; i < dBatchAll.length; i += 100) {
-      const { error } = await sb.from('devis').upsert(dBatchAll.slice(i, i + 100), { onConflict: 'id' });
+    for (let i = 0; i < dBatchAll.length; i += 500) {
+      const { error } = await sb.from('devis').upsert(dBatchAll.slice(i, i + 500), { onConflict: 'id' });
       if (error) console.warn('[Akuiteo] Devis upsert err:', error.message);
     }
     syncedDocs.devis = dBatchAll.length;
@@ -18867,8 +18876,8 @@ async function syncAkuiteo() {
       if (!row.custom_data) delete row.custom_data;
       return row;
     });
-    for (let i = 0; i < cBatchAll.length; i += 100) {
-      const { error } = await sb.from('commandes').upsert(cBatchAll.slice(i, i + 100), { onConflict: 'id' });
+    for (let i = 0; i < cBatchAll.length; i += 500) {
+      const { error } = await sb.from('commandes').upsert(cBatchAll.slice(i, i + 500), { onConflict: 'id' });
       if (error) console.warn('[Akuiteo] Commandes upsert err:', error.message);
     }
     syncedDocs.commandes = cBatchAll.length;
@@ -18904,8 +18913,8 @@ async function syncAkuiteo() {
       if (!row.custom_data) delete row.custom_data;
       return row;
     });
-    for (let i = 0; i < fBatchAll.length; i += 100) {
-      const { error } = await sb.from('factures').upsert(fBatchAll.slice(i, i + 100), { onConflict: 'id' });
+    for (let i = 0; i < fBatchAll.length; i += 500) {
+      const { error } = await sb.from('factures').upsert(fBatchAll.slice(i, i + 500), { onConflict: 'id' });
       if (error) console.warn('[Akuiteo] Factures upsert err:', error.message);
     }
     syncedDocs.factures = fBatchAll.length;
@@ -18959,15 +18968,15 @@ async function syncAkuiteo() {
         for (const aff of mData.affaires) { projectToMarche[aff.projectId] = mId; }
       }
       if (marchesBatch.length > 0) {
-        for (let i = 0; i < marchesBatch.length; i += 100) {
-          const { error } = await sb.from('marches').upsert(marchesBatch.slice(i, i + 100), { onConflict: 'id' });
+        for (let i = 0; i < marchesBatch.length; i += 500) {
+          const { error } = await sb.from('marches').upsert(marchesBatch.slice(i, i + 500), { onConflict: 'id' });
           if (error) console.warn('[Akuiteo] Marchés err:', error.message);
-          else syncedMarches += marchesBatch.slice(i, i + 100).length;
+          else syncedMarches += marchesBatch.slice(i, i + 500).length;
         }
       }
       // Enrichir affaires avec nom + apporteur d'affaire depuis l'API projet
       console.log(`[Akuiteo] Enrichissement des ${Object.keys(affairesByProject).length} affaires (nom + apporteur)...`);
-      const PARALLEL = 10;
+      const PARALLEL = 30;
       const projectPids = Object.keys(affairesByProject);
       for (let i = 0; i < projectPids.length; i += PARALLEL) {
         const batch = projectPids.slice(i, i + PARALLEL);
@@ -19001,10 +19010,10 @@ async function syncAkuiteo() {
         affairesBatch.push({ id: affId, akuiteo_id: pid, ref: pid, nom: aff.nom || ('Affaire ' + pid), marche_id: projectToMarche[pid] || null, client_id: aff.client_id, client_name: aff.client_name, date_debut: aff.minDate, date_fin: aff.maxDate, montant: aff.montant, montant_ttc: aff.montant_ttc, statut: 'en_cours', agence: aff.agence, code_projet: pid, apporteur_affaire: aff.apporteur || null, architecte: aff.architecte || null, responsable: aff.responsable || null, adresse: aff.adresse || null, ville: aff.ville || null, code_postal: aff.code_postal || null });
       }
       if (affairesBatch.length > 0) {
-        for (let i = 0; i < affairesBatch.length; i += 100) {
-          const { error } = await sb.from('affaires').upsert(affairesBatch.slice(i, i + 100), { onConflict: 'id' });
+        for (let i = 0; i < affairesBatch.length; i += 500) {
+          const { error } = await sb.from('affaires').upsert(affairesBatch.slice(i, i + 500), { onConflict: 'id' });
           if (error) console.warn('[Akuiteo] Affaires err:', error.message);
-          else syncedAffaires += affairesBatch.slice(i, i + 100).length;
+          else syncedAffaires += affairesBatch.slice(i, i + 500).length;
         }
       }
       // Lier docs → affaires/marchés + propager apporteur d'affaire (non bloquant)
@@ -19014,8 +19023,8 @@ async function syncAkuiteo() {
       // Lancer en arrière-plan pour ne pas bloquer la sync contacts
       (async () => {
         let linkOk = 0, linkErr = 0;
-        for (let li = 0; li < linkPids.length; li += 5) {
-          const linkBatch = linkPids.slice(li, li + 5);
+        for (let li = 0; li < linkPids.length; li += 20) {
+          const linkBatch = linkPids.slice(li, li + 20);
           await Promise.allSettled(linkBatch.map(async ([pid, affId]) => {
             try {
               const mId = projectToMarche[pid] || null;
@@ -19033,7 +19042,7 @@ async function syncAkuiteo() {
               linkErr++;
             }
           }));
-          if ((li + 5) % 100 < 5) console.log(`[Akuiteo] Liens docs: ${li + linkBatch.length}/${linkPids.length}`);
+          if ((li + 20) % 100 < 20) console.log(`[Akuiteo] Liens docs: ${li + linkBatch.length}/${linkPids.length}`);
         }
         console.log(`[Akuiteo] Liens docs terminé: ${linkOk} ok, ${linkErr} erreurs`);
       })();
@@ -19053,8 +19062,8 @@ async function syncAkuiteo() {
         const siteAddresses = {};
         const custIds = Object.keys(customerSitesToFetch);
         console.log(`[Akuiteo] Sites à récupérer pour ${custIds.length} clients`);
-        for (let i = 0; i < custIds.length; i += 10) {
-          const batch = custIds.slice(i, i + 10);
+        for (let i = 0; i < custIds.length; i += 30) {
+          const batch = custIds.slice(i, i + 30);
           await Promise.allSettled(batch.map(async (cid) => {
             const sites = await akuiteoFetch('GET', '/crm/customers/' + cid + '/sites').catch(() => []);
             if (!Array.isArray(sites)) return;
@@ -19069,44 +19078,55 @@ async function syncAkuiteo() {
         console.log(`[Akuiteo] Sites avec adresse: ${Object.keys(siteAddresses).length}`);
         let geoOk = 0, geoFail = 0;
 
-        // Mettre à jour les adresses des marchés (sans géocodage GPS)
+        // Mettre à jour les adresses des marchés (batch upsert)
+        const marcheAddrUpdates = [];
         for (const [prefix, info] of Object.entries(marcheDeliverySite)) {
           const addr = siteAddresses[info.deliverySiteId];
           if (!addr) continue;
           const mId = 'akm_' + prefix.replace(/[^a-zA-Z0-9.]/g, '_');
-          await sb.from('marches').update({ adresse: addr.line1, code_postal: addr.postalCode, ville: addr.city }).eq('id', mId);
+          marcheAddrUpdates.push({ id: mId, adresse: addr.line1, code_postal: addr.postalCode, ville: addr.city });
         }
-        console.log(`[Akuiteo] Adresses marchés mises à jour: ${Object.keys(marcheDeliverySite).length}`);
+        for (let i = 0; i < marcheAddrUpdates.length; i += 500) {
+          await sb.from('marches').upsert(marcheAddrUpdates.slice(i, i + 500), { onConflict: 'id' });
+        }
+        console.log(`[Akuiteo] Adresses marchés mises à jour: ${marcheAddrUpdates.length}`);
 
-        // Mettre à jour les adresses des affaires via deliverySite (sans géocodage GPS)
+        // Mettre à jour les adresses des affaires via deliverySite (batch upsert)
+        const affaireAddrUpdates = [];
         for (const [pid, info] of Object.entries(projectDeliverySite)) {
           const addr = siteAddresses[info.deliverySiteId];
           if (!addr) continue;
           const affId = 'aka_' + pid.replace(/[^a-zA-Z0-9.]/g, '_');
-          await sb.from('affaires').update({ adresse: addr.line1, code_postal: addr.postalCode, ville: addr.city }).eq('id', affId);
+          affaireAddrUpdates.push({ id: affId, adresse: addr.line1, code_postal: addr.postalCode, ville: addr.city });
         }
-        console.log(`[Akuiteo] Adresses affaires mises à jour: ${Object.keys(projectDeliverySite).length}`);
+        for (let i = 0; i < affaireAddrUpdates.length; i += 500) {
+          await sb.from('affaires').upsert(affaireAddrUpdates.slice(i, i + 500), { onConflict: 'id' });
+        }
+        console.log(`[Akuiteo] Adresses affaires mises à jour: ${affaireAddrUpdates.length}`);
       } catch (e) { console.warn('[Akuiteo] Erreur adresses marchés:', e.message); }
     })();
 
     console.log(`[Akuiteo] Marchés: ${syncedMarches}, Affaires: ${syncedAffaires}`);
     toast(`${syncedDocs.devis}D ${syncedDocs.commandes}C ${syncedDocs.factures}F, ${syncedMarches} marchés, ${syncedAffaires} affaires`, 'info');
 
-    // --- ETAPE 5 : Propager adresses affaires → documents (en arrière-plan) ---
+    // --- ETAPE 5 : Propager adresses affaires → documents (en arrière-plan, batches parallèles) ---
     (async () => {
       try {
         const { data: affWithAddr } = await sb.from('affaires').select('id,adresse,ville,code_postal').not('adresse', 'is', null);
         if (affWithAddr && affWithAddr.length > 0) {
-          let docUpdated = 0;
-          for (const aff of affWithAddr) {
-            if (!aff.adresse) continue;
-            const update = { adresse: aff.adresse, ville: aff.ville, code_postal: aff.code_postal };
-            await sb.from('devis').update(update).eq('affaire_id', aff.id);
-            await sb.from('commandes').update(update).eq('affaire_id', aff.id);
-            await sb.from('factures').update(update).eq('affaire_id', aff.id);
-            docUpdated++;
+          const validAffs = affWithAddr.filter(a => a.adresse);
+          for (let i = 0; i < validAffs.length; i += 50) {
+            const batch = validAffs.slice(i, i + 50);
+            await Promise.allSettled(batch.map(aff => {
+              const update = { adresse: aff.adresse, ville: aff.ville, code_postal: aff.code_postal };
+              return Promise.all([
+                sb.from('devis').update(update).eq('affaire_id', aff.id),
+                sb.from('commandes').update(update).eq('affaire_id', aff.id),
+                sb.from('factures').update(update).eq('affaire_id', aff.id),
+              ]);
+            }));
           }
-          console.log(`[Akuiteo] Adresses propagées: ${docUpdated} affaires → devis/commandes/factures`);
+          console.log(`[Akuiteo] Adresses propagées: ${validAffs.length} affaires → devis/commandes/factures`);
         }
       } catch (e) { console.warn('[Akuiteo] Erreur propagation adresses docs:', e.message); }
     })();
@@ -19135,12 +19155,13 @@ async function syncAkuiteo() {
             }
           }
         }
+        const comUpdates = Object.entries(managerByClient).map(([clientId, managerId]) => ({ id: clientId, account_manager_id: managerId }));
         let assignedCount = 0;
-        for (const [clientId, managerId] of Object.entries(managerByClient)) {
-          const { error } = await sb.from('clients').update({ account_manager_id: managerId }).eq('id', clientId);
-          if (!error) assignedCount++;
+        for (let i = 0; i < comUpdates.length; i += 500) {
+          const { error } = await sb.from('clients').upsert(comUpdates.slice(i, i + 500), { onConflict: 'id' });
+          if (!error) assignedCount += comUpdates.slice(i, i + 500).length;
         }
-        console.log(`[Akuiteo] Commerciaux auto-assignés: ${assignedCount}/${Object.keys(managerByClient).length}`);
+        console.log(`[Akuiteo] Commerciaux auto-assignés: ${assignedCount}/${comUpdates.length}`);
       }
     } catch (e) {
       console.warn('[Akuiteo] Erreur auto-assign commerciaux:', e.message);
