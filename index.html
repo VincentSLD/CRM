@@ -13247,7 +13247,7 @@ function renderEnvois() {
 
 // ═══ ANNUAIRE COLLABORATEURS ═══
 let annuaireSearch = '';
-let _annuaireAbsentsToday = new Set(); // Set de lucca_id absents aujourd'hui
+let _annuaireAbsentsToday = new Map(); // Map lucca_id → 'AM'|'PM'|'FULL'
 let annSortCol = 'nom', annSortAsc = true;
 let _annEditingId = null;
 var annFNom = '', annFPrenom = '', annFPoste = '', annFEmail = '', annFAgence = '', annFPresence = '';
@@ -13292,7 +13292,7 @@ function renderAnnuaire() {
       mobile: ak.mobile || '',
       agence: lucca ? (lucca.etablissement || '') : '',
       poste: lucca ? (lucca.poste || '') : '',
-      absent: _annuaireAbsentsToday.has(ak.lucca_id),
+      absence: _annuaireAbsentsToday.get(ak.lucca_id) || null,
     };
   });
   // Filtre recherche globale
@@ -13310,8 +13310,11 @@ function renderAnnuaire() {
   if (annFPoste) { const q = annFPoste.toLowerCase(); list = list.filter(c => c.poste.toLowerCase().includes(q)); }
   if (annFEmail) { const q = annFEmail.toLowerCase(); list = list.filter(c => c.email.toLowerCase().includes(q)); }
   if (annFAgence) { const q = annFAgence.toLowerCase(); list = list.filter(c => c.agence.toLowerCase().includes(q)); }
-  if (annFPresence === 'absent') list = list.filter(c => c.absent);
-  if (annFPresence === 'present') list = list.filter(c => !c.absent);
+  if (annFPresence === 'absent') list = list.filter(c => c.absence);
+  if (annFPresence === 'absent_am') list = list.filter(c => c.absence === 'AM');
+  if (annFPresence === 'absent_pm') list = list.filter(c => c.absence === 'PM');
+  if (annFPresence === 'absent_full') list = list.filter(c => c.absence === 'FULL');
+  if (annFPresence === 'present') list = list.filter(c => !c.absence);
 
   // Tri dynamique
   list.sort((a, b) => {
@@ -13322,7 +13325,7 @@ function renderAnnuaire() {
       case 'poste': va = a.poste; vb = b.poste; break;
       case 'email': va = a.email; vb = b.email; break;
       case 'agence': va = a.agence; vb = b.agence; break;
-      case 'presence': va = a.absent ? 1 : 0; vb = b.absent ? 1 : 0; return annSortAsc ? va - vb : vb - va;
+      case 'presence': va = a.absence ? 1 : 0; vb = b.absence ? 1 : 0; return annSortAsc ? va - vb : vb - va;
       default: va = a.nom; vb = b.nom;
     }
     const cmp = (va || '').localeCompare(vb || '');
@@ -13349,7 +13352,7 @@ function renderAnnuaire() {
         style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:14px;background:var(--bg-1);color:var(--t1);box-sizing:border-box"
         oninput="annuaireSearch=this.value;renderAnnuaireRefresh()">
     </div>
-    <div style="font-size:12px;color:var(--t3);margin-bottom:10px">${list.length} collaborateur(s)${_annuaireAbsentsToday.size ? ' · <span style="color:var(--red)">' + _annuaireAbsentsToday.size + " absent(s)</span>" : ''}</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px">${list.length} collaborateur(s)${_annuaireAbsentsToday.size ? (() => { let am=0,pm=0,full=0; for(const v of _annuaireAbsentsToday.values()){if(v==='AM')am++;else if(v==='PM')pm++;else full++;} const parts=[]; if(full)parts.push(full+' journée'); if(am)parts.push(am+' matin'); if(pm)parts.push(pm+' après-midi'); return ' · <span style="color:var(--red)">' + _annuaireAbsentsToday.size + ' absent(s) ('+parts.join(', ')+')</span>'; })() : ''}</div>
     ${list.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--t3)">Aucun résultat</div>' :
       list.map(c => {
         const telFmt = formatPhone(c.telephone);
@@ -13413,7 +13416,10 @@ function renderAnnuaire() {
             <td><select id="annFPresence" style="${fStyle}" onchange="annFPresence=this.value;renderAnnuaireRefresh()">
               <option value="">Tous</option>
               <option value="present" ${annFPresence==='present'?'selected':''}>Présent</option>
-              <option value="absent" ${annFPresence==='absent'?'selected':''}>Absent</option>
+              <option value="absent" ${annFPresence==='absent'?'selected':''}>Tous absents</option>
+              <option value="absent_am" ${annFPresence==='absent_am'?'selected':''}>Absent matin</option>
+              <option value="absent_pm" ${annFPresence==='absent_pm'?'selected':''}>Absent après-midi</option>
+              <option value="absent_full" ${annFPresence==='absent_full'?'selected':''}>Absent journée</option>
             </select></td>
             <td></td>
           </tr>
@@ -13424,7 +13430,7 @@ function renderAnnuaire() {
             const editing = _annEditingId === c.akId;
             const telFmt = formatPhone(c.telephone);
             const mobFmt = formatPhone(c.mobile);
-            return `<tr${c.absent ? ' style="opacity:0.55"' : ''}>
+            return `<tr${c.absence === 'FULL' ? ' style="opacity:0.5"' : c.absence ? ' style="opacity:0.7"' : ''}>
             <td><strong>${c.nom}</strong></td>
             <td>${c.prenom}</td>
             <td style="font-size:11px;color:var(--t2)">${c.poste || '—'}</td>
@@ -13436,8 +13442,8 @@ function renderAnnuaire() {
               ? `<input type="text" id="annMob_${c.akId}" value="${mobFmt.replace(/"/g,'&quot;')}" style="border:1px solid var(--accent);border-radius:4px;padding:3px 6px;font-size:12px;width:120px;background:var(--bg-0);color:var(--t1)">`
               : `<span style="font-size:12px">${mobFmt || '—'}</span>`}</td>
             <td>${c.agence || '—'}</td>
-            <td style="text-align:center">${c.absent
-              ? '<span style="color:var(--red);font-weight:600;font-size:12px">Absent</span>'
+            <td style="text-align:center">${c.absence
+              ? '<span style="color:var(--red);font-weight:600;font-size:12px">' + (c.absence === 'AM' ? 'Absent matin' : c.absence === 'PM' ? 'Absent après-midi' : 'Absent journée') + '</span>'
               : '<span style="color:var(--green);font-size:12px">Présent</span>'}</td>
             <td>${editing
               ? `<button class="btn btn-primary" style="font-size:10px;padding:2px 8px" onclick="annSavePhone('${c.akId}')">Valider</button>
@@ -13453,10 +13459,15 @@ function renderAnnuaire() {
 async function loadAnnuaireAbsences() {
   const today = new Date().toISOString().substring(0, 10);
   const { data } = await sb.from('absences_lucca')
-    .select('lucca_id')
+    .select('lucca_id,periode')
     .eq('date_absence', today)
     .eq('actif', true);
-  _annuaireAbsentsToday = new Set((data || []).map(a => a.lucca_id));
+  _annuaireAbsentsToday = new Map();
+  for (const a of (data || [])) {
+    const cur = _annuaireAbsentsToday.get(a.lucca_id);
+    if (!cur) _annuaireAbsentsToday.set(a.lucca_id, a.periode === 'AM' ? 'AM' : a.periode === 'PM' ? 'PM' : 'FULL');
+    else if (cur !== 'FULL') _annuaireAbsentsToday.set(a.lucca_id, 'FULL'); // AM+PM = journée
+  }
 }
 
 function renderAnnuaireRefresh() {
