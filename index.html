@@ -4515,11 +4515,27 @@ async function renderDashClientLists() {
   }
   const top100 = Object.values(clientCA).sort((a, b) => b.ca - a.ca).slice(0, 100);
 
+  // --- Enrichir Top 100 avec les noms commerciaux ---
+  if (top100.length > 0) {
+    try {
+      const ids = top100.map(c => c.id);
+      const { data: cInfos } = await sb.from('clients').select('id,account_manager_name,salesman_name').in('id', ids);
+      if (cInfos) {
+        const map = {};
+        for (const ci of cInfos) map[ci.id] = ci;
+        for (const c of top100) {
+          const info = map[c.id];
+          if (info) { c.account_manager_name = info.account_manager_name; c.salesman_name = info.salesman_name; }
+        }
+      }
+    } catch (e) { console.warn('Erreur chargement commerciaux Top 100:', e.message); }
+  }
+
   // --- Nouveaux et dormants depuis Supabase ---
   let nouveaux = [], dormants = [];
   try {
     const { data } = await sb.from('clients')
-      .select('id,name,city,code_postal,account_manager_name,created_at,last_contact,status')
+      .select('id,name,city,code_postal,account_manager_name,salesman_name,created_at,last_contact,status')
       .in('status', ['nouveau', 'dormant'])
       .limit(300);
     const all = data || [];
@@ -4538,6 +4554,7 @@ async function renderDashClientLists() {
       <td style="font-size:11px">${c.city || '—'}</td>
       <td style="font-size:11px;text-align:center" class="mono">${dept}</td>
       <td style="font-size:11px">${c.account_manager_name || '—'}</td>
+      <td style="font-size:11px">${c.salesman_name || '—'}</td>
       ${extra}
     </tr>`;
   }
@@ -4546,10 +4563,12 @@ async function renderDashClientLists() {
   const top100HTML = top100.length === 0
     ? '<div style="padding:14px;text-align:center;color:var(--t3)">Aucune facture sur la période</div>'
     : `<div class="table-wrap"><table class="tbl-compact">
-      <thead><tr><th>#</th><th>Client</th><th style="text-align:right">CA facturé</th><th style="text-align:right">CA commandé</th></tr></thead>
+      <thead><tr><th>#</th><th>Client</th><th>Commercial Novam</th><th>Commercial GPH</th><th style="text-align:right">CA facturé</th><th style="text-align:right">CA commandé</th></tr></thead>
       <tbody>${top100.map((c, i) => `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
         <td style="font-size:11px;color:var(--t3);text-align:center">${i + 1}</td>
         <td style="font-size:12px;font-weight:500">${c.name}</td>
+        <td style="font-size:11px">${c.account_manager_name || '—'}</td>
+        <td style="font-size:11px">${c.salesman_name || '—'}</td>
         <td style="font-size:12px;text-align:right;font-weight:600">${fmt(c.ca)}<span style="color:var(--t3);font-weight:400;font-size:10px;margin-left:4px">(${c.nbFact})</span></td>
         <td style="font-size:12px;text-align:right">${c.caCmd ? fmt(c.caCmd) + '<span style="color:var(--t3);font-size:10px;margin-left:4px">(' + c.nbCmd + ')</span>' : '—'}</td>
       </tr>`).join('')}</tbody></table></div>`;
@@ -4558,14 +4577,14 @@ async function renderDashClientLists() {
   const nouveauxHTML = nouveaux.length === 0
     ? '<div style="padding:14px;text-align:center;color:var(--t3)">Aucun nouveau client</div>'
     : `<div class="table-wrap"><table class="tbl-compact">
-      <thead><tr><th>Client</th><th>Ville</th><th style="text-align:center">Dpt</th><th>Commercial</th><th>Créé le</th></tr></thead>
+      <thead><tr><th>Client</th><th>Ville</th><th style="text-align:center">Dpt</th><th>Commercial Novam</th><th>Commercial GPH</th><th>Créé le</th></tr></thead>
       <tbody>${nouveaux.map(c => clientRow(c, `<td style="font-size:11px">${c.created_at ? new Date(c.created_at).toLocaleDateString('fr-FR') : '—'}</td>`)).join('')}</tbody></table></div>`;
 
   // Render Dormants
   const dormantsHTML = dormants.length === 0
     ? '<div style="padding:14px;text-align:center;color:var(--t3)">Aucun client dormant</div>'
     : `<div class="table-wrap"><table class="tbl-compact">
-      <thead><tr><th>Client</th><th>Ville</th><th style="text-align:center">Dpt</th><th>Commercial</th><th>Dernier contact</th></tr></thead>
+      <thead><tr><th>Client</th><th>Ville</th><th style="text-align:center">Dpt</th><th>Commercial Novam</th><th>Commercial GPH</th><th>Dernier contact</th></tr></thead>
       <tbody>${dormants.map(c => clientRow(c, `<td style="font-size:11px">${c.last_contact ? new Date(c.last_contact).toLocaleDateString('fr-FR') : '—'}</td>`)).join('')}</tbody></table></div>`;
 
   el.innerHTML = `
