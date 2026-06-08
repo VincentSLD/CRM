@@ -15670,43 +15670,42 @@ function dictCancel() {
   document.getElementById('editorStatus').textContent = 'Prêt';
   zone.style.display = 'none';
 }
-function buildDictationGlossary() {
-  const terms = new Set();
-  // Noms de clients du CRM
-  if (Array.isArray(DB.clients)) for (const c of DB.clients) {
-    if (c.name) terms.add(c.name);
-    if (c.raison_sociale) terms.add(c.raison_sociale);
-  }
-  // Noms de clients depuis les documents (couverture plus large que DB.clients paginé)
+const _DICT_TECHNICAL_TERMS = [
+  'GPH', 'GPH-R', 'GPH64', 'GPH85', 'SA85', 'Novam', 'Akuiteo', 'CODIAL',
+  'G1', 'G1 PGC', 'G1 ES', 'G2', 'G2 AVP', 'G2 PRO', 'G2 DCE', 'G3', 'G4', 'G5',
+  'NF P 94-500', 'AVP', 'PRO', 'DCE', 'ACT', 'CCTP', 'DPGF', 'OPC', 'DPE',
+  'géotechnique', 'hydrogéologie', 'piézomètre', 'piézométrie',
+  'sondage', 'forage', 'essai pressiométrique', 'reconnaissance de sol', 'terrassement',
+  'fondation', 'micropieux', 'tirants d\'ancrage', 'rabattement de nappe', 'étude de sol',
+  'remblai', 'déblai', 'talus', 'nappe phréatique',
+  'béton armé', 'charpente métallique', 'charpente bois', 'prédimensionnement',
+  'note de calcul', 'plan de coffrage', 'plan de ferraillage', 'voile', 'poteau', 'poutre', 'dalle',
+  'RT 2012', 'RE 2020', 'audit énergétique', 'CVC', 'SSI', 'chauffage', 'ventilation', 'climatisation',
+  'VRD', 'assainissement', 'eau potable', 'voirie', 'réseaux secs', 'réseaux humides',
+  'économie de la construction', 'métrés', 'quantitatif', 'estimatif',
+  'paysage', 'environnement', 'topographie', 'levé topographique',
+  'étude d\'impact', 'étude écologique'
+];
+function _collectClientNames(maxNames) {
+  const freq = new Map();
   for (const arr of [DB.devis, DB.commandes, DB.factures]) {
-    for (const d of (arr || [])) { if (d.client_name) terms.add(d.client_name); }
+    for (const d of (arr || [])) { if (d.client_name) freq.set(d.client_name, (freq.get(d.client_name) || 0) + 1); }
   }
-  // Client actuel (contexte prioritaire)
-  if (currentClient?.name) terms.add(currentClient.name);
-  if (currentClient?.raison_sociale) terms.add(currentClient.raison_sociale);
-  // Groupe et outils
-  ['GPH', 'GPH-R', 'GPH64', 'GPH85', 'SA85', 'Novam', 'Akuiteo', 'CODIAL',
-  // Missions géotechniques NF P 94-500
-   'G1', 'G1 PGC', 'G1 ES', 'G2', 'G2 AVP', 'G2 PRO', 'G2 DCE', 'G3', 'G4', 'G5',
-   'NF P 94-500', 'AVP', 'PRO', 'DCE', 'ACT', 'CCTP', 'DPGF', 'OPC', 'DPE',
-  // Géotechnique
-   'géotechnique', 'hydrogéologie', 'piézomètre', 'piézométrie',
-   'sondage', 'forage', 'essai pressiométrique', 'reconnaissance de sol', 'terrassement',
-   'fondation', 'micropieux', 'tirants d\'ancrage', 'rabattement de nappe', 'étude de sol',
-   'remblai', 'déblai', 'talus', 'nappe phréatique',
-  // Structure
-   'béton armé', 'charpente métallique', 'charpente bois', 'prédimensionnement',
-   'note de calcul', 'plan de coffrage', 'plan de ferraillage', 'voile', 'poteau', 'poutre', 'dalle',
-  // Thermique / Fluides
-   'RT 2012', 'RE 2020', 'audit énergétique', 'CVC', 'SSI', 'chauffage', 'ventilation', 'climatisation',
-  // VRD
-   'VRD', 'assainissement', 'eau potable', 'voirie', 'réseaux secs', 'réseaux humides',
-  // Économie de la construction
-   'économie de la construction', 'métrés', 'quantitatif', 'estimatif',
-  // Autres métiers
-   'paysage', 'environnement', 'topographie', 'levé topographique',
-   'étude d\'impact', 'étude écologique'].forEach(t => terms.add(t));
+  if (Array.isArray(DB.clients)) for (const c of DB.clients) {
+    if (c.name && !freq.has(c.name)) freq.set(c.name, 1);
+    if (c.raison_sociale && !freq.has(c.raison_sociale)) freq.set(c.raison_sociale, 1);
+  }
+  if (currentClient?.name) freq.set(currentClient.name, (freq.get(currentClient.name) || 0) + 1000);
+  if (currentClient?.raison_sociale) freq.set(currentClient.raison_sociale, (freq.get(currentClient.raison_sociale) || 0) + 1000);
+  return [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, maxNames).map(e => e[0]);
+}
+function buildDictationGlossary() {
+  const terms = new Set(_DICT_TECHNICAL_TERMS);
+  for (const n of _collectClientNames(500)) terms.add(n);
   return [...terms].join(', ');
+}
+function buildChatGlossary() {
+  return _collectClientNames(100).join(', ');
 }
 async function dictCorrect() {
   const ta = document.getElementById('dictText');
@@ -16351,7 +16350,7 @@ async function askAIChat(presetQuestion) {
     const resp = await fetch('/api/ai-chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, history: _aiChatHistory, userProfile: _getAIUserProfile(), stream: true, glossary: buildDictationGlossary() })
+      body: JSON.stringify({ question, history: _aiChatHistory, userProfile: _getAIUserProfile(), stream: true, glossary: buildChatGlossary() })
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
