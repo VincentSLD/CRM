@@ -11616,10 +11616,40 @@ function akRefOptions(list, selectedId, placeholder) {
   }
   return html;
 }
+// Comme akRefOptions mais garantit que la valeur enregistrée du client reste
+// affichée et sélectionnée même si absente du référentiel Akuiteo (API
+// indisponible, employé non lié à Lucca, id manquant mais nom présent…).
+// On reproduit ainsi exactement ce qu'affiche la fiche.
+function akRefOptionsKeep(list, selectedId, selectedName, placeholder) {
+  list = list || [];
+  let id = (selectedId != null && selectedId !== '') ? selectedId : null;
+  let inList = id != null && list.some(r => String(r.id) === String(id));
+  // Pas d'id exploitable mais un nom connu : tenter de retrouver l'id via le nom
+  if (!inList && selectedName) {
+    const byName = list.find(r => (r.name || r.code || '').trim().toLowerCase() === String(selectedName).trim().toLowerCase());
+    if (byName) { id = byName.id; inList = true; }
+  }
+  let html = '<option value="">' + (placeholder || '—') + '</option>';
+  // Valeur courante absente de la liste : on l'injecte pour la conserver à l'affichage et à l'enregistrement
+  if (!inList && selectedName) {
+    const v = id != null ? String(id).replace(/"/g, '&quot;') : '';
+    html += '<option value="' + v + '" selected>' + selectedName + '</option>';
+  }
+  for (const r of list) {
+    const label = r.name || r.code;
+    const sel = id != null && String(r.id) === String(id) ? ' selected' : '';
+    html += '<option value="' + r.id + '"' + sel + '>' + label + '</option>';
+  }
+  return html;
+}
 // Sous-catégories filtrées par catégorie
 function akRefSubCatOptions(selectedId, categoryId) {
   const filtered = categoryId ? (akRef.subCategories || []).filter(s => s.categoryId === categoryId) : (akRef.subCategories || []);
   return akRefOptions(filtered, selectedId, 'Sous-catégorie...');
+}
+function akRefSubCatOptionsKeep(selectedId, selectedName, categoryId) {
+  const filtered = categoryId ? (akRef.subCategories || []).filter(s => s.categoryId === categoryId) : (akRef.subCategories || []);
+  return akRefOptionsKeep(filtered, selectedId, selectedName, 'Sous-catégorie...');
 }
 
 function getAkuiteoFieldsFromModal(prefix) {
@@ -16942,16 +16972,16 @@ async function fillAkuiteoDropdowns(prefix, client) {
   await loadAkuiteoRefs();
   const c = client || {};
   const setHtml = (id, html) => { const el = document.getElementById(prefix + '-mk-' + id); if (el) el.innerHTML = html; };
-  setHtml('categorie', akRefOptions(akRef.categories, c.mk_categorie_id, 'Catégorie...'));
-  setHtml('sous-categorie', akRefSubCatOptions(c.mk_sous_categorie_id, c.mk_categorie_id));
-  setHtml('categorie-pro', akRefOptions(akRef.proCats, c.mk_categorie_pro_id, 'Catégorie prof...'));
-  setHtml('secteur', akRefOptions(akRef.sectors, c.mk_secteur_id, 'Secteur...'));
-  setHtml('type', akRefOptions(akRef.linkTypes, c.mk_type_id, 'Type...'));
-  setHtml('tarification', akRefOptions(akRef.pricingMethods, c.mode_tarification, 'Mode de tarification GPH...'));
-  setHtml('manager', akRefOptions(akRef.employees, c.account_manager_id, 'Commercial Novam...'));
-  setHtml('salesman', akRefOptions(akRef.employees, c.salesman_id, 'Commercial GPH...'));
+  setHtml('categorie', akRefOptionsKeep(akRef.categories, c.mk_categorie_id, c.mk_categorie, 'Catégorie...'));
+  setHtml('sous-categorie', akRefSubCatOptionsKeep(c.mk_sous_categorie_id, c.mk_sous_categorie, c.mk_categorie_id));
+  setHtml('categorie-pro', akRefOptionsKeep(akRef.proCats, c.mk_categorie_pro_id, c.mk_categorie_pro, 'Catégorie prof...'));
+  setHtml('secteur', akRefOptionsKeep(akRef.sectors, c.mk_secteur_id, c.mk_secteur, 'Secteur...'));
+  setHtml('type', akRefOptionsKeep(akRef.linkTypes, c.mk_type_id, c.mk_type, 'Type...'));
+  setHtml('tarification', akRefOptionsKeep(akRef.pricingMethods, c.mode_tarification, c.mode_tarification_name, 'Mode de tarification GPH...'));
+  setHtml('manager', akRefOptionsKeep(akRef.employees, c.account_manager_id, c.account_manager_name, 'Commercial Novam...'));
+  setHtml('salesman', akRefOptionsKeep(akRef.employees, c.salesman_id, c.salesman_name, 'Commercial GPH...'));
   const factResp = document.getElementById(prefix + '-fact-responsable');
-  if (factResp) factResp.innerHTML = akRefOptions(akRef.employees, c.responsable_site_id, 'Responsable du site...');
+  if (factResp) factResp.innerHTML = akRefOptionsKeep(akRef.employees, c.responsable_site_id, c.responsable_site_name, 'Responsable du site...');
   // Par défaut, copier le Commercial GPH vers le Responsable du site
   const salesmanSel = document.getElementById(prefix + '-mk-salesman');
   if (salesmanSel && factResp) {
@@ -18284,17 +18314,31 @@ function selectReseauPro(val, dropdownId, containerId) {
   if (input) input.value = '';
 }
 
+async function _countClientLinks(table, clientId) {
+  const { count, error } = await sb.from(table).select('id', { count: 'exact', head: true }).eq('client_id', clientId);
+  if (error) { console.warn('[deleteClient] count', table, error.message); return 0; }
+  return count || 0;
+}
+
 async function deleteClient(clientId, clientName) {
-  // Vérifier si la société est rattachée à des devis, commandes ou factures
-  const linkedDevis = DB.devis.filter(d => d.client_id === clientId);
-  const linkedCmd = DB.commandes.filter(c => c.client_id === clientId);
-  const linkedFact = DB.factures.filter(f => f.client_id === clientId);
-  if (linkedDevis.length || linkedCmd.length || linkedFact.length) {
+  // Vérifier en base (pas seulement en mémoire, qui est filtrée sur 1 an) si la
+  // société est rattachée à des documents financiers ou des projets : on bloque
+  // dans ce cas avec un message clair plutôt que de provoquer une erreur 500 (FK).
+  const [nDevis, nCmd, nFact, nMarche, nAffaire] = await Promise.all([
+    _countClientLinks('devis', clientId),
+    _countClientLinks('commandes', clientId),
+    _countClientLinks('factures', clientId),
+    _countClientLinks('marches', clientId),
+    _countClientLinks('affaires', clientId),
+  ]);
+  if (nDevis || nCmd || nFact || nMarche || nAffaire) {
     const details = [];
-    if (linkedDevis.length) details.push(linkedDevis.length + ' devis');
-    if (linkedCmd.length) details.push(linkedCmd.length + ' commande(s)');
-    if (linkedFact.length) details.push(linkedFact.length + ' facture(s)');
-    toast(`Impossible de supprimer "${clientName}" : société rattachée à ${details.join(', ')}`, 'error');
+    if (nDevis) details.push(nDevis + ' devis');
+    if (nCmd) details.push(nCmd + ' commande(s)');
+    if (nFact) details.push(nFact + ' facture(s)');
+    if (nMarche) details.push(nMarche + ' marché(s)');
+    if (nAffaire) details.push(nAffaire + ' affaire(s)');
+    toast(`Impossible de supprimer "${clientName}" : société rattachée à ${details.join(', ')}. Utilisez la fusion de fiches si nécessaire.`, 'error');
     return;
   }
   const linkedReports = DB.reports.filter(r => r.client_id === clientId);
@@ -18320,6 +18364,11 @@ async function deleteClient(clientId, clientName) {
   // Supprimer les contacts liés
   const { error: ctErr } = await sb.from('contacts').delete().eq('client_id', clientId);
   if (ctErr) { toast('Erreur suppression contacts: ' + ctErr.message, 'error'); return; }
+  // Supprimer les autres enregistrements liés (FK client_id) pour éviter une erreur 500
+  for (const t of ['objectifs_clients', 'client_concurrents']) {
+    const { error: e } = await sb.from(t).delete().eq('client_id', clientId);
+    if (e) { toast('Erreur suppression ' + t + ': ' + e.message, 'error'); return; }
+  }
   // Supprimer la société
   const { error } = await sb.from('clients').delete().eq('id', clientId);
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
