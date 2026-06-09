@@ -13245,20 +13245,15 @@ async function selectCRReseau(reseau) {
   let nbSoc = 0, nbCon = 0;
   for (const cl of clients) {
     if (!_crSelectedClients.some(c => c.id === cl.id)) { _crSelectedClients.push({ id: cl.id, name: cl.name }); nbSoc++; }
+    // On charge les contacts (pour les rendre disponibles à la recherche) sans les sélectionner
     await loadCRContacts(cl.id);
-    for (const ct of (crContactsCache[cl.id] || [])) {
-      if (!_crSelectedContacts.some(c => c.id === ct.id)) {
-        const fullName = [ct.prenom, ct.nom].filter(Boolean).join(' ');
-        _crSelectedContacts.push({ id: ct.id, name: fullName });
-        nbCon++;
-      }
-    }
+    nbCon += (crContactsCache[cl.id] || []).length;
   }
   renderCRClientChips();
   renderCRContactChips();
   const co = document.getElementById('crContactSearch');
   if (co && _crSelectedClients.length) { co.disabled = false; co.style.opacity = '1'; }
-  toast(`Réseau « ${reseau} » : ${nbSoc} société(s) et ${nbCon} contact(s) ajoutés`, 'success');
+  toast(`Réseau « ${reseau} » : ${nbSoc} société(s) ajoutée(s). Choisissez les contacts (${nbCon} disponible(s)).`, 'success');
 }
 
 async function searchCRContact(q) {
