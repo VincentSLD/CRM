@@ -4324,6 +4324,24 @@ function anReset() { const r = _anDefaultRange(); anFrom = r.from; anTo = r.to; 
 function anToggleNetType(t, on) { _anNetTypes[t] = on; buildAnalyseNetwork(); }
 function anClearFocus() { _anNetFocus = ''; buildAnalyseNetwork(); document.getElementById('anFocusLabel') && (document.getElementById('anFocusLabel').textContent = ''); }
 
+let _anFsBound = false;
+function toggleAnNetworkFullscreen() {
+  const card = document.getElementById('anNetCard');
+  if (!card) return;
+  if (!_anFsBound) { document.addEventListener('fullscreenchange', _anOnFsChange); document.addEventListener('webkitfullscreenchange', _anOnFsChange); _anFsBound = true; }
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (!fsEl) { (card.requestFullscreen || card.webkitRequestFullscreen || (() => {})).call(card); }
+  else { (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document); }
+}
+function _anOnFsChange() {
+  const card = document.getElementById('anNetCard'), net = document.getElementById('anNetwork');
+  if (!net) return;
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (fsEl === card) { card.style.background = 'var(--card)'; card.style.display = 'flex'; card.style.flexDirection = 'column'; net.style.height = (window.innerHeight - 110) + 'px'; }
+  else { card.style.display = ''; card.style.flexDirection = ''; net.style.height = '560px'; }
+  if (_anNetwork) { try { _anNetwork.setSize('100%', net.style.height); _anNetwork.redraw(); _anNetwork.fit(); } catch (e) {} }
+}
+
 function _anRankCard(title, entries, total, accent) {
   const top = entries.slice(0, 12);
   if (!top.length) return `<div class="card"><div class="card-header"><div class="card-title">${title}</div></div><div class="card-body" style="color:var(--t3);font-size:12px;padding:12px">Aucune donnée</div></div>`;
@@ -4400,7 +4418,7 @@ function renderAnalyse() {
   </div>`;
 
   const tcb = (t, lbl) => `<label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" ${_anNetTypes[t] ? 'checked' : ''} onchange="anToggleNetType('${t}',this.checked)"> ${lbl}</label>`;
-  const network = `<div class="card"><div class="card-header" style="flex-wrap:wrap;gap:10px">
+  const network = `<div class="card" id="anNetCard"><div class="card-header" style="flex-wrap:wrap;gap:10px">
       <div class="card-title">Cartographie — qui travaille avec qui</div>
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         ${tcb('client', '<span style="color:#4f8ff7">●</span> Clients')}
@@ -4408,6 +4426,7 @@ function renderAnalyse() {
         ${tcb('apporteur', '<span style="color:#f59e0b">●</span> Apporteurs')}
         <span id="anFocusLabel" style="font-size:11px;color:var(--t3)"></span>
         <button class="btn" style="font-size:11px;padding:2px 8px" onclick="anClearFocus()">Vue globale</button>
+        <button class="btn" style="font-size:11px;padding:2px 8px" onclick="toggleAnNetworkFullscreen()" title="Plein écran">⛶ Plein écran</button>
       </div></div>
     <div class="card-body" style="padding:0">
       <div style="font-size:11px;color:var(--t3);padding:6px 12px">Taille des nœuds = CA · épaisseur des liens = CA partagé · cliquez un nœud pour zoomer sur ses partenaires (top 60 affichés).</div>
