@@ -11442,9 +11442,16 @@ async function submitRelanceDevis(devisId) {
   if (data && data[0]) DB.relancesDevis[devisId] = data[0];
   closeModal('relance-devis');
   toast('Relance enregistrée', 'success');
+  _refreshAfterRelance(devisId);
+}
+
+// Rafraîchit l'affichage après une action de relance, selon la page courante
+function _refreshAfterRelance(devisId) {
   DB.alerts = generateAlerts();
   updateNavBadges();
-  renderPage(currentPage);
+  if (currentPage === 'devis-detail') showDevisDetail(devisId);
+  else if (currentPage === 'devis') filterDevis(document._lastFilter || 'all');
+  else renderPage(currentPage);
 }
 
 async function deleteRelanceDevis(devisId) {
@@ -11454,9 +11461,7 @@ async function deleteRelanceDevis(devisId) {
   delete DB.relancesDevis[devisId];
   closeModal('relance-devis');
   toast('Suivi supprimé', 'success');
-  DB.alerts = generateAlerts();
-  updateNavBadges();
-  renderPage(currentPage);
+  _refreshAfterRelance(devisId);
 }
 
 function renderDevis(filter='all') {
