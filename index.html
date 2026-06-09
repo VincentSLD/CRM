@@ -3324,9 +3324,9 @@ async function loadDB() {
     }
 
     // Colonnes minimales pour agrégation + affichage liste
-    const DEVIS_LITE = 'id,ref,client_id,client_name,sujet,montant,date,statut,projet,agence,societe,responsable_id,commercial_id,probabilite,marche_id,affaire_id,akuiteo_id,adresse,ville,code_postal';
-    const CMD_LITE = 'id,ref,client_id,client_name,nom,montant,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id,marche_id,affaire_id,akuiteo_id,adresse,ville,code_postal,surface_facturee';
-    const FACT_LITE = 'id,ref,client_id,client_name,montant,date,echeance,statut,jours_retard,projet,agence,societe,responsable_id,type_facture,reste_a_payer,date_paiement,marche_id,affaire_id,akuiteo_id,adresse,ville,code_postal';
+    const DEVIS_LITE = 'id,ref,client_id,client_name,sujet,montant,date,statut,projet,agence,societe,responsable_id,commercial_id,probabilite,marche_id,affaire_id,akuiteo_id,adresse,ville,code_postal,type_prestation';
+    const CMD_LITE = 'id,ref,client_id,client_name,nom,montant,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id,marche_id,affaire_id,akuiteo_id,adresse,ville,code_postal,surface_facturee,type_prestation';
+    const FACT_LITE = 'id,ref,client_id,client_name,montant,date,echeance,statut,jours_retard,projet,agence,societe,responsable_id,type_facture,reste_a_payer,date_paiement,marche_id,affaire_id,akuiteo_id,adresse,ville,code_postal,type_prestation';
     const MARCHE_LITE = 'id,nom,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,adresse,code_postal,ville,lat,lng,nb_affaires,responsable_id';
     const AFFAIRE_LITE = 'id,nom,marche_id,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,code_projet,apporteur_affaire,architecte,responsable,adresse,ville,code_postal,departement,region';
 
@@ -3453,8 +3453,8 @@ async function loadDB() {
       DB.notifications = nAll.map(n => ({ ...n, time: n.time_label }));
       DB.relancesDevis = {};
       for (const r of (relancesAll || [])) { if (r.devis_id) DB.relancesDevis[r.devis_id] = r; }
-      // Précharge la correspondance société → commercial, enrichit les documents, puis rafraîchit si besoin (non bloquant)
-      loadApporteurCommMap().then(() => {
+      // Précharge la correspondance société → commercial + le mapping métier, enrichit les documents, puis rafraîchit si besoin (non bloquant)
+      Promise.all([loadApporteurCommMap(), loadMissionMapping().catch(() => {})]).then(() => {
         _ensureDocsCommercial();
         if (['devis', 'commandes', 'factures', 'affaires'].includes(currentPage)) renderPage(currentPage);
       });
@@ -11615,12 +11615,14 @@ function renderDevis(filter='all') {
       ${sortTh('devis','apporteur_affaire','Apporteur','filterDevis')}
       ${sortTh('devis','comm_novam','Comm. Novam','filterDevis')}
       ${sortTh('devis','comm_gph','Comm. GPH','filterDevis')}
+      ${sortTh('devis','metier','Métier','filterDevis')}
+      ${sortTh('devis','type_prestation','Type prestation','filterDevis')}
       <th style="font-size:11px">Marché</th>
       <th style="font-size:11px">Affaire</th>
       ${sortTh('devis','statut','Statut','filterDevis')}
       <th style="font-size:11px">Relance</th>
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="14" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis trouvé</td></tr>' : filtered.slice(devisPage*TBL_PAGE_SIZE, (devisPage+1)*TBL_PAGE_SIZE).map(d => `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="16" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis trouvé</td></tr>' : filtered.slice(devisPage*TBL_PAGE_SIZE, (devisPage+1)*TBL_PAGE_SIZE).map(d => `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer">
       <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="devis-rel-cb" data-id="${d.id}" onclick="toggleDevisRelanceSel('${d.id}',this.checked)" ${_devisRelanceSel.has(d.id)?'checked':''} ${(_devisRelanceSelSoc!==null && _devisSocKey(d)!==_devisRelanceSelSoc)?'disabled':''}></td>
       <td class="mono">${d.ref}</td>
       <td>${d.client}</td>
@@ -11631,6 +11633,8 @@ function renderDevis(filter='all') {
       <td style="font-size:11px">${d.apporteur_affaire||''}</td>
       <td style="font-size:11px">${d.comm_novam||''}</td>
       <td style="font-size:11px">${d.comm_gph||''}</td>
+      <td style="font-size:11px">${d.metier||''}</td>
+      <td style="font-size:11px">${d.type_prestation||''}</td>
       <td>${linkMarche(d.marche_id)}</td>
       <td>${linkAffaire(d.affaire_id)}</td>
       <td>${devisStatusLabel(d.statut)}</td>
@@ -11695,10 +11699,12 @@ function renderCommandes(filter='all') {
       ${sortTh('commandes','apporteur_affaire','Apporteur','filterCmd')}
       ${sortTh('commandes','comm_novam','Comm. Novam','filterCmd')}
       ${sortTh('commandes','comm_gph','Comm. GPH','filterCmd')}
+      ${sortTh('commandes','metier','Métier','filterCmd')}
+      ${sortTh('commandes','type_prestation','Type prestation','filterCmd')}
       <th style="font-size:11px">Marché</th>
       ${sortTh('commandes','statut','Statut','filterCmd')}
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="13" style="text-align:center;padding:20px;color:var(--t3)">Aucune commande trouvée</td></tr>' : filtered.slice(cmdPage*TBL_PAGE_SIZE, (cmdPage+1)*TBL_PAGE_SIZE).map(c => { const aff = c.affaire_id ? DB.affaires.find(a => a.id === c.affaire_id) : null; return `<tr onclick="showCommandeDetail('${c.id}')" style="cursor:pointer">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="15" style="text-align:center;padding:20px;color:var(--t3)">Aucune commande trouvée</td></tr>' : filtered.slice(cmdPage*TBL_PAGE_SIZE, (cmdPage+1)*TBL_PAGE_SIZE).map(c => { const aff = c.affaire_id ? DB.affaires.find(a => a.id === c.affaire_id) : null; return `<tr onclick="showCommandeDetail('${c.id}')" style="cursor:pointer">
       <td class="mono"><strong>${aff?.code_projet || '—'}</strong></td>
       <td class="mono">${c.ref}</td>
       <td>${c.client}</td>
@@ -11710,6 +11716,8 @@ function renderCommandes(filter='all') {
       <td style="font-size:11px">${c.apporteur_affaire||''}</td>
       <td style="font-size:11px">${c.comm_novam||''}</td>
       <td style="font-size:11px">${c.comm_gph||''}</td>
+      <td style="font-size:11px">${c.metier||''}</td>
+      <td style="font-size:11px">${c.type_prestation||''}</td>
       <td>${linkMarche(c.marche_id)}</td>
       <td>${cmdStatusLabel(c.statut)}</td>
     </tr>`; }).join('')}</tbody></table>
@@ -11773,11 +11781,13 @@ function renderFactures(filter='all') {
       ${sortTh('factures','apporteur_affaire','Apporteur','filterFact')}
       ${sortTh('factures','comm_novam','Comm. Novam','filterFact')}
       ${sortTh('factures','comm_gph','Comm. GPH','filterFact')}
+      ${sortTh('factures','metier','Métier','filterFact')}
+      ${sortTh('factures','type_prestation','Type prestation','filterFact')}
       <th style="font-size:11px">Marché</th>
       <th style="font-size:11px">Affaire</th>
       ${sortTh('factures','statut','Statut','filterFact')}
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="14" style="text-align:center;padding:20px;color:var(--t3)">Aucune facture trouvée</td></tr>' : filtered.slice(factPage*TBL_PAGE_SIZE, (factPage+1)*TBL_PAGE_SIZE).map(f => `<tr onclick="showFactureDetail('${f.id}')" style="cursor:pointer">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="16" style="text-align:center;padding:20px;color:var(--t3)">Aucune facture trouvée</td></tr>' : filtered.slice(factPage*TBL_PAGE_SIZE, (factPage+1)*TBL_PAGE_SIZE).map(f => `<tr onclick="showFactureDetail('${f.id}')" style="cursor:pointer">
       <td class="mono">${f.ref}</td>
       <td>${f.client}</td>
       <td>${f.type_facture === 'CREDIT' ? '<span style="color:var(--red)">Avoir</span>' : f.type_facture === 'INVOICE' ? 'Facture' : f.type_facture || ''}</td>
@@ -11789,6 +11799,8 @@ function renderFactures(filter='all') {
       <td style="font-size:11px">${f.apporteur_affaire||''}</td>
       <td style="font-size:11px">${f.comm_novam||''}</td>
       <td style="font-size:11px">${f.comm_gph||''}</td>
+      <td style="font-size:11px">${f.metier||''}</td>
+      <td style="font-size:11px">${f.type_prestation||''}</td>
       <td>${linkMarche(f.marche_id)}</td>
       <td>${linkAffaire(f.affaire_id)}</td>
       <td>${facStatusLabel(f.statut)}</td>
@@ -12014,10 +12026,25 @@ function _clientCommForDoc(doc) {
   if (_apporteurCommMap) return _apporteurCommMap[_normApporteurName(doc.client || doc.client_name)] || null;
   return null;
 }
-// Attache comm_novam / comm_gph à chaque document pour le tri et le filtre par colonne
+// Déduit le métier (Géotechnique / Structure) depuis le "Type de mission" (type_prestation).
+// Priorité au mapping configuré en Paramétrage (SOL/EXE), repli sur une heuristique du libellé.
+function deriveMetier(tp) {
+  if (!tp) return '';
+  const m = (typeof _missionMapping === 'object' && _missionMapping) ? _missionMapping[tp] : null;
+  if (m === 'SOL') return 'Géotechnique';
+  if (m === 'EXE') return 'Structure';
+  const s = tp.toUpperCase();
+  if (/_SOL|\bSOL\b|\bG[1-5]\b|G2PRO|G5SUR|LOI ELAN/.test(s)) return 'Géotechnique';
+  if (/_EXE|\bEXE\b|CHARP|STRUCT|\bGO\b|GROS.?OEUVRE/.test(s)) return 'Structure';
+  return '';
+}
+// Attache comm_novam / comm_gph et metier à chaque document (pour le tri et le filtre par colonne)
 function _ensureDocsCommercial() {
-  if (!_clientCommById && !_apporteurCommMap) return;
-  const apply = d => { const e = _clientCommForDoc(d); d.comm_novam = (e && e.novam) || ''; d.comm_gph = (e && e.gph) || ''; };
+  const haveComm = _clientCommById || _apporteurCommMap;
+  const apply = d => {
+    if (haveComm) { const e = _clientCommForDoc(d); d.comm_novam = (e && e.novam) || ''; d.comm_gph = (e && e.gph) || ''; }
+    d.metier = deriveMetier(d.type_prestation);
+  };
   (DB.devis || []).forEach(apply);
   (DB.commandes || []).forEach(apply);
   (DB.factures || []).forEach(apply);
@@ -12136,6 +12163,7 @@ async function showDevisDetail(id) {
         detailRow('Référence complémentaire', d.reference1),
         detailRow('Statut', devisStatusLabel(d.statut)),
         detailRow('Probabilité', d.probabilite ? d.probabilite + '/10' : null),
+        (() => { const tp = d.type_prestation || d.custom_data?.['1-alpha06']?.value || null; return detailRow('Métier', deriveMetier(tp)) + detailRow('Type de prestation', tp); })(),
       ])}
       ${detailSection('Montants', [
         detailRow('Montant HT', fmt(d.montant)),
@@ -12238,6 +12266,7 @@ async function showCommandeDetail(id) {
         detailRow('Texte sur la commande', c.description || '—'),
         detailRow('Référence complémentaire', c.reference1),
         detailRow('Statut', cmdStatusLabel(c.statut)),
+        (() => { const tp = c.type_prestation || c.custom_data?.['1-alpha06']?.value || null; return detailRow('Métier', deriveMetier(tp)) + detailRow('Type de prestation', tp); })(),
         detailRow('Devis d&#39;origine', c.devis_origine),
       ])}
       ${detailSection('Montants', [
@@ -12755,6 +12784,7 @@ async function showFactureDetail(id) {
         detailRow('Description', f.description),
         detailRow('Référence complémentaire', f.reference1),
         detailRow('Statut', facStatusLabel(f.statut)),
+        (() => { const tp = f.type_prestation || f.custom_data?.['1-alpha06']?.value || null; return detailRow('Métier', deriveMetier(tp)) + detailRow('Type de prestation', tp); })(),
         detailRow('Dématérialisation', f.statut_dematerialisation === 'NO_TRANSMISSION' ? 'Non transmis' : f.statut_dematerialisation),
       ])}
       ${detailSection('Montants', [
@@ -19624,9 +19654,11 @@ async function syncAkuiteo() {
         date_signature_reelle: q.actualSignatureDate ? q.actualSignatureDate.substring(0, 10) : null,
         nb_lignes: Array.isArray(q.lines) ? q.lines.length : 0,
         custom_data: (q.customData && Object.keys(q.customData).length > 0) ? q.customData : null,
+        type_prestation: (q.customData && q.customData['1-alpha06'] && q.customData['1-alpha06'].value) || null,
       };
-      // Don't overwrite custom_data if null — preserve existing value in Supabase
+      // Don't overwrite custom_data/type_prestation if null — preserve existing value in Supabase
       if (!row.custom_data) delete row.custom_data;
+      if (!row.type_prestation) delete row.type_prestation;
       return row;
     });
     for (let i = 0; i < dBatchAll.length; i += 500) {
@@ -19662,9 +19694,11 @@ async function syncAkuiteo() {
         devise: o.currencyCode || 'EUR', nb_lignes: Array.isArray(o.lines) ? o.lines.length : 0,
         surface_facturee: Array.isArray(o.lines) ? o.lines.reduce((s, l) => s + Number(l.quantity || 0), 0) : null,
         custom_data: (o.customData && Object.keys(o.customData).length > 0) ? o.customData : null,
+        type_prestation: (o.customData && o.customData['1-alpha06'] && o.customData['1-alpha06'].value) || null,
       };
-      // Don't overwrite custom_data if null — preserve existing value in Supabase
+      // Don't overwrite custom_data/type_prestation if null — preserve existing value in Supabase
       if (!row.custom_data) delete row.custom_data;
+      if (!row.type_prestation) delete row.type_prestation;
       return row;
     });
     for (let i = 0; i < cBatchAll.length; i += 500) {
@@ -19699,9 +19733,11 @@ async function syncAkuiteo() {
         responsable_id: f.managerId || null, devise: f.currencyCode || 'EUR',
         nb_lignes: Array.isArray(f.lines) ? f.lines.length : 0, reference1: f.reference1 || null,
         custom_data: (f.customData && Object.keys(f.customData).length > 0) ? f.customData : null,
+        type_prestation: (f.customData && f.customData['1-alpha06'] && f.customData['1-alpha06'].value) || null,
       };
-      // Don't overwrite custom_data if null — preserve existing value in Supabase
+      // Don't overwrite custom_data/type_prestation if null — preserve existing value in Supabase
       if (!row.custom_data) delete row.custom_data;
+      if (!row.type_prestation) delete row.type_prestation;
       return row;
     });
     for (let i = 0; i < fBatchAll.length; i += 500) {
