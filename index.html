@@ -12890,6 +12890,15 @@ function getCREditorHTML(r) {
         </select>
       </div>
     </div>
+    <div class="cr-fields-row" style="padding:12px 16px 0 16px">
+      <div style="position:relative">
+        <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Réseau professionnel <span style="font-weight:400">— ajoute toutes les sociétés et contacts du réseau</span></label>
+        <input type="text" id="crReseauSearch" placeholder="Choisir un réseau pro..." autocomplete="off"
+          style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)"
+          oninput="searchCRReseau(this.value)" onfocus="searchCRReseau(this.value)">
+        <div id="crReseauDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.2)"></div>
+      </div>
+    </div>
     <div class="cr-fields-row" style="display:grid;grid-template-columns:${window.innerWidth<=768?'1fr':'1fr 1fr'};gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)">
       <div style="position:relative">
         <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Sociétés <span style="color:var(--red)">*</span></label>
@@ -13152,6 +13161,52 @@ async function loadCRContacts(clientId) {
   crContactsCache[clientId] = data || [];
 }
 
+// ─── Réseau pro : ajoute toutes les sociétés du réseau + tous leurs contacts ───
+async function searchCRReseau(q) {
+  const dd = document.getElementById('crReseauDropdown');
+  if (!dd) return;
+  const all = await loadReseauxPro();
+  const ql = (q || '').toLowerCase();
+  const filtered = ql ? all.filter(r => r.toLowerCase().includes(ql)) : all;
+  if (!filtered.length) {
+    dd.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucun réseau trouvé</div>';
+  } else {
+    dd.innerHTML = filtered.slice(0, 12).map(r =>
+      `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
+        onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
+        onclick="selectCRReseau('${r.replace(/'/g, "&#39;")}')">${r}</div>`).join('');
+  }
+  dd.style.display = 'block';
+}
+
+async function selectCRReseau(reseau) {
+  const dd = document.getElementById('crReseauDropdown');
+  if (dd) dd.style.display = 'none';
+  const inp = document.getElementById('crReseauSearch');
+  if (inp) inp.value = '';
+  // Toutes les sociétés rattachées à ce réseau pro
+  const { data: clients, error } = await sb.from('clients').select('id,name').contains('reseaux_pro', [reseau]);
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  if (!clients || !clients.length) { toast('Aucune société dans le réseau « ' + reseau + ' »', 'info'); return; }
+  let nbSoc = 0, nbCon = 0;
+  for (const cl of clients) {
+    if (!_crSelectedClients.some(c => c.id === cl.id)) { _crSelectedClients.push({ id: cl.id, name: cl.name }); nbSoc++; }
+    await loadCRContacts(cl.id);
+    for (const ct of (crContactsCache[cl.id] || [])) {
+      if (!_crSelectedContacts.some(c => c.id === ct.id)) {
+        const fullName = [ct.prenom, ct.nom].filter(Boolean).join(' ');
+        _crSelectedContacts.push({ id: ct.id, name: fullName });
+        nbCon++;
+      }
+    }
+  }
+  renderCRClientChips();
+  renderCRContactChips();
+  const co = document.getElementById('crContactSearch');
+  if (co && _crSelectedClients.length) { co.disabled = false; co.style.opacity = '1'; }
+  toast(`Réseau « ${reseau} » : ${nbSoc} société(s) et ${nbCon} contact(s) ajoutés`, 'success');
+}
+
 async function searchCRContact(q) {
   const dd = document.getElementById('crContactDropdown');
   if (!_crSelectedClients.length) { dd.style.display='none'; return; }
@@ -13277,6 +13332,9 @@ document.addEventListener('click', e => {
   }
   if (!e.target.closest('#crContactSearch') && !e.target.closest('#crContactDropdown')) {
     const d = document.getElementById('crContactDropdown'); if(d) d.style.display='none';
+  }
+  if (!e.target.closest('#crReseauSearch') && !e.target.closest('#crReseauDropdown')) {
+    const d = document.getElementById('crReseauDropdown'); if(d) d.style.display='none';
   }
   if (!e.target.closest('#ec-reseaux-input') && !e.target.closest('#ec-reseaux-dd')) {
     const d = document.getElementById('ec-reseaux-dd'); if(d) d.style.display='none';
