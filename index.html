@@ -6002,7 +6002,17 @@ async function refreshLegalFromSiret() {
 
     // 5. Construire les champs proposés depuis l'établissement courant
     const adrParts = [etabCourant.numero_voie, etabCourant.indice_repetition, etabCourant.type_voie, etabCourant.libelle_voie].filter(Boolean).join(' ');
-    const adresseFull = etabCourant.adresse || adrParts || null;
+    // La ligne 1 ne doit contenir que la voie : le code postal et la ville ont
+    // leurs propres champs. On privilégie les composants de voie ; à défaut on
+    // nettoie l'adresse complète INSEE en retirant code postal et commune.
+    let adresseFull = adrParts;
+    if (!adresseFull && etabCourant.adresse) {
+      let a = etabCourant.adresse;
+      if (etabCourant.code_postal) a = a.split(etabCourant.code_postal).join(' ');
+      if (etabCourant.libelle_commune) a = a.replace(new RegExp(etabCourant.libelle_commune.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig'), ' ');
+      adresseFull = a.replace(/\s+/g, ' ').trim();
+    }
+    adresseFull = adresseFull || null;
     const proposed = {
       raison_sociale: entreprise.nom_raison_sociale || entreprise.nom_complet || null,
       siren: entreprise.siren || null,
@@ -6535,7 +6545,15 @@ async function ajouterEtablissementsSirene() {
 
     const dept = etab.code_postal ? etab.code_postal.substring(0, 2) : (etab.departement || '');
     const etabId = name.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 15) + '_' + etab.siret.slice(-6) + '_' + String(Date.now()).slice(-4);
-    const addr = [etab.numero_voie, etab.type_voie, etab.libelle_voie].filter(Boolean).join(' ') || etab.adresse || null;
+    // Ligne 1 = voie uniquement (le code postal et la ville ont leurs propres champs)
+    let addr = [etab.numero_voie, etab.type_voie, etab.libelle_voie].filter(Boolean).join(' ');
+    if (!addr && etab.adresse) {
+      let a = etab.adresse;
+      if (etab.code_postal) a = a.split(etab.code_postal).join(' ');
+      if (etab.libelle_commune) a = a.replace(new RegExp(etab.libelle_commune.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig'), ' ');
+      addr = a.replace(/\s+/g, ' ').trim();
+    }
+    addr = addr || null;
 
     const { error } = await sb.from('clients').insert({
       id: etabId, name,
@@ -9587,7 +9605,15 @@ async function esApply(idx, candIdx, alsoAkuiteo) {
   if (!ok) return;
   // Recompose adresse depuis les sous-champs SIRENE
   const adrLignes = [siege.numero_voie, siege.indice_repetition, siege.type_voie, siege.libelle_voie].filter(Boolean).join(' ');
-  const adresseFull = siege.adresse || adrLignes || null;
+  // Ligne 1 = voie uniquement (le code postal et la ville ont leurs propres champs)
+  let adresseFull = adrLignes;
+  if (!adresseFull && siege.adresse) {
+    let a = siege.adresse;
+    if (siege.code_postal) a = a.split(siege.code_postal).join(' ');
+    if (siege.libelle_commune) a = a.replace(new RegExp(siege.libelle_commune.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig'), ' ');
+    adresseFull = a.replace(/\s+/g, ' ').trim();
+  }
+  adresseFull = adresseFull || null;
   const officialName = cand.nom_complet || cand.nom_raison_sociale || null;
   const update = {
     name: officialName || item.client.name,
@@ -17792,7 +17818,15 @@ async function submitNewClient() {
         const dept = etab.code_postal ? etab.code_postal.substring(0, 2) : (etab.departement || '');
         const etabId = name.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 15) + '_' + etab.siret.slice(-6) + '_' + String(Date.now()).slice(-4);
         const etabIni = name.split(' ').map(w => (w || '')[0]).join('').substring(0, 2).toUpperCase();
-        const addr = [etab.numero_voie, etab.type_voie, etab.libelle_voie].filter(Boolean).join(' ') || etab.adresse || null;
+        // Ligne 1 = voie uniquement (le code postal et la ville ont leurs propres champs)
+        let addr = [etab.numero_voie, etab.type_voie, etab.libelle_voie].filter(Boolean).join(' ');
+        if (!addr && etab.adresse) {
+          let a = etab.adresse;
+          if (etab.code_postal) a = a.split(etab.code_postal).join(' ');
+          if (etab.libelle_commune) a = a.replace(new RegExp(etab.libelle_commune.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig'), ' ');
+          addr = a.replace(/\s+/g, ' ').trim();
+        }
+        addr = addr || null;
         const { error } = await sb.from('clients').insert({
           id: etabId, name,
           code: ('ETB-' + etab.siret.slice(-6)).substring(0, 10),
