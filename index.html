@@ -3453,6 +3453,7 @@ async function loadDB() {
       DB.notifications = nAll.map(n => ({ ...n, time: n.time_label }));
       DB.relancesDevis = {};
       for (const r of (relancesAll || [])) { if (r.devis_id) DB.relancesDevis[r.devis_id] = r; }
+      loadApporteurCommMap(); // précharge la correspondance apporteur → commercial (non bloquant)
       collaborateursLuccaData = luccaAll;
       collaborateursData = akAll;
       _buildCommerciauxLuccaMap();
@@ -7636,9 +7637,10 @@ function renderAffairesRefresh() {
 function filterAffaires() { renderAffairesRefresh(); }
 function goAffairesPage(p) { affairesPage=p; document.getElementById('contentArea').innerHTML='<div class="page active">'+renderAffaires()+'</div>'; }
 
-function showAffaireDetail(id) {
+async function showAffaireDetail(id) {
   currentAffaireId = id;
   currentPage = 'affaire-detail';
+  await loadApporteurCommMap();
   const a = DB.affaires.find(x => x.id === id);
   if (a) document.getElementById('pageTitle').textContent = 'Affaire ' + (a.ref || a.nom || id);
   document.getElementById('contentArea').innerHTML = '<div class="page active">' + renderAffaireDetail() + '</div>';
@@ -7682,6 +7684,7 @@ function renderAffaireDetail() {
       detailRow('Code projet', a.code_projet),
       detailRow('Société', a.client_name ? '<a href="#" onclick="showClient(&#39;'+a.client_id+'&#39;);return false" style="color:var(--accent)">'+a.client_name+'</a>' : null),
       detailRow('Apporteur d\'affaire', a.apporteur_affaire),
+      detailRow('Commercial apporteur', apporteurCommercialLabel(a.apporteur_affaire)),
       detailRow('Architecte', a.architecte),
       detailRow('Responsable', a.responsable),
       detailRow('Marché', marche ? '<a href="#" onclick="showMarcheDetail(&#39;'+marche.id+'&#39;);return false" style="color:var(--accent)">'+( marche.ref||'')+' - '+(marche.nom||'')+'</a>' : '—'),
@@ -11933,6 +11936,41 @@ async function resolveEmployeeNames() {
     } catch (e) { console.warn('[Akuiteo] Employee resolve:', e.message); }
   }
 }
+// ── Commercial de l'apporteur d'affaire ──
+// L'apporteur d'affaire (souvent un cabinet d'architecte) est une société du
+// CRM. On affiche le(s) commercial(aux) de cette société (Novam + GPH).
+let _apporteurCommMap = null; // nom normalisé société -> { novam, gph }
+function _normApporteurName(s) { return (s || '').toString().trim().toUpperCase().replace(/\s+/g, ' '); }
+async function loadApporteurCommMap() {
+  if (_apporteurCommMap) return _apporteurCommMap;
+  const map = {};
+  let off = 0;
+  while (true) {
+    const { data, error } = await sb.from('clients').select('name,raison_sociale,account_manager_name,salesman_name').range(off, off + 999);
+    if (error || !data || !data.length) break;
+    for (const c of data) {
+      const v = { novam: c.account_manager_name || null, gph: c.salesman_name || null };
+      for (const k of [_normApporteurName(c.name), _normApporteurName(c.raison_sociale)]) {
+        if (k && !map[k]) map[k] = v;
+      }
+    }
+    if (data.length < 1000) break;
+    off += 1000;
+  }
+  _apporteurCommMap = map;
+  return _apporteurCommMap;
+}
+// Libellé du/des commercial(aux) de la société apporteur (null si introuvable)
+function apporteurCommercialLabel(apporteur) {
+  if (!apporteur || !_apporteurCommMap) return null;
+  const e = _apporteurCommMap[_normApporteurName(apporteur)];
+  if (!e) return null;
+  const parts = [];
+  if (e.novam) parts.push(e.novam);
+  if (e.gph && e.gph !== e.novam) parts.push(e.gph);
+  return parts.length ? parts.join(' — ') : null;
+}
+
 function detailRow(label, value) {
   if (value === null || value === undefined || value === '') return '';
   return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
@@ -12002,6 +12040,7 @@ async function fetchAkuiteoCustomData(table, id, akuiteoId, apiPath) {
 async function showDevisDetail(id) {
   const d = DB.devis.find(x => x.id === id);
   if (!d) return;
+  await loadApporteurCommMap();
   // Charger les champs lourds à la demande
   if (d.custom_data === undefined) {
     const { data } = await sb.from('devis').select('custom_data,description').eq('id', id).maybeSingle();
@@ -12065,6 +12104,7 @@ async function showDevisDetail(id) {
         detailRow('Marché', d.marche_id ? (() => { const m = DB.marches.find(x=>x.id===d.marche_id); return m ? '<a href="#" onclick="showMarcheDetail(&#39;'+m.id+'&#39;);return false" style="color:var(--accent)">'+(m.ref||'')+' - '+(m.nom||'')+'</a>' : d.marche_id; })() : null),
         detailRow('Affaire', d.affaire_id ? (() => { const a = DB.affaires.find(x=>x.id===d.affaire_id); return a ? '<a href="#" onclick="showAffaireDetail(&#39;'+a.id+'&#39;);return false" style="color:var(--accent)">'+(a.ref||'')+' - '+(a.nom||'')+'</a>' : d.affaire_id; })() : null),
         detailRow('Apporteur d\'affaire', d.apporteur_affaire),
+        detailRow('Commercial apporteur', apporteurCommercialLabel(d.apporteur_affaire)),
         detailRow('Architecte', d.architecte),
         detailRow('Projet', d.projet),
         detailRow('Agence', d.agence),
@@ -12100,6 +12140,7 @@ async function showDevisDetail(id) {
 async function showCommandeDetail(id) {
   const c = DB.commandes.find(x => x.id === id);
   if (!c) return;
+  await loadApporteurCommMap();
   if (c.custom_data === undefined || c.description === undefined) {
     const { data } = await sb.from('commandes').select('custom_data,description').eq('id', id).maybeSingle();
     if (data) { c.custom_data = data.custom_data; c.description = data.description; }
@@ -12149,6 +12190,7 @@ async function showCommandeDetail(id) {
         detailRow('Marché', c.marche_id ? (() => { const m = DB.marches.find(x=>x.id===c.marche_id); return m ? '<a href="#" onclick="showMarcheDetail(&#39;'+m.id+'&#39;);return false" style="color:var(--accent)">'+(m.ref||'')+' - '+(m.nom||'')+'</a>' : c.marche_id; })() : null),
         detailRow('Affaire', c.affaire_id ? (() => { const a = DB.affaires.find(x=>x.id===c.affaire_id); return a ? '<a href="#" onclick="showAffaireDetail(&#39;'+a.id+'&#39;);return false" style="color:var(--accent)">'+(a.ref||'')+' - '+(a.nom||'')+'</a>' : c.affaire_id; })() : null),
         detailRow('Apporteur d\'affaire', c.apporteur_affaire),
+        detailRow('Commercial apporteur', apporteurCommercialLabel(c.apporteur_affaire)),
         detailRow('Architecte', c.architecte),
         detailRow('Projet', c.projet),
         detailRow('Agence', c.agence),
@@ -12621,6 +12663,7 @@ function cmdRenderDocChat(){
 async function showFactureDetail(id) {
   const f = DB.factures.find(x => x.id === id);
   if (!f) return;
+  await loadApporteurCommMap();
   if (f.custom_data === undefined) {
     const { data } = await sb.from('factures').select('custom_data,description').eq('id', id).maybeSingle();
     if (data) { f.custom_data = data.custom_data; f.description = data.description; }
@@ -12666,6 +12709,7 @@ async function showFactureDetail(id) {
         detailRow('Marché', f.marche_id ? (() => { const m = DB.marches.find(x=>x.id===f.marche_id); return m ? '<a href="#" onclick="showMarcheDetail(&#39;'+m.id+'&#39;);return false" style="color:var(--accent)">'+(m.ref||'')+' - '+(m.nom||'')+'</a>' : f.marche_id; })() : null),
         detailRow('Affaire', f.affaire_id ? (() => { const a = DB.affaires.find(x=>x.id===f.affaire_id); return a ? '<a href="#" onclick="showAffaireDetail(&#39;'+a.id+'&#39;);return false" style="color:var(--accent)">'+(a.ref||'')+' - '+(a.nom||'')+'</a>' : f.affaire_id; })() : null),
         detailRow('Apporteur d\'affaire', f.apporteur_affaire),
+        detailRow('Commercial apporteur', apporteurCommercialLabel(f.apporteur_affaire)),
         detailRow('Architecte', f.architecte),
         detailRow('Projet', f.projet),
         detailRow('Agence', f.agence),
