@@ -2613,9 +2613,9 @@ tbody tr:last-child td { border-bottom: none; }
             <div style="display:grid;gap:8px">
               <div class="fg"><label class="fl">Commercial Novam</label><select class="fi" id="ec-mk-manager"></select></div>
               <div class="fg"><label class="fl">Commercial GPH</label><select class="fi" id="ec-mk-salesman"></select></div>
-              <div class="fg"><label class="fl">Code CODIAL <span style="font-weight:400;color:var(--t3);font-size:10px">(local)</span></label><input class="fi" id="ec-code-codial" placeholder="Ex: T16-00123"></div>
-              <div class="fg"><label class="fl">Compta CODIAL <span style="font-weight:400;color:var(--t3);font-size:10px">(local)</span></label><input class="fi" id="ec-compta-codial" placeholder="Ex: 411-00123"></div>
-              <div class="fg"><label class="fl">ID Plateforme <span style="font-weight:400;color:var(--t3);font-size:10px">(local)</span></label><input class="fi" id="ec-id-plateforme" placeholder=""></div>
+              <div class="fg"><label class="fl">Code CODIAL <span style="font-weight:400;color:var(--t3);font-size:10px">(local · non modifiable)</span></label><input class="fi" id="ec-code-codial" placeholder="Ex: T16-00123" readonly title="Identifiant local non modifiable depuis la fiche" style="background:var(--bg-1);color:var(--t3);cursor:not-allowed"></div>
+              <div class="fg"><label class="fl">Compta CODIAL <span style="font-weight:400;color:var(--t3);font-size:10px">(local · non modifiable)</span></label><input class="fi" id="ec-compta-codial" placeholder="Ex: 411-00123" readonly title="Identifiant local non modifiable depuis la fiche" style="background:var(--bg-1);color:var(--t3);cursor:not-allowed"></div>
+              <div class="fg"><label class="fl">ID Plateforme <span style="font-weight:400;color:var(--t3);font-size:10px">(local · non modifiable)</span></label><input class="fi" id="ec-id-plateforme" placeholder="" readonly title="Identifiant local non modifiable depuis la fiche" style="background:var(--bg-1);color:var(--t3);cursor:not-allowed"></div>
             </div>
             <div id="ec-propager-commercial-wrap" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
               <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
