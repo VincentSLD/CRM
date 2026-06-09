@@ -4259,32 +4259,47 @@ function loadVisNetwork() {
   if (_visLoading) return _visLoading;
   _visLoading = new Promise((res, rej) => {
     const s = document.createElement('script');
-    s.src = 'https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js';
+    s.src = 'https://cdn.jsdelivr.net/npm/vis-network@9.1.9/standalone/umd/vis-network.min.js';
     s.onload = res; s.onerror = rej; document.head.appendChild(s);
   });
   return _visLoading;
 }
 
-async function loadAnalyseData() {
-  _anLoading = true;
-  await loadApporteurCommMap().catch(() => {});
-  await loadMissionMapping().catch(() => {});
-  const cols = 'id,ref,montant,date,client_id,client_name,apporteur_affaire,architecte,societe,type_prestation,statut';
-  let all = [], off = 0;
-  while (true) {
-    const { data, error } = await sb.from('factures').select(cols).gte('date', anFrom).lte('date', anTo).order('date', { ascending: false }).range(off, off + 999);
-    if (error || !data || !data.length) break;
-    all = all.concat(data);
-    if (data.length < 1000) break;
-    off += 1000;
-  }
-  for (const f of all) {
+function _anEnrich(rows) {
+  for (const f of rows) {
     const e = (_clientCommById && f.client_id && _clientCommById[f.client_id]) || (_apporteurCommMap && _apporteurCommMap[_normApporteurName(f.client_name)]) || null;
     f._novam = (e && e.novam) || '';
     f._gph = (e && e.gph) || '';
     f._metier = deriveMetier(f.type_prestation);
   }
+}
+async function loadAnalyseData() {
+  _anLoading = true;
+  await loadMissionMapping().catch(() => {});
+  // Pagination keyset (par id) pour éviter les OFFSET profonds (erreur 500). Repli sans type_prestation si la colonne n'existe pas encore.
+  const fullCols = 'id,ref,montant,date,client_id,client_name,apporteur_affaire,architecte,societe,type_prestation,statut';
+  const baseCols = 'id,ref,montant,date,client_id,client_name,apporteur_affaire,architecte,societe,statut';
+  let cols = fullCols, all = [], lastId = '', firstPage = true;
+  try {
+    while (true) {
+      let q = sb.from('factures').select(cols).gte('date', anFrom).lte('date', anTo).order('id', { ascending: true }).limit(1000);
+      if (lastId) q = q.gt('id', lastId);
+      const { data, error } = await q;
+      if (error) {
+        if (firstPage && cols === fullCols) { cols = baseCols; console.warn('[analyse] type_prestation absent, repli sans cette colonne'); continue; }
+        console.warn('[analyse] factures', error.message); break;
+      }
+      if (!data || !data.length) break;
+      all = all.concat(data); lastId = data[data.length - 1].id; firstPage = false;
+      if (data.length < 1000) break;
+    }
+  } catch (e) { console.warn('[analyse] exception', e); }
+  _anEnrich(all);
   _anData = all; _anLoading = false;
+  // Carte société → commercial chargée en arrière-plan si absente : ré-enrichit + rafraîchit sans bloquer l'affichage
+  if (!_clientCommById) {
+    loadApporteurCommMap().then(() => { _anEnrich(_anData || []); if (currentPage === 'analyse') renderPage('analyse'); }).catch(() => {});
+  }
 }
 
 function _anFiltered() {
@@ -12192,35 +12207,46 @@ async function resolveEmployeeNames() {
 let _apporteurCommMap = null;       // nom normalisé société -> { novam, gph, resp, respId, siren }
 let _clientCommById = null;         // client_id -> même rec (pour les colonnes Novam/GPH des documents)
 let _apporteurSiegeResp = null;     // siren -> nom du responsable du site du siège
+let _apporteurLoading = null;       // promesse en cours (évite les scans concurrents)
 function _normApporteurName(s) { return (s || '').toString().trim().toUpperCase().replace(/\s+/g, ' '); }
 async function loadApporteurCommMap() {
   if (_apporteurCommMap) return _apporteurCommMap;
-  const map = {}, byId = {}, siegeResp = {};
-  let off = 0;
-  while (true) {
-    const { data, error } = await sb.from('clients')
-      .select('id,name,raison_sociale,account_manager_name,salesman_name,responsable_site_name,responsable_site_id,est_siege,siren')
-      .range(off, off + 999);
-    if (error || !data || !data.length) break;
-    for (const c of data) {
-      const rec = {
-        novam: c.account_manager_name || null,
-        gph: c.salesman_name || null,
-        resp: c.responsable_site_name || null,
-        respId: c.responsable_site_id || null,
-        siren: c.siren || null,
-      };
-      if (c.id) byId[c.id] = rec;
-      for (const k of [_normApporteurName(c.name), _normApporteurName(c.raison_sociale)]) {
-        if (k && !map[k]) map[k] = rec;
+  if (_apporteurLoading) return _apporteurLoading;
+  // Pagination keyset (par id) : évite les OFFSET profonds qui font expirer Postgres (erreur 500)
+  _apporteurLoading = (async () => {
+    const map = {}, byId = {}, siegeResp = {};
+    let lastId = '';
+    try {
+      while (true) {
+        let q = sb.from('clients')
+          .select('id,name,raison_sociale,account_manager_name,salesman_name,responsable_site_name,responsable_site_id,est_siege,siren')
+          .order('id', { ascending: true }).limit(1000);
+        if (lastId) q = q.gt('id', lastId);
+        const { data, error } = await q;
+        if (error) { console.warn('[loadApporteurCommMap]', error.message); break; }
+        if (!data || !data.length) break;
+        for (const c of data) {
+          const rec = {
+            novam: c.account_manager_name || null,
+            gph: c.salesman_name || null,
+            resp: c.responsable_site_name || null,
+            respId: c.responsable_site_id || null,
+            siren: c.siren || null,
+          };
+          if (c.id) byId[c.id] = rec;
+          for (const k of [_normApporteurName(c.name), _normApporteurName(c.raison_sociale)]) {
+            if (k && !map[k]) map[k] = rec;
+          }
+          if (c.est_siege === true && c.siren && c.responsable_site_name && !siegeResp[c.siren]) siegeResp[c.siren] = c.responsable_site_name;
+        }
+        lastId = data[data.length - 1].id;
+        if (data.length < 1000) break;
       }
-      if (c.est_siege === true && c.siren && c.responsable_site_name && !siegeResp[c.siren]) siegeResp[c.siren] = c.responsable_site_name;
-    }
-    if (data.length < 1000) break;
-    off += 1000;
-  }
-  _apporteurCommMap = map; _clientCommById = byId; _apporteurSiegeResp = siegeResp;
-  return _apporteurCommMap;
+    } catch (e) { console.warn('[loadApporteurCommMap] exception', e); }
+    _apporteurCommMap = map; _clientCommById = byId; _apporteurSiegeResp = siegeResp; _apporteurLoading = null;
+    return _apporteurCommMap;
+  })();
+  return _apporteurLoading;
 }
 
 // Résout le commercial Novam/GPH d'une société (par id puis par nom)
