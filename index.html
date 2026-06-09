@@ -11464,6 +11464,89 @@ async function deleteRelanceDevis(devisId) {
   _refreshAfterRelance(devisId);
 }
 
+// ── Sélection multiple pour relance groupée (une seule société à la fois) ──
+let _devisRelanceSel = new Set();
+let _devisRelanceSelSoc = null; // clé société verrouillée par la sélection
+function _devisSocKey(d) { return d ? (d.client_id || ('n:' + (d.client || d.client_name || ''))) : null; }
+
+function toggleDevisRelanceSel(id, checked) {
+  const d = DB.devis.find(x => x.id === id);
+  if (!d) return;
+  const key = _devisSocKey(d);
+  if (checked) {
+    if (_devisRelanceSel.size === 0) _devisRelanceSelSoc = key;
+    if (key !== _devisRelanceSelSoc) { toast('Relance groupée limitée à une seule société à la fois', 'warn'); }
+    else _devisRelanceSel.add(id);
+  } else {
+    _devisRelanceSel.delete(id);
+    if (_devisRelanceSel.size === 0) _devisRelanceSelSoc = null;
+  }
+  filterDevis(document._lastFilter || 'all');
+}
+function clearDevisRelanceSel() { _devisRelanceSel.clear(); _devisRelanceSelSoc = null; filterDevis(document._lastFilter || 'all'); }
+function selectAllDevisRelanceSoc() {
+  // Coche tous les devis visibles cochables (= même société quand une est verrouillée)
+  document.querySelectorAll('.devis-rel-cb:not(:disabled)').forEach(cb => { if (_devisRelanceSel.size === 0) _devisRelanceSelSoc = _devisSocKey(DB.devis.find(x => x.id === cb.dataset.id)); _devisRelanceSel.add(cb.dataset.id); });
+  filterDevis(document._lastFilter || 'all');
+}
+function renderDevisRelanceBar() {
+  if (!_devisRelanceSel.size) return '';
+  const first = DB.devis.find(x => x.id === [..._devisRelanceSel][0]);
+  const socName = first ? (first.client || first.client_name || '—') : '—';
+  return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding:8px 12px;border:1px solid var(--accent);border-radius:8px;background:rgba(79,143,247,.08)">
+    <strong style="font-size:13px">${_devisRelanceSel.size} devis sélectionné(s)</strong>
+    <span style="font-size:12px;color:var(--t3)">— ${(socName + '').replace(/</g,'&lt;')}</span>
+    <button class="btn btn-primary" style="font-size:12px" onclick="openRelanceDevisGroup()">Relancer la sélection</button>
+    <button class="btn" style="font-size:12px" onclick="selectAllDevisRelanceSoc()">Tout cocher (même société, à l'écran)</button>
+    <button class="btn" style="font-size:12px" onclick="clearDevisRelanceSel()">Tout décocher</button>
+  </div>`;
+}
+
+function openRelanceDevisGroup() {
+  const ids = [..._devisRelanceSel];
+  if (!ids.length) return;
+  const list = ids.map(id => DB.devis.find(x => x.id === id)).filter(Boolean);
+  const socName = list[0] ? (list[0].client || list[0].client_name || '—') : '—';
+  const today = new Date().toISOString().slice(0, 10);
+  const body = `
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px">
+      Relance groupée de <strong>${list.length}</strong> devis — société <strong>${(socName + '').replace(/</g,'&lt;')}</strong>
+    </div>
+    <div style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px 10px;margin-bottom:10px;font-size:12px">
+      ${list.map(d => `<div>• ${d.ref || d.id} — ${fmt(d.montant)}${d.date_raw ? ' (il y a ' + joursDepuis(d.date_raw) + ' j)' : ''}</div>`).join('')}
+    </div>
+    <div class="fg"><label class="fl">Date de la relance</label><input class="fi" type="date" id="rdg-date" value="${today}"></div>
+    <div class="fg"><label class="fl">Résultat</label><select class="fi" id="rdg-statut">
+      <option value="en_attente">En attente de réponse</option>
+      <option value="cloture">Clôturé (sans suite)</option></select></div>
+    <div class="fg"><label class="fl">Note (appliquée à tous les devis sélectionnés)</label>
+      <textarea class="fi" id="rdg-note" rows="4" style="resize:vertical" placeholder="Ex : Relance groupée par téléphone, le client revient vers nous."></textarea></div>`;
+  const footer = '<button class="btn" onclick="closeModal(\'relance-devis-group\')">Annuler</button>'
+    + '<button class="btn btn-primary" onclick="submitRelanceDevisGroup()">Enregistrer les ' + list.length + ' relances</button>';
+  openDynModal('relance-devis-group', 'Relance groupée', body, footer);
+}
+
+async function submitRelanceDevisGroup() {
+  const ids = [..._devisRelanceSel];
+  if (!ids.length) { closeModal('relance-devis-group'); return; }
+  const statut = document.getElementById('rdg-statut').value;
+  const date_relance = document.getElementById('rdg-date').value || new Date().toISOString().slice(0, 10);
+  const note = document.getElementById('rdg-note').value.trim() || null;
+  const now = new Date().toISOString();
+  const rows = ids.map(id => { const d = DB.devis.find(x => x.id === id); return {
+    devis_id: id, devis_ref: d?.ref || null, client_id: d?.client_id || null,
+    client_name: d?.client || d?.client_name || null, statut, date_relance, note,
+    commercial_id: currentCommercial?.id || null, commercial_nom: currentCommercial?.nom || null, updated_at: now }; });
+  const { data, error } = await sb.from('relances_devis').upsert(rows, { onConflict: 'devis_id' }).select();
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  for (const r of (data || [])) DB.relancesDevis[r.devis_id] = r;
+  closeModal('relance-devis-group');
+  toast(ids.length + ' relance(s) enregistrée(s)', 'success');
+  _devisRelanceSel.clear(); _devisRelanceSelSoc = null;
+  DB.alerts = generateAlerts(); updateNavBadges();
+  filterDevis(document._lastFilter || 'all');
+}
+
 function renderDevis(filter='all') {
   document._lastFilter = filter;
   const byComm = filterByCommercial(DB.devis);
@@ -11500,12 +11583,14 @@ function renderDevis(filter='all') {
       onchange="devisDateTo=this.value;filterDevis('${filter}')">
     <span style="font-size:12px;color:var(--t3);margin-left:8px">${filtered.length} résultat(s) — Total HT: <strong>${fmt(totalHT)}</strong> — TTC: <strong>${fmt(totalTTC)}</strong></span>
   </div>
+  ${renderDevisRelanceBar()}
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
     <table class="tbl-compact"><colgroup>
-      <col class="col-ref"><col class="col-client"><col class="col-sujet">
+      <col style="width:34px"><col class="col-ref"><col class="col-client"><col class="col-sujet">
       <col class="col-montant"><col class="col-date">
       <col><col><col class="col-statut"><col>
     </colgroup><thead><tr>
+      <th style="width:34px;text-align:center"><span title="Cocher des devis (même société) pour une relance groupée" style="font-size:11px;color:var(--t3)">✓</span></th>
       ${sortTh('devis','ref','Réf','filterDevis')}
       ${sortTh('devis','client','Client','filterDevis')}
       ${sortTh('devis','sujet','Sujet','filterDevis')}
@@ -11517,7 +11602,8 @@ function renderDevis(filter='all') {
       ${sortTh('devis','statut','Statut','filterDevis')}
       <th style="font-size:11px">Relance</th>
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis trouvé</td></tr>' : filtered.slice(devisPage*TBL_PAGE_SIZE, (devisPage+1)*TBL_PAGE_SIZE).map(d => `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis trouvé</td></tr>' : filtered.slice(devisPage*TBL_PAGE_SIZE, (devisPage+1)*TBL_PAGE_SIZE).map(d => `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer">
+      <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="devis-rel-cb" data-id="${d.id}" onclick="toggleDevisRelanceSel('${d.id}',this.checked)" ${_devisRelanceSel.has(d.id)?'checked':''} ${(_devisRelanceSelSoc!==null && _devisSocKey(d)!==_devisRelanceSelSoc)?'disabled':''}></td>
       <td class="mono">${d.ref}</td>
       <td>${d.client}</td>
       <td>${d.sujet||''}</td>
