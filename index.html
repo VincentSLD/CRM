@@ -3181,29 +3181,6 @@ function filterBySociete(items) {
   return items.filter(d => selectedSocietes.has(d.societe));
 }
 
-// Map commerciaux.id (redacteur_id) → societe via documents
-// Chaîne : redacteur_id → commerciaux.akuiteo_manager_id → document.responsable_id → document.societe
-function _getRedacteurSocieteMap() {
-  const mgrSoc = new Map();
-  for (const arr of [DB.devis, DB.commandes, DB.factures]) {
-    for (const d of arr) {
-      if (d.responsable_id && d.societe && !mgrSoc.has(d.responsable_id)) mgrSoc.set(d.responsable_id, d.societe);
-    }
-  }
-  const map = new Map();
-  for (const co of (DB.commerciaux || [])) {
-    if (co.akuiteo_manager_id && mgrSoc.has(co.akuiteo_manager_id)) map.set(co.id, mgrSoc.get(co.akuiteo_manager_id));
-  }
-  return map;
-}
-
-function filterCRBySociete(reports) {
-  const allSoc = getAllSocietes();
-  if (selectedSocietes.size === 0 || selectedSocietes.size >= allSoc.length) return reports;
-  const redSoc = _getRedacteurSocieteMap();
-  return reports.filter(r => r.redacteur_id && selectedSocietes.has(redSoc.get(r.redacteur_id)));
-}
-
 function societeSelect(code) {
   const all = getAllSocietes();
   if (code === '__ALL__') {
@@ -12595,7 +12572,7 @@ function crGetRedacteurNom(r) {
 
 function renderCRList() {
   const myId = currentCommercial?.id || '';
-  let filteredReports = filterCRBySociete(DB.reports);
+  let filteredReports = (DB.reports || []).slice();
   // Filtre auteur (select global)
   if (crFilterAuteur === '__mine__') {
     filteredReports = filteredReports.filter(r => r.redacteur_id == myId);
