@@ -1765,7 +1765,7 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
       <div class="nav-item" data-page="devis" onclick="go('devis')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        Devis <span class="nav-badge" id="navBadgeDevis"></span>
+        Devis <span class="nav-badge" id="navBadgeDevis"></span><span class="nav-badge" id="navBadgeDevisRelance" title="Devis à relancer" style="display:none;background:var(--red);color:#fff;margin-left:4px"></span>
       </div>
       <div class="nav-item" data-page="commandes" onclick="go('commandes')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>
@@ -2902,7 +2902,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // ═══════════════════════════════════════════════════════════
 //  DATA LAYER — chargé depuis Supabase
 // ═══════════════════════════════════════════════════════════
-const DB = { clients:[], devis:[], commandes:[], factures:[], reports:[], notifications:[], alerts:[], marches:[], affaires:[] };
+const DB = { clients:[], devis:[], commandes:[], factures:[], reports:[], notifications:[], alerts:[], marches:[], affaires:[], relancesDevis:{} };
 
 function timeAgo(dateStr) {
   const d = new Date(dateStr);
@@ -3433,7 +3433,7 @@ async function loadDB() {
     _deferredDataLoaded = false;
     _deferredLoadPromise = (async () => {
       const t1 = Date.now();
-      const [rAll, nAll, maAll, afAll, luccaAll, akAll, contactsCount, concurrentsCount, campagnesCount] = await Promise.all([
+      const [rAll, nAll, maAll, afAll, luccaAll, akAll, contactsCount, concurrentsCount, campagnesCount, relancesAll] = await Promise.all([
         (async () => { const RCOLS = 'id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at'; let all=[],off=0; while(true){ const {data}=await sb.from('reports').select(RCOLS).order('date',{ascending:false}).range(off,off+999); if(!data||!data.length) break; all=all.concat(data); if(data.length<1000) break; off+=1000; } return all; })(),
         sb.from('notifications').select('id,type,text,time_label,read,created_at').order('created_at', {ascending:false}).limit(100).then(r => r.data || []),
         fetchFast('marches', MARCHE_LITE, 'date_debut', true),
@@ -3443,6 +3443,7 @@ async function loadDB() {
         sb.from('contacts').select('id', { count: 'exact', head: true }).then(r => r.count || 0),
         sb.from('concurrents').select('id', { count: 'exact', head: true }).then(r => r.count || 0),
         sb.from('campagnes').select('id', { count: 'exact', head: true }).then(r => r.count || 0),
+        sb.from('relances_devis').select('*').then(r => r.data || []),
       ]);
       DB.reports = rAll.map(r => ({
         ...r, client: r.client_name, text: r.contenu || '', date_raw: r.date, date: timeAgo(r.date), titre: r.titre,
@@ -3450,6 +3451,8 @@ async function loadDB() {
         contacts_list: r.contacts_list && r.contacts_list.length ? r.contacts_list : (r.contact_id ? [{id: r.contact_id, name: r.contact_name}] : []),
       }));
       DB.notifications = nAll.map(n => ({ ...n, time: n.time_label }));
+      DB.relancesDevis = {};
+      for (const r of (relancesAll || [])) { if (r.devis_id) DB.relancesDevis[r.devis_id] = r; }
       collaborateursLuccaData = luccaAll;
       collaborateursData = akAll;
       _buildCommerciauxLuccaMap();
@@ -3494,6 +3497,7 @@ function updateNavBadges() {
     navBadgeMarches: filterBySociete(filterByDateRange(filterByCommercial(DB.marches), marchesDateFrom, marchesDateTo)).length,
     navBadgeAffaires: filterBySociete(filterByDateRange(filterByCommercial(DB.affaires), affairesDateFrom, affairesDateTo)).length,
     navBadgeDevis: filterBySociete(filterByDateRange(filterByCommercial(DB.devis), devisDateFrom, devisDateTo)).length,
+    navBadgeDevisRelance: getDevisARelancer().length,
     navBadgeCommandes: filterBySociete(filterByDateRange(filterByCommercial(DB.commandes), cmdDateFrom, cmdDateTo)).length,
     navBadgeFactures: filterBySociete(filterByDateRange(filterByCommercial(DB.factures), factDateFrom, factDateTo)).length,
     navBadgeCR: (DB.reports || []).length,
@@ -3906,6 +3910,16 @@ function generateAlerts() {
       type:'danger', title:'Factures en retard',
       desc: `${overdueInvoices.length} facture(s) en retard pour un total de ${fmt(overdueInvoices.reduce((a,f)=>a+Number(f.montant),0))}`,
       items: overdueInvoices.slice(0, 30).map(f => `${f.ref} — ${f.client} — ${fmt(Number(f.montant))}${f.jours ? ' — '+f.jours+' jours de retard' : ''}`)
+    });
+  }
+
+  // ── Devis à relancer (envoyés sans réponse depuis le seuil) ──
+  const aRelancer = (typeof getDevisARelancer === 'function') ? getDevisARelancer() : [];
+  if (aRelancer.length) {
+    alerts.push({
+      type:'warn', title:'Devis à relancer',
+      desc: `${aRelancer.length} devis envoyé(s) sans réponse depuis plus de ${DEVIS_RELANCE_SEUIL_JOURS} jours`,
+      items: aRelancer.slice(0, 30).map(d => `${d.ref} — <span onclick="showDevisDetail('${d.id}')" style="cursor:pointer;text-decoration:underline">${d.client}</span> — ${fmt(Number(d.montant || 0))} — ${joursDepuis(d.date_raw)} jours`)
     });
   }
 
@@ -11345,12 +11359,112 @@ function renderBatiscope() {
 }
 
 // ═══ DEVIS / COMMANDES / FACTURES / OBJECTIFS ═══
+// ═══ RELANCE DE DEVIS ═══
+// Seuil (en jours) au-delà duquel un devis "Envoyé" sans réponse est à relancer
+const DEVIS_RELANCE_SEUIL_JOURS = 15;
+// Statuts de devis considérés comme "en attente de réponse" (donc relançables)
+const DEVIS_STATUTS_RELANCABLES = ['sent'];
+
+function getDevisRelance(devisId) { return DB.relancesDevis ? DB.relancesDevis[devisId] : null; }
+function joursDepuis(dateIso) { return dateIso ? Math.round((Date.now() - new Date(dateIso)) / 86400000) : 0; }
+
+// Un devis est "à relancer" s'il est Envoyé, sans réponse depuis le seuil, et pas encore traité
+function isDevisARelancer(d) {
+  if (!d || !DEVIS_STATUTS_RELANCABLES.includes(d.statut)) return false;
+  if (getDevisRelance(d.id)) return false; // déjà relancé ou clôturé
+  if (!d.date_raw) return false;
+  return joursDepuis(d.date_raw) >= DEVIS_RELANCE_SEUIL_JOURS;
+}
+function getDevisARelancer() {
+  return filterBySociete(filterByCommercial(DB.devis)).filter(isDevisARelancer)
+    .sort((a, b) => (a.date_raw || '').localeCompare(b.date_raw || ''));
+}
+const RELANCE_STATUT_LABELS = { en_attente: 'En attente de réponse', cloture: 'Clôturé (sans suite)' };
+
+// Cellule "Relance" d'une ligne de devis : badge si déjà relancé, bouton si à relancer, sinon —
+function renderDevisRelanceCell(d) {
+  const rel = getDevisRelance(d.id);
+  if (rel) {
+    const color = rel.statut === 'cloture' ? '#6b7280' : '#10b981';
+    const lbl = rel.statut === 'cloture' ? 'Clôturé' : 'Relancé';
+    const note = (rel.note || '').replace(/"/g, '&quot;');
+    return `<span title="${note}" onclick="event.stopPropagation();openRelanceDevis('${d.id}')" style="cursor:pointer;font-size:10px;padding:2px 6px;border-radius:4px;background:${color}22;color:${color};font-weight:600;white-space:nowrap">✓ ${lbl}${rel.date_relance ? ' ' + fmtDateFR(rel.date_relance) : ''}</span>`;
+  }
+  if (isDevisARelancer(d)) {
+    return `<button class="btn" onclick="event.stopPropagation();openRelanceDevis('${d.id}')" style="font-size:10px;padding:2px 8px;background:var(--red);color:#fff;border:none;white-space:nowrap">Relancer</button>`;
+  }
+  return '<span style="color:var(--t3)">—</span>';
+}
+
+// Ouvre la modale de journalisation d'une relance manuelle pour un devis
+function openRelanceDevis(devisId) {
+  const d = DB.devis.find(x => x.id === devisId);
+  if (!d) return;
+  const existing = getDevisRelance(devisId);
+  const today = new Date().toISOString().slice(0, 10);
+  const body = `
+    <div style="font-size:12px;color:var(--t3);margin-bottom:10px">
+      Devis <strong>${d.ref || d.id}</strong> — ${(d.client || '').replace(/</g,'&lt;')} — ${fmt(d.montant)}<br>
+      Émis le ${d.date}${d.date_raw ? ' (il y a ' + joursDepuis(d.date_raw) + ' jours)' : ''}
+    </div>
+    <div class="fg"><label class="fl">Date de la relance</label>
+      <input class="fi" type="date" id="rd-date" value="${existing?.date_relance || today}"></div>
+    <div class="fg"><label class="fl">Résultat</label>
+      <select class="fi" id="rd-statut">
+        <option value="en_attente" ${existing?.statut==='en_attente'?'selected':''}>En attente de réponse</option>
+        <option value="cloture" ${existing?.statut==='cloture'?'selected':''}>Clôturé (sans suite)</option>
+      </select></div>
+    <div class="fg"><label class="fl">Note (canal, échange, prochaine action...)</label>
+      <textarea class="fi" id="rd-note" rows="4" style="resize:vertical" placeholder="Ex : Relance téléphonique, le client revient vers nous semaine prochaine.">${(existing?.note || '').replace(/</g,'&lt;')}</textarea></div>`;
+  const footer = (existing ? '<button class="btn" style="color:var(--red);margin-right:auto" onclick="deleteRelanceDevis(\'' + devisId + '\')">Supprimer le suivi</button>' : '')
+    + '<button class="btn" onclick="closeModal(\'relance-devis\')">Annuler</button>'
+    + '<button class="btn btn-primary" onclick="submitRelanceDevis(\'' + devisId + '\')">Enregistrer la relance</button>';
+  openDynModal('relance-devis', existing ? 'Modifier le suivi de relance' : 'Relancer le devis', body, footer);
+}
+
+async function submitRelanceDevis(devisId) {
+  const d = DB.devis.find(x => x.id === devisId);
+  const statut = document.getElementById('rd-statut').value;
+  const date_relance = document.getElementById('rd-date').value || new Date().toISOString().slice(0, 10);
+  const note = document.getElementById('rd-note').value.trim() || null;
+  const row = {
+    devis_id: devisId,
+    devis_ref: d?.ref || null,
+    client_id: d?.client_id || null,
+    client_name: d?.client || d?.client_name || null,
+    statut, date_relance, note,
+    commercial_id: currentCommercial?.id || null,
+    commercial_nom: currentCommercial?.nom || null,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await sb.from('relances_devis').upsert(row, { onConflict: 'devis_id' }).select();
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  if (data && data[0]) DB.relancesDevis[devisId] = data[0];
+  closeModal('relance-devis');
+  toast('Relance enregistrée', 'success');
+  DB.alerts = generateAlerts();
+  updateNavBadges();
+  renderPage(currentPage);
+}
+
+async function deleteRelanceDevis(devisId) {
+  if (!confirm('Supprimer le suivi de relance de ce devis ? Il réapparaîtra dans la liste « À relancer ».')) return;
+  const { error } = await sb.from('relances_devis').delete().eq('devis_id', devisId);
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  delete DB.relancesDevis[devisId];
+  closeModal('relance-devis');
+  toast('Suivi supprimé', 'success');
+  DB.alerts = generateAlerts();
+  updateNavBadges();
+  renderPage(currentPage);
+}
+
 function renderDevis(filter='all') {
   document._lastFilter = filter;
   const byComm = filterByCommercial(DB.devis);
   const bySociete = filterBySociete(byComm);
   const dated = filterByDateRange(bySociete, devisDateFrom, devisDateTo);
-  const statusFiltered = filter==='all' ? dated : dated.filter(d=>d.statut===filter);
+  const statusFiltered = filter==='all' ? dated : (filter==='relance' ? dated.filter(isDevisARelancer) : dated.filter(d=>d.statut===filter));
   const colFiltered = applyColFilters(statusFiltered, 'devis');
   const filtered = applySorting(colFiltered, 'devis');
   const totalHT = filtered.reduce((a,d) => a + Number(d.montant||0), 0);
@@ -11363,6 +11477,7 @@ function renderDevis(filter='all') {
       <button class="btn ${filter==='accepted'?'active':''}" onclick="filterDevis('accepted')">Acceptés <span style="opacity:.4">${dated.filter(d=>d.statut==='accepted').length}</span></button>
       <button class="btn ${filter==='sent'?'active':''}" onclick="filterDevis('sent')">Envoyés <span style="opacity:.4">${dated.filter(d=>d.statut==='sent').length}</span></button>
       <button class="btn ${filter==='refused'?'active':''}" onclick="filterDevis('refused')">Refusés <span style="opacity:.4">${dated.filter(d=>d.statut==='refused').length}</span></button>
+      ${(() => { const nRel = dated.filter(isDevisARelancer).length; return `<button class="btn ${filter==='relance'?'active':''}" onclick="filterDevis('relance')" title="Devis envoyés sans réponse depuis plus de ${DEVIS_RELANCE_SEUIL_JOURS} jours" style="${nRel?'border-color:var(--red);color:var(--red)':''}">À relancer <span style="opacity:.6;font-weight:700">${nRel}</span></button>`; })()}
       ${renderSocieteFilter(() => filterDevis(filter))}
     </div>
     <div style="display:flex;gap:6px;align-items:center">
@@ -11384,7 +11499,7 @@ function renderDevis(filter='all') {
     <table class="tbl-compact"><colgroup>
       <col class="col-ref"><col class="col-client"><col class="col-sujet">
       <col class="col-montant"><col class="col-date">
-      <col><col><col><col class="col-statut">
+      <col><col><col class="col-statut"><col>
     </colgroup><thead><tr>
       ${sortTh('devis','ref','Réf','filterDevis')}
       ${sortTh('devis','client','Client','filterDevis')}
@@ -11395,8 +11510,9 @@ function renderDevis(filter='all') {
       <th style="font-size:11px">Marché</th>
       <th style="font-size:11px">Affaire</th>
       ${sortTh('devis','statut','Statut','filterDevis')}
+      <th style="font-size:11px">Relance</th>
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis trouvé</td></tr>' : filtered.slice(devisPage*TBL_PAGE_SIZE, (devisPage+1)*TBL_PAGE_SIZE).map(d => `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis trouvé</td></tr>' : filtered.slice(devisPage*TBL_PAGE_SIZE, (devisPage+1)*TBL_PAGE_SIZE).map(d => `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer">
       <td class="mono">${d.ref}</td>
       <td>${d.client}</td>
       <td>${d.sujet||''}</td>
@@ -11406,6 +11522,7 @@ function renderDevis(filter='all') {
       <td>${linkMarche(d.marche_id)}</td>
       <td>${linkAffaire(d.affaire_id)}</td>
       <td>${devisStatusLabel(d.statut)}</td>
+      <td>${renderDevisRelanceCell(d)}</td>
     </tr>`).join('')}</tbody></table>
   ${renderTablePagination(filtered.length, devisPage, 'goDevisPage')}
   </div></div></div>`;
@@ -11811,6 +11928,7 @@ async function showDevisDetail(id) {
       <button class="btn" onclick="go('devis')">← Retour aux devis</button>
       ${d.client_id ? '<button class="btn" onclick="showClient(&#39;'+d.client_id+'&#39;)">← Retour à la fiche '+((d.client||'').replace(/'/g,'&#39;'))+'</button>' : ''}
       ${dAff ? '<button class="btn" onclick="showAffaireDetail(&#39;'+dAff.id+'&#39;)">← Retour à l\'affaire '+(dAff.ref||dAff.nom||dAff.code_projet||'')+'</button>' : ''}
+      <button class="btn" onclick="openRelanceDevis('${d.id}')" style="margin-left:auto;${!getDevisRelance(d.id) && isDevisARelancer(d) ? 'background:var(--red);color:#fff;border:none' : ''}">${getDevisRelance(d.id) ? '✓ Suivi de relance' : 'Relancer ce devis'}</button>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       ${detailSection('Informations générales', [
@@ -11835,6 +11953,23 @@ async function showDevisDetail(id) {
         detailRow('Date signature prévue', d.date_signature_prevue ? fmtDateFR(d.date_signature_prevue) : null),
         detailRow('Date signature réelle', d.date_signature_reelle ? fmtDateFR(d.date_signature_reelle) : null),
       ])}
+      ${(() => {
+        const rel = getDevisRelance(d.id);
+        const rows = [];
+        if (rel) {
+          rows.push(detailRow('État', RELANCE_STATUT_LABELS[rel.statut] || rel.statut));
+          rows.push(detailRow('Date de relance', rel.date_relance ? fmtDateFR(rel.date_relance) : null));
+          rows.push(detailRow('Note', rel.note ? rel.note.replace(/</g,'&lt;').replace(/\n/g,'<br>') : null));
+          rows.push(detailRow('Par', rel.commercial_nom));
+        } else if (isDevisARelancer(d)) {
+          rows.push(detailRow('État', '<span style="color:var(--red);font-weight:600">À relancer</span> — envoyé sans réponse depuis ' + joursDepuis(d.date_raw) + ' jours'));
+        } else if (DEVIS_STATUTS_RELANCABLES.includes(d.statut)) {
+          rows.push(detailRow('État', 'Envoyé il y a ' + joursDepuis(d.date_raw) + ' jours (relance à partir de ' + DEVIS_RELANCE_SEUIL_JOURS + ' jours)'));
+        } else {
+          rows.push(detailRow('État', 'Pas de relance nécessaire (statut : ' + devisStatusLabel(d.statut) + ')'));
+        }
+        return detailSection('Suivi de relance', rows);
+      })()}
       ${detailSection('Organisation', [
         detailRow('Marché', d.marche_id ? (() => { const m = DB.marches.find(x=>x.id===d.marche_id); return m ? '<a href="#" onclick="showMarcheDetail(&#39;'+m.id+'&#39;);return false" style="color:var(--accent)">'+(m.ref||'')+' - '+(m.nom||'')+'</a>' : d.marche_id; })() : null),
         detailRow('Affaire', d.affaire_id ? (() => { const a = DB.affaires.find(x=>x.id===d.affaire_id); return a ? '<a href="#" onclick="showAffaireDetail(&#39;'+a.id+'&#39;);return false" style="color:var(--accent)">'+(a.ref||'')+' - '+(a.nom||'')+'</a>' : d.affaire_id; })() : null),
@@ -17051,6 +17186,17 @@ function readCategorieCompte(prefix) {
   return Object.keys(result).length > 0 ? result : null;
 }
 function closeModal(id) { const el=document.getElementById('modal-'+id); if(el) el.classList.remove('active'); }
+// Modale créée dynamiquement (réutilise le markup et closeModal existants)
+function openDynModal(name, title, bodyHtml, footerHtml) {
+  const mid = 'modal-' + name;
+  let el = document.getElementById(mid);
+  if (!el) { el = document.createElement('div'); el.className = 'modal-overlay'; el.id = mid; document.body.appendChild(el); }
+  el.innerHTML = '<div class="modal" style="max-width:520px">'
+    + '<div class="modal-head"><h3>' + title + '</h3><button class="modal-close" onclick="closeModal(\'' + name + '\')">×</button></div>'
+    + '<div class="modal-body">' + bodyHtml + '</div>'
+    + '<div class="modal-foot">' + footerHtml + '</div></div>';
+  el.classList.add('active');
+}
 // ═══ SEND REPORT ═══
 let sendRecipients = []; // [{id, name, email}]
 let sendSearchTimeout = null;
