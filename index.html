@@ -12617,7 +12617,6 @@ function renderCRList() {
     // ═══ MOBILE : cartes CR ═══
     return `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px">
-      ${renderSocieteFilter(() => { crPage=0; renderPage('cr'); })}
       <select style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1);flex:1"
         onchange="crFilterAuteur=this.value;crPage=0;renderPage('cr')">
         <option value="__mine__" ${crFilterAuteur==='__mine__'?'selected':''}>Mes CR</option>
@@ -12678,7 +12677,6 @@ function renderCRList() {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:10px;align-items:center">
       <div style="font-size:13px;color:var(--t2)">Comptes-rendus</div>
-      ${renderSocieteFilter(() => { crPage=0; renderPage('cr'); })}
       <select style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--bg-1);color:var(--t1)"
         onchange="crFilterAuteur=this.value;crPage=0;renderPage('cr')">
         <option value="__mine__" ${crFilterAuteur==='__mine__'?'selected':''}>Mes CR</option>
