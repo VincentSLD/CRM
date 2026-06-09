@@ -1722,6 +1722,10 @@ tbody tr:last-child td { border-bottom: none; }
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         Tableau de bord
       </div>
+      <div class="nav-item" data-page="analyse" onclick="go('analyse')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M6.5 7.5l4.5 9M17.5 7.5l-4.5 9M7 6h10"/></svg>
+        Analyse / KPI
+      </div>
       <div class="nav-item" data-page="clients" onclick="go('clients')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Clients/Prospects
@@ -4103,7 +4107,7 @@ function go(page) {
   if (page === 'cr') { crViewMode = 'list'; currentReport = null; }
   const navPage = page === 'client-detail' ? 'clients' : page === 'contact-detail' ? 'contacts' : page === 'marche-detail' ? 'marches' : page === 'affaire-detail' ? 'marches' : page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
-  const titles = {dashboard:'Tableau de bord',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing','marches-publics':'Veille marchés publics','procedures-coll':'Veille procédures collectives (BODACC)',pipeline:'Pipeline commercial',carte:'Carte sociétés',
+  const titles = {dashboard:'Tableau de bord',analyse:'Analyse / KPI',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing','marches-publics':'Veille marchés publics','procedures-coll':'Veille procédures collectives (BODACC)',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
     cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',endev:"En Dev'"};
@@ -4163,6 +4167,7 @@ function renderPage(page) {
   const C = document.getElementById('contentArea');
   const renderers = {
     dashboard: renderDashboard,
+    analyse: renderAnalyse,
     clients: renderClients,
     contacts: renderContacts,
     concurrence: renderConcurrence,
@@ -4228,10 +4233,208 @@ function renderPage(page) {
   }
   if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); }, 50);
   if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); }, 50);
+  if (page === 'analyse') setTimeout(initAnalyse, 30);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
   if (page === 'collaborateurs-lucca') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); renderCollaborateursLuccaRefresh(); }, 50);
   if (page === 'annuaire') setTimeout(async () => { await loadAnnuaireAbsences(); renderAnnuaireRefresh(); }, 50);
   if (page === 'cr' && crViewMode === 'send') setTimeout(loadSendGroups, 50);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ANALYSE / KPI — indicateurs + cartographie "qui travaille avec qui"
+// ═══════════════════════════════════════════════════════════
+let anFrom = '', anTo = '';            // plage de dates (date de facture)
+let anAgence = '', anMetier = '';      // filtres
+let _anData = null, _anLoading = false;
+let _anNetwork = null, _anNetFocus = '';
+let _anNetTypes = { client: true, architecte: true, apporteur: true };
+let _visLoading = null;
+
+const _AN_NOISE = ['AUCUN', 'TIERS INCONNU', 'A COMPLETER', 'INDEFINI', 'INDÉFINI', 'NON RENSEIGN'];
+function _anClean(v) { if (!v) return ''; const s = String(v).trim(); const up = s.toUpperCase(); if (!s || _AN_NOISE.some(n => up.includes(n))) return ''; return s; }
+function _anDefaultRange() { const to = new Date(); const from = new Date(); from.setFullYear(from.getFullYear() - 1); return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) }; }
+
+function loadVisNetwork() {
+  if (typeof vis !== 'undefined' && vis.Network) return Promise.resolve();
+  if (_visLoading) return _visLoading;
+  _visLoading = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js';
+    s.onload = res; s.onerror = rej; document.head.appendChild(s);
+  });
+  return _visLoading;
+}
+
+async function loadAnalyseData() {
+  _anLoading = true;
+  await loadApporteurCommMap().catch(() => {});
+  await loadMissionMapping().catch(() => {});
+  const cols = 'id,ref,montant,date,client_id,client_name,apporteur_affaire,architecte,societe,type_prestation,statut';
+  let all = [], off = 0;
+  while (true) {
+    const { data, error } = await sb.from('factures').select(cols).gte('date', anFrom).lte('date', anTo).order('date', { ascending: false }).range(off, off + 999);
+    if (error || !data || !data.length) break;
+    all = all.concat(data);
+    if (data.length < 1000) break;
+    off += 1000;
+  }
+  for (const f of all) {
+    const e = (_clientCommById && f.client_id && _clientCommById[f.client_id]) || (_apporteurCommMap && _apporteurCommMap[_normApporteurName(f.client_name)]) || null;
+    f._novam = (e && e.novam) || '';
+    f._gph = (e && e.gph) || '';
+    f._metier = deriveMetier(f.type_prestation);
+  }
+  _anData = all; _anLoading = false;
+}
+
+function _anFiltered() {
+  let rows = _anData || [];
+  if (anAgence) rows = rows.filter(f => (f.societe || '') === anAgence);
+  if (anMetier) rows = rows.filter(f => f._metier === anMetier);
+  return rows;
+}
+
+function initAnalyse() {
+  if (!anFrom || !anTo) { const r = _anDefaultRange(); anFrom = r.from; anTo = r.to; }
+  if (!_anData && !_anLoading) {
+    loadAnalyseData().then(() => { if (currentPage === 'analyse') renderPage('analyse'); });
+  } else if (_anData) {
+    setTimeout(buildAnalyseNetwork, 60);
+  }
+}
+function anSetDates(from, to) { anFrom = from; anTo = to; _anData = null; _anNetwork = null; renderPage('analyse'); }
+function anSetAgence(v) { anAgence = v; _anNetwork = null; renderPage('analyse'); }
+function anSetMetier(v) { anMetier = v; _anNetwork = null; renderPage('analyse'); }
+function anReset() { const r = _anDefaultRange(); anFrom = r.from; anTo = r.to; anAgence = ''; anMetier = ''; _anNetFocus = ''; _anData = null; _anNetwork = null; renderPage('analyse'); }
+function anToggleNetType(t, on) { _anNetTypes[t] = on; buildAnalyseNetwork(); }
+function anClearFocus() { _anNetFocus = ''; buildAnalyseNetwork(); document.getElementById('anFocusLabel') && (document.getElementById('anFocusLabel').textContent = ''); }
+
+function _anRankCard(title, entries, total, accent) {
+  const top = entries.slice(0, 12);
+  if (!top.length) return `<div class="card"><div class="card-header"><div class="card-title">${title}</div></div><div class="card-body" style="color:var(--t3);font-size:12px;padding:12px">Aucune donnée</div></div>`;
+  const max = top[0][1].ca || 1;
+  return `<div class="card"><div class="card-header"><div class="card-title">${title}</div></div><div class="card-body" style="padding:8px 12px">
+    ${top.map(([k, v]) => { const pct = total ? (v.ca / total * 100) : 0; return `<div style="margin-bottom:7px">
+      <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(k + '').replace(/"/g, '&quot;')}">${k} <span style="color:var(--t3)">(${v.n})</span></span><strong style="white-space:nowrap">${fmt(v.ca)} <span style="color:var(--t3);font-weight:400">${pct.toFixed(0)}%</span></strong></div>
+      <div style="height:6px;background:var(--bg-1);border-radius:3px;overflow:hidden;margin-top:2px"><div style="height:100%;width:${(v.ca / max * 100).toFixed(1)}%;background:${accent || 'var(--accent)'}"></div></div>
+    </div>`; }).join('')}
+  </div></div>`;
+}
+
+function renderAnalyse() {
+  if (!anFrom || !anTo) { const r = _anDefaultRange(); anFrom = r.from; anTo = r.to; }
+  const agences = [...new Set((_anData || []).map(f => f.societe).filter(Boolean))].sort();
+  const filters = `
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px">
+    <strong style="font-size:12px;color:var(--t2)">CA facturé</strong>
+    <label style="font-size:12px;color:var(--t3)">Du</label>
+    <input type="date" value="${anFrom}" onchange="anSetDates(this.value, anTo)" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1)">
+    <label style="font-size:12px;color:var(--t3)">au</label>
+    <input type="date" value="${anTo}" onchange="anSetDates(anFrom, this.value)" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1)">
+    <select onchange="anSetAgence(this.value)" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1)">
+      <option value="">Toutes agences</option>
+      ${agences.map(a => `<option value="${a}" ${anAgence === a ? 'selected' : ''}>${a}</option>`).join('')}
+    </select>
+    <select onchange="anSetMetier(this.value)" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1)">
+      <option value="">Tous métiers</option>
+      <option value="Géotechnique" ${anMetier === 'Géotechnique' ? 'selected' : ''}>Géotechnique</option>
+      <option value="Structure" ${anMetier === 'Structure' ? 'selected' : ''}>Structure</option>
+    </select>
+    <button class="btn" style="font-size:12px" onclick="anReset()">Réinitialiser</button>
+  </div>`;
+
+  if (_anLoading || !_anData) {
+    return filters + `<div style="text-align:center;padding:50px;color:var(--t3)">Chargement des données d'analyse…</div>`;
+  }
+
+  const rows = _anFiltered();
+  const caTotal = rows.reduce((a, f) => a + Number(f.montant || 0), 0);
+  const nbFact = rows.length;
+  const ticket = nbFact ? caTotal / nbFact : 0;
+  const nClients = new Set(rows.map(f => f.client_id || f.client_name).filter(Boolean)).size;
+  const nApp = new Set(rows.map(f => _anClean(f.apporteur_affaire)).filter(Boolean)).size;
+  const nArch = new Set(rows.map(f => _anClean(f.architecte)).filter(Boolean)).size;
+
+  const rk = keyFn => { const m = {}; for (const f of rows) { const k = keyFn(f); if (!k) continue; if (!m[k]) m[k] = { ca: 0, n: 0 }; m[k].ca += Number(f.montant || 0); m[k].n++; } return Object.entries(m).sort((a, b) => b[1].ca - a[1].ca); };
+  const byApp = rk(f => _anClean(f.apporteur_affaire));
+  const byArch = rk(f => _anClean(f.architecte));
+  const byClient = rk(f => f.client_name);
+  const byNovam = rk(f => f._novam);
+  const byGph = rk(f => f._gph);
+  const byMetier = rk(f => f._metier);
+
+  const kpi = (label, val, sub) => `<div class="card"><div class="card-body" style="text-align:center;padding:14px 10px">
+    <div style="font-size:20px;font-weight:800;color:var(--accent)">${val}</div>
+    <div style="font-size:11px;color:var(--t3);margin-top:3px">${label}</div>${sub ? '<div style="font-size:10px;color:var(--t3)">' + sub + '</div>' : ''}</div></div>`;
+  const kpis = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">
+    ${kpi('CA facturé', fmt(caTotal))}
+    ${kpi('Factures', nbFact)}
+    ${kpi('Ticket moyen', fmt(ticket))}
+    ${kpi('Clients facturés', nClients)}
+    ${kpi('Apporteurs', nApp)}
+    ${kpi('Architectes', nArch)}
+  </div>`;
+
+  const rankings = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:18px">
+    ${_anRankCard('CA par apporteur d\'affaire', byApp, caTotal, '#f59e0b')}
+    ${_anRankCard('CA par architecte', byArch, caTotal, '#10b981')}
+    ${_anRankCard('CA par client facturé', byClient, caTotal, '#4f8ff7')}
+    ${_anRankCard('CA par commercial Novam', byNovam, caTotal, '#8b5cf6')}
+    ${_anRankCard('CA par commercial GPH', byGph, caTotal, '#06b6d4')}
+    ${_anRankCard('CA par métier', byMetier, caTotal, '#ef4444')}
+  </div>`;
+
+  const tcb = (t, lbl) => `<label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" ${_anNetTypes[t] ? 'checked' : ''} onchange="anToggleNetType('${t}',this.checked)"> ${lbl}</label>`;
+  const network = `<div class="card"><div class="card-header" style="flex-wrap:wrap;gap:10px">
+      <div class="card-title">Cartographie — qui travaille avec qui</div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        ${tcb('client', '<span style="color:#4f8ff7">●</span> Clients')}
+        ${tcb('architecte', '<span style="color:#10b981">●</span> Architectes')}
+        ${tcb('apporteur', '<span style="color:#f59e0b">●</span> Apporteurs')}
+        <span id="anFocusLabel" style="font-size:11px;color:var(--t3)"></span>
+        <button class="btn" style="font-size:11px;padding:2px 8px" onclick="anClearFocus()">Vue globale</button>
+      </div></div>
+    <div class="card-body" style="padding:0">
+      <div style="font-size:11px;color:var(--t3);padding:6px 12px">Taille des nœuds = CA · épaisseur des liens = CA partagé · cliquez un nœud pour zoomer sur ses partenaires (top 60 affichés).</div>
+      <div id="anNetwork" style="height:560px;background:var(--bg-1);border-top:1px solid var(--border)"></div>
+    </div></div>`;
+
+  return filters + kpis + rankings + network;
+}
+
+function buildAnalyseNetwork() {
+  const el = document.getElementById('anNetwork');
+  if (!el) return;
+  if (typeof vis === 'undefined' || !vis.Network) { el.innerHTML = '<div style="padding:20px;color:var(--t3)">Chargement du graphe…</div>'; loadVisNetwork().then(buildAnalyseNetwork).catch(() => { el.innerHTML = '<div style="padding:20px;color:var(--red)">Impossible de charger la librairie de graphe (réseau requis).</div>'; }); return; }
+  const rows = _anFiltered();
+  const nodeCA = {}, edge = {};
+  const addNode = (type, name, ca) => { if (!name) return null; const id = type + '|' + name; nodeCA[id] = (nodeCA[id] || 0) + ca; return id; };
+  for (const f of rows) {
+    const ca = Number(f.montant || 0);
+    const ids = [];
+    if (_anNetTypes.client) { const id = addNode('client', f.client_name, ca); if (id) ids.push(id); }
+    if (_anNetTypes.architecte) { const a = _anClean(f.architecte); if (a) ids.push(addNode('architecte', a, ca)); }
+    if (_anNetTypes.apporteur) { const a = _anClean(f.apporteur_affaire); if (a) ids.push(addNode('apporteur', a, ca)); }
+    for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) { if (!ids[i] || !ids[j]) continue; const key = [ids[i], ids[j]].sort().join('§'); edge[key] = (edge[key] || 0) + ca; }
+  }
+  let nodeIds = Object.keys(nodeCA);
+  if (_anNetFocus && nodeCA[_anNetFocus]) {
+    const nb = new Set([_anNetFocus]);
+    for (const k in edge) { const [a, b] = k.split('§'); if (a === _anNetFocus) nb.add(b); if (b === _anNetFocus) nb.add(a); }
+    nodeIds = nodeIds.filter(id => nb.has(id));
+    const fl = document.getElementById('anFocusLabel'); if (fl) fl.textContent = 'Focus : ' + _anNetFocus.split('|').slice(1).join('|');
+  } else {
+    nodeIds = nodeIds.sort((a, b) => nodeCA[b] - nodeCA[a]).slice(0, 60);
+  }
+  const keep = new Set(nodeIds);
+  const colors = { client: '#4f8ff7', architecte: '#10b981', apporteur: '#f59e0b' };
+  const nodes = nodeIds.map(id => { const p = id.split('|'); const type = p[0]; const name = p.slice(1).join('|'); return { id, label: name.length > 24 ? name.slice(0, 22) + '…' : name, title: type + ' — ' + name + ' : ' + fmt(nodeCA[id]), color: colors[type] || '#888', value: nodeCA[id], shape: 'dot' }; });
+  const edges = Object.entries(edge).filter(([k]) => { const [a, b] = k.split('§'); return keep.has(a) && keep.has(b); }).map(([k, ca]) => { const [a, b] = k.split('§'); return { from: a, to: b, value: ca, title: 'CA partagé : ' + fmt(ca) }; });
+  const data = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
+  const options = { nodes: { scaling: { min: 6, max: 42 }, font: { size: 12, color: '#888' } }, edges: { scaling: { min: 1, max: 12 }, color: { color: '#9991', highlight: '#4f8ff7' }, smooth: false }, physics: { stabilization: { iterations: 200 }, barnesHut: { gravitationalConstant: -9000, springLength: 130, springConstant: 0.04 } }, interaction: { hover: true, tooltipDelay: 120 } };
+  if (_anNetwork) { try { _anNetwork.destroy(); } catch (e) {} _anNetwork = null; }
+  _anNetwork = new vis.Network(el, data, options);
+  _anNetwork.on('click', params => { if (params.nodes && params.nodes.length) { const n = params.nodes[0]; _anNetFocus = (_anNetFocus === n) ? '' : n; buildAnalyseNetwork(); } });
 }
 
 // ═══════════════════════════════════════════════════════════
