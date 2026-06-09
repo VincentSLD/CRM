@@ -3453,7 +3453,11 @@ async function loadDB() {
       DB.notifications = nAll.map(n => ({ ...n, time: n.time_label }));
       DB.relancesDevis = {};
       for (const r of (relancesAll || [])) { if (r.devis_id) DB.relancesDevis[r.devis_id] = r; }
-      loadApporteurCommMap(); // précharge la correspondance apporteur → commercial (non bloquant)
+      // Précharge la correspondance société → commercial, enrichit les documents, puis rafraîchit si besoin (non bloquant)
+      loadApporteurCommMap().then(() => {
+        _ensureDocsCommercial();
+        if (['devis', 'commandes', 'factures', 'affaires'].includes(currentPage)) renderPage(currentPage);
+      });
       collaborateursLuccaData = luccaAll;
       collaborateursData = akAll;
       _buildCommerciauxLuccaMap();
@@ -7513,6 +7517,7 @@ function renderMarcheDetail() {
 
 // ═══ LISTE DES AFFAIRES ═══
 function renderAffaires() {
+  _ensureDocsCommercial();
   let affaires = filterByCommercial(DB.affaires);
   affaires = filterBySociete(affaires);
   affaires = filterByDateRange(affaires, affairesDateFrom, affairesDateTo);
@@ -7594,6 +7599,9 @@ function renderAffaires() {
       ${sortTh('affaires','code_projet','Code projet','filterAffaires')}
       ${sortTh('affaires','nom','Nom','filterAffaires')}
       ${sortTh('affaires','client_name','Société','filterAffaires')}
+      ${sortTh('affaires','apporteur_affaire','Apporteur','filterAffaires')}
+      ${sortTh('affaires','comm_novam','Comm. Novam','filterAffaires')}
+      ${sortTh('affaires','comm_gph','Comm. GPH','filterAffaires')}
       <th style="font-size:11px">Marché</th>
       ${sortTh('affaires','date_debut','Début','filterAffaires')}
       ${sortTh('affaires','date_fin','Fin','filterAffaires')}
@@ -7604,7 +7612,7 @@ function renderAffaires() {
       ${sortTh('affaires','statut','Statut','filterAffaires')}
       ${sortTh('affaires','agence','Agence','filterAffaires')}
     </tr></thead>
-    <tbody>${affaires.length === 0 ? '<tr><td colspan="12" style="text-align:center;padding:20px;color:var(--t3)">Aucune affaire trouvée</td></tr>' : affaires.slice(affairesPage*TBL_PAGE_SIZE, (affairesPage+1)*TBL_PAGE_SIZE).map(a => {
+    <tbody>${affaires.length === 0 ? '<tr><td colspan="15" style="text-align:center;padding:20px;color:var(--t3)">Aucune affaire trouvée</td></tr>' : affaires.slice(affairesPage*TBL_PAGE_SIZE, (affairesPage+1)*TBL_PAGE_SIZE).map(a => {
       const marche = DB.marches.find(m => m.id === a.marche_id);
       const nbDevis = DB.devis.filter(d => d.affaire_id === a.id).length;
       const nbCmd = DB.commandes.filter(c => c.affaire_id === a.id).length;
@@ -7613,6 +7621,9 @@ function renderAffaires() {
         <td class="mono"><strong>${a.code_projet || '—'}</strong></td>
         <td>${a.nom || '—'}</td>
         <td>${a.client_name || '—'}</td>
+        <td style="font-size:11px">${a.apporteur_affaire || ''}</td>
+        <td style="font-size:11px">${a.comm_novam || ''}</td>
+        <td style="font-size:11px">${a.comm_gph || ''}</td>
         <td>${marche ? '<a href="#" onclick="event.stopPropagation();showMarcheDetail(&#39;'+marche.id+'&#39;)" style="color:var(--accent)">'+(marche.ref || marche.nom || '—')+'</a>' : '—'}</td>
         <td>${a.date_debut ? fmtDateFR(a.date_debut) : '—'}</td>
         <td>${a.date_fin ? fmtDateFR(a.date_fin) : '—'}</td>
@@ -11552,6 +11563,7 @@ async function submitRelanceDevisGroup() {
 
 function renderDevis(filter='all') {
   document._lastFilter = filter;
+  _ensureDocsCommercial();
   const byComm = filterByCommercial(DB.devis);
   const bySociete = filterBySociete(byComm);
   const dated = filterByDateRange(bySociete, devisDateFrom, devisDateTo);
@@ -11600,12 +11612,15 @@ function renderDevis(filter='all') {
       ${sortTh('devis','montant','HT','filterDevis')}
       ${sortTh('devis','date_raw','Date','filterDevis')}
       ${sortTh('devis','societe','Société','filterDevis')}
+      ${sortTh('devis','apporteur_affaire','Apporteur','filterDevis')}
+      ${sortTh('devis','comm_novam','Comm. Novam','filterDevis')}
+      ${sortTh('devis','comm_gph','Comm. GPH','filterDevis')}
       <th style="font-size:11px">Marché</th>
       <th style="font-size:11px">Affaire</th>
       ${sortTh('devis','statut','Statut','filterDevis')}
       <th style="font-size:11px">Relance</th>
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis trouvé</td></tr>' : filtered.slice(devisPage*TBL_PAGE_SIZE, (devisPage+1)*TBL_PAGE_SIZE).map(d => `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="14" style="text-align:center;padding:20px;color:var(--t3)">Aucun devis trouvé</td></tr>' : filtered.slice(devisPage*TBL_PAGE_SIZE, (devisPage+1)*TBL_PAGE_SIZE).map(d => `<tr onclick="showDevisDetail('${d.id}')" style="cursor:pointer">
       <td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="devis-rel-cb" data-id="${d.id}" onclick="toggleDevisRelanceSel('${d.id}',this.checked)" ${_devisRelanceSel.has(d.id)?'checked':''} ${(_devisRelanceSelSoc!==null && _devisSocKey(d)!==_devisRelanceSelSoc)?'disabled':''}></td>
       <td class="mono">${d.ref}</td>
       <td>${d.client}</td>
@@ -11613,6 +11628,9 @@ function renderDevis(filter='all') {
       <td class="mono">${fmt(d.montant)}</td>
       <td>${d.date}</td>
       <td>${d.societe||''}</td>
+      <td style="font-size:11px">${d.apporteur_affaire||''}</td>
+      <td style="font-size:11px">${d.comm_novam||''}</td>
+      <td style="font-size:11px">${d.comm_gph||''}</td>
       <td>${linkMarche(d.marche_id)}</td>
       <td>${linkAffaire(d.affaire_id)}</td>
       <td>${devisStatusLabel(d.statut)}</td>
@@ -11627,6 +11645,7 @@ async function updateDevisStatus(id,s) { await dbUpdate('devis',id,{statut:s}); 
 
 function renderCommandes(filter='all') {
   document._lastFilter = filter;
+  _ensureDocsCommercial();
   const byComm = filterByCommercial(DB.commandes);
   const bySociete = filterBySociete(byComm);
   const dated = filterByDateRange(bySociete, cmdDateFrom, cmdDateTo);
@@ -11673,10 +11692,13 @@ function renderCommandes(filter='all') {
       ${sortTh('commandes','date_raw','Date','filterCmd')}
       ${sortTh('commandes','livraison','Livraison','filterCmd')}
       ${sortTh('commandes','societe','Société','filterCmd')}
+      ${sortTh('commandes','apporteur_affaire','Apporteur','filterCmd')}
+      ${sortTh('commandes','comm_novam','Comm. Novam','filterCmd')}
+      ${sortTh('commandes','comm_gph','Comm. GPH','filterCmd')}
       <th style="font-size:11px">Marché</th>
       ${sortTh('commandes','statut','Statut','filterCmd')}
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--t3)">Aucune commande trouvée</td></tr>' : filtered.slice(cmdPage*TBL_PAGE_SIZE, (cmdPage+1)*TBL_PAGE_SIZE).map(c => { const aff = c.affaire_id ? DB.affaires.find(a => a.id === c.affaire_id) : null; return `<tr onclick="showCommandeDetail('${c.id}')" style="cursor:pointer">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="13" style="text-align:center;padding:20px;color:var(--t3)">Aucune commande trouvée</td></tr>' : filtered.slice(cmdPage*TBL_PAGE_SIZE, (cmdPage+1)*TBL_PAGE_SIZE).map(c => { const aff = c.affaire_id ? DB.affaires.find(a => a.id === c.affaire_id) : null; return `<tr onclick="showCommandeDetail('${c.id}')" style="cursor:pointer">
       <td class="mono"><strong>${aff?.code_projet || '—'}</strong></td>
       <td class="mono">${c.ref}</td>
       <td>${c.client}</td>
@@ -11685,6 +11707,9 @@ function renderCommandes(filter='all') {
       <td>${c.date}</td>
       <td>${c.livraison}</td>
       <td>${c.societe||''}</td>
+      <td style="font-size:11px">${c.apporteur_affaire||''}</td>
+      <td style="font-size:11px">${c.comm_novam||''}</td>
+      <td style="font-size:11px">${c.comm_gph||''}</td>
       <td>${linkMarche(c.marche_id)}</td>
       <td>${cmdStatusLabel(c.statut)}</td>
     </tr>`; }).join('')}</tbody></table>
@@ -11697,6 +11722,7 @@ async function updateCmdStatus(id,s) { await dbUpdate('commandes',id,{statut:s})
 
 function renderFactures(filter='all') {
   document._lastFilter = filter;
+  _ensureDocsCommercial();
   const byComm = filterByCommercial(DB.factures);
   const bySociete = filterBySociete(byComm);
   const dated = filterByDateRange(bySociete, factDateFrom, factDateTo);
@@ -11744,11 +11770,14 @@ function renderFactures(filter='all') {
       ${sortTh('factures','date_raw','Date','filterFact')}
       ${sortTh('factures','date_paiement','Paiement','filterFact')}
       ${sortTh('factures','societe','Société','filterFact')}
+      ${sortTh('factures','apporteur_affaire','Apporteur','filterFact')}
+      ${sortTh('factures','comm_novam','Comm. Novam','filterFact')}
+      ${sortTh('factures','comm_gph','Comm. GPH','filterFact')}
       <th style="font-size:11px">Marché</th>
       <th style="font-size:11px">Affaire</th>
       ${sortTh('factures','statut','Statut','filterFact')}
     </tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="11" style="text-align:center;padding:20px;color:var(--t3)">Aucune facture trouvée</td></tr>' : filtered.slice(factPage*TBL_PAGE_SIZE, (factPage+1)*TBL_PAGE_SIZE).map(f => `<tr onclick="showFactureDetail('${f.id}')" style="cursor:pointer">
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="14" style="text-align:center;padding:20px;color:var(--t3)">Aucune facture trouvée</td></tr>' : filtered.slice(factPage*TBL_PAGE_SIZE, (factPage+1)*TBL_PAGE_SIZE).map(f => `<tr onclick="showFactureDetail('${f.id}')" style="cursor:pointer">
       <td class="mono">${f.ref}</td>
       <td>${f.client}</td>
       <td>${f.type_facture === 'CREDIT' ? '<span style="color:var(--red)">Avoir</span>' : f.type_facture === 'INVOICE' ? 'Facture' : f.type_facture || ''}</td>
@@ -11757,6 +11786,9 @@ function renderFactures(filter='all') {
       <td>${f.date}</td>
       <td>${f.date_paiement ? fmtDateFR(f.date_paiement) : ''}</td>
       <td>${f.societe||''}</td>
+      <td style="font-size:11px">${f.apporteur_affaire||''}</td>
+      <td style="font-size:11px">${f.comm_novam||''}</td>
+      <td style="font-size:11px">${f.comm_gph||''}</td>
       <td>${linkMarche(f.marche_id)}</td>
       <td>${linkAffaire(f.affaire_id)}</td>
       <td>${facStatusLabel(f.statut)}</td>
@@ -11943,15 +11975,16 @@ async function resolveEmployeeNames() {
 // secondaire). On affiche ses commerciaux : Novam, GPH et le Responsable du site
 // (avec repli sur le responsable du siège du même SIREN si l'établissement n'en a pas).
 let _apporteurCommMap = null;       // nom normalisé société -> { novam, gph, resp, respId, siren }
+let _clientCommById = null;         // client_id -> même rec (pour les colonnes Novam/GPH des documents)
 let _apporteurSiegeResp = null;     // siren -> nom du responsable du site du siège
 function _normApporteurName(s) { return (s || '').toString().trim().toUpperCase().replace(/\s+/g, ' '); }
 async function loadApporteurCommMap() {
   if (_apporteurCommMap) return _apporteurCommMap;
-  const map = {}, siegeResp = {};
+  const map = {}, byId = {}, siegeResp = {};
   let off = 0;
   while (true) {
     const { data, error } = await sb.from('clients')
-      .select('name,raison_sociale,account_manager_name,salesman_name,responsable_site_name,responsable_site_id,est_siege,siren')
+      .select('id,name,raison_sociale,account_manager_name,salesman_name,responsable_site_name,responsable_site_id,est_siege,siren')
       .range(off, off + 999);
     if (error || !data || !data.length) break;
     for (const c of data) {
@@ -11962,6 +11995,7 @@ async function loadApporteurCommMap() {
         respId: c.responsable_site_id || null,
         siren: c.siren || null,
       };
+      if (c.id) byId[c.id] = rec;
       for (const k of [_normApporteurName(c.name), _normApporteurName(c.raison_sociale)]) {
         if (k && !map[k]) map[k] = rec;
       }
@@ -11970,8 +12004,24 @@ async function loadApporteurCommMap() {
     if (data.length < 1000) break;
     off += 1000;
   }
-  _apporteurCommMap = map; _apporteurSiegeResp = siegeResp;
+  _apporteurCommMap = map; _clientCommById = byId; _apporteurSiegeResp = siegeResp;
   return _apporteurCommMap;
+}
+
+// Résout le commercial Novam/GPH d'une société (par id puis par nom)
+function _clientCommForDoc(doc) {
+  if (_clientCommById && doc.client_id && _clientCommById[doc.client_id]) return _clientCommById[doc.client_id];
+  if (_apporteurCommMap) return _apporteurCommMap[_normApporteurName(doc.client || doc.client_name)] || null;
+  return null;
+}
+// Attache comm_novam / comm_gph à chaque document pour le tri et le filtre par colonne
+function _ensureDocsCommercial() {
+  if (!_clientCommById && !_apporteurCommMap) return;
+  const apply = d => { const e = _clientCommForDoc(d); d.comm_novam = (e && e.novam) || ''; d.comm_gph = (e && e.gph) || ''; };
+  (DB.devis || []).forEach(apply);
+  (DB.commandes || []).forEach(apply);
+  (DB.factures || []).forEach(apply);
+  (DB.affaires || []).forEach(apply);
 }
 // Libellé du/des commercial(aux) de la société apporteur (null si introuvable)
 function apporteurCommercialLabel(apporteur) {
