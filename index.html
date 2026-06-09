@@ -11939,25 +11939,38 @@ async function resolveEmployeeNames() {
 // ── Commercial de l'apporteur d'affaire ──
 // L'apporteur d'affaire (souvent un cabinet d'architecte) est une société du
 // CRM. On affiche le(s) commercial(aux) de cette société (Novam + GPH).
-let _apporteurCommMap = null; // nom normalisé société -> { novam, gph }
+// L'apporteur peut être n'importe quelle société du CRM (siège OU établissement
+// secondaire). On affiche ses commerciaux : Novam, GPH et le Responsable du site
+// (avec repli sur le responsable du siège du même SIREN si l'établissement n'en a pas).
+let _apporteurCommMap = null;       // nom normalisé société -> { novam, gph, resp, respId, siren }
+let _apporteurSiegeResp = null;     // siren -> nom du responsable du site du siège
 function _normApporteurName(s) { return (s || '').toString().trim().toUpperCase().replace(/\s+/g, ' '); }
 async function loadApporteurCommMap() {
   if (_apporteurCommMap) return _apporteurCommMap;
-  const map = {};
+  const map = {}, siegeResp = {};
   let off = 0;
   while (true) {
-    const { data, error } = await sb.from('clients').select('name,raison_sociale,account_manager_name,salesman_name').range(off, off + 999);
+    const { data, error } = await sb.from('clients')
+      .select('name,raison_sociale,account_manager_name,salesman_name,responsable_site_name,responsable_site_id,est_siege,siren')
+      .range(off, off + 999);
     if (error || !data || !data.length) break;
     for (const c of data) {
-      const v = { novam: c.account_manager_name || null, gph: c.salesman_name || null };
+      const rec = {
+        novam: c.account_manager_name || null,
+        gph: c.salesman_name || null,
+        resp: c.responsable_site_name || null,
+        respId: c.responsable_site_id || null,
+        siren: c.siren || null,
+      };
       for (const k of [_normApporteurName(c.name), _normApporteurName(c.raison_sociale)]) {
-        if (k && !map[k]) map[k] = v;
+        if (k && !map[k]) map[k] = rec;
       }
+      if (c.est_siege === true && c.siren && c.responsable_site_name && !siegeResp[c.siren]) siegeResp[c.siren] = c.responsable_site_name;
     }
     if (data.length < 1000) break;
     off += 1000;
   }
-  _apporteurCommMap = map;
+  _apporteurCommMap = map; _apporteurSiegeResp = siegeResp;
   return _apporteurCommMap;
 }
 // Libellé du/des commercial(aux) de la société apporteur (null si introuvable)
@@ -11965,10 +11978,13 @@ function apporteurCommercialLabel(apporteur) {
   if (!apporteur || !_apporteurCommMap) return null;
   const e = _apporteurCommMap[_normApporteurName(apporteur)];
   if (!e) return null;
+  let resp = e.resp;
+  if (!resp && e.siren && _apporteurSiegeResp) resp = _apporteurSiegeResp[e.siren] || null; // repli sur le siège
   const parts = [];
-  if (e.novam) parts.push(e.novam);
-  if (e.gph && e.gph !== e.novam) parts.push(e.gph);
-  return parts.length ? parts.join(' — ') : null;
+  if (e.novam) parts.push('Novam : ' + e.novam);
+  if (e.gph && e.gph !== e.novam) parts.push('GPH : ' + e.gph);
+  if (resp) parts.push('Resp. site : ' + resp);
+  return parts.length ? parts.join('<br>') : null;
 }
 
 function detailRow(label, value) {
