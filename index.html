@@ -3519,7 +3519,7 @@ function updateNavBadges() {
     navBadgeDevis: filterBySociete(filterByDateRange(filterByCommercial(DB.devis), devisDateFrom, devisDateTo)).length,
     navBadgeCommandes: filterBySociete(filterByDateRange(filterByCommercial(DB.commandes), cmdDateFrom, cmdDateTo)).length,
     navBadgeFactures: filterBySociete(filterByDateRange(filterByCommercial(DB.factures), factDateFrom, factDateTo)).length,
-    navBadgeCR: filterCRBySociete(DB.reports).length,
+    navBadgeCR: (DB.reports || []).length,
     navBadgeAlertes: DB.alerts.length,
     navBadgeCampagnes: _navCampagnesCount || null,
   };
