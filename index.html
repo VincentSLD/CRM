@@ -4485,7 +4485,13 @@ function buildAnalyseNetwork() {
   const keep = new Set(nodeIds);
   const colors = { agence: '#8b5cf6', client: '#4f8ff7', architecte: '#10b981', apporteur: '#f59e0b', gros_oeuvre: '#ec4899' };
   const typeLbl = { agence: 'agence', client: 'client', architecte: 'architecte', apporteur: 'apporteur', gros_oeuvre: 'gros-œuvre' };
-  const nodes = nodeIds.map(id => { const p = id.split('|'); const type = p[0]; const name = p.slice(1).join('|'); return { id, label: name.length > 24 ? name.slice(0, 22) + '…' : name, title: (typeLbl[type] || type) + ' — ' + name + ' : ' + fmt(nodeCA[id]), color: colors[type] || '#888', value: nodeCA[id], shape: type === 'agence' ? 'square' : 'dot' }; });
+  const nodes = nodeIds.map(id => {
+    const p = id.split('|'); const type = p[0]; const name = p.slice(1).join('|');
+    const n = { id, label: name.length > 24 ? name.slice(0, 22) + '…' : name, title: (typeLbl[type] || type) + ' — ' + name + ' : ' + fmt(nodeCA[id]), color: colors[type] || '#888', shape: type === 'agence' ? 'square' : 'dot' };
+    if (type === 'agence') n.size = 10;            // carrés agences : taille fixe réduite
+    else n.value = nodeCA[id];                     // autres nœuds : taille proportionnelle au CA
+    return n;
+  });
   const keptEdges = Object.entries(edge).filter(([k]) => { const [a, b] = k.split('§'); return keep.has(a) && keep.has(b); });
   const maxEdgeCa = keptEdges.reduce((m, [, ca]) => Math.max(m, ca), 0) || 1;
   const edges = keptEdges.map(([k, ca]) => {
