@@ -4249,6 +4249,9 @@ let _anData = null, _anLoading = false;
 let _anNetwork = null, _anNetFocus = '';
 let _anNetTypes = { agence: true, client: true, architecte: true, apporteur: true, gros_oeuvre: false };
 let _visLoading = null;
+// Vue carte par département
+let anMapCommercial = '', anMapClient = '', anMapApporteur = '', anMapArchitecte = '', anMapGO = '';
+let _anMap = null, _anMapLayer = null, _anDeptGeo = null, _anAffaireCP = null;
 
 const _AN_NOISE = ['AUCUN', 'TIERS INCONNU', 'A COMPLETER', 'INDEFINI', 'INDÉFINI', 'NON RENSEIGN'];
 function _anClean(v) { if (!v) return ''; const s = String(v).trim(); const up = s.toUpperCase(); if (!s || _AN_NOISE.some(n => up.includes(n))) return ''; return s; }
@@ -4285,6 +4288,7 @@ function _anEnrich(rows) {
 async function loadAnalyseData() {
   _anLoading = true;
   await loadMissionMapping().catch(() => {});
+  await loadAnAffaireCP().catch(() => {});
   // Pagination keyset (par id) pour éviter les OFFSET profonds (erreur 500).
   // Repli automatique si les colonnes optionnelles (type_prestation / gros_oeuvre) n'existent pas encore.
   const colSets = [
@@ -4327,13 +4331,13 @@ function initAnalyse() {
   if (!_anData && !_anLoading) {
     loadAnalyseData().then(() => { if (currentPage === 'analyse') renderPage('analyse'); });
   } else if (_anData) {
-    setTimeout(buildAnalyseNetwork, 60);
+    setTimeout(() => { buildAnalyseNetwork(); buildAnalyseMap(); }, 60);
   }
 }
-function anSetDates(from, to) { anFrom = from; anTo = to; _anData = null; _anNetwork = null; renderPage('analyse'); }
-function anSetAgence(v) { anAgence = v; _anNetwork = null; renderPage('analyse'); }
-function anSetMetier(v) { anMetier = v; _anNetwork = null; renderPage('analyse'); }
-function anReset() { const r = _anDefaultRange(); anFrom = r.from; anTo = r.to; anAgence = ''; anMetier = ''; _anNetFocus = ''; _anData = null; _anNetwork = null; renderPage('analyse'); }
+function anSetDates(from, to) { anFrom = from; anTo = to; _anData = null; _anNetwork = null; _anMap = null; renderPage('analyse'); }
+function anSetAgence(v) { anAgence = v; _anNetwork = null; _anMap = null; renderPage('analyse'); }
+function anSetMetier(v) { anMetier = v; _anNetwork = null; _anMap = null; renderPage('analyse'); }
+function anReset() { const r = _anDefaultRange(); anFrom = r.from; anTo = r.to; anAgence = ''; anMetier = ''; _anNetFocus = ''; _anData = null; _anNetwork = null; _anMap = null; renderPage('analyse'); }
 function anToggleNetType(t, on) { _anNetTypes[t] = on; buildAnalyseNetwork(); }
 function anClearFocus() { _anNetFocus = ''; buildAnalyseNetwork(); document.getElementById('anFocusLabel') && (document.getElementById('anFocusLabel').textContent = ''); }
 
@@ -4453,7 +4457,124 @@ function renderAnalyse() {
       <div id="anNetwork" style="height:560px;background:var(--bg-1);border-top:1px solid var(--border)"></div>
     </div></div>`;
 
-  return filters + kpis + rankings + network;
+  // ── Vue carte : CA par département, avec filtres (une valeur par dimension) ──
+  const uniq = vals => [...new Set(vals.filter(Boolean))].sort((a, b) => (a + '').localeCompare(b + '', 'fr'));
+  const optCommerciaux = uniq([..._anData.map(f => f._novam), ..._anData.map(f => f._gph)]);
+  const optClients = uniq(_anData.map(f => f.client_name));
+  const optApp = uniq(_anData.map(f => _anClean(f.apporteur_affaire)));
+  const optArch = uniq(_anData.map(f => _anClean(f.architecte)));
+  const optGO = uniq(_anData.map(f => _anClean(f.gros_oeuvre)));
+  const mapSel = (which, cur, label, opts) => `<select onchange="anSetMapFilter('${which}',this.value)" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1);max-width:210px">
+      <option value="">${label} (tous)</option>
+      ${opts.map(o => `<option value="${(o + '').replace(/"/g, '&quot;')}" ${cur === o ? 'selected' : ''}>${o}</option>`).join('')}
+    </select>`;
+  const anyMapFilter = anMapCommercial || anMapClient || anMapApporteur || anMapArchitecte || anMapGO;
+  const mapSection = `<div class="card" style="margin-top:14px"><div class="card-header"><div class="card-title">CA par département</div></div>
+    <div class="card-body" style="padding:0">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px">
+        ${mapSel('commercial', anMapCommercial, 'Commercial', optCommerciaux)}
+        ${mapSel('client', anMapClient, 'Client facturé', optClients)}
+        ${mapSel('apporteur', anMapApporteur, 'Apporteur', optApp)}
+        ${mapSel('architecte', anMapArchitecte, 'Architecte', optArch)}
+        ${mapSel('go', anMapGO, 'Gros-œuvre', optGO)}
+        ${anyMapFilter ? '<button class="btn" style="font-size:11px;padding:2px 8px;color:var(--red)" onclick="anResetMapFilters()">Effacer</button>' : ''}
+      </div>
+      <div style="font-size:11px;color:var(--t3);padding:0 12px 6px">Couleur = CA facturé (clair → bleu foncé). Département déduit du code postal de la facture, sinon de l'affaire, sinon du client.</div>
+      <div id="anMap" style="height:560px;border-top:1px solid var(--border)"></div>
+    </div></div>`;
+
+  return filters + kpis + rankings + network + mapSection;
+}
+
+// ── Carte CA par département ──
+async function loadAnAffaireCP() {
+  if (_anAffaireCP) return _anAffaireCP;
+  const m = {}; let lastId = '';
+  try {
+    while (true) {
+      let q = sb.from('affaires').select('id,code_postal').order('id', { ascending: true }).limit(1000);
+      if (lastId) q = q.gt('id', lastId);
+      const { data, error } = await q;
+      if (error || !data || !data.length) break;
+      for (const a of data) { if (a.code_postal) m[a.id] = a.code_postal; }
+      lastId = data[data.length - 1].id;
+      if (data.length < 1000) break;
+    }
+  } catch (e) { console.warn('[analyse] affaires CP', e); }
+  _anAffaireCP = m; return m;
+}
+// Code département à partir d'un code postal (gère Corse 2A/2B et DOM 97x/98x)
+function _anDept(cp) {
+  if (!cp) return '';
+  const s = String(cp).trim();
+  if (!/^\d{2}/.test(s)) return '';
+  if (s.startsWith('97') || s.startsWith('98')) return s.slice(0, 3);
+  if (s.startsWith('20')) { const n = parseInt(s.slice(0, 3), 10); return n <= 201 ? '2A' : '2B'; }
+  return s.slice(0, 2);
+}
+// Département d'une facture : code postal facture → affaire → client
+function _anFactDept(f) {
+  return _anDept(f.code_postal)
+    || _anDept(_anAffaireCP && _anAffaireCP[f.affaire_id])
+    || _anDept(_clientCommById && f.client_id && _clientCommById[f.client_id] && _clientCommById[f.client_id].cp)
+    || '';
+}
+// Lignes filtrées pour la carte : filtres globaux + filtres carte (une valeur par dimension)
+function _anMapFiltered() {
+  let rows = _anFiltered();
+  if (anMapCommercial) rows = rows.filter(f => f._novam === anMapCommercial || f._gph === anMapCommercial);
+  if (anMapClient) rows = rows.filter(f => f.client_name === anMapClient);
+  if (anMapApporteur) rows = rows.filter(f => _anClean(f.apporteur_affaire) === anMapApporteur);
+  if (anMapArchitecte) rows = rows.filter(f => _anClean(f.architecte) === anMapArchitecte);
+  if (anMapGO) rows = rows.filter(f => _anClean(f.gros_oeuvre) === anMapGO);
+  return rows;
+}
+function anSetMapFilter(which, val) {
+  if (which === 'commercial') anMapCommercial = val;
+  else if (which === 'client') anMapClient = val;
+  else if (which === 'apporteur') anMapApporteur = val;
+  else if (which === 'architecte') anMapArchitecte = val;
+  else if (which === 'go') anMapGO = val;
+  buildAnalyseMap();
+}
+function anResetMapFilters() { anMapCommercial = anMapClient = anMapApporteur = anMapArchitecte = anMapGO = ''; renderPage('analyse'); }
+// Couleur choroplèthe : clair (faible CA) → bleu foncé (CA élevé)
+function _anChoro(t) {
+  t = Math.max(0, Math.min(1, Math.sqrt(t)));
+  const c0 = [239, 246, 255], c1 = [29, 78, 216];
+  const m = (a, b) => Math.round(a + (b - a) * t);
+  return 'rgb(' + m(c0[0], c1[0]) + ',' + m(c0[1], c1[1]) + ',' + m(c0[2], c1[2]) + ')';
+}
+async function buildAnalyseMap() {
+  const el = document.getElementById('anMap');
+  if (!el || typeof L === 'undefined') return;
+  if (!_anMap) {
+    _anMap = L.map('anMap', { zoomControl: true, scrollWheelZoom: true }).setView([46.7, 2.4], 5);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 19, attribution: '© OpenStreetMap, © CARTO' }).addTo(_anMap);
+  }
+  setTimeout(() => { try { _anMap.invalidateSize(); } catch (e) {} }, 60);
+  // Charger le fond GeoJSON des départements une seule fois
+  if (!_anDeptGeo) {
+    try { _anDeptGeo = await fetch('https://cdn.jsdelivr.net/gh/gregoiredavid/france-geojson@master/departements-version-simplifiee.geojson').then(r => r.json()); }
+    catch (e) { el.innerHTML = '<div style="padding:20px;color:var(--red)">Impossible de charger le fond de carte des départements (réseau requis).</div>'; return; }
+  }
+  // Agréger le CA par département
+  const rows = _anMapFiltered();
+  const caByDept = {}; let total = 0;
+  for (const f of rows) { const d = _anFactDept(f); if (!d) continue; const ca = Number(f.montant || 0); caByDept[d] = (caByDept[d] || 0) + ca; total += ca; }
+  const max = Math.max(1, ...Object.values(caByDept));
+  if (_anMapLayer) { try { _anMap.removeLayer(_anMapLayer); } catch (e) {} _anMapLayer = null; }
+  _anMapLayer = L.geoJSON(_anDeptGeo, {
+    style: feat => { const code = feat.properties.code; const ca = caByDept[code] || 0; return { fillColor: ca ? _anChoro(ca / max) : '#f1f5f9', weight: 1, color: '#fff', fillOpacity: ca ? 0.85 : 0.5 }; },
+    onEachFeature: (feat, layer) => {
+      const code = feat.properties.code; const ca = caByDept[code] || 0;
+      layer.bindTooltip('<strong>' + feat.properties.nom + ' (' + code + ')</strong><br>CA : ' + fmt(ca), { sticky: true });
+      layer.on({
+        mouseover: e => e.target.setStyle({ weight: 2, color: '#1d4ed8' }),
+        mouseout: e => _anMapLayer.resetStyle(e.target),
+      });
+    },
+  }).addTo(_anMap);
 }
 
 function buildAnalyseNetwork() {
@@ -12294,7 +12415,7 @@ async function loadApporteurCommMap() {
     try {
       while (true) {
         let q = sb.from('clients')
-          .select('id,name,raison_sociale,account_manager_name,salesman_name,responsable_site_name,responsable_site_id,est_siege,siren')
+          .select('id,name,raison_sociale,account_manager_name,salesman_name,responsable_site_name,responsable_site_id,est_siege,siren,code_postal')
           .order('id', { ascending: true }).limit(1000);
         if (lastId) q = q.gt('id', lastId);
         const { data, error } = await q;
@@ -12307,6 +12428,7 @@ async function loadApporteurCommMap() {
             resp: c.responsable_site_name || null,
             respId: c.responsable_site_id || null,
             siren: c.siren || null,
+            cp: c.code_postal || null,
           };
           if (c.id) byId[c.id] = rec;
           for (const k of [_normApporteurName(c.name), _normApporteurName(c.raison_sociale)]) {
