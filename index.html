@@ -4247,7 +4247,7 @@ let anFrom = '', anTo = '';            // plage de dates (date de facture)
 let anAgence = '', anMetier = '';      // filtres
 let _anData = null, _anLoading = false;
 let _anNetwork = null, _anNetFocus = '';
-let _anNetTypes = { client: true, architecte: true, apporteur: true };
+let _anNetTypes = { agence: true, client: true, architecte: true, apporteur: true, gros_oeuvre: false };
 let _visLoading = null;
 
 const _AN_NOISE = ['AUCUN', 'TIERS INCONNU', 'A COMPLETER', 'INDEFINI', 'INDÉFINI', 'NON RENSEIGN'];
@@ -4285,17 +4285,21 @@ function _anEnrich(rows) {
 async function loadAnalyseData() {
   _anLoading = true;
   await loadMissionMapping().catch(() => {});
-  // Pagination keyset (par id) pour éviter les OFFSET profonds (erreur 500). Repli sans type_prestation si la colonne n'existe pas encore.
-  const fullCols = 'id,ref,montant,date,client_id,client_name,apporteur_affaire,architecte,societe,type_prestation,statut';
-  const baseCols = 'id,ref,montant,date,client_id,client_name,apporteur_affaire,architecte,societe,statut';
-  let cols = fullCols, all = [], lastId = '', firstPage = true;
+  // Pagination keyset (par id) pour éviter les OFFSET profonds (erreur 500).
+  // Repli automatique si les colonnes optionnelles (type_prestation / gros_oeuvre) n'existent pas encore.
+  const colSets = [
+    'id,ref,montant,date,client_id,client_name,apporteur_affaire,architecte,societe,type_prestation,gros_oeuvre,statut',
+    'id,ref,montant,date,client_id,client_name,apporteur_affaire,architecte,societe,type_prestation,statut',
+    'id,ref,montant,date,client_id,client_name,apporteur_affaire,architecte,societe,statut',
+  ];
+  let ci = 0, all = [], lastId = '', firstPage = true;
   try {
     while (true) {
-      let q = sb.from('factures').select(cols).gte('date', anFrom).lte('date', anTo).order('id', { ascending: true }).limit(1000);
+      let q = sb.from('factures').select(colSets[ci]).gte('date', anFrom).lte('date', anTo).order('id', { ascending: true }).limit(1000);
       if (lastId) q = q.gt('id', lastId);
       const { data, error } = await q;
       if (error) {
-        if (firstPage && cols === fullCols) { cols = baseCols; console.warn('[analyse] type_prestation absent, repli sans cette colonne'); continue; }
+        if (firstPage && ci < colSets.length - 1) { ci++; console.warn('[analyse] repli colonnes optionnelles'); continue; }
         console.warn('[analyse] factures', error.message); break;
       }
       if (!data || !data.length) break;
@@ -4430,9 +4434,11 @@ function renderAnalyse() {
   const network = `<div class="card" id="anNetCard"><div class="card-header" style="flex-wrap:wrap;gap:10px">
       <div class="card-title">Cartographie — qui travaille avec qui</div>
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        ${tcb('agence', '<span style="color:#8b5cf6">●</span> Agences')}
         ${tcb('client', '<span style="color:#4f8ff7">●</span> Clients')}
         ${tcb('architecte', '<span style="color:#10b981">●</span> Architectes')}
         ${tcb('apporteur', '<span style="color:#f59e0b">●</span> Apporteurs')}
+        ${tcb('gros_oeuvre', '<span style="color:#ec4899">●</span> Gros-œuvre')}
         <span id="anFocusLabel" style="font-size:11px;color:var(--t3)"></span>
         <button class="btn" style="font-size:11px;padding:2px 8px" onclick="anClearFocus()">Vue globale</button>
         <button class="btn" style="font-size:11px;padding:2px 8px" onclick="toggleAnNetworkFullscreen()" title="Plein écran">⛶ Plein écran</button>
@@ -4460,9 +4466,11 @@ function buildAnalyseNetwork() {
   for (const f of rows) {
     const ca = Number(f.montant || 0);
     const ids = [];
+    if (_anNetTypes.agence) { const v = (f.societe || '').trim(); if (v) ids.push(addNode('agence', v, ca)); }
     if (_anNetTypes.client) { const id = addNode('client', f.client_name, ca); if (id) ids.push(id); }
     if (_anNetTypes.architecte) { const a = _anClean(f.architecte); if (a) ids.push(addNode('architecte', a, ca)); }
     if (_anNetTypes.apporteur) { const a = _anClean(f.apporteur_affaire); if (a) ids.push(addNode('apporteur', a, ca)); }
+    if (_anNetTypes.gros_oeuvre) { const a = _anClean(f.gros_oeuvre); if (a) ids.push(addNode('gros_oeuvre', a, ca)); }
     for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) { if (!ids[i] || !ids[j]) continue; const key = [ids[i], ids[j]].sort().join('§'); edge[key] = (edge[key] || 0) + ca; }
   }
   let nodeIds = Object.keys(nodeCA);
@@ -4475,8 +4483,9 @@ function buildAnalyseNetwork() {
     nodeIds = nodeIds.sort((a, b) => nodeCA[b] - nodeCA[a]).slice(0, 60);
   }
   const keep = new Set(nodeIds);
-  const colors = { client: '#4f8ff7', architecte: '#10b981', apporteur: '#f59e0b' };
-  const nodes = nodeIds.map(id => { const p = id.split('|'); const type = p[0]; const name = p.slice(1).join('|'); return { id, label: name.length > 24 ? name.slice(0, 22) + '…' : name, title: type + ' — ' + name + ' : ' + fmt(nodeCA[id]), color: colors[type] || '#888', value: nodeCA[id], shape: 'dot' }; });
+  const colors = { agence: '#8b5cf6', client: '#4f8ff7', architecte: '#10b981', apporteur: '#f59e0b', gros_oeuvre: '#ec4899' };
+  const typeLbl = { agence: 'agence', client: 'client', architecte: 'architecte', apporteur: 'apporteur', gros_oeuvre: 'gros-œuvre' };
+  const nodes = nodeIds.map(id => { const p = id.split('|'); const type = p[0]; const name = p.slice(1).join('|'); return { id, label: name.length > 24 ? name.slice(0, 22) + '…' : name, title: (typeLbl[type] || type) + ' — ' + name + ' : ' + fmt(nodeCA[id]), color: colors[type] || '#888', value: nodeCA[id], shape: type === 'agence' ? 'square' : 'dot' }; });
   const keptEdges = Object.entries(edge).filter(([k]) => { const [a, b] = k.split('§'); return keep.has(a) && keep.has(b); });
   const maxEdgeCa = keptEdges.reduce((m, [, ca]) => Math.max(m, ca), 0) || 1;
   const edges = keptEdges.map(([k, ca]) => {
@@ -19944,10 +19953,12 @@ async function syncAkuiteo() {
         nb_lignes: Array.isArray(q.lines) ? q.lines.length : 0,
         custom_data: (q.customData && Object.keys(q.customData).length > 0) ? q.customData : null,
         type_prestation: (q.customData && q.customData['1-alpha06'] && q.customData['1-alpha06'].value) || null,
+        gros_oeuvre: (q.customData && q.customData['1-alpha12'] && q.customData['1-alpha12'].value) || null,
       };
-      // Don't overwrite custom_data/type_prestation if null — preserve existing value in Supabase
+      // Don't overwrite custom_data/type_prestation/gros_oeuvre if null — preserve existing value in Supabase
       if (!row.custom_data) delete row.custom_data;
       if (!row.type_prestation) delete row.type_prestation;
+      if (!row.gros_oeuvre) delete row.gros_oeuvre;
       return row;
     });
     for (let i = 0; i < dBatchAll.length; i += 500) {
@@ -19984,10 +19995,12 @@ async function syncAkuiteo() {
         surface_facturee: Array.isArray(o.lines) ? o.lines.reduce((s, l) => s + Number(l.quantity || 0), 0) : null,
         custom_data: (o.customData && Object.keys(o.customData).length > 0) ? o.customData : null,
         type_prestation: (o.customData && o.customData['1-alpha06'] && o.customData['1-alpha06'].value) || null,
+        gros_oeuvre: (o.customData && o.customData['1-alpha12'] && o.customData['1-alpha12'].value) || null,
       };
-      // Don't overwrite custom_data/type_prestation if null — preserve existing value in Supabase
+      // Don't overwrite custom_data/type_prestation/gros_oeuvre if null — preserve existing value in Supabase
       if (!row.custom_data) delete row.custom_data;
       if (!row.type_prestation) delete row.type_prestation;
+      if (!row.gros_oeuvre) delete row.gros_oeuvre;
       return row;
     });
     for (let i = 0; i < cBatchAll.length; i += 500) {
@@ -20023,10 +20036,12 @@ async function syncAkuiteo() {
         nb_lignes: Array.isArray(f.lines) ? f.lines.length : 0, reference1: f.reference1 || null,
         custom_data: (f.customData && Object.keys(f.customData).length > 0) ? f.customData : null,
         type_prestation: (f.customData && f.customData['1-alpha06'] && f.customData['1-alpha06'].value) || null,
+        gros_oeuvre: (f.customData && f.customData['1-alpha12'] && f.customData['1-alpha12'].value) || null,
       };
-      // Don't overwrite custom_data/type_prestation if null — preserve existing value in Supabase
+      // Don't overwrite custom_data/type_prestation/gros_oeuvre if null — preserve existing value in Supabase
       if (!row.custom_data) delete row.custom_data;
       if (!row.type_prestation) delete row.type_prestation;
+      if (!row.gros_oeuvre) delete row.gros_oeuvre;
       return row;
     });
     for (let i = 0; i < fBatchAll.length; i += 500) {
