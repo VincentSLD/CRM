@@ -21780,12 +21780,60 @@ async function pullClientFromAkuiteo(clientId) {
   }
 }
 
+// Référentiel géographique Akuiteo (départements + régions) pour écrire les CODES
+// attendus par l'adresse (address.department = code dept, address.region = code région).
+let _akGeoRef = null;
+function _akNormDept(c) { return String(c == null ? '' : c).trim().toUpperCase().replace(/^0+(?=\d)/, ''); }
+async function loadAkuiteoGeoRef() {
+  if (_akGeoRef) return _akGeoRef;
+  const byNorm = {}, regionByDept = {};
+  try {
+    const search = async path => {
+      try { return await akuiteoFetch('POST', path, { code: { operator: 'LIKE', value: '%' } }); }
+      catch (e) { return await akuiteoFetch('POST', path, {}); }
+    };
+    const [depts, regions] = await Promise.all([
+      search('/settings/geographical-departments/search?limit=500').catch(() => []),
+      search('/settings/regions/search?limit=500').catch(() => []),
+    ]);
+    const regCodeById = {};
+    for (const r of (regions || [])) if (r && r.id != null) regCodeById[String(r.id)] = r.code;
+    for (const d of (depts || [])) {
+      if (!d || d.code == null) continue;
+      const actual = String(d.code).trim();
+      byNorm[_akNormDept(actual)] = actual;
+      if (d.regionId != null && regCodeById[String(d.regionId)] != null) regionByDept[actual] = regCodeById[String(d.regionId)];
+    }
+  } catch (e) { console.warn('[loadAkuiteoGeoRef]', e.message); }
+  _akGeoRef = { byNorm, regionByDept };
+  return _akGeoRef;
+}
+function _deptCodeFromCP(cp) {
+  if (!cp) return '';
+  const s = String(cp).trim();
+  if (!/^\d{2}/.test(s)) return '';
+  if (s.startsWith('97') || s.startsWith('98')) return s.slice(0, 3);
+  if (s.startsWith('20')) { const n = parseInt(s.slice(0, 3), 10); return n <= 201 ? '2A' : '2B'; }
+  return s.slice(0, 2);
+}
+// Renseigne department/region (codes Akuiteo) sur un objet adresse à partir d'un code postal
+function _applyAkGeo(addr, cp) {
+  if (!addr) return;
+  const dc = _deptCodeFromCP(cp);
+  if (!dc) return;
+  const actual = (_akGeoRef && _akGeoRef.byNorm[_akNormDept(dc)]) || dc;
+  addr.department = actual;
+  const rc = _akGeoRef && _akGeoRef.regionByDept[actual];
+  if (rc != null && rc !== '') addr.region = rc;
+}
+
 async function pushClientToAkuiteo(clientId) {
   // Charger les données du client depuis Supabase (pas DB.clients qui est paginé)
   const { data: full } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
   if (!full) { toast('Société non trouvée en base', 'error'); return; }
 
   showSyncLoading(true); setSyncText('Envoi vers Akuiteo...');
+  await loadAkuiteoGeoRef().catch(() => {});
   let customerAkId = full.akuiteo_id;
   try {
     // Pour un update : lire d'abord la fiche Akuiteo existante et merger nos modifications
@@ -21832,6 +21880,8 @@ async function pushClientToAkuiteo(clientId) {
       if (full.fax) akData.address.fax = full.fax;
       if (full.email) akData.address.email = full.email;
       if (full.site_web) akData.address.webSite = full.site_web;
+      // Département / région (codes Akuiteo) — déduits du code postal de la fiche
+      if (full.code_postal) { akData.address.postalCode = full.code_postal; _applyAkGeo(akData.address, full.code_postal); }
     } else {
       // Création : construire de zéro
       akData = {
@@ -21854,6 +21904,8 @@ async function pushClientToAkuiteo(clientId) {
           email: full.email || null,
         },
       };
+      // Département / région (codes Akuiteo) — déduits du code postal
+      _applyAkGeo(akData.address, full.code_postal);
       // Champs Akuiteo (IDs) — Infos Entreprise / Commercial / Tarification
       if (full.mk_categorie_id) akData.categoryId = full.mk_categorie_id;
       if (full.mk_sous_categorie_id) akData.subCategoryId = full.mk_sous_categorie_id;
@@ -21950,6 +22002,7 @@ async function pushClientToAkuiteo(clientId) {
             siteBody.address.city = full.fact_ville || siteBody.address.city || null;
             const pays = full.fact_pays || full.pays || siteBody.address.country || 'FR';
             siteBody.address.country = pays.trim().match(/^[A-Z]{2}$/) ? pays.trim() : 'FR';
+            _applyAkGeo(siteBody.address, full.fact_code_postal || full.code_postal);
             if (full.responsable_site_id) siteBody.managerId = full.responsable_site_id;
             await akuiteoFetch('POST', '/crm/customers/' + customerAkId + '/sites/' + billingSite.id, siteBody, { accept: 'text/plain' });
           }
@@ -22003,6 +22056,7 @@ async function pushClientToAkuiteo(clientId) {
               validUntil: etab.etat_insee === 'C' && etab.date_fermeture ? etab.date_fermeture + 'T00:00:00' : null,
               address: { line1: (etab.adresse_ligne1 || '').substring(0, 38) || null, postalCode: (etab.code_postal || '').substring(0, 10) || null, city: (etab.city || '').substring(0, 38) || null, country: 'FR' },
             };
+            _applyAkGeo(siteBody.address, etab.code_postal);
 
             try {
               if (existingSite) {
