@@ -21827,6 +21827,29 @@ function _applyAkGeo(addr, cp) {
   if (rc != null && rc !== '') addr.region = rc;
 }
 
+// Retrouve l'id d'un référentiel Akuiteo à partir d'un libellé (nom ou code)
+function _akIdFromName(list, name) {
+  if (!name || !Array.isArray(list)) return null;
+  const n = String(name).trim().toLowerCase();
+  const f = list.find(x => String(x.name || '').trim().toLowerCase() === n || String(x.code || '').trim().toLowerCase() === n);
+  return f ? f.id : null;
+}
+// Applique les champs référentiels (catégorie, sous-catégorie, secteur, type, tarif, commerciaux).
+// Si l'id manque côté CRM, on le résout depuis le nom via le référentiel Akuiteo (akRef).
+function _applyAkRefs(akData, full) {
+  const r = (typeof akRef === 'object' && akRef) ? akRef : {};
+  const cat = full.mk_categorie_id || _akIdFromName(r.categories, full.mk_categorie); if (cat) akData.categoryId = cat;
+  const sub = full.mk_sous_categorie_id || _akIdFromName(r.subCategories, full.mk_sous_categorie); if (sub) akData.subCategoryId = sub;
+  const pro = full.mk_categorie_pro_id || _akIdFromName(r.proCats, full.mk_categorie_pro); if (pro) akData.professionalCategoryId = pro;
+  const sec = full.mk_secteur_id || _akIdFromName(r.sectors, full.mk_secteur); if (sec) akData.sectorId = sec;
+  const typ = full.mk_type_id || _akIdFromName(r.linkTypes, full.mk_type); if (typ) akData.thirdPartyLinkTypeId = typ;
+  const pm = full.mode_tarification || _akIdFromName(r.pricingMethods, full.mode_tarification_name); if (pm) akData.firstPricingMethodId = pm;
+  const am = full.account_manager_id || _akIdFromName(r.employees, full.account_manager_name); if (am) akData.accountManagerId = am;
+  const sm = full.salesman_id || _akIdFromName(r.employees, full.salesman_name); if (sm) akData.salesmanId = sm;
+  if (full.mk_groupe) akData.level1grouping = full.mk_groupe;
+  if (full.mk_origine) akData.level2grouping = full.mk_origine;
+}
+
 async function pushClientToAkuiteo(clientId) {
   // Charger les données du client depuis Supabase (pas DB.clients qui est paginé)
   const { data: full } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
@@ -21834,6 +21857,7 @@ async function pushClientToAkuiteo(clientId) {
 
   showSyncLoading(true); setSyncText('Envoi vers Akuiteo...');
   await loadAkuiteoGeoRef().catch(() => {});
+  await loadAkuiteoRefs().catch(() => {});
   let customerAkId = full.akuiteo_id;
   try {
     // Pour un update : lire d'abord la fiche Akuiteo existante et merger nos modifications
@@ -21862,17 +21886,8 @@ async function pushClientToAkuiteo(clientId) {
       if (full.capital) akData.equity = full.capital;
       if (full.effectif) akData.headcount = full.effectif;
       if (full.notes !== undefined) akData.notes = full.notes;
-      // Champs Akuiteo (IDs) — Infos Entreprise / Commercial / Tarification
-      if (full.mk_categorie_id) akData.categoryId = full.mk_categorie_id;
-      if (full.mk_sous_categorie_id) akData.subCategoryId = full.mk_sous_categorie_id;
-      if (full.mk_categorie_pro_id) akData.professionalCategoryId = full.mk_categorie_pro_id;
-      if (full.mk_secteur_id) akData.sectorId = full.mk_secteur_id;
-      if (full.mk_type_id) akData.thirdPartyLinkTypeId = full.mk_type_id;
-      if (full.mode_tarification) akData.firstPricingMethodId = full.mode_tarification;
-      if (full.account_manager_id) akData.accountManagerId = full.account_manager_id;
-      if (full.salesman_id) akData.salesmanId = full.salesman_id;
-      if (full.mk_groupe) akData.level1grouping = full.mk_groupe;
-      if (full.mk_origine) akData.level2grouping = full.mk_origine;
+      // Champs Akuiteo (IDs) — Infos Entreprise / Commercial / Tarification (id, sinon résolu depuis le nom)
+      _applyAkRefs(akData, full);
       // Coordonnées sur la fiche client (pas l'adresse de facturation, qui va sur le site)
       if (full.phone) akData.address.phone = full.phone;
       if (full.telephone2) akData.address.phone2 = full.telephone2;
@@ -21906,17 +21921,8 @@ async function pushClientToAkuiteo(clientId) {
       };
       // Département / région (codes Akuiteo) — déduits du code postal
       _applyAkGeo(akData.address, full.code_postal);
-      // Champs Akuiteo (IDs) — Infos Entreprise / Commercial / Tarification
-      if (full.mk_categorie_id) akData.categoryId = full.mk_categorie_id;
-      if (full.mk_sous_categorie_id) akData.subCategoryId = full.mk_sous_categorie_id;
-      if (full.mk_categorie_pro_id) akData.professionalCategoryId = full.mk_categorie_pro_id;
-      if (full.mk_secteur_id) akData.sectorId = full.mk_secteur_id;
-      if (full.mk_type_id) akData.thirdPartyLinkTypeId = full.mk_type_id;
-      if (full.mode_tarification) akData.firstPricingMethodId = full.mode_tarification;
-      if (full.account_manager_id) akData.accountManagerId = full.account_manager_id;
-      if (full.salesman_id) akData.salesmanId = full.salesman_id;
-      if (full.mk_groupe) akData.level1grouping = full.mk_groupe;
-      if (full.mk_origine) akData.level2grouping = full.mk_origine;
+      // Champs Akuiteo (IDs) — Infos Entreprise / Commercial / Tarification (id, sinon résolu depuis le nom)
+      _applyAkRefs(akData, full);
     }
 
     // Akuiteo limite le code à 10 caractères : on tronque pour éviter T9RuntimeException
@@ -21976,13 +21982,33 @@ async function pushClientToAkuiteo(clientId) {
         }
         throw createErr; // Relancer les autres erreurs
       }
-      if (result) {
-        customerAkId = String(typeof result === 'object' ? result.id || result : result);
+      // Récupérer l'id retourné par Akuiteo (corps text/plain = id, ou objet {id})
+      if (result != null) {
+        const rid = (typeof result === 'object') ? (result.id != null ? result.id : '') : result;
+        const s = String(rid).trim();
+        if (/^\d+$/.test(s)) customerAkId = s;
+      }
+      // Repli : si l'id n'a pas été renvoyé/parsé, on retrouve la fiche dans Akuiteo (par code, puis nom + code postal)
+      if (!customerAkId || customerAkId === full.akuiteo_id) {
+        setSyncText('Récupération de l\'ID Akuiteo...');
+        const clause = v => ({ operator: 'EQUALS', value: v });
+        try {
+          let found = null;
+          if (akData.code) { const r = await akuiteoFetch('POST', '/crm/customers/search?limit=2', { code: clause(akData.code) }).catch(() => null); if (Array.isArray(r) && r.length) found = r[0]; }
+          if (!found && full.name && full.code_postal) { const r = await akuiteoFetch('POST', '/crm/customers/search?limit=5', { name: clause(full.name), postalCode: clause(full.code_postal) }).catch(() => null); if (Array.isArray(r) && r.length) found = r[0]; }
+          if (!found && full.name) { const r = await akuiteoFetch('POST', '/crm/customers/search?limit=5', { name: clause(full.name) }).catch(() => null); if (Array.isArray(r) && r.length === 1) found = r[0]; }
+          if (found && found.id != null) customerAkId = String(found.id);
+        } catch (e) { console.warn('Récupération ID Akuiteo:', e.message); }
+      }
+      if (customerAkId && /^\d+$/.test(customerAkId)) {
         await sb.from('clients').update({ akuiteo_id: customerAkId }).eq('id', clientId);
         await loadDB();
+        if (currentClient && currentClient.id === clientId) { const { data: rf } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle(); if (rf) currentClient = rf; }
         renderPage(currentPage);
+        toast('Client créé dans Akuiteo (ID ' + customerAkId + ')', 'success');
+      } else {
+        toast('Client créé dans Akuiteo, mais ID non récupéré — relancez la synchro pour le rattacher', 'warn');
       }
-      toast('Client créé dans Akuiteo', 'success');
     }
     // --- Mettre à jour l'adresse de facturation sur le site Akuiteo (useForBillingAddress) ---
     if (customerAkId && (full.fact_adresse_ligne1 || full.fact_code_postal || full.fact_ville || full.responsable_site_id)) {
