@@ -4252,6 +4252,15 @@ let _visLoading = null;
 
 const _AN_NOISE = ['AUCUN', 'TIERS INCONNU', 'A COMPLETER', 'INDEFINI', 'INDÉFINI', 'NON RENSEIGN'];
 function _anClean(v) { if (!v) return ''; const s = String(v).trim(); const up = s.toUpperCase(); if (!s || _AN_NOISE.some(n => up.includes(n))) return ''; return s; }
+// Dégradé "chaud" pour l'intensité du CA partagé : 0 = gris clair, 0.5 = orange, 1 = rouge
+function _anHeat(t) {
+  t = Math.max(0, Math.min(1, t));
+  const stops = [[203, 213, 225], [245, 158, 11], [239, 68, 68]];
+  const i = t <= 0.5 ? 0 : 1, lt = t <= 0.5 ? t / 0.5 : (t - 0.5) / 0.5;
+  const c0 = stops[i], c1 = stops[i + 1];
+  const m = (a, b) => Math.round(a + (b - a) * lt);
+  return 'rgb(' + m(c0[0], c1[0]) + ',' + m(c0[1], c1[1]) + ',' + m(c0[2], c1[2]) + ')';
+}
 function _anDefaultRange() { const to = new Date(); const from = new Date(); from.setFullYear(from.getFullYear() - 1); return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) }; }
 
 function loadVisNetwork() {
@@ -4429,7 +4438,12 @@ function renderAnalyse() {
         <button class="btn" style="font-size:11px;padding:2px 8px" onclick="toggleAnNetworkFullscreen()" title="Plein écran">⛶ Plein écran</button>
       </div></div>
     <div class="card-body" style="padding:0">
-      <div style="font-size:11px;color:var(--t3);padding:6px 12px">Taille des nœuds = CA · épaisseur des liens = CA partagé · cliquez un nœud pour zoomer sur ses partenaires (top 60 affichés).</div>
+      <div style="font-size:11px;color:var(--t3);padding:6px 12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+        <span>Taille des nœuds = CA · cliquez un nœud pour zoomer sur ses partenaires (top 60 affichés).</span>
+        <span style="display:inline-flex;align-items:center;gap:6px">CA partagé faible
+          <span style="display:inline-block;width:120px;height:8px;border-radius:4px;background:linear-gradient(90deg,rgb(203,213,225),rgb(245,158,11),rgb(239,68,68))"></span>
+          élevé</span>
+      </div>
       <div id="anNetwork" style="height:560px;background:var(--bg-1);border-top:1px solid var(--border)"></div>
     </div></div>`;
 
@@ -4463,9 +4477,17 @@ function buildAnalyseNetwork() {
   const keep = new Set(nodeIds);
   const colors = { client: '#4f8ff7', architecte: '#10b981', apporteur: '#f59e0b' };
   const nodes = nodeIds.map(id => { const p = id.split('|'); const type = p[0]; const name = p.slice(1).join('|'); return { id, label: name.length > 24 ? name.slice(0, 22) + '…' : name, title: type + ' — ' + name + ' : ' + fmt(nodeCA[id]), color: colors[type] || '#888', value: nodeCA[id], shape: 'dot' }; });
-  const edges = Object.entries(edge).filter(([k]) => { const [a, b] = k.split('§'); return keep.has(a) && keep.has(b); }).map(([k, ca]) => { const [a, b] = k.split('§'); return { from: a, to: b, value: ca, title: 'CA partagé : ' + fmt(ca) }; });
+  const keptEdges = Object.entries(edge).filter(([k]) => { const [a, b] = k.split('§'); return keep.has(a) && keep.has(b); });
+  const maxEdgeCa = keptEdges.reduce((m, [, ca]) => Math.max(m, ca), 0) || 1;
+  const edges = keptEdges.map(([k, ca]) => {
+    const [a, b] = k.split('§');
+    const t = Math.min(1, ca / maxEdgeCa);              // intensité 0..1 du CA partagé
+    const width = 1 + Math.pow(t, 0.6) * 13;            // épaisseur : fin → très épais
+    const col = _anHeat(t);                             // couleur : gris clair → orange → rouge
+    return { from: a, to: b, width, color: { color: col, opacity: 0.3 + 0.65 * t, highlight: '#1d4ed8', hover: '#1d4ed8' }, title: 'CA partagé : ' + fmt(ca) };
+  });
   const data = { nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges) };
-  const options = { nodes: { scaling: { min: 6, max: 42 }, font: { size: 12, color: '#888' } }, edges: { scaling: { min: 1, max: 12 }, color: { color: '#9991', highlight: '#4f8ff7' }, smooth: false }, physics: { stabilization: { iterations: 200 }, barnesHut: { gravitationalConstant: -9000, springLength: 130, springConstant: 0.04 } }, interaction: { hover: true, tooltipDelay: 120 } };
+  const options = { nodes: { scaling: { min: 6, max: 42 }, font: { size: 12, color: '#888' } }, edges: { smooth: false }, physics: { stabilization: { iterations: 200 }, barnesHut: { gravitationalConstant: -9000, springLength: 130, springConstant: 0.04 } }, interaction: { hover: true, tooltipDelay: 120 } };
   if (_anNetwork) { try { _anNetwork.destroy(); } catch (e) {} _anNetwork = null; }
   _anNetwork = new vis.Network(el, data, options);
   _anNetwork.on('click', params => { if (params.nodes && params.nodes.length) { const n = params.nodes[0]; _anNetFocus = (_anNetFocus === n) ? '' : n; buildAnalyseNetwork(); } });
