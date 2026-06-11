@@ -4354,7 +4354,7 @@ function _anOnFsChange() {
   const card = document.getElementById('anNetCard'), net = document.getElementById('anNetwork');
   if (!net) return;
   const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
-  if (fsEl === card) { card.style.background = 'var(--card)'; card.style.display = 'flex'; card.style.flexDirection = 'column'; net.style.height = (window.innerHeight - 110) + 'px'; }
+  if (fsEl === card) { card.style.background = 'var(--bg-1, #ffffff)'; card.style.display = 'flex'; card.style.flexDirection = 'column'; net.style.height = (window.innerHeight - 110) + 'px'; }
   else { card.style.display = ''; card.style.flexDirection = ''; net.style.height = '560px'; }
   if (_anNetwork) { try { _anNetwork.setSize('100%', net.style.height); _anNetwork.redraw(); _anNetwork.fit(); } catch (e) {} }
 }
@@ -15370,8 +15370,8 @@ function toggleImportSiretFullscreen() {
 function _impOnFs() {
   const m = document.querySelector('#modal-import-siret .modal'); if (!m) return;
   const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
-  if (fsEl === m) { m.style.maxWidth = '100vw'; m.style.width = '100vw'; m.style.height = '100vh'; m.style.background = 'var(--card)'; m.style.overflow = 'auto'; }
-  else { m.style.maxWidth = '96vw'; m.style.width = ''; m.style.height = ''; m.style.overflow = ''; }
+  if (fsEl === m) { m.style.maxWidth = '100vw'; m.style.width = '100vw'; m.style.height = '100vh'; m.style.background = 'var(--bg-1, #ffffff)'; m.style.overflow = 'auto'; }
+  else { m.style.maxWidth = '96vw'; m.style.width = ''; m.style.height = ''; m.style.background = ''; m.style.overflow = ''; }
 }
 async function impSiretLoad(input) {
   const file = input.files && input.files[0]; if (!file) return;
