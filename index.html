@@ -15352,9 +15352,26 @@ function _siretCleanValide(raw) {
 let _impSiret = { rows: [], applicable: [] };
 function openImportSiret() {
   const body = '<div style="font-size:12px;color:var(--t3);margin-bottom:8px">Fichier Excel (.xlsx) avec les colonnes <strong>Code</strong> (= code Codial) et <strong>SIRET VALIDES</strong>. La correspondance et la validité sont vérifiées avant toute écriture.</div>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'
     + '<input type="file" accept=".xlsx" id="impSiretFile" onchange="impSiretLoad(this)" style="font-size:12px">'
+    + '<button class="btn" onclick="toggleImportSiretFullscreen()" title="Plein écran" style="font-size:12px">⛶ Plein écran</button>'
+    + '</div>'
     + '<div id="impSiretResults" style="margin-top:12px"></div>';
   openDynModal('import-siret', 'Import SIRET — vérification avant écriture', body, '<button class="btn" onclick="closeModal(\'import-siret\')">Fermer</button>', '96vw');
+}
+let _impFsBound = false;
+function toggleImportSiretFullscreen() {
+  const m = document.querySelector('#modal-import-siret .modal'); if (!m) return;
+  if (!_impFsBound) { document.addEventListener('fullscreenchange', _impOnFs); document.addEventListener('webkitfullscreenchange', _impOnFs); _impFsBound = true; }
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (!fsEl) { (m.requestFullscreen || m.webkitRequestFullscreen || (() => {})).call(m); }
+  else { (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document); }
+}
+function _impOnFs() {
+  const m = document.querySelector('#modal-import-siret .modal'); if (!m) return;
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (fsEl === m) { m.style.maxWidth = '100vw'; m.style.width = '100vw'; m.style.height = '100vh'; m.style.background = 'var(--card)'; m.style.overflow = 'auto'; }
+  else { m.style.maxWidth = '96vw'; m.style.width = ''; m.style.height = ''; m.style.overflow = ''; }
 }
 async function impSiretLoad(input) {
   const file = input.files && input.files[0]; if (!file) return;
@@ -15366,13 +15383,14 @@ async function impSiretLoad(input) {
     const codeCol = findCol(['code'], 3);
     const siretCol = findCol(['siret valides', 'siret'], 23);
     const nameCol = findCol(['nom officiel', 'nom codial', 'nom'], 7);
+    const adresseCol = findCol(['adr. ligne 1', 'adresse', 'adr ligne 1'], 8);
     const cpCol = findCol(['c.p.', 'cp', 'code postal'], 10);
     const villeCol = findCol(['ville'], 11);
     const fileRows = []; const codesSet = new Set();
     for (let r = 1; r < rows.length; r++) {
       const code = String(rows[r][codeCol] || '').trim(); if (!code) continue;
       fileRows.push({ code, raw: String(rows[r][siretCol] == null ? '' : rows[r][siretCol]).replace(/\s/g, ''), siret: _siretCleanValide(rows[r][siretCol]),
-        name: String(rows[r][nameCol] || '').trim(), cp: String(rows[r][cpCol] || '').trim(), ville: String(rows[r][villeCol] || '').trim(), colA: String(rows[r][0] || '').trim() });
+        name: String(rows[r][nameCol] || '').trim(), adresse: String(rows[r][adresseCol] || '').trim(), cp: String(rows[r][cpCol] || '').trim(), ville: String(rows[r][villeCol] || '').trim(), colA: String(rows[r][0] || '').trim() });
       codesSet.add(code);
     }
     // Chargement de TOUS les clients (keyset) pour une correspondance normalisée et multi-champs
@@ -15402,7 +15420,7 @@ async function impSiretLoad(input) {
       if (!c) { c = byCode[k]; field = 'code'; }
       if (!c) { c = byLegacy[k]; field = 'legacy_id'; }
       if (c) { if (field === 'code_codial') mCodial++; else if (field === 'code') mCode++; else mLeg++; }
-      return { code: fr.code, colA: fr.colA, fileSiret: fr.siret, raw: fr.raw, name: fr.name, cp: fr.cp, ville: fr.ville, clientId: c ? c.id : null, clientName: c ? c.name : null, currentSiret: c ? (c.siret || '') : '', matchField: c ? field : null, apiSiret: null, apiScore: null };
+      return { code: fr.code, colA: fr.colA, fileSiret: fr.siret, raw: fr.raw, name: fr.name, adresse: fr.adresse, cp: fr.cp, ville: fr.ville, clientId: c ? c.id : null, clientName: c ? c.name : null, currentSiret: c ? (c.siret || '') : '', matchField: c ? field : null, apiSiret: null, apiScore: null };
     });
     _impSiret.matchInfo = { nClients, mCodial, mCode, mLeg };
     console.log('[import SIRET] clients=' + nClients + ' | match code_codial=' + mCodial + ' code=' + mCode + ' legacy_id=' + mLeg);
@@ -15443,6 +15461,9 @@ function renderImpSiretTable() {
       + '<td style="padding:3px 6px;font-family:monospace">' + _impEsc(r.code) + '</td>'
       + '<td style="padding:3px 6px;font-size:11px">' + stBadge[st] + '</td>'
       + '<td style="padding:3px 6px">' + (r.clientName ? _impEsc(r.clientName) : '<span style="color:var(--t3)">—</span>') + '</td>'
+      + '<td style="padding:3px 6px;font-size:11px">' + _impEsc(r.adresse) + '</td>'
+      + '<td style="padding:3px 6px;font-family:monospace">' + _impEsc(r.cp) + '</td>'
+      + '<td style="padding:3px 6px;font-size:11px">' + _impEsc(r.ville) + '</td>'
       + '<td style="padding:3px 6px;font-family:monospace;color:var(--t3)">' + (_impEsc(r.currentSiret) || '—') + '</td>'
       + '<td style="padding:3px 6px;font-family:monospace">' + (r.fileSiret ? '<span style="color:#10b981">' + _impEsc(r.fileSiret) + '</span>' : '<span style="color:#ef4444" title="' + _impEsc(r.raw) + '">invalide</span>') + '</td>'
       + '<td style="padding:3px 6px" id="impapi_' + i + '">' + impApiCellHtml(r, i) + '</td></tr>';
@@ -15456,7 +15477,7 @@ function renderImpSiretTable() {
     + '<option value="">Tous les statuts</option><option value="a_ecrire">À écrire</option><option value="deja">Déjà OK</option><option value="non_trouve">Non trouvé</option><option value="siret_invalide">SIRET invalide</option></select>'
     + '</div>'
     + '<div style="max-height:70vh;overflow:auto"><table id="impSiretTable" style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--bg-1);position:sticky;top:0">'
-    + '<th></th><th style="padding:4px 6px" title="Colonne A du fichier">A</th><th style="padding:4px 6px;text-align:left">Code</th><th style="padding:4px 6px;text-align:left">Statut</th><th style="padding:4px 6px;text-align:left">Société CRM</th><th style="padding:4px 6px;text-align:left">SIRET actuel</th><th style="padding:4px 6px;text-align:left">→ SIRET fichier</th><th style="padding:4px 6px;text-align:left">Proposition API</th>'
+    + '<th></th><th style="padding:4px 6px" title="Colonne A du fichier">A</th><th style="padding:4px 6px;text-align:left">Code</th><th style="padding:4px 6px;text-align:left">Statut</th><th style="padding:4px 6px;text-align:left">Société CRM</th><th style="padding:4px 6px;text-align:left">Adresse</th><th style="padding:4px 6px;text-align:left">CP</th><th style="padding:4px 6px;text-align:left">Ville</th><th style="padding:4px 6px;text-align:left">SIRET actuel</th><th style="padding:4px 6px;text-align:left">→ SIRET fichier</th><th style="padding:4px 6px;text-align:left">Proposition API</th>'
     + '</tr></thead><tbody>' + trs + '</tbody></table></div>';
 }
 function impSiretFilter() {
@@ -15475,7 +15496,8 @@ async function impSiretApiCheck(i) {
   try {
     const q = (r.name || r.clientName || '').trim();
     if (!q) { r.apiChecked = true; r.apiSiret = ''; if (td) td.innerHTML = '<span style="color:var(--t3);font-size:10px">nom manquant</span>'; return; }
-    const params = new URLSearchParams({ q, per_page: '5' });
+    // On enrichit la requête avec la ville (aide au ciblage) et on filtre par code postal
+    const params = new URLSearchParams({ q: q + (r.ville ? ' ' + r.ville : ''), per_page: '5' });
     if (r.cp) params.set('code_postal', r.cp);
     const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + params);
     const d = resp.ok ? await resp.json() : {};
