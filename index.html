@@ -15302,6 +15302,133 @@ async function showLuccaAbsences(luccaId, fullName) {
 }
 
 // ═══ ALERTES ═══
+// ═══ IMPORT SIRET (Excel) — vérification puis mise à jour par code Codial ═══
+async function _inflateRaw(u8) {
+  const ds = new DecompressionStream('deflate-raw');
+  const stream = new Response(new Blob([u8])).body.pipeThrough(ds);
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+// Lit un .xlsx (ZIP de XML) en s'appuyant sur DecompressionStream du navigateur. Renvoie sheet1 en tableau 2D.
+async function _parseXlsx(ab) {
+  const buf = new Uint8Array(ab), dv = new DataView(ab), td = new TextDecoder('utf-8');
+  let eocd = -1;
+  for (let i = buf.length - 22; i >= 0; i--) { if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; } }
+  if (eocd < 0) throw new Error('Format Excel non reconnu');
+  const cdOff = dv.getUint32(eocd + 16, true), cdCount = dv.getUint16(eocd + 10, true);
+  const E = {}; let p = cdOff;
+  for (let i = 0; i < cdCount; i++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true);
+    const nlen = dv.getUint16(p + 28, true), elen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true);
+    const lho = dv.getUint32(p + 42, true);
+    const name = td.decode(buf.subarray(p + 46, p + 46 + nlen));
+    E[name] = { method, csize, lho }; p = p + 46 + nlen + elen + clen;
+  }
+  async function ex(n) {
+    const e = E[n]; if (!e) return null;
+    const lnlen = dv.getUint16(e.lho + 26, true), lelen = dv.getUint16(e.lho + 28, true);
+    const start = e.lho + 30 + lnlen + lelen, data = buf.subarray(start, start + e.csize);
+    return e.method === 0 ? data : await _inflateRaw(data);
+  }
+  const ssBuf = await ex('xl/sharedStrings.xml'); const sst = [];
+  if (ssBuf) { const ss = td.decode(ssBuf); const si = /<si>([\s\S]*?)<\/si>/g; let m; while ((m = si.exec(ss))) { let t = ''; const tr = /<t[^>]*>([\s\S]*?)<\/t>/g; let tm; while ((tm = tr.exec(m[1]))) t += tm[1]; sst.push(t.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')); } }
+  const sheet = td.decode(await ex('xl/worksheets/sheet1.xml'));
+  const colNum = r => { const a = r.match(/^([A-Z]+)/)[1]; let n = 0; for (const ch of a) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; };
+  const rows = []; const rr = /<row[^>]*>([\s\S]*?)<\/row>/g; let rm;
+  while ((rm = rr.exec(sheet))) {
+    const cells = []; const cr = /<c r="([A-Z]+\d+)"([^>]*)>([\s\S]*?)<\/c>/g; let cm;
+    while ((cm = cr.exec(rm[1]))) { const ci = colNum(cm[1]); const isS = /t="s"/.test(cm[2]); const v = cm[3].match(/<v>([\s\S]*?)<\/v>/); let val = ''; if (v) val = isS ? (sst[+v[1]] || '') : v[1]; else { const im = cm[3].match(/<t[^>]*>([\s\S]*?)<\/t>/); if (im) val = im[1]; } cells[ci] = val; }
+    rows.push(cells);
+  }
+  return rows;
+}
+// Normalise un SIRET (récupère les zéros de tête perdus par Excel) ; null si invalide
+function _siretCleanValide(raw) {
+  let s = String(raw == null ? '' : raw).replace(/\D/g, '');
+  if (/^\d{14}$/.test(s) && _siretValide(s)) return s;
+  if (s.length > 0 && s.length < 14) { const pad = s.padStart(14, '0'); if (_siretValide(pad)) return pad; }
+  return null;
+}
+let _impSiret = { rows: [], applicable: [] };
+function openImportSiret() {
+  const body = '<div style="font-size:12px;color:var(--t3);margin-bottom:8px">Fichier Excel (.xlsx) avec les colonnes <strong>Code</strong> (= code Codial) et <strong>SIRET VALIDES</strong>. La correspondance et la validité sont vérifiées avant toute écriture.</div>'
+    + '<input type="file" accept=".xlsx" id="impSiretFile" onchange="impSiretLoad(this)" style="font-size:12px">'
+    + '<div id="impSiretResults" style="margin-top:12px"></div>';
+  openDynModal('import-siret', 'Import SIRET — vérification avant écriture', body, '<button class="btn" onclick="closeModal(\'import-siret\')">Fermer</button>', '920px');
+}
+async function impSiretLoad(input) {
+  const file = input.files && input.files[0]; if (!file) return;
+  const el = document.getElementById('impSiretResults'); el.innerHTML = 'Lecture du fichier…';
+  try {
+    const rows = await _parseXlsx(await file.arrayBuffer());
+    const hdr = rows[0] || [];
+    let codeCol = hdr.findIndex(h => String(h || '').trim().toLowerCase() === 'code');
+    let siretCol = hdr.findIndex(h => String(h || '').trim().toUpperCase() === 'SIRET VALIDES');
+    if (codeCol < 0) codeCol = 3; if (siretCol < 0) siretCol = 23;
+    const fileRows = []; const codesSet = new Set();
+    for (let r = 1; r < rows.length; r++) {
+      const code = String(rows[r][codeCol] || '').trim(); if (!code) continue;
+      fileRows.push({ code, raw: String(rows[r][siretCol] == null ? '' : rows[r][siretCol]).replace(/\s/g, ''), siret: _siretCleanValide(rows[r][siretCol]) });
+      codesSet.add(code);
+    }
+    el.innerHTML = 'Recherche des sociétés (code Codial) — ' + codesSet.size + ' codes…';
+    const codes = [...codesSet], crmByCode = {};
+    for (let i = 0; i < codes.length; i += 200) {
+      const { data } = await sb.from('clients').select('id,name,code_codial,siret').in('code_codial', codes.slice(i, i + 200));
+      for (const c of (data || [])) crmByCode[c.code_codial] = c;
+    }
+    _impSiret.rows = fileRows.map(fr => { const c = crmByCode[fr.code]; return { code: fr.code, fileSiret: fr.siret, raw: fr.raw, clientId: c ? c.id : null, clientName: c ? c.name : null, currentSiret: c ? (c.siret || '') : '' }; });
+    renderImpSiretTable();
+  } catch (e) { console.error('impSiretLoad', e); el.innerHTML = '<div style="color:var(--red)">Erreur de lecture : ' + e.message + '</div>'; }
+}
+function renderImpSiretTable() {
+  const rows = _impSiret.rows;
+  const applicable = rows.filter(r => r.clientId && r.fileSiret && r.fileSiret !== r.currentSiret);
+  const dejaOk = rows.filter(r => r.clientId && r.fileSiret && r.fileSiret === r.currentSiret);
+  const invalides = rows.filter(r => r.clientId && !r.fileSiret);
+  const nonTrouves = rows.filter(r => !r.clientId);
+  _impSiret.applicable = applicable;
+  const esc = s => String(s == null ? '' : s).replace(/</g, '&lt;');
+  const summary = '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-bottom:10px">'
+    + '<span><strong>' + rows.length + '</strong> lignes</span>'
+    + '<span style="color:#10b981"><strong>' + applicable.length + '</strong> à écrire</span>'
+    + '<span style="color:var(--t3)"><strong>' + dejaOk.length + '</strong> déjà à jour</span>'
+    + '<span style="color:#f59e0b"><strong>' + nonTrouves.length + '</strong> code non trouvé</span>'
+    + '<span style="color:#ef4444"><strong>' + invalides.length + '</strong> SIRET invalide</span></div>';
+  const tableRows = applicable.map((r, i) => '<tr style="border-bottom:1px solid var(--border)">'
+    + '<td style="padding:4px 6px;text-align:center"><input type="checkbox" class="imp-siret-cb" data-idx="' + i + '" checked></td>'
+    + '<td style="padding:4px 6px;font-family:monospace">' + esc(r.code) + '</td>'
+    + '<td style="padding:4px 6px">' + esc(r.clientName) + '</td>'
+    + '<td style="padding:4px 6px;font-family:monospace;color:var(--t3)">' + (esc(r.currentSiret) || '—') + '</td>'
+    + '<td style="padding:4px 6px;font-family:monospace;color:#10b981">' + esc(r.fileSiret) + '</td></tr>').join('');
+  const detail = (title, color, list, withName) => list.length ? '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;color:' + color + '">' + title + ' (' + list.length + ')</summary>'
+    + '<div style="max-height:180px;overflow:auto;font-size:11px;margin-top:4px">' + list.slice(0, 500).map(r => esc(r.code) + (withName && r.clientName ? ' — ' + esc(r.clientName) : '') + ' : ' + esc(r.raw || '(vide)')).join('<br>') + '</div></details>' : '';
+  document.getElementById('impSiretResults').innerHTML = summary
+    + (applicable.length ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><button class="btn btn-primary" style="font-size:12px" onclick="impSiretApply()">✔ Écrire le SIRET + SIREN (' + applicable.length + ')</button>'
+      + '<label style="font-size:11px;color:var(--t3)"><input type="checkbox" checked onchange="document.querySelectorAll(&quot;.imp-siret-cb&quot;).forEach(c=>c.checked=this.checked)"> tout cocher</label></div>'
+      + '<div style="max-height:42vh;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--bg-1)"><th></th><th style="padding:4px 6px;text-align:left">Code</th><th style="padding:4px 6px;text-align:left">Société CRM</th><th style="padding:4px 6px;text-align:left">SIRET actuel</th><th style="padding:4px 6px;text-align:left">→ SIRET fichier</th></tr></thead><tbody>' + tableRows + '</tbody></table></div>' : '<div style="color:var(--t3);font-size:12px">Aucune mise à jour à appliquer.</div>')
+    + detail('🟠 Codes non trouvés dans le CRM', '#f59e0b', nonTrouves, false)
+    + detail('🔴 SIRET invalides (à corriger dans le fichier)', '#ef4444', invalides, true);
+}
+async function impSiretApply() {
+  const checks = [...document.querySelectorAll('.imp-siret-cb:checked')];
+  if (!checks.length) { toast('Aucune ligne cochée', 'warn'); return; }
+  if (!confirm('Écrire le SIRET + SIREN pour ' + checks.length + ' société(s) ?')) return;
+  showSyncLoading(true);
+  let done = 0, err = 0;
+  for (let i = 0; i < checks.length; i++) {
+    const r = _impSiret.applicable[+checks[i].dataset.idx]; if (!r) continue;
+    setSyncText('Mise à jour ' + (i + 1) + ' / ' + checks.length + '…');
+    const { error } = await sb.from('clients').update({ siret: r.fileSiret, siren: r.fileSiret.slice(0, 9) }).eq('id', r.clientId);
+    if (error) { err++; console.warn('update siret', r.code, error.message); } else done++;
+  }
+  showSyncLoading(false);
+  toast(done + ' SIRET/SIREN mis à jour' + (err ? ', ' + err + ' erreur(s)' : ''), err ? 'warn' : 'success');
+  closeModal('import-siret');
+  await loadDB();
+  renderPage(currentPage);
+}
+
 function renderAdmin() {
   const isAdmin = !currentCommercial || currentCommercial.role === 'admin';
   if (!isAdmin) {
@@ -15309,6 +15436,14 @@ function renderAdmin() {
   }
   return `
   <div style="margin-bottom:16px;font-size:13px;color:var(--t2)">Administration</div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><div class="card-title">Import SIRET (Excel) — mise à jour par Code Codial</div></div>
+    <div class="card-body" style="font-size:13px;color:var(--t3)">
+      Importez un fichier Excel (colonnes <strong>Code</strong> = code Codial et <strong>SIRET VALIDES</strong>). L'outil vérifie la correspondance SIRET ↔ société et la validité (Luhn) <strong>avant</strong> d'écrire.
+      <div style="margin-top:10px"><button class="btn btn-primary" onclick="openImportSiret()" style="font-size:12px">Ouvrir l'outil d'import SIRET</button></div>
+    </div>
+  </div>
 
   <div class="card" style="margin-bottom:16px">
     <div class="card-header"><div class="card-title">Demandes d'accès au CRM</div></div>
@@ -17934,11 +18069,11 @@ function readCategorieCompte(prefix) {
 }
 function closeModal(id) { const el=document.getElementById('modal-'+id); if(el) el.classList.remove('active'); }
 // Modale créée dynamiquement (réutilise le markup et closeModal existants)
-function openDynModal(name, title, bodyHtml, footerHtml) {
+function openDynModal(name, title, bodyHtml, footerHtml, maxWidth) {
   const mid = 'modal-' + name;
   let el = document.getElementById(mid);
   if (!el) { el = document.createElement('div'); el.className = 'modal-overlay'; el.id = mid; document.body.appendChild(el); }
-  el.innerHTML = '<div class="modal" style="max-width:520px">'
+  el.innerHTML = '<div class="modal" style="max-width:' + (maxWidth || '520px') + '">'
     + '<div class="modal-head"><h3>' + title + '</h3><button class="modal-close" onclick="closeModal(\'' + name + '\')">×</button></div>'
     + '<div class="modal-body">' + bodyHtml + '</div>'
     + '<div class="modal-foot">' + footerHtml + '</div></div>';
