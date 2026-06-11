@@ -15447,7 +15447,8 @@ function impApiCellHtml(r, i) {
   const col = match ? '#10b981' : (r.apiScore >= 60 ? '#10b981' : r.apiScore >= 40 ? '#f59e0b' : '#ef4444');
   const useBtn = (r.clientId && r.apiSiret && r.apiSiret !== r.currentSiret) ? ' <button class="btn" style="font-size:9px;padding:0 5px;color:var(--accent)" onclick="impSiretUseApi(' + i + ')" title="Écrire ce SIRET dans la fiche">Utiliser</button>' : '';
   const pappers = ' <a href="https://www.pappers.fr/entreprise/' + r.apiSiret.slice(0, 9) + '" target="_blank" rel="noopener" style="color:#3b82f6;font-size:10px;text-decoration:none" title="Vérifier sur Pappers">↗Pappers</a>';
-  return '<div style="font-family:monospace;color:' + col + '">' + r.apiSiret + (match ? ' ✓' : '') + pappers + useBtn + '</div>'
+  const choix = (r.apiCands && r.apiCands.length > 1) ? ' <button class="btn" style="font-size:9px;padding:0 5px" onclick="impSiretApiChoices(' + i + ')" title="Voir les autres propositions">▾ ' + r.apiCands.length + '</button>' : '';
+  return '<div style="font-family:monospace;color:' + col + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + r.apiSiret + (match ? ' ✓' : '') + pappers + choix + useBtn + '</div>'
     + '<div style="font-size:10px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + _impEsc(r.apiName || '') + '">' + _impEsc((r.apiName || '').slice(0, 30)) + ' · ' + _impEsc(r.apiCp || '') + ' · score ' + r.apiScore + '</div>';
 }
 function renderImpSiretTable() {
@@ -15470,7 +15471,7 @@ function renderImpSiretTable() {
     const fileSiretCell = r.fileSiret
       ? '<span style="color:#10b981">' + _impEsc(r.fileSiret) + '</span> <a href="https://www.pappers.fr/entreprise/' + r.fileSiret.slice(0, 9) + '" target="_blank" rel="noopener" style="color:#3b82f6;font-size:10px;text-decoration:none" title="Vérifier sur Pappers">↗</a>'
       : '<span style="color:#ef4444" title="' + _impEsc(r.raw) + '">invalide</span>';
-    return '<tr data-st="' + st + '" data-q="' + _impEsc(q) + '" style="border-bottom:1px solid var(--border)">'
+    return '<tr id="improw_' + i + '" data-st="' + st + '" data-q="' + _impEsc(q) + '" style="border-bottom:1px solid var(--border)">'
       + '<td style="padding:2px 4px;text-align:center">' + chk + '</td>'
       + '<td style="padding:2px 4px;text-align:center;font-weight:600;color:var(--t2)">' + _impEsc(r.colA) + '</td>'
       + '<td style="padding:2px 4px;font-family:monospace;' + ell + '" title="' + _impEsc(r.code) + '">' + _impEsc(r.code) + '</td>'
@@ -15514,17 +15515,47 @@ async function impSiretApiCheck(i) {
     const q = (r.name || r.clientName || '').trim();
     if (!q) { r.apiChecked = true; r.apiSiret = ''; if (td) td.innerHTML = '<span style="color:var(--t3);font-size:10px">nom manquant</span>'; return; }
     // On enrichit la requête avec la ville (aide au ciblage) et on filtre par code postal
-    const params = new URLSearchParams({ q: q + (r.ville ? ' ' + r.ville : ''), per_page: '5' });
+    const params = new URLSearchParams({ q: q + (r.ville ? ' ' + r.ville : ''), per_page: '10' });
     if (r.cp) params.set('code_postal', r.cp);
     const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + params);
     const d = resp.ok ? await resp.json() : {};
-    const cands = (d.results || []).map(x => ({ x, score: _esScore({ name: q, code_postal: r.cp, city: r.ville }, x) })).sort((a, b) => b.score - a.score);
-    r.apiChecked = true;
+    const cands = (d.results || []).map(x => { const s = x.siege || {}; return { siret: s.siret || '', siren: x.siren || '', nom: x.nom_complet || x.nom_raison_sociale || '', cp: s.code_postal || '', ville: s.libelle_commune || '', etat: x.etat_administratif || s.etat_administratif || '', ape: s.activite_principale || x.activite_principale || '', score: _esScore({ name: q, code_postal: r.cp, city: r.ville }, x) }; }).sort((a, b) => b.score - a.score);
+    r.apiChecked = true; r.apiCands = cands;
     if (!cands.length) { r.apiSiret = ''; if (td) td.innerHTML = impApiCellHtml(r, i); return; }
-    const best = cands[0], s = best.x.siege || {};
-    r.apiSiret = s.siret || ''; r.apiScore = best.score; r.apiName = best.x.nom_complet || best.x.nom_raison_sociale || ''; r.apiCp = s.code_postal || '';
+    const b = cands[0]; r.apiSiret = b.siret; r.apiScore = b.score; r.apiName = b.nom; r.apiCp = b.cp;
     if (td) td.innerHTML = impApiCellHtml(r, i);
   } catch (e) { r.apiChecked = true; r.apiSiret = ''; if (td) td.innerHTML = '<span style="color:var(--red);font-size:10px">erreur</span> <button class="btn" style="font-size:9px;padding:0 4px" onclick="impSiretApiCheck(' + i + ')">↻</button>'; }
+}
+// Affiche/masque la liste des propositions API (candidats) sous la ligne
+function impSiretApiChoices(i) {
+  const r = _impSiret.rows[i]; if (!r || !r.apiCands) return;
+  const row = document.getElementById('improw_' + i); if (!row) return;
+  const nxt = row.nextElementSibling;
+  if (nxt && nxt.classList.contains('imp-exp')) { nxt.remove(); return; }
+  document.querySelectorAll('#impSiretTable tbody tr.imp-exp').forEach(e => e.remove());
+  const cells = r.apiCands.map((c, k) => {
+    const col = c.score >= 60 ? '#10b981' : c.score >= 40 ? '#f59e0b' : '#ef4444';
+    const sel = c.siret && c.siret === r.apiSiret;
+    return '<div style="display:flex;gap:8px;align-items:center;padding:3px 0;border-bottom:1px solid var(--border)' + (sel ? ';background:rgba(16,185,129,.08)' : '') + '">'
+      + '<span style="width:34px;text-align:right;color:' + col + ';font-weight:600">' + c.score + '</span>'
+      + '<span style="font-family:monospace;width:130px">' + (c.siret || '—') + '</span>'
+      + '<a href="https://www.pappers.fr/entreprise/' + (c.siren || (c.siret || '').slice(0, 9)) + '" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:none" title="Pappers">↗</a>'
+      + '<span style="flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + _impEsc(c.nom) + '">' + _impEsc(c.nom) + '</span>'
+      + '<span style="width:150px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _impEsc((c.cp + ' ' + c.ville).trim()) + '</span>'
+      + '<span style="width:46px;color:' + (c.etat === 'A' ? '#10b981' : '#ef4444') + '">' + (c.etat === 'A' ? 'Actif' : (c.etat ? 'Fermé' : '')) + '</span>'
+      + (r.clientId && c.siret ? '<button class="btn" style="font-size:10px;padding:1px 8px" onclick="impSiretUseApiCand(' + i + ',' + k + ')">Utiliser</button>' : '')
+      + '</div>';
+  }).join('');
+  const tr = document.createElement('tr'); tr.className = 'imp-exp';
+  tr.innerHTML = '<td colspan="11" style="padding:6px 12px;background:var(--bg-0)"><div style="font-size:11px;color:var(--t3);margin-bottom:4px">Propositions API pour « ' + _impEsc(r.name || r.clientName || '') + ' » (' + r.apiCands.length + ') — score · SIRET · société · localité · état :</div>' + cells + '</td>';
+  row.after(tr);
+}
+// Choisit un candidat de la liste et l'écrit dans la fiche
+function impSiretUseApiCand(i, k) {
+  const r = _impSiret.rows[i]; const c = r && r.apiCands && r.apiCands[k]; if (!c) return;
+  r.apiSiret = c.siret; r.apiScore = c.score; r.apiName = c.nom; r.apiCp = c.cp;
+  const row = document.getElementById('improw_' + i); const nxt = row && row.nextElementSibling; if (nxt && nxt.classList.contains('imp-exp')) nxt.remove();
+  impSiretUseApi(i);
 }
 let _impApiRunning = false;
 async function impSiretApiCheckAll() {
