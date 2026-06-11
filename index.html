@@ -15342,6 +15342,8 @@ async function _parseXlsx(ab) {
   }
   return rows;
 }
+// Normalise un code postal (5 chiffres ; récupère le zéro de tête perdu par Excel) ; '' si invalide
+function _cleanCP(v) { let s = String(v == null ? '' : v).replace(/\D/g, ''); if (s.length === 4) s = '0' + s; return /^\d{5}$/.test(s) ? s : ''; }
 // Normalise un SIRET (récupère les zéros de tête perdus par Excel) ; null si invalide
 function _siretCleanValide(raw) {
   let s = String(raw == null ? '' : raw).replace(/\D/g, '');
@@ -15384,13 +15386,16 @@ async function impSiretLoad(input) {
     const siretCol = findCol(['siret valides', 'siret'], 23);
     const nameCol = findCol(['nom officiel', 'nom codial', 'nom'], 7);
     const adresseCol = findCol(['adr. ligne 1', 'adresse', 'adr ligne 1'], 8);
+    const adr2Col = findCol(['adr. ligne 2', 'adr ligne 2'], 9);
     const cpCol = findCol(['c.p.', 'cp', 'code postal'], 10);
     const villeCol = findCol(['ville'], 11);
     const fileRows = []; const codesSet = new Set();
     for (let r = 1; r < rows.length; r++) {
       const code = String(rows[r][codeCol] || '').trim(); if (!code) continue;
+      // CP : colonne dédiée, sinon récupéré depuis "Adr. Ligne 2" si c'est un CP
+      const fileCp = _cleanCP(rows[r][cpCol]) || _cleanCP(rows[r][adr2Col]);
       fileRows.push({ code, raw: String(rows[r][siretCol] == null ? '' : rows[r][siretCol]).replace(/\s/g, ''), siret: _siretCleanValide(rows[r][siretCol]),
-        name: String(rows[r][nameCol] || '').trim(), adresse: String(rows[r][adresseCol] || '').trim(), cp: String(rows[r][cpCol] || '').trim(), ville: String(rows[r][villeCol] || '').trim(), colA: String(rows[r][0] || '').trim() });
+        name: String(rows[r][nameCol] || '').trim(), adresse: String(rows[r][adresseCol] || '').trim(), cp: fileCp, ville: String(rows[r][villeCol] || '').trim(), colA: String(rows[r][0] || '').trim() });
       codesSet.add(code);
     }
     // Chargement de TOUS les clients (keyset) pour une correspondance normalisée et multi-champs
@@ -15399,7 +15404,7 @@ async function impSiretLoad(input) {
     const byCodial = {}, byCode = {}, byLegacy = {};
     let lastId = '', nClients = 0;
     while (true) {
-      let q = sb.from('clients').select('id,name,code_codial,code,legacy_id,siret').order('id', { ascending: true }).limit(1000);
+      let q = sb.from('clients').select('id,name,code_codial,code,legacy_id,siret,code_postal,city').order('id', { ascending: true }).limit(1000);
       if (lastId) q = q.gt('id', lastId);
       const { data, error } = await q;
       if (error) { console.warn('[import SIRET] chargement clients', error.message); break; }
@@ -15420,7 +15425,12 @@ async function impSiretLoad(input) {
       if (!c) { c = byCode[k]; field = 'code'; }
       if (!c) { c = byLegacy[k]; field = 'legacy_id'; }
       if (c) { if (field === 'code_codial') mCodial++; else if (field === 'code') mCode++; else mLeg++; }
-      return { code: fr.code, colA: fr.colA, fileSiret: fr.siret, raw: fr.raw, name: fr.name, adresse: fr.adresse, cp: fr.cp, ville: fr.ville, clientId: c ? c.id : null, clientName: c ? c.name : null, currentSiret: c ? (c.siret || '') : '', matchField: c ? field : null, apiSiret: null, apiScore: null };
+      // CP : valeur du fichier, sinon repli sur le code postal de la fiche CRM
+      const crmCP = c ? (c.code_postal || '') : '';
+      const cp = fr.cp || crmCP;
+      const cpSource = fr.cp ? 'fichier' : (crmCP ? 'CRM' : '');
+      const ville = fr.ville || (c ? (c.city || '') : '');
+      return { code: fr.code, colA: fr.colA, fileSiret: fr.siret, raw: fr.raw, name: fr.name, adresse: fr.adresse, cp, cpSource, ville, clientId: c ? c.id : null, clientName: c ? c.name : null, currentSiret: c ? (c.siret || '') : '', matchField: c ? field : null, apiSiret: null, apiScore: null };
     });
     _impSiret.matchInfo = { nClients, mCodial, mCode, mLeg };
     console.log('[import SIRET] clients=' + nClients + ' | match code_codial=' + mCodial + ' code=' + mCode + ' legacy_id=' + mLeg);
@@ -15462,7 +15472,7 @@ function renderImpSiretTable() {
       + '<td style="padding:3px 6px;font-size:11px">' + stBadge[st] + '</td>'
       + '<td style="padding:3px 6px">' + (r.clientName ? _impEsc(r.clientName) : '<span style="color:var(--t3)">—</span>') + '</td>'
       + '<td style="padding:3px 6px;font-size:11px">' + _impEsc(r.adresse) + '</td>'
-      + '<td style="padding:3px 6px;font-family:monospace">' + _impEsc(r.cp) + '</td>'
+      + '<td style="padding:3px 6px;font-family:monospace">' + (_impEsc(r.cp) || '<span style="color:var(--t3)">—</span>') + (r.cpSource === 'CRM' ? ' <span style="font-size:9px;color:var(--accent)">CRM</span>' : '') + '</td>'
       + '<td style="padding:3px 6px;font-size:11px">' + _impEsc(r.ville) + '</td>'
       + '<td style="padding:3px 6px;font-family:monospace;color:var(--t3)">' + (_impEsc(r.currentSiret) || '—') + '</td>'
       + '<td style="padding:3px 6px;font-family:monospace">' + (r.fileSiret ? '<span style="color:#10b981">' + _impEsc(r.fileSiret) + '</span>' : '<span style="color:#ef4444" title="' + _impEsc(r.raw) + '">invalide</span>') + '</td>'
