@@ -15446,8 +15446,9 @@ function impApiCellHtml(r, i) {
   const match = r.apiSiret === r.fileSiret;
   const col = match ? '#10b981' : (r.apiScore >= 60 ? '#10b981' : r.apiScore >= 40 ? '#f59e0b' : '#ef4444');
   const useBtn = (r.clientId && r.apiSiret && r.apiSiret !== r.currentSiret) ? ' <button class="btn" style="font-size:9px;padding:0 5px;color:var(--accent)" onclick="impSiretUseApi(' + i + ')" title="Écrire ce SIRET dans la fiche">Utiliser</button>' : '';
-  return '<div style="font-family:monospace;color:' + col + '">' + r.apiSiret + (match ? ' ✓=' : '') + useBtn + '</div>'
-    + '<div style="font-size:10px;color:var(--t3)">' + _impEsc((r.apiName || '').slice(0, 26)) + ' · ' + _impEsc(r.apiCp || '') + ' · score ' + r.apiScore + '</div>';
+  const pappers = ' <a href="https://www.pappers.fr/entreprise/' + r.apiSiret.slice(0, 9) + '" target="_blank" rel="noopener" style="color:#3b82f6;font-size:10px;text-decoration:none" title="Vérifier sur Pappers">↗Pappers</a>';
+  return '<div style="font-family:monospace;color:' + col + '">' + r.apiSiret + (match ? ' ✓' : '') + pappers + useBtn + '</div>'
+    + '<div style="font-size:10px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + _impEsc(r.apiName || '') + '">' + _impEsc((r.apiName || '').slice(0, 30)) + ' · ' + _impEsc(r.apiCp || '') + ' · score ' + r.apiScore + '</div>';
 }
 function renderImpSiretTable() {
   const rows = _impSiret.rows;
@@ -15465,18 +15466,22 @@ function renderImpSiretTable() {
     const st = _impSiretStatus(r);
     const chk = st === 'a_ecrire' ? '<input type="checkbox" class="imp-siret-cb" data-idx="' + i + '" checked>' : '';
     const q = (r.code + ' ' + (r.clientName || '') + ' ' + (r.name || '')).toLowerCase();
+    const ell = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    const fileSiretCell = r.fileSiret
+      ? '<span style="color:#10b981">' + _impEsc(r.fileSiret) + '</span> <a href="https://www.pappers.fr/entreprise/' + r.fileSiret.slice(0, 9) + '" target="_blank" rel="noopener" style="color:#3b82f6;font-size:10px;text-decoration:none" title="Vérifier sur Pappers">↗</a>'
+      : '<span style="color:#ef4444" title="' + _impEsc(r.raw) + '">invalide</span>';
     return '<tr data-st="' + st + '" data-q="' + _impEsc(q) + '" style="border-bottom:1px solid var(--border)">'
-      + '<td style="padding:3px 6px;text-align:center">' + chk + '</td>'
-      + '<td style="padding:3px 6px;text-align:center;font-weight:600;color:var(--t2)">' + _impEsc(r.colA) + '</td>'
-      + '<td style="padding:3px 6px;font-family:monospace">' + _impEsc(r.code) + '</td>'
-      + '<td style="padding:3px 6px;font-size:11px">' + stBadge[st] + '</td>'
-      + '<td style="padding:3px 6px">' + (r.clientName ? _impEsc(r.clientName) : '<span style="color:var(--t3)">—</span>') + '</td>'
-      + '<td style="padding:3px 6px;font-size:11px">' + _impEsc(r.adresse) + '</td>'
-      + '<td style="padding:3px 6px;font-family:monospace">' + (_impEsc(r.cp) || '<span style="color:var(--t3)">—</span>') + (r.cpSource === 'CRM' ? ' <span style="font-size:9px;color:var(--accent)">CRM</span>' : '') + '</td>'
-      + '<td style="padding:3px 6px;font-size:11px">' + _impEsc(r.ville) + '</td>'
-      + '<td style="padding:3px 6px;font-family:monospace;color:var(--t3)">' + (_impEsc(r.currentSiret) || '—') + '</td>'
-      + '<td style="padding:3px 6px;font-family:monospace">' + (r.fileSiret ? '<span style="color:#10b981">' + _impEsc(r.fileSiret) + '</span>' : '<span style="color:#ef4444" title="' + _impEsc(r.raw) + '">invalide</span>') + '</td>'
-      + '<td style="padding:3px 6px" id="impapi_' + i + '">' + impApiCellHtml(r, i) + '</td></tr>';
+      + '<td style="padding:2px 4px;text-align:center">' + chk + '</td>'
+      + '<td style="padding:2px 4px;text-align:center;font-weight:600;color:var(--t2)">' + _impEsc(r.colA) + '</td>'
+      + '<td style="padding:2px 4px;font-family:monospace;' + ell + '" title="' + _impEsc(r.code) + '">' + _impEsc(r.code) + '</td>'
+      + '<td style="padding:2px 4px;font-size:11px">' + stBadge[st] + '</td>'
+      + '<td style="padding:2px 4px;' + ell + '" title="' + _impEsc(r.clientName || '') + '">' + (r.clientName ? _impEsc(r.clientName) : '<span style="color:var(--t3)">—</span>') + '</td>'
+      + '<td style="padding:2px 4px;font-size:11px;' + ell + '" title="' + _impEsc(r.adresse) + '">' + _impEsc(r.adresse) + '</td>'
+      + '<td style="padding:2px 4px;font-family:monospace">' + (_impEsc(r.cp) || '<span style="color:var(--t3)">—</span>') + (r.cpSource === 'CRM' ? ' <span style="font-size:9px;color:var(--accent)">CRM</span>' : '') + '</td>'
+      + '<td style="padding:2px 4px;font-size:11px;' + ell + '" title="' + _impEsc(r.ville) + '">' + _impEsc(r.ville) + '</td>'
+      + '<td style="padding:2px 4px;font-family:monospace;color:var(--t3);' + ell + '">' + (_impEsc(r.currentSiret) || '—') + '</td>'
+      + '<td style="padding:2px 4px;font-family:monospace;' + ell + '">' + fileSiretCell + '</td>'
+      + '<td style="padding:2px 4px;' + ell + '" id="impapi_' + i + '">' + impApiCellHtml(r, i) + '</td></tr>';
   }).join('');
   document.getElementById('impSiretResults').innerHTML = summary
     + '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">'
@@ -15486,7 +15491,9 @@ function renderImpSiretTable() {
     + '<select id="impSiretStatusFilter" onchange="impSiretFilter()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg-1);color:var(--t1)">'
     + '<option value="">Tous les statuts</option><option value="a_ecrire">À écrire</option><option value="deja">Déjà OK</option><option value="non_trouve">Non trouvé</option><option value="siret_invalide">SIRET invalide</option></select>'
     + '</div>'
-    + '<div style="max-height:70vh;overflow:auto"><table id="impSiretTable" style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--bg-1);position:sticky;top:0">'
+    + '<div style="max-height:70vh;overflow:auto"><table id="impSiretTable" style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed">'
+    + '<colgroup><col style="width:26px"><col style="width:24px"><col style="width:80px"><col style="width:70px"><col><col><col style="width:58px"><col style="width:100px"><col style="width:112px"><col style="width:120px"><col style="width:210px"></colgroup>'
+    + '<thead><tr style="background:var(--bg-1);position:sticky;top:0">'
     + '<th></th><th style="padding:4px 6px" title="Colonne A du fichier">A</th><th style="padding:4px 6px;text-align:left">Code</th><th style="padding:4px 6px;text-align:left">Statut</th><th style="padding:4px 6px;text-align:left">Société CRM</th><th style="padding:4px 6px;text-align:left">Adresse</th><th style="padding:4px 6px;text-align:left">CP</th><th style="padding:4px 6px;text-align:left">Ville</th><th style="padding:4px 6px;text-align:left">SIRET actuel</th><th style="padding:4px 6px;text-align:left">→ SIRET fichier</th><th style="padding:4px 6px;text-align:left">Proposition API</th>'
     + '</tr></thead><tbody>' + trs + '</tbody></table></div>';
 }
