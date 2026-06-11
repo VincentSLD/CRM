@@ -15336,8 +15336,8 @@ async function _parseXlsx(ab) {
   const colNum = r => { const a = r.match(/^([A-Z]+)/)[1]; let n = 0; for (const ch of a) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; };
   const rows = []; const rr = /<row[^>]*>([\s\S]*?)<\/row>/g; let rm;
   while ((rm = rr.exec(sheet))) {
-    const cells = []; const cr = /<c r="([A-Z]+\d+)"([^>]*)>([\s\S]*?)<\/c>/g; let cm;
-    while ((cm = cr.exec(rm[1]))) { const ci = colNum(cm[1]); const isS = /t="s"/.test(cm[2]); const v = cm[3].match(/<v>([\s\S]*?)<\/v>/); let val = ''; if (v) val = isS ? (sst[+v[1]] || '') : v[1]; else { const im = cm[3].match(/<t[^>]*>([\s\S]*?)<\/t>/); if (im) val = im[1]; } cells[ci] = val; }
+    const cells = []; const cr = /<c\s+r="([A-Z]+\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g; let cm;
+    while ((cm = cr.exec(rm[1]))) { const ci = colNum(cm[1]); const isS = /t="s"/.test(cm[2]); const inner = cm[3] || ''; const v = inner.match(/<v>([\s\S]*?)<\/v>/); let val = ''; if (v) val = isS ? (sst[+v[1]] || '') : v[1]; else { const im = inner.match(/<t[^>]*>([\s\S]*?)<\/t>/); if (im) val = im[1]; } cells[ci] = val; }
     rows.push(cells);
   }
   return rows;
