@@ -7082,7 +7082,8 @@ async function syncSitesVersAkuiteo() {
       else siteBody = { customerId: c.akuiteo_id };
       siteBody.name = siteName;
       siteBody.SIRET = siretOk ? etab.siret : (siteBody.SIRET || null);  // jamais de SIRET invalide (Akuiteo rejette tout le site)
-      siteBody.validUntil = (etab.etat_insee === 'C' && etab.date_fermeture_insee) ? etab.date_fermeture_insee + 'T00:00:00' : (siteBody.validUntil || null);
+      // Fermé/cessé → date de fin (site inactif dans Akuiteo) ; actif → pas de date de fin
+      siteBody.validUntil = (etab.etat_insee === 'C' || etab.etat_insee === 'F') ? ((etab.date_fermeture_insee || new Date().toISOString().slice(0, 10)) + 'T00:00:00') : null;
       if (!siteBody.address) siteBody.address = {};
       siteBody.address.line1 = (etab.adresse_ligne1 || '').substring(0, 38) || siteBody.address.line1 || null;
       siteBody.address.postalCode = (etab.code_postal || '').substring(0, 10) || siteBody.address.postalCode || null;
@@ -21943,7 +21944,7 @@ async function pushEtablissementAsSite(full, siege) {
     const siretOk = _siretValide(full.siret);
     if (full.siret && !siretOk) toast('SIRET invalide (' + full.siret + ') — site synchronisé sans le SIRET', 'warn');
     siteBody.SIRET = siretOk ? full.siret : (siteBody.SIRET || null);
-    siteBody.validUntil = (full.etat_insee === 'C' && full.date_fermeture_insee) ? full.date_fermeture_insee + 'T00:00:00' : (siteBody.validUntil || null);
+    siteBody.validUntil = (full.etat_insee === 'C' || full.etat_insee === 'F') ? ((full.date_fermeture_insee || new Date().toISOString().slice(0, 10)) + 'T00:00:00') : null;
     if (!siteBody.address) siteBody.address = {};
     siteBody.address.line1 = (full.adresse_ligne1 || '').substring(0, 38) || siteBody.address.line1 || null;
     siteBody.address.postalCode = (full.code_postal || '').substring(0, 10) || siteBody.address.postalCode || null;
@@ -22218,7 +22219,8 @@ async function pushClientToAkuiteo(clientId) {
             siteBody.name = siteName;
             // N'envoyer que des SIRET valides (Luhn) ; sinon conserver l'existant, jamais un SIRET erroné (Akuiteo rejette tout le site)
             siteBody.SIRET = siretOk ? etab.siret : (siteBody.SIRET || null);
-            siteBody.validUntil = (etab.etat_insee === 'C' && etab.date_fermeture_insee) ? etab.date_fermeture_insee + 'T00:00:00' : (siteBody.validUntil || null);
+            // Fermé/cessé → date de fin (site inactif dans Akuiteo) ; actif → pas de date de fin
+            siteBody.validUntil = (etab.etat_insee === 'C' || etab.etat_insee === 'F') ? ((etab.date_fermeture_insee || new Date().toISOString().slice(0, 10)) + 'T00:00:00') : null;
             if (!siteBody.address) siteBody.address = {};
             siteBody.address.line1 = (etab.adresse_ligne1 || '').substring(0, 38) || siteBody.address.line1 || null;
             siteBody.address.postalCode = (etab.code_postal || '').substring(0, 10) || siteBody.address.postalCode || null;
