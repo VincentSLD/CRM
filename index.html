@@ -7159,7 +7159,14 @@ function renderClientDetail() {
       })()}
       ${c.akuiteo_id ? '<button class="btn" onclick="pullClientFromAkuiteo(\''+c.id+'\')" title="Récupérer les mises à jour depuis Akuiteo">⬇ Recup Akuiteo</button>' : ''}
       ${(c.siren || c.siret) ? '<a href="https://www.pappers.fr/entreprise/'+(c.siren || c.siret)+'" target="_blank" rel="noopener" class="btn" style="text-decoration:none;background:#3b82f6;color:#fff;border-color:#3b82f6" title="Voir la fiche Pappers (infos juridiques, dirigeants, comptes...)">📋 Pappers</a>' : ''}
-      <button class="btn ${c.akuiteo_id ? (c.akuiteo_dirty ? 'btn-not-synced' : 'btn-synced') : 'btn-not-synced'}" onclick="pushClientToAkuiteo('${c.id}')" title="${c.akuiteo_id ? (c.akuiteo_dirty ? 'Modifié localement — cliquez pour synchroniser' : 'Synchronisé (ID: '+c.akuiteo_id+')') : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? (c.akuiteo_dirty ? '⬆ Synchroniser' : '✔ Synchronisé') : '⬆ Sync Akuiteo'}</button>
+      ${(() => {
+        const synced = (c.akuiteo_id || c.akuiteo_site_id) && !c.akuiteo_dirty;
+        const cls = synced ? 'btn-synced' : 'btn-not-synced';
+        const idLabel = c.akuiteo_id ? 'ID: ' + c.akuiteo_id : (c.akuiteo_site_id ? 'Site Akuiteo: ' + c.akuiteo_site_id : '');
+        const title = synced ? ('Synchronisé (' + idLabel + ')') : (c.akuiteo_dirty ? 'Modifié localement — cliquez pour synchroniser' : 'Non synchronisé — cliquez pour envoyer vers Akuiteo');
+        const label = synced ? '✔ Synchronisé' : ((c.akuiteo_id || c.akuiteo_site_id) ? '⬆ Synchroniser' : '⬆ Sync Akuiteo');
+        return '<button class="btn ' + cls + '" onclick="pushClientToAkuiteo(\'' + c.id + '\')" title="' + title + '">' + label + '</button>';
+      })()}
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
       <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer ce client/prospect">Supprimer</button>
     </div>
@@ -22087,14 +22094,19 @@ async function pushClientToAkuiteo(clientId) {
             _applyAkGeo(siteBody.address, etab.code_postal);
 
             try {
+              let siteId = existingSite ? existingSite.id : null;
               if (existingSite) {
                 siteBody.id = existingSite.id;
                 await akuiteoFetch('POST', '/crm/customers/' + customerAkId + '/sites/' + existingSite.id, siteBody, { accept: 'text/plain' });
                 sitesUpdated++;
               } else {
-                await akuiteoFetch('PUT', '/crm/customers/' + customerAkId + '/sites', siteBody, { accept: 'text/plain' });
+                const cr = await akuiteoFetch('PUT', '/crm/customers/' + customerAkId + '/sites', siteBody, { accept: 'text/plain' });
+                const s = String(typeof cr === 'object' ? (cr && cr.id != null ? cr.id : '') : cr).trim();
+                if (/^\d+$/.test(s)) siteId = s;
                 sitesCreated++;
               }
+              // Marquer l'établissement secondaire comme synchronisé (bouton vert)
+              await sb.from('clients').update({ akuiteo_site_id: siteId != null ? String(siteId) : 'synced', akuiteo_dirty: false }).eq('id', etab.id);
             } catch (siteErr) { sitesErrors++; console.warn('Sync site error:', etab.siret, siteErr.message); }
           }
           if (sitesCreated + sitesUpdated > 0) {
