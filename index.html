@@ -22059,29 +22059,29 @@ async function pushClientToAkuiteo(clientId) {
             if (Array.isArray(sites)) existingSites = sites;
           } catch (e) { console.warn('Chargement sites Akuiteo:', e.message); }
 
-          let sitesCreated = 0, sitesUpdated = 0;
+          let sitesCreated = 0, sitesUpdated = 0, sitesErrors = 0;
           for (let i = 0; i < etabs.length; i++) {
             const etab = etabs[i];
             setSyncText('Site ' + (i + 1) + ' / ' + etabs.length + ' — ' + (etab.city || etab.siret || '') + '…');
 
-            // Chercher site existant par ville+CP ou nom contenant le SIRET
-            const existingSite = existingSites.find(s => {
-              const a = s.address || {};
-              if (etab.code_postal && a.postalCode && etab.city && a.city) {
-                return a.postalCode === etab.code_postal && a.city.toUpperCase() === (etab.city || '').toUpperCase();
-              }
-              if (etab.siret && s.name && s.name.includes(etab.siret)) return true;
-              return false;
-            });
+            // Chercher site existant : priorité au SIRET (1 SIRET = 1 site), sinon nom contenant le SIRET, sinon ville+CP
+            const existingSite = existingSites.find(s => etab.siret && s.SIRET && String(s.SIRET).replace(/\s/g, '') === String(etab.siret).replace(/\s/g, ''))
+              || existingSites.find(s => etab.siret && s.name && s.name.includes(etab.siret))
+              || existingSites.find(s => { const a = s.address || {}; return etab.code_postal && a.postalCode && etab.city && a.city && a.postalCode === etab.code_postal && a.city.toUpperCase() === (etab.city || '').toUpperCase(); });
 
             const siteName = ((etab.city || etab.siret || 'Établissement') + (etab.siret ? ' (' + etab.siret + ')' : '')).substring(0, 50);
-            const siteBody = {
-              customerId: customerAkId,
-              name: siteName,
-              SIRET: etab.siret || null,
-              validUntil: etab.etat_insee === 'C' && etab.date_fermeture ? etab.date_fermeture + 'T00:00:00' : null,
-              address: { line1: (etab.adresse_ligne1 || '').substring(0, 38) || null, postalCode: (etab.code_postal || '').substring(0, 10) || null, city: (etab.city || '').substring(0, 38) || null, country: 'FR' },
-            };
+            // En mise à jour : partir du site existant pour ne pas écraser ses autres données
+            let siteBody;
+            if (existingSite) { siteBody = { ...existingSite }; delete siteBody.contacts; delete siteBody.taxInformation; }
+            else { siteBody = { customerId: customerAkId }; }
+            siteBody.name = siteName;
+            siteBody.SIRET = etab.siret || siteBody.SIRET || null;   // un SIRET par site (valeur CRM prioritaire)
+            siteBody.validUntil = (etab.etat_insee === 'C' && etab.date_fermeture) ? etab.date_fermeture + 'T00:00:00' : (siteBody.validUntil || null);
+            if (!siteBody.address) siteBody.address = {};
+            siteBody.address.line1 = (etab.adresse_ligne1 || '').substring(0, 38) || siteBody.address.line1 || null;
+            siteBody.address.postalCode = (etab.code_postal || '').substring(0, 10) || siteBody.address.postalCode || null;
+            siteBody.address.city = (etab.city || '').substring(0, 38) || siteBody.address.city || null;
+            siteBody.address.country = siteBody.address.country || 'FR';
             _applyAkGeo(siteBody.address, etab.code_postal);
 
             try {
@@ -22093,10 +22093,12 @@ async function pushClientToAkuiteo(clientId) {
                 await akuiteoFetch('PUT', '/crm/customers/' + customerAkId + '/sites', siteBody, { accept: 'text/plain' });
                 sitesCreated++;
               }
-            } catch (siteErr) { console.warn('Sync site error:', etab.siret, siteErr.message); }
+            } catch (siteErr) { sitesErrors++; console.warn('Sync site error:', etab.siret, siteErr.message); }
           }
           if (sitesCreated + sitesUpdated > 0) {
-            toast(sitesCreated + ' site(s) créé(s), ' + sitesUpdated + ' mis à jour dans Akuiteo', 'success');
+            toast(sitesCreated + ' site(s) créé(s), ' + sitesUpdated + ' mis à jour dans Akuiteo' + (sitesErrors ? ' — ' + sitesErrors + ' en erreur' : ''), sitesErrors ? 'warn' : 'success');
+          } else if (sitesErrors) {
+            toast(sitesErrors + ' site(s) en erreur lors de la synchro (voir console)', 'error');
           }
         }
       } catch (siteErr) { console.warn('Sync sites error:', siteErr.message); }
