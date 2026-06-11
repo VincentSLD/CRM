@@ -15375,13 +15375,37 @@ async function impSiretLoad(input) {
         name: String(rows[r][nameCol] || '').trim(), cp: String(rows[r][cpCol] || '').trim(), ville: String(rows[r][villeCol] || '').trim(), colA: String(rows[r][0] || '').trim() });
       codesSet.add(code);
     }
-    el.innerHTML = 'Recherche des sociétés (code Codial) — ' + codesSet.size + ' codes…';
-    const codes = [...codesSet], crmByCode = {};
-    for (let i = 0; i < codes.length; i += 200) {
-      const { data } = await sb.from('clients').select('id,name,code_codial,siret').in('code_codial', codes.slice(i, i + 200));
-      for (const c of (data || [])) crmByCode[c.code_codial] = c;
+    // Chargement de TOUS les clients (keyset) pour une correspondance normalisée et multi-champs
+    el.innerHTML = 'Chargement des sociétés du CRM…';
+    const norm = s => String(s == null ? '' : s).trim().toUpperCase();
+    const byCodial = {}, byCode = {}, byLegacy = {};
+    let lastId = '', nClients = 0;
+    while (true) {
+      let q = sb.from('clients').select('id,name,code_codial,code,legacy_id,siret').order('id', { ascending: true }).limit(1000);
+      if (lastId) q = q.gt('id', lastId);
+      const { data, error } = await q;
+      if (error) { console.warn('[import SIRET] chargement clients', error.message); break; }
+      if (!data || !data.length) break;
+      for (const c of data) {
+        nClients++;
+        if (c.code_codial) { const k = norm(c.code_codial); if (!byCodial[k]) byCodial[k] = c; }
+        if (c.code) { const k = norm(c.code); if (!byCode[k]) byCode[k] = c; }
+        if (c.legacy_id) { const k = norm(c.legacy_id); if (!byLegacy[k]) byLegacy[k] = c; }
+      }
+      lastId = data[data.length - 1].id;
+      if (data.length < 1000) break;
     }
-    _impSiret.rows = fileRows.map(fr => { const c = crmByCode[fr.code]; return { code: fr.code, colA: fr.colA, fileSiret: fr.siret, raw: fr.raw, name: fr.name, cp: fr.cp, ville: fr.ville, clientId: c ? c.id : null, clientName: c ? c.name : null, currentSiret: c ? (c.siret || '') : '', apiSiret: null, apiScore: null }; });
+    let mCodial = 0, mCode = 0, mLeg = 0;
+    _impSiret.rows = fileRows.map(fr => {
+      const k = norm(fr.code);
+      let c = byCodial[k], field = 'code_codial';
+      if (!c) { c = byCode[k]; field = 'code'; }
+      if (!c) { c = byLegacy[k]; field = 'legacy_id'; }
+      if (c) { if (field === 'code_codial') mCodial++; else if (field === 'code') mCode++; else mLeg++; }
+      return { code: fr.code, colA: fr.colA, fileSiret: fr.siret, raw: fr.raw, name: fr.name, cp: fr.cp, ville: fr.ville, clientId: c ? c.id : null, clientName: c ? c.name : null, currentSiret: c ? (c.siret || '') : '', matchField: c ? field : null, apiSiret: null, apiScore: null };
+    });
+    _impSiret.matchInfo = { nClients, mCodial, mCode, mLeg };
+    console.log('[import SIRET] clients=' + nClients + ' | match code_codial=' + mCodial + ' code=' + mCode + ' legacy_id=' + mLeg);
     renderImpSiretTable();
   } catch (e) { console.error('impSiretLoad', e); el.innerHTML = '<div style="color:var(--red)">Erreur de lecture : ' + e.message + '</div>'; }
 }
@@ -15398,7 +15422,8 @@ function renderImpSiretTable() {
     + '<span style="color:#10b981"><strong>' + applicable.length + '</strong> à écrire</span>'
     + '<span style="color:var(--t3)"><strong>' + dejaOk.length + '</strong> déjà à jour</span>'
     + '<span style="color:#f59e0b"><strong>' + nonTrouves.length + '</strong> code non trouvé</span>'
-    + '<span style="color:#ef4444"><strong>' + invalides.length + '</strong> SIRET invalide</span></div>';
+    + '<span style="color:#ef4444"><strong>' + invalides.length + '</strong> SIRET invalide</span></div>'
+    + (_impSiret.matchInfo ? '<div style="font-size:11px;color:var(--t3);margin-bottom:10px">Correspondances : ' + (_impSiret.matchInfo.mCodial || 0) + ' par code Codial · ' + (_impSiret.matchInfo.mCode || 0) + ' par code · ' + (_impSiret.matchInfo.mLeg || 0) + ' par legacy_id (sur ' + (_impSiret.matchInfo.nClients || 0) + ' clients CRM)</div>' : '');
   const tableRows = applicable.map((r, i) => '<tr style="border-bottom:1px solid var(--border)">'
     + '<td style="padding:4px 6px;text-align:center"><input type="checkbox" class="imp-siret-cb" data-idx="' + i + '" checked></td>'
     + '<td style="padding:4px 6px;text-align:center;font-weight:600;color:var(--t2)">' + esc(r.colA) + '</td>'
