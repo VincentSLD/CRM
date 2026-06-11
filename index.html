@@ -7057,7 +7057,8 @@ async function syncSitesVersAkuiteo() {
     setSyncText(existingSites.length + ' site(s) existant(s) dans Akuiteo — Synchronisation…');
 
     // 3. Pour chaque établissement CRM, créer ou mettre à jour un site (logique alignée sur le push siège)
-    let created = 0, updated = 0, errors = 0, siretInvalides = 0;
+    let created = 0, updated = 0, errors = 0;
+    const siretInvalidesList = [];
     const norm = v => String(v == null ? '' : v).replace(/\s/g, '');
     const usedSiteIds = new Set();  // un site Akuiteo n'est rattaché qu'à un seul établissement par run
 
@@ -7073,7 +7074,7 @@ async function syncSitesVersAkuiteo() {
       if (existingSite) usedSiteIds.add(existingSite.id);
 
       const siretOk = _siretValide(etab.siret);
-      if (etab.siret && !siretOk) siretInvalides++;
+      if (etab.siret && !siretOk) siretInvalidesList.push({ id: etab.id, name: etab.name, siret: etab.siret, city: etab.city });
       const siteName = ((etab.city || etab.siret || 'Établissement') + (etab.siret ? ' (' + etab.siret + ')' : '')).substring(0, 50);
       // Mise à jour : partir du site existant pour ne pas écraser ses autres données
       let siteBody;
@@ -7111,6 +7112,7 @@ async function syncSitesVersAkuiteo() {
 
     showSyncLoading(false);
 
+    const siretInvalides = siretInvalidesList.length;
     const msg = [];
     if (siretInvalides > 0) msg.push(siretInvalides + ' SIRET invalide(s) ignoré(s)');
     if (created > 0) msg.push(created + ' site(s) créé(s)');
@@ -7121,6 +7123,7 @@ async function syncSitesVersAkuiteo() {
     await loadDB();
     if (currentClient) { const { data: rf } = await sb.from('clients').select('*').eq('id', currentClient.id).maybeSingle(); if (rf) currentClient = rf; }
     renderPage(currentPage);
+    if (siretInvalides) setTimeout(() => showSiretInvalidesReport(siretInvalidesList), 400);
 
   } catch (err) {
     console.error('syncSitesVersAkuiteo error:', err);
@@ -21852,6 +21855,27 @@ function _siretValide(s) {
   for (let i = 0; i < 14; i++) { let d = +s[13 - i]; if (i % 2 === 1) { d *= 2; if (d > 9) d -= 9; } sum += d; }
   return sum % 10 === 0;
 }
+// Rapport des établissements dont le SIRET est invalide (synchronisés sans SIRET)
+function showSiretInvalidesReport(list) {
+  if (!list || !list.length) return;
+  window._siretInvalidesList = list;
+  const rows = list.map(e => '<tr style="border-bottom:1px solid var(--border)">'
+    + '<td style="padding:6px 8px"><a href="#" onclick="closeModal(\'siret-invalides\');showClient(\'' + e.id + '\');return false" style="color:var(--accent)">' + String(e.name || '—').replace(/</g, '&lt;') + '</a></td>'
+    + '<td style="padding:6px 8px;color:var(--t3)">' + String(e.city || '').replace(/</g, '&lt;') + '</td>'
+    + '<td style="padding:6px 8px;font-family:monospace">' + String(e.siret || '') + '</td></tr>').join('');
+  const body = '<div style="font-size:12px;color:var(--t3);margin-bottom:8px">' + list.length + ' établissement(s) ont un SIRET invalide (clé de Luhn erronée). Ils ont été synchronisés <strong>sans</strong> SIRET. Corrigez le SIRET dans la fiche, puis relancez la synchronisation.</div>'
+    + '<div style="max-height:50vh;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+    + '<thead><tr style="background:var(--bg-1)"><th style="padding:6px 8px;text-align:left">Établissement</th><th style="padding:6px 8px;text-align:left">Ville</th><th style="padding:6px 8px;text-align:left">SIRET invalide</th></tr></thead>'
+    + '<tbody>' + rows + '</tbody></table></div>';
+  const footer = '<button class="btn" onclick="_copySiretInvalides()">Copier la liste</button>'
+    + '<button class="btn btn-primary" onclick="closeModal(\'siret-invalides\')">Fermer</button>';
+  openDynModal('siret-invalides', '⚠ SIRET invalides ignorés (' + list.length + ')', body, footer);
+}
+function _copySiretInvalides() {
+  const list = window._siretInvalidesList || [];
+  const txt = 'Établissement\tVille\tSIRET\n' + list.map(e => [e.name || '', e.city || '', e.siret || ''].join('\t')).join('\n');
+  if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => toast('Liste copiée', 'success')).catch(() => toast('Copie impossible', 'error'));
+}
 // Retrouve l'id d'un référentiel Akuiteo à partir d'un libellé (nom ou code)
 function _akIdFromName(list, name) {
   if (!name || !Array.isArray(list)) return null;
@@ -22169,7 +22193,8 @@ async function pushClientToAkuiteo(clientId) {
             if (Array.isArray(sites)) existingSites = sites;
           } catch (e) { console.warn('Chargement sites Akuiteo:', e.message); }
 
-          let sitesCreated = 0, sitesUpdated = 0, sitesErrors = 0, siretInvalides = 0;
+          let sitesCreated = 0, sitesUpdated = 0, sitesErrors = 0;
+          const siretInvalidesList = [];
           const usedSiteIds = new Set();  // un site Akuiteo n'est rattaché qu'à un seul établissement par run
           const norm = v => String(v == null ? '' : v).replace(/\s/g, '');
           for (let i = 0; i < etabs.length; i++) {
@@ -22185,7 +22210,7 @@ async function pushClientToAkuiteo(clientId) {
             if (existingSite) usedSiteIds.add(existingSite.id);
 
             const siretOk = _siretValide(etab.siret);
-            if (etab.siret && !siretOk) siretInvalides++;
+            if (etab.siret && !siretOk) siretInvalidesList.push({ id: etab.id, name: etab.name, siret: etab.siret, city: etab.city });
             const siteName = ((etab.city || etab.siret || 'Établissement') + (etab.siret ? ' (' + etab.siret + ')' : '')).substring(0, 50);
             let siteBody;
             if (existingSite) { siteBody = { ...existingSite }; delete siteBody.contacts; delete siteBody.taxInformation; }
@@ -22217,12 +22242,14 @@ async function pushClientToAkuiteo(clientId) {
               await sb.from('clients').update({ akuiteo_site_id: siteId != null ? String(siteId) : 'synced', akuiteo_dirty: false }).eq('id', etab.id);
             } catch (siteErr) { sitesErrors++; console.warn('Sync site error:', etab.siret, siteErr.message); }
           }
+          const siretInvalides = siretInvalidesList.length;
           const suffix = (siretInvalides ? ' · ' + siretInvalides + ' SIRET invalide(s) ignoré(s)' : '') + (sitesErrors ? ' · ' + sitesErrors + ' en erreur' : '');
           if (sitesCreated + sitesUpdated > 0) {
             toast(sitesCreated + ' site(s) créé(s), ' + sitesUpdated + ' mis à jour dans Akuiteo' + suffix, (sitesErrors || siretInvalides) ? 'warn' : 'success');
           } else if (sitesErrors || siretInvalides) {
             toast('Synchro sites : ' + (sitesErrors + ' erreur(s)') + suffix, 'error');
           }
+          if (siretInvalides) setTimeout(() => showSiretInvalidesReport(siretInvalidesList), 400);
         }
       } catch (siteErr) { console.warn('Sync sites error:', siteErr.message); }
     }
