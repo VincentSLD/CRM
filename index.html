@@ -7024,6 +7024,75 @@ async function ajouterEtablissementsSirene() {
 }
 
 // ═══ SYNC ÉTABLISSEMENTS → SITES AKUITEO ═══
+// Rapport de réconciliation : compare les sites Akuiteo aux établissements CRM (par SIRET)
+async function rapportSitesAkuiteo() {
+  const c = currentClient;
+  if (!c || !c.siren) { toast('Ce client n\'a pas de SIREN', 'error'); return; }
+  let customerAkId = c.akuiteo_id;
+  if (!customerAkId) { const s = await _akSiegeFor(c); if (s) customerAkId = s.akuiteo_id; }
+  if (!customerAkId) { toast('Aucun ID Akuiteo (siège) trouvé pour ce SIREN', 'error'); return; }
+  showSyncLoading(true); setSyncText('Réconciliation sites Akuiteo ↔ CRM…');
+  try {
+    const norm = v => String(v == null ? '' : v).replace(/\s/g, '');
+    const today = new Date().toISOString().slice(0, 10);
+    const sites = (await akuiteoFetch('GET', '/crm/customers/' + customerAkId + '/sites').catch(() => [])) || [];
+    const { data: crm } = await sb.from('clients').select('id,name,siret,city,etat_insee').eq('siren', c.siren);
+    const crmList = crm || [];
+    const crmBySiret = {}; for (const e of crmList) if (e.siret) crmBySiret[norm(e.siret)] = e;
+    const siegeSiret = norm(c.siret);
+    const isActive = s => !s.validUntil || String(s.validUntil).slice(0, 10) >= today;
+    const actifs = sites.filter(isActive);
+    // Doublons : même SIRET sur plusieurs sites
+    const bySiret = {}; for (const s of sites) { const k = norm(s.SIRET); if (!k) continue; (bySiret[k] = bySiret[k] || []).push(s); }
+    const doublons = Object.entries(bySiret).filter(([, arr]) => arr.length > 1);
+    // Orphelins : site Akuiteo actif dont le SIRET n'est ni dans le CRM ni celui du siège
+    const orphelins = actifs.filter(s => { const k = norm(s.SIRET); return k && !crmBySiret[k] && k !== siegeSiret; });
+    const sansSiret = actifs.filter(s => !norm(s.SIRET));
+    // Établissements CRM actifs sans site Akuiteo
+    const sitesSiretSet = new Set(sites.map(s => norm(s.SIRET)).filter(Boolean));
+    const crmSansSite = crmList.filter(e => e.id !== c.id && e.etat_insee !== 'C' && e.etat_insee !== 'F' && e.siret && !sitesSiretSet.has(norm(e.siret)));
+    window._rapportSites = sites; window._rapportCustomerAkId = customerAkId;
+    window._rapportOrphelinsIds = orphelins.map(s => s.id);
+
+    const lignes = arr => arr.length ? arr.map(s => '<tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 8px">' + String(s.name || '—').replace(/</g, '&lt;') + '</td><td style="padding:5px 8px;font-family:monospace">' + (s.SIRET || '—') + '</td><td style="padding:5px 8px;color:var(--t3)">' + ((s.address && s.address.city) || '') + '</td></tr>').join('') : '<tr><td colspan="3" style="padding:6px 8px;color:var(--t3)">—</td></tr>';
+    const crmLignes = arr => arr.length ? arr.map(e => '<tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 8px"><a href="#" onclick="closeModal(\'rapport-sites\');showClient(\'' + e.id + '\');return false" style="color:var(--accent)">' + String(e.name || '—').replace(/</g, '&lt;') + '</a></td><td style="padding:5px 8px;font-family:monospace">' + (e.siret || '—') + '</td><td style="padding:5px 8px;color:var(--t3)">' + (e.city || '') + '</td></tr>').join('') : '<tr><td colspan="3" style="padding:6px 8px;color:var(--t3)">—</td></tr>';
+    const tbl = (title, color, inner) => '<div style="margin-bottom:12px"><div style="font-weight:600;font-size:12px;color:' + color + ';margin-bottom:4px">' + title + '</div><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--bg-1)"><th style="padding:5px 8px;text-align:left">Nom</th><th style="padding:5px 8px;text-align:left">SIRET</th><th style="padding:5px 8px;text-align:left">Ville</th></tr></thead><tbody>' + inner + '</tbody></table></div>';
+
+    const body = '<div style="font-size:12px;color:var(--t2);margin-bottom:10px;display:flex;gap:14px;flex-wrap:wrap">'
+      + '<span><strong>' + sites.length + '</strong> sites Akuiteo (' + actifs.length + ' actifs)</span>'
+      + '<span><strong>' + crmList.filter(e => e.id !== c.id).length + '</strong> établissements CRM</span></div>'
+      + '<div style="max-height:55vh;overflow:auto">'
+      + tbl('🟠 Orphelins — sites Akuiteo actifs sans établissement CRM (' + orphelins.length + ')', '#f59e0b', lignes(orphelins))
+      + tbl('🔴 Doublons — même SIRET sur plusieurs sites (' + doublons.length + ' SIRET)', '#ef4444', doublons.length ? doublons.map(([, arr]) => lignes(arr)).join('') : '<tr><td colspan="3" style="padding:6px 8px;color:var(--t3)">—</td></tr>')
+      + tbl('⚪ Sites Akuiteo actifs sans SIRET (' + sansSiret.length + ')', 'var(--t2)', lignes(sansSiret))
+      + tbl('🔵 Établissements CRM actifs sans site Akuiteo (' + crmSansSite.length + ')', '#4f8ff7', crmLignes(crmSansSite))
+      + '</div>';
+    const footer = (orphelins.length ? '<button class="btn" style="color:#f59e0b;margin-right:auto" onclick="_desactiverOrphelins()">Désactiver les ' + orphelins.length + ' orphelin(s)</button>' : '')
+      + '<button class="btn btn-primary" onclick="closeModal(\'rapport-sites\')">Fermer</button>';
+    openDynModal('rapport-sites', 'Réconciliation sites Akuiteo ↔ CRM', body, footer);
+  } catch (e) { console.error('rapportSitesAkuiteo', e); toast('Erreur rapport : ' + e.message, 'error'); }
+  finally { showSyncLoading(false); }
+}
+// Désactive (validUntil = aujourd'hui) les sites Akuiteo orphelins identifiés par le rapport
+async function _desactiverOrphelins() {
+  const sites = window._rapportSites || [], ids = window._rapportOrphelinsIds || [], customerAkId = window._rapportCustomerAkId;
+  if (!ids.length || !customerAkId) return;
+  if (!confirm('Désactiver ' + ids.length + ' site(s) orphelin(s) dans Akuiteo (date de fin = aujourd\'hui) ?')) return;
+  showSyncLoading(true); setSyncText('Désactivation des orphelins…');
+  const today = new Date().toISOString().slice(0, 10);
+  let done = 0, err = 0;
+  for (const id of ids) {
+    const s = sites.find(x => String(x.id) === String(id)); if (!s) continue;
+    const body = { ...s }; delete body.contacts; delete body.taxInformation;
+    body.validUntil = today + 'T00:00:00';
+    try { await akuiteoFetch('POST', '/crm/customers/' + customerAkId + '/sites/' + id, body, { accept: 'text/plain' }); done++; }
+    catch (e) { err++; console.warn('désactivation site', id, e.message); }
+  }
+  showSyncLoading(false);
+  closeModal('rapport-sites');
+  toast(done + ' site(s) orphelin(s) désactivé(s)' + (err ? ', ' + err + ' erreur(s)' : ''), err ? 'warn' : 'success');
+}
+
 async function syncSitesVersAkuiteo() {
   const c = currentClient;
   if (!c || !c.siren || !c.akuiteo_id) { toast('Ce client n\'a pas de SIREN ou d\'ID Akuiteo', 'error'); return; }
@@ -7260,7 +7329,7 @@ function renderClientDetail() {
     </div>
   </div>
   ${c.siren ? `<div class="card" style="margin-bottom:16px">
-    <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ${c.siren})</span></div>${c.akuiteo_id && c.siren ? '<button class="btn" onclick="syncSitesVersAkuiteo()" style="font-size:11px;padding:3px 10px">Synchroniser Sites → Akuiteo</button>' : ''}</div>
+    <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ${c.siren})</span></div>${c.akuiteo_id && c.siren ? '<button class="btn" onclick="syncSitesVersAkuiteo()" style="font-size:11px;padding:3px 10px">Synchroniser Sites → Akuiteo</button> <button class="btn" onclick="rapportSitesAkuiteo()" style="font-size:11px;padding:3px 10px" title="Comparer les sites Akuiteo et les établissements CRM">📊 Rapport sites</button>' : ''}</div>
     <div class="card-body" id="etablissements-lies" style="padding:12px"><div style="color:var(--t3);font-size:13px">Chargement...</div></div>
   </div>` : ''}
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
