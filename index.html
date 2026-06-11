@@ -7057,25 +7057,30 @@ async function syncSitesVersAkuiteo() {
     setSyncText(existingSites.length + ' site(s) existant(s) dans Akuiteo — Synchronisation…');
 
     // 3. Pour chaque établissement CRM, créer ou mettre à jour un site (logique alignée sur le push siège)
-    let created = 0, updated = 0, errors = 0;
+    let created = 0, updated = 0, errors = 0, siretInvalides = 0;
     const norm = v => String(v == null ? '' : v).replace(/\s/g, '');
+    const usedSiteIds = new Set();  // un site Akuiteo n'est rattaché qu'à un seul établissement par run
 
     for (let i = 0; i < etabs.length; i++) {
       const etab = etabs[i];
       setSyncText('Site ' + (i + 1) + ' / ' + etabs.length + ' — ' + (etab.city || etab.siret || '') + '…');
 
-      // Appariement : SIRET d'abord (1 SIRET = 1 site), sinon nom contenant le SIRET, sinon ville+CP
-      const existingSite = existingSites.find(s => etab.siret && s.SIRET && norm(s.SIRET) === norm(etab.siret))
-        || existingSites.find(s => etab.siret && s.name && s.name.includes(etab.siret))
-        || existingSites.find(s => { const a = s.address || {}; return etab.code_postal && a.postalCode && etab.city && a.city && a.postalCode === etab.code_postal && a.city.toUpperCase() === (etab.city || '').toUpperCase(); });
+      // Appariement : SIRET d'abord (1 SIRET = 1 site), sinon nom, sinon ville+CP — en excluant les sites déjà utilisés ce run
+      const free = s => !usedSiteIds.has(s.id);
+      const existingSite = existingSites.find(s => free(s) && etab.siret && s.SIRET && norm(s.SIRET) === norm(etab.siret))
+        || existingSites.find(s => free(s) && etab.siret && s.name && s.name.includes(etab.siret))
+        || existingSites.find(s => free(s) && (() => { const a = s.address || {}; return etab.code_postal && a.postalCode && etab.city && a.city && a.postalCode === etab.code_postal && a.city.toUpperCase() === (etab.city || '').toUpperCase(); })());
+      if (existingSite) usedSiteIds.add(existingSite.id);
 
+      const siretOk = _siretValide(etab.siret);
+      if (etab.siret && !siretOk) siretInvalides++;
       const siteName = ((etab.city || etab.siret || 'Établissement') + (etab.siret ? ' (' + etab.siret + ')' : '')).substring(0, 50);
       // Mise à jour : partir du site existant pour ne pas écraser ses autres données
       let siteBody;
       if (existingSite) { siteBody = { ...existingSite }; delete siteBody.contacts; delete siteBody.taxInformation; }
       else siteBody = { customerId: c.akuiteo_id };
       siteBody.name = siteName;
-      siteBody.SIRET = etab.siret || siteBody.SIRET || null;
+      siteBody.SIRET = siretOk ? etab.siret : (siteBody.SIRET || null);  // jamais de SIRET invalide (Akuiteo rejette tout le site)
       siteBody.validUntil = (etab.etat_insee === 'C' && etab.date_fermeture_insee) ? etab.date_fermeture_insee + 'T00:00:00' : (siteBody.validUntil || null);
       if (!siteBody.address) siteBody.address = {};
       siteBody.address.line1 = (etab.adresse_ligne1 || '').substring(0, 38) || siteBody.address.line1 || null;
@@ -7093,7 +7098,7 @@ async function syncSitesVersAkuiteo() {
         } else {
           const cr = await akuiteoFetch('PUT', '/crm/customers/' + c.akuiteo_id + '/sites', siteBody, { accept: 'text/plain' });
           const s = String(typeof cr === 'object' ? (cr && cr.id != null ? cr.id : '') : cr).trim();
-          if (/^\d+$/.test(s)) siteId = s;
+          if (/^\d+$/.test(s)) { siteId = s; usedSiteIds.add(s); }
           created++;
         }
         // Marquer l'établissement comme synchronisé (bouton vert)
@@ -7107,10 +7112,11 @@ async function syncSitesVersAkuiteo() {
     showSyncLoading(false);
 
     const msg = [];
+    if (siretInvalides > 0) msg.push(siretInvalides + ' SIRET invalide(s) ignoré(s)');
     if (created > 0) msg.push(created + ' site(s) créé(s)');
     if (updated > 0) msg.push(updated + ' site(s) mis à jour');
     if (errors > 0) msg.push(errors + ' erreur(s)');
-    toast('Sites Akuiteo : ' + msg.join(', '), errors > 0 ? 'warn' : 'success');
+    toast('Sites Akuiteo : ' + msg.join(', '), (errors > 0 || siretInvalides > 0) ? 'warn' : 'success');
     // Rafraîchir pour refléter les boutons (établissements synchronisés → vert)
     await loadDB();
     if (currentClient) { const { data: rf } = await sb.from('clients').select('*').eq('id', currentClient.id).maybeSingle(); if (rf) currentClient = rf; }
@@ -21838,6 +21844,14 @@ function _applyAkGeo(addr, cp) {
   if (rc != null && rc !== '') addr.region = rc;
 }
 
+// Valide un SIRET (14 chiffres + clé de Luhn). Akuiteo rejette les SIRET au checksum invalide.
+function _siretValide(s) {
+  s = String(s == null ? '' : s).replace(/\s/g, '');
+  if (!/^\d{14}$/.test(s)) return false;
+  let sum = 0;
+  for (let i = 0; i < 14; i++) { let d = +s[13 - i]; if (i % 2 === 1) { d *= 2; if (d > 9) d -= 9; } sum += d; }
+  return sum % 10 === 0;
+}
 // Retrouve l'id d'un référentiel Akuiteo à partir d'un libellé (nom ou code)
 function _akIdFromName(list, name) {
   if (!name || !Array.isArray(list)) return null;
@@ -21902,7 +21916,9 @@ async function pushEtablissementAsSite(full, siege) {
     if (existingSite) { siteBody = { ...existingSite }; delete siteBody.contacts; delete siteBody.taxInformation; }
     else siteBody = { customerId: customerAkId };
     siteBody.name = siteName;
-    siteBody.SIRET = full.siret || siteBody.SIRET || null;
+    const siretOk = _siretValide(full.siret);
+    if (full.siret && !siretOk) toast('SIRET invalide (' + full.siret + ') — site synchronisé sans le SIRET', 'warn');
+    siteBody.SIRET = siretOk ? full.siret : (siteBody.SIRET || null);
     siteBody.validUntil = (full.etat_insee === 'C' && full.date_fermeture_insee) ? full.date_fermeture_insee + 'T00:00:00' : (siteBody.validUntil || null);
     if (!siteBody.address) siteBody.address = {};
     siteBody.address.line1 = (full.adresse_ligne1 || '').substring(0, 38) || siteBody.address.line1 || null;
@@ -22153,23 +22169,30 @@ async function pushClientToAkuiteo(clientId) {
             if (Array.isArray(sites)) existingSites = sites;
           } catch (e) { console.warn('Chargement sites Akuiteo:', e.message); }
 
-          let sitesCreated = 0, sitesUpdated = 0, sitesErrors = 0;
+          let sitesCreated = 0, sitesUpdated = 0, sitesErrors = 0, siretInvalides = 0;
+          const usedSiteIds = new Set();  // un site Akuiteo n'est rattaché qu'à un seul établissement par run
+          const norm = v => String(v == null ? '' : v).replace(/\s/g, '');
           for (let i = 0; i < etabs.length; i++) {
             const etab = etabs[i];
             setSyncText('Site ' + (i + 1) + ' / ' + etabs.length + ' — ' + (etab.city || etab.siret || '') + '…');
 
-            // Chercher site existant : priorité au SIRET (1 SIRET = 1 site), sinon nom contenant le SIRET, sinon ville+CP
-            const existingSite = existingSites.find(s => etab.siret && s.SIRET && String(s.SIRET).replace(/\s/g, '') === String(etab.siret).replace(/\s/g, ''))
-              || existingSites.find(s => etab.siret && s.name && s.name.includes(etab.siret))
-              || existingSites.find(s => { const a = s.address || {}; return etab.code_postal && a.postalCode && etab.city && a.city && a.postalCode === etab.code_postal && a.city.toUpperCase() === (etab.city || '').toUpperCase(); });
+            // Appariement : SIRET d'abord (1 SIRET = 1 site), sinon nom contenant le SIRET, sinon ville+CP.
+            // On exclut les sites déjà utilisés ce run pour ne pas écraser plusieurs établissements sur le même site.
+            const free = s => !usedSiteIds.has(s.id);
+            const existingSite = existingSites.find(s => free(s) && etab.siret && s.SIRET && norm(s.SIRET) === norm(etab.siret))
+              || existingSites.find(s => free(s) && etab.siret && s.name && s.name.includes(etab.siret))
+              || existingSites.find(s => free(s) && (() => { const a = s.address || {}; return etab.code_postal && a.postalCode && etab.city && a.city && a.postalCode === etab.code_postal && a.city.toUpperCase() === (etab.city || '').toUpperCase(); })());
+            if (existingSite) usedSiteIds.add(existingSite.id);
 
+            const siretOk = _siretValide(etab.siret);
+            if (etab.siret && !siretOk) siretInvalides++;
             const siteName = ((etab.city || etab.siret || 'Établissement') + (etab.siret ? ' (' + etab.siret + ')' : '')).substring(0, 50);
-            // En mise à jour : partir du site existant pour ne pas écraser ses autres données
             let siteBody;
             if (existingSite) { siteBody = { ...existingSite }; delete siteBody.contacts; delete siteBody.taxInformation; }
             else { siteBody = { customerId: customerAkId }; }
             siteBody.name = siteName;
-            siteBody.SIRET = etab.siret || siteBody.SIRET || null;   // un SIRET par site (valeur CRM prioritaire)
+            // N'envoyer que des SIRET valides (Luhn) ; sinon conserver l'existant, jamais un SIRET erroné (Akuiteo rejette tout le site)
+            siteBody.SIRET = siretOk ? etab.siret : (siteBody.SIRET || null);
             siteBody.validUntil = (etab.etat_insee === 'C' && etab.date_fermeture_insee) ? etab.date_fermeture_insee + 'T00:00:00' : (siteBody.validUntil || null);
             if (!siteBody.address) siteBody.address = {};
             siteBody.address.line1 = (etab.adresse_ligne1 || '').substring(0, 38) || siteBody.address.line1 || null;
@@ -22187,17 +22210,18 @@ async function pushClientToAkuiteo(clientId) {
               } else {
                 const cr = await akuiteoFetch('PUT', '/crm/customers/' + customerAkId + '/sites', siteBody, { accept: 'text/plain' });
                 const s = String(typeof cr === 'object' ? (cr && cr.id != null ? cr.id : '') : cr).trim();
-                if (/^\d+$/.test(s)) siteId = s;
+                if (/^\d+$/.test(s)) { siteId = s; usedSiteIds.add(s); }
                 sitesCreated++;
               }
               // Marquer l'établissement secondaire comme synchronisé (bouton vert)
               await sb.from('clients').update({ akuiteo_site_id: siteId != null ? String(siteId) : 'synced', akuiteo_dirty: false }).eq('id', etab.id);
             } catch (siteErr) { sitesErrors++; console.warn('Sync site error:', etab.siret, siteErr.message); }
           }
+          const suffix = (siretInvalides ? ' · ' + siretInvalides + ' SIRET invalide(s) ignoré(s)' : '') + (sitesErrors ? ' · ' + sitesErrors + ' en erreur' : '');
           if (sitesCreated + sitesUpdated > 0) {
-            toast(sitesCreated + ' site(s) créé(s), ' + sitesUpdated + ' mis à jour dans Akuiteo' + (sitesErrors ? ' — ' + sitesErrors + ' en erreur' : ''), sitesErrors ? 'warn' : 'success');
-          } else if (sitesErrors) {
-            toast(sitesErrors + ' site(s) en erreur lors de la synchro (voir console)', 'error');
+            toast(sitesCreated + ' site(s) créé(s), ' + sitesUpdated + ' mis à jour dans Akuiteo' + suffix, (sitesErrors || siretInvalides) ? 'warn' : 'success');
+          } else if (sitesErrors || siretInvalides) {
+            toast('Synchro sites : ' + (sitesErrors + ' erreur(s)') + suffix, 'error');
           }
         }
       } catch (siteErr) { console.warn('Sync sites error:', siteErr.message); }
