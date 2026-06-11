@@ -6779,7 +6779,7 @@ async function majEtatEtablissements(siren, currentClientId) {
     }
 
     // Charger les établissements CRM de ce SIREN
-    const { data: crmEtabs } = await sb.from('clients').select('id,siret,etat_insee,date_fermeture').eq('siren', siren);
+    const { data: crmEtabs } = await sb.from('clients').select('id,siret,etat_insee,date_fermeture_insee').eq('siren', siren);
     if (!crmEtabs || crmEtabs.length === 0) { toast('Aucun établissement CRM pour ce SIREN', 'warn'); return; }
 
     let updated = 0;
@@ -6788,8 +6788,8 @@ async function majEtatEtablissements(siren, currentClientId) {
       const info = inseeMap[c.siret];
       const etat = info.etat === 'F' ? 'C' : 'A'; // CRM stocke 'C' pour cessé/fermé
       const dateFerm = info.dateFermeture || null;
-      if (c.etat_insee !== etat || c.date_fermeture !== dateFerm) {
-        await sb.from('clients').update({ etat_insee: etat, date_fermeture: dateFerm }).eq('id', c.id);
+      if (c.etat_insee !== etat || c.date_fermeture_insee !== dateFerm) {
+        await sb.from('clients').update({ etat_insee: etat, date_fermeture_insee: dateFerm }).eq('id', c.id);
         updated++;
       }
     }
@@ -7035,7 +7035,7 @@ async function syncSitesVersAkuiteo() {
 
   try {
     // 1. Charger les établissements depuis le CRM (même SIREN, hors siège, sans akuiteo_id propre)
-    const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city,est_siege,etat_insee,date_fermeture')
+    const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city,est_siege,etat_insee,date_fermeture_insee')
       .eq('siren', c.siren).neq('id', c.id).is('akuiteo_id', null).order('name');
     console.log('[syncSites] SIREN', c.siren, '— établissements trouvés :', (etabs || []).length);
 
@@ -7076,7 +7076,7 @@ async function syncSitesVersAkuiteo() {
       else siteBody = { customerId: c.akuiteo_id };
       siteBody.name = siteName;
       siteBody.SIRET = etab.siret || siteBody.SIRET || null;
-      siteBody.validUntil = (etab.etat_insee === 'C' && etab.date_fermeture) ? etab.date_fermeture + 'T00:00:00' : (siteBody.validUntil || null);
+      siteBody.validUntil = (etab.etat_insee === 'C' && etab.date_fermeture_insee) ? etab.date_fermeture_insee + 'T00:00:00' : (siteBody.validUntil || null);
       if (!siteBody.address) siteBody.address = {};
       siteBody.address.line1 = (etab.adresse_ligne1 || '').substring(0, 38) || siteBody.address.line1 || null;
       siteBody.address.postalCode = (etab.code_postal || '').substring(0, 10) || siteBody.address.postalCode || null;
@@ -21903,7 +21903,7 @@ async function pushEtablissementAsSite(full, siege) {
     else siteBody = { customerId: customerAkId };
     siteBody.name = siteName;
     siteBody.SIRET = full.siret || siteBody.SIRET || null;
-    siteBody.validUntil = (full.etat_insee === 'C' && full.date_fermeture) ? full.date_fermeture + 'T00:00:00' : (siteBody.validUntil || null);
+    siteBody.validUntil = (full.etat_insee === 'C' && full.date_fermeture_insee) ? full.date_fermeture_insee + 'T00:00:00' : (siteBody.validUntil || null);
     if (!siteBody.address) siteBody.address = {};
     siteBody.address.line1 = (full.adresse_ligne1 || '').substring(0, 38) || siteBody.address.line1 || null;
     siteBody.address.postalCode = (full.code_postal || '').substring(0, 10) || siteBody.address.postalCode || null;
@@ -22140,7 +22140,7 @@ async function pushClientToAkuiteo(clientId) {
     if (customerAkId && full.siren) {
       setSyncText('Synchronisation des établissements secondaires (Sites)…');
       try {
-        const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city,etat_insee,date_fermeture')
+        const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city,etat_insee,date_fermeture_insee')
           .eq('siren', full.siren).neq('id', full.id).is('akuiteo_id', null).order('name');
         console.log('[sync sites] SIREN', full.siren, '— établissements (sans akuiteo_id) trouvés :', (etabs || []).length);
         // S'il y a plusieurs établissements secondaires, demander confirmation avant de les pousser
@@ -22170,7 +22170,7 @@ async function pushClientToAkuiteo(clientId) {
             else { siteBody = { customerId: customerAkId }; }
             siteBody.name = siteName;
             siteBody.SIRET = etab.siret || siteBody.SIRET || null;   // un SIRET par site (valeur CRM prioritaire)
-            siteBody.validUntil = (etab.etat_insee === 'C' && etab.date_fermeture) ? etab.date_fermeture + 'T00:00:00' : (siteBody.validUntil || null);
+            siteBody.validUntil = (etab.etat_insee === 'C' && etab.date_fermeture_insee) ? etab.date_fermeture_insee + 'T00:00:00' : (siteBody.validUntil || null);
             if (!siteBody.address) siteBody.address = {};
             siteBody.address.line1 = (etab.adresse_ligne1 || '').substring(0, 38) || siteBody.address.line1 || null;
             siteBody.address.postalCode = (etab.code_postal || '').substring(0, 10) || siteBody.address.postalCode || null;
