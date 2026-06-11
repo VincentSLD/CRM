@@ -7034,9 +7034,10 @@ async function syncSitesVersAkuiteo() {
   await loadAkuiteoGeoRef().catch(() => {});
 
   try {
-    // 1. Charger les établissements secondaires depuis le CRM (même SIREN, hors siège)
+    // 1. Charger les établissements depuis le CRM (même SIREN, hors siège, sans akuiteo_id propre)
     const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city,est_siege,etat_insee,date_fermeture')
-      .eq('siren', c.siren).neq('id', c.id).or('est_siege.is.null,est_siege.eq.false').order('name');
+      .eq('siren', c.siren).neq('id', c.id).is('akuiteo_id', null).order('name');
+    console.log('[syncSites] SIREN', c.siren, '— établissements trouvés :', (etabs || []).length);
 
     if (!etabs || etabs.length === 0) {
       showSyncLoading(false);
@@ -21936,9 +21937,10 @@ async function pushClientToAkuiteo(clientId) {
   const { data: full } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
   if (!full) { toast('Société non trouvée en base', 'error'); return; }
 
-  // Rôle déduit du SIREN : si une autre fiche du même SIREN est le siège (client Akuiteo),
-  // alors cette fiche est un établissement → on la synchronise comme Site (et non comme client).
-  if (full.siren) {
+  // Rôle déduit du SIREN : une fiche SANS akuiteo_id dont le SIREN correspond à un autre
+  // client déjà dans Akuiteo (le siège) est un établissement → synchronisée comme Site.
+  // Une fiche qui a son propre akuiteo_id est un client (siège) : jamais poussée comme site.
+  if (full.siren && !full.akuiteo_id) {
     const siege = await _akSiegeFor(full);
     if (siege && siege.id !== full.id) { return await pushEtablissementAsSite(full, siege); }
   }
@@ -22129,7 +22131,7 @@ async function pushClientToAkuiteo(clientId) {
       if (contacts && contacts.length > 0) {
         setSyncText(`Synchronisation de ${contacts.length} contact(s)…`);
         for (const ct of contacts) {
-          await pushContactToAkuiteo(ct.id);
+          try { await pushContactToAkuiteo(ct.id); } catch (e) { console.warn('Push contact échoué:', ct.id, e.message); }
         }
       }
     }
@@ -22139,7 +22141,8 @@ async function pushClientToAkuiteo(clientId) {
       setSyncText('Synchronisation des établissements secondaires (Sites)…');
       try {
         const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city,etat_insee,date_fermeture')
-          .eq('siren', full.siren).neq('id', full.id).or('est_siege.is.null,est_siege.eq.false').order('name');
+          .eq('siren', full.siren).neq('id', full.id).is('akuiteo_id', null).order('name');
+        console.log('[sync sites] SIREN', full.siren, '— établissements (sans akuiteo_id) trouvés :', (etabs || []).length);
         // S'il y a plusieurs établissements secondaires, demander confirmation avant de les pousser
         const syncEtabs = etabs && etabs.length > 0 && (etabs.length === 1 || confirm('Cette société a ' + etabs.length + ' établissements secondaires.\n\nVoulez-vous aussi les synchroniser comme Sites (avec leur SIRET) dans Akuiteo ?'));
         if (syncEtabs) {
