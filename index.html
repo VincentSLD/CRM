@@ -22051,7 +22051,9 @@ async function pushClientToAkuiteo(clientId) {
       try {
         const { data: etabs } = await sb.from('clients').select('id,name,siret,adresse_ligne1,code_postal,city,etat_insee,date_fermeture')
           .eq('siren', full.siren).eq('est_siege', false).order('name');
-        if (etabs && etabs.length > 0) {
+        // S'il y a plusieurs établissements secondaires, demander confirmation avant de les pousser
+        const syncEtabs = etabs && etabs.length > 0 && (etabs.length === 1 || confirm('Cette société a ' + etabs.length + ' établissements secondaires.\n\nVoulez-vous aussi les synchroniser comme Sites (avec leur SIRET) dans Akuiteo ?'));
+        if (syncEtabs) {
           // Charger les sites existants dans Akuiteo
           let existingSites = [];
           try {
