@@ -15409,73 +15409,109 @@ async function impSiretLoad(input) {
     renderImpSiretTable();
   } catch (e) { console.error('impSiretLoad', e); el.innerHTML = '<div style="color:var(--red)">Erreur de lecture : ' + e.message + '</div>'; }
 }
+function _impSiretStatus(r) { return !r.clientId ? 'non_trouve' : (!r.fileSiret ? 'siret_invalide' : (r.fileSiret === r.currentSiret ? 'deja' : 'a_ecrire')); }
+function _impEsc(s) { return String(s == null ? '' : s).replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
+// Contenu de la cellule "Proposition API" pour une ligne (bouton, ou résultat + bouton Utiliser)
+function impApiCellHtml(r, i) {
+  if (!r.apiChecked) return '<button class="btn" style="font-size:10px;padding:1px 6px" onclick="impSiretApiCheck(' + i + ')" title="Proposer le SIRET via l\'API entreprise">🔍</button>';
+  if (!r.apiSiret) return '<span style="color:var(--t3);font-size:10px">aucun résultat</span> <button class="btn" style="font-size:9px;padding:0 4px" onclick="impSiretApiCheck(' + i + ')">↻</button>';
+  const match = r.apiSiret === r.fileSiret;
+  const col = match ? '#10b981' : (r.apiScore >= 60 ? '#10b981' : r.apiScore >= 40 ? '#f59e0b' : '#ef4444');
+  const useBtn = (r.clientId && r.apiSiret && r.apiSiret !== r.currentSiret) ? ' <button class="btn" style="font-size:9px;padding:0 5px;color:var(--accent)" onclick="impSiretUseApi(' + i + ')" title="Écrire ce SIRET dans la fiche">Utiliser</button>' : '';
+  return '<div style="font-family:monospace;color:' + col + '">' + r.apiSiret + (match ? ' ✓=' : '') + useBtn + '</div>'
+    + '<div style="font-size:10px;color:var(--t3)">' + _impEsc((r.apiName || '').slice(0, 26)) + ' · ' + _impEsc(r.apiCp || '') + ' · score ' + r.apiScore + '</div>';
+}
 function renderImpSiretTable() {
   const rows = _impSiret.rows;
-  const applicable = rows.filter(r => r.clientId && r.fileSiret && r.fileSiret !== r.currentSiret);
-  const dejaOk = rows.filter(r => r.clientId && r.fileSiret && r.fileSiret === r.currentSiret);
-  const invalides = rows.filter(r => r.clientId && !r.fileSiret);
-  const nonTrouves = rows.filter(r => !r.clientId);
-  _impSiret.applicable = applicable;
-  const esc = s => String(s == null ? '' : s).replace(/</g, '&lt;');
-  const summary = '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-bottom:10px">'
-    + '<span><strong>' + rows.length + '</strong> lignes</span>'
-    + '<span style="color:#10b981"><strong>' + applicable.length + '</strong> à écrire</span>'
-    + '<span style="color:var(--t3)"><strong>' + dejaOk.length + '</strong> déjà à jour</span>'
-    + '<span style="color:#f59e0b"><strong>' + nonTrouves.length + '</strong> code non trouvé</span>'
-    + '<span style="color:#ef4444"><strong>' + invalides.length + '</strong> SIRET invalide</span></div>'
-    + (_impSiret.matchInfo ? '<div style="font-size:11px;color:var(--t3);margin-bottom:10px">Correspondances : ' + (_impSiret.matchInfo.mCodial || 0) + ' par code Codial · ' + (_impSiret.matchInfo.mCode || 0) + ' par code · ' + (_impSiret.matchInfo.mLeg || 0) + ' par legacy_id (sur ' + (_impSiret.matchInfo.nClients || 0) + ' clients CRM)</div>' : '');
-  const tableRows = applicable.map((r, i) => '<tr style="border-bottom:1px solid var(--border)">'
-    + '<td style="padding:4px 6px;text-align:center"><input type="checkbox" class="imp-siret-cb" data-idx="' + i + '" checked></td>'
-    + '<td style="padding:4px 6px;text-align:center;font-weight:600;color:var(--t2)">' + esc(r.colA) + '</td>'
-    + '<td style="padding:4px 6px;font-family:monospace">' + esc(r.code) + '</td>'
-    + '<td style="padding:4px 6px">' + esc(r.clientName) + '</td>'
-    + '<td style="padding:4px 6px;font-family:monospace;color:var(--t3)">' + (esc(r.currentSiret) || '—') + '</td>'
-    + '<td style="padding:4px 6px;font-family:monospace;color:#10b981">' + esc(r.fileSiret) + '</td>'
-    + '<td style="padding:4px 6px" id="impapi_' + i + '"><button class="btn" style="font-size:10px;padding:1px 6px" onclick="impSiretApiCheck(' + i + ')" title="Proposer le SIRET via l\'API entreprise">🔍</button></td></tr>').join('');
-  const detail = (title, color, list, withName) => list.length ? '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;color:' + color + '">' + title + ' (' + list.length + ')</summary>'
-    + '<div style="max-height:180px;overflow:auto;font-size:11px;margin-top:4px">' + list.slice(0, 500).map(r => esc(r.code) + (withName && r.clientName ? ' — ' + esc(r.clientName) : '') + ' : ' + esc(r.raw || '(vide)')).join('<br>') + '</div></details>' : '';
+  let nEcrire = 0, nDeja = 0, nInval = 0, nNon = 0;
+  for (const r of rows) { const st = _impSiretStatus(r); if (st === 'a_ecrire') nEcrire++; else if (st === 'deja') nDeja++; else if (st === 'siret_invalide') nInval++; else nNon++; }
+  const stBadge = { a_ecrire: '<span style="color:#10b981">À écrire</span>', deja: '<span style="color:var(--t3)">Déjà OK</span>', siret_invalide: '<span style="color:#ef4444">SIRET invalide</span>', non_trouve: '<span style="color:#f59e0b">Non trouvé</span>' };
+  const summary = '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-bottom:6px">'
+    + '<span><strong>' + rows.length + '</strong> lignes fichier</span>'
+    + '<span style="color:#10b981"><strong>' + nEcrire + '</strong> à écrire</span>'
+    + '<span style="color:var(--t3)"><strong>' + nDeja + '</strong> déjà à jour</span>'
+    + '<span style="color:#f59e0b"><strong>' + nNon + '</strong> non trouvé</span>'
+    + '<span style="color:#ef4444"><strong>' + nInval + '</strong> SIRET invalide</span></div>'
+    + (_impSiret.matchInfo ? '<div style="font-size:11px;color:var(--t3);margin-bottom:8px">Correspondances : ' + (_impSiret.matchInfo.mCodial || 0) + ' par code Codial · ' + (_impSiret.matchInfo.mCode || 0) + ' par code · ' + (_impSiret.matchInfo.mLeg || 0) + ' par legacy_id (sur ' + (_impSiret.matchInfo.nClients || 0) + ' clients CRM)</div>' : '');
+  const trs = rows.map((r, i) => {
+    const st = _impSiretStatus(r);
+    const chk = st === 'a_ecrire' ? '<input type="checkbox" class="imp-siret-cb" data-idx="' + i + '" checked>' : '';
+    const q = (r.code + ' ' + (r.clientName || '') + ' ' + (r.name || '')).toLowerCase();
+    return '<tr data-st="' + st + '" data-q="' + _impEsc(q) + '" style="border-bottom:1px solid var(--border)">'
+      + '<td style="padding:3px 6px;text-align:center">' + chk + '</td>'
+      + '<td style="padding:3px 6px;text-align:center;font-weight:600;color:var(--t2)">' + _impEsc(r.colA) + '</td>'
+      + '<td style="padding:3px 6px;font-family:monospace">' + _impEsc(r.code) + '</td>'
+      + '<td style="padding:3px 6px;font-size:11px">' + stBadge[st] + '</td>'
+      + '<td style="padding:3px 6px">' + (r.clientName ? _impEsc(r.clientName) : '<span style="color:var(--t3)">—</span>') + '</td>'
+      + '<td style="padding:3px 6px;font-family:monospace;color:var(--t3)">' + (_impEsc(r.currentSiret) || '—') + '</td>'
+      + '<td style="padding:3px 6px;font-family:monospace">' + (r.fileSiret ? '<span style="color:#10b981">' + _impEsc(r.fileSiret) + '</span>' : '<span style="color:#ef4444" title="' + _impEsc(r.raw) + '">invalide</span>') + '</td>'
+      + '<td style="padding:3px 6px" id="impapi_' + i + '">' + impApiCellHtml(r, i) + '</td></tr>';
+  }).join('');
   document.getElementById('impSiretResults').innerHTML = summary
-    + (applicable.length ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap"><button class="btn btn-primary" style="font-size:12px" onclick="impSiretApply()">✔ Écrire le SIRET + SIREN (' + applicable.length + ')</button>'
-      + '<button class="btn" id="impApiAllBtn" style="font-size:12px" onclick="impSiretApiCheckAll()" title="Proposer un SIRET via l\'API entreprise pour les lignes cochées">🔍 Vérifier les cochées (API)</button>'
-      + '<label style="font-size:11px;color:var(--t3)"><input type="checkbox" checked onchange="document.querySelectorAll(&quot;.imp-siret-cb&quot;).forEach(c=>c.checked=this.checked)"> tout cocher</label></div>'
-      + '<div style="max-height:42vh;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--bg-1)"><th></th><th style="padding:4px 6px;text-align:center" title="Colonne A du fichier">A</th><th style="padding:4px 6px;text-align:left">Code</th><th style="padding:4px 6px;text-align:left">Société CRM</th><th style="padding:4px 6px;text-align:left">SIRET actuel</th><th style="padding:4px 6px;text-align:left">→ SIRET fichier</th><th style="padding:4px 6px;text-align:left">Proposition API (score)</th></tr></thead><tbody>' + tableRows + '</tbody></table></div>' : '<div style="color:var(--t3);font-size:12px">Aucune mise à jour à appliquer.</div>')
-    + detail('🟠 Codes non trouvés dans le CRM', '#f59e0b', nonTrouves, false)
-    + detail('🔴 SIRET invalides (à corriger dans le fichier)', '#ef4444', invalides, true);
+    + '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">'
+    + '<button class="btn btn-primary" style="font-size:12px" onclick="impSiretApply()">✔ Écrire SIRET+SIREN des lignes cochées (' + nEcrire + ')</button>'
+    + '<button class="btn" id="impApiAllBtn" style="font-size:12px" onclick="impSiretApiCheckAll()" title="Proposer via API pour les lignes visibles non encore vérifiées">🔍 Vérifier (API) les lignes visibles</button>'
+    + '<input id="impSiretSearch" placeholder="Filtrer code/société…" oninput="impSiretFilter()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg-1);color:var(--t1)">'
+    + '<select id="impSiretStatusFilter" onchange="impSiretFilter()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--bg-1);color:var(--t1)">'
+    + '<option value="">Tous les statuts</option><option value="a_ecrire">À écrire</option><option value="deja">Déjà OK</option><option value="non_trouve">Non trouvé</option><option value="siret_invalide">SIRET invalide</option></select>'
+    + '</div>'
+    + '<div style="max-height:52vh;overflow:auto"><table id="impSiretTable" style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--bg-1);position:sticky;top:0">'
+    + '<th></th><th style="padding:4px 6px" title="Colonne A du fichier">A</th><th style="padding:4px 6px;text-align:left">Code</th><th style="padding:4px 6px;text-align:left">Statut</th><th style="padding:4px 6px;text-align:left">Société CRM</th><th style="padding:4px 6px;text-align:left">SIRET actuel</th><th style="padding:4px 6px;text-align:left">→ SIRET fichier</th><th style="padding:4px 6px;text-align:left">Proposition API</th>'
+    + '</tr></thead><tbody>' + trs + '</tbody></table></div>';
 }
-// Propose un SIRET via l'API recherche-entreprises (nom + CP + ville) avec un score, comparable au SIRET du fichier
+function impSiretFilter() {
+  const q = (document.getElementById('impSiretSearch')?.value || '').toLowerCase().trim();
+  const st = document.getElementById('impSiretStatusFilter')?.value || '';
+  document.querySelectorAll('#impSiretTable tbody tr').forEach(tr => {
+    const okQ = !q || (tr.dataset.q || '').includes(q);
+    const okS = !st || tr.dataset.st === st;
+    tr.style.display = (okQ && okS) ? '' : 'none';
+  });
+}
+// Propose un SIRET via l'API recherche-entreprises (nom + CP + ville) avec un score
 async function impSiretApiCheck(i) {
-  const r = _impSiret.applicable[i]; if (!r) return;
+  const r = _impSiret.rows[i]; if (!r) return;
   const td = document.getElementById('impapi_' + i); if (td) td.innerHTML = '…';
   try {
     const q = (r.name || r.clientName || '').trim();
-    if (!q) { if (td) td.innerHTML = '<span style="color:var(--t3);font-size:10px">nom manquant</span>'; return; }
+    if (!q) { r.apiChecked = true; r.apiSiret = ''; if (td) td.innerHTML = '<span style="color:var(--t3);font-size:10px">nom manquant</span>'; return; }
     const params = new URLSearchParams({ q, per_page: '5' });
     if (r.cp) params.set('code_postal', r.cp);
     const resp = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + params);
     const d = resp.ok ? await resp.json() : {};
     const cands = (d.results || []).map(x => ({ x, score: _esScore({ name: q, code_postal: r.cp, city: r.ville }, x) })).sort((a, b) => b.score - a.score);
-    if (!cands.length) { if (td) td.innerHTML = '<span style="color:var(--t3);font-size:10px">aucun résultat</span>'; return; }
-    const best = cands[0], s = best.x.siege || {}, proposed = s.siret || '';
-    r.apiSiret = proposed; r.apiScore = best.score;
-    const match = proposed && proposed === r.fileSiret;
-    const col = match ? '#10b981' : (best.score >= 60 ? '#10b981' : best.score >= 40 ? '#f59e0b' : '#ef4444');
-    if (td) td.innerHTML = '<div style="font-family:monospace;color:' + col + '">' + (proposed || '—') + (match ? ' ✓=' : '') + '</div>'
-      + '<div style="font-size:10px;color:var(--t3)">' + String(best.x.nom_complet || '').slice(0, 26).replace(/</g, '&lt;') + ' · ' + (s.code_postal || '') + ' · score ' + best.score + '</div>';
-  } catch (e) { if (td) td.innerHTML = '<span style="color:var(--red);font-size:10px">erreur</span>'; }
+    r.apiChecked = true;
+    if (!cands.length) { r.apiSiret = ''; if (td) td.innerHTML = impApiCellHtml(r, i); return; }
+    const best = cands[0], s = best.x.siege || {};
+    r.apiSiret = s.siret || ''; r.apiScore = best.score; r.apiName = best.x.nom_complet || best.x.nom_raison_sociale || ''; r.apiCp = s.code_postal || '';
+    if (td) td.innerHTML = impApiCellHtml(r, i);
+  } catch (e) { r.apiChecked = true; r.apiSiret = ''; if (td) td.innerHTML = '<span style="color:var(--red);font-size:10px">erreur</span> <button class="btn" style="font-size:9px;padding:0 4px" onclick="impSiretApiCheck(' + i + ')">↻</button>'; }
 }
 let _impApiRunning = false;
 async function impSiretApiCheckAll() {
   const btn = document.getElementById('impApiAllBtn');
-  if (_impApiRunning) { _impApiRunning = false; if (btn) btn.textContent = '🔍 Vérifier les cochées (API)'; return; }
+  if (_impApiRunning) { _impApiRunning = false; if (btn) btn.textContent = '🔍 Vérifier (API) les lignes visibles'; return; }
   _impApiRunning = true;
-  const checks = [...document.querySelectorAll('.imp-siret-cb:checked')];
-  for (let k = 0; k < checks.length && _impApiRunning; k++) {
-    const i = +checks[k].dataset.idx;
-    if (btn) btn.textContent = '⏹ Arrêter (' + (k + 1) + '/' + checks.length + ')';
-    await impSiretApiCheck(i);
+  // lignes actuellement visibles et pas encore vérifiées
+  const visibles = [...document.querySelectorAll('#impSiretTable tbody tr')].filter(tr => tr.style.display !== 'none');
+  const idxs = visibles.map(tr => +tr.querySelector('[id^=impapi_]')?.id.split('_')[1]).filter(i => !isNaN(i) && !_impSiret.rows[i].apiChecked);
+  for (let k = 0; k < idxs.length && _impApiRunning; k++) {
+    if (btn) btn.textContent = '⏹ Arrêter (' + (k + 1) + '/' + idxs.length + ')';
+    await impSiretApiCheck(idxs[k]);
     await new Promise(res => setTimeout(res, 160));
   }
-  _impApiRunning = false; if (btn) btn.textContent = '🔍 Vérifier les cochées (API)';
+  _impApiRunning = false; if (btn) btn.textContent = '🔍 Vérifier (API) les lignes visibles';
+}
+// Écrit le SIRET proposé par l'API dans la fiche (aide à retrouver un SIRET manquant/erroné)
+async function impSiretUseApi(i) {
+  const r = _impSiret.rows[i]; if (!r || !r.clientId || !r.apiSiret) return;
+  if (!_siretValide(r.apiSiret)) { toast('Le SIRET proposé est invalide', 'warn'); return; }
+  if (!confirm('Écrire le SIRET ' + r.apiSiret + ' (proposé par l\'API) dans la fiche « ' + (r.clientName || '') + ' » ?')) return;
+  const { error } = await sb.from('clients').update({ siret: r.apiSiret, siren: r.apiSiret.slice(0, 9) }).eq('id', r.clientId);
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  r.currentSiret = r.apiSiret;
+  toast('SIRET écrit dans la fiche', 'success');
+  const td = document.getElementById('impapi_' + i); if (td) td.innerHTML = impApiCellHtml(r, i);
 }
 
 async function impSiretApply() {
@@ -15485,7 +15521,7 @@ async function impSiretApply() {
   showSyncLoading(true);
   let done = 0, err = 0;
   for (let i = 0; i < checks.length; i++) {
-    const r = _impSiret.applicable[+checks[i].dataset.idx]; if (!r) continue;
+    const r = _impSiret.rows[+checks[i].dataset.idx]; if (!r || !r.clientId || !r.fileSiret) continue;
     setSyncText('Mise à jour ' + (i + 1) + ' / ' + checks.length + '…');
     const { error } = await sb.from('clients').update({ siret: r.fileSiret, siren: r.fileSiret.slice(0, 9) }).eq('id', r.clientId);
     if (error) { err++; console.warn('update siret', r.code, error.message); } else done++;
