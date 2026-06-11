@@ -21857,10 +21857,72 @@ function _applyAkRefs(akData, full) {
   if (full.mk_origine) akData.level2grouping = full.mk_origine;
 }
 
+// Pousse un établissement secondaire comme SITE de son client siège (et non comme client).
+// Dans Akuiteo, les établissements d'un même SIREN partagent un seul client ; chaque site
+// porte son propre SIRET. On retrouve donc le siège (même SIREN, est_siege=true) puis on
+// crée/met à jour le site correspondant (apparié par SIRET).
+async function pushEtablissementAsSite(full) {
+  showSyncLoading(true); setSyncText('Synchronisation de l\'établissement (Site Akuiteo)...');
+  try {
+    await loadAkuiteoGeoRef().catch(() => {});
+    const { data: sieges } = await sb.from('clients').select('id,akuiteo_id,name').eq('siren', full.siren).eq('est_siege', true).limit(1);
+    const siege = sieges && sieges[0];
+    if (!siege) { toast('Aucun siège (établissement principal) trouvé pour ce SIREN. Créez/synchronisez d\'abord le siège.', 'error'); return; }
+    if (!siege.akuiteo_id) {
+      if (confirm('Le siège « ' + (siege.name || '') + ' » n\'est pas encore synchronisé dans Akuiteo.\n\nSynchroniser le siège maintenant ? (ses établissements seront proposés)')) {
+        return await pushClientToAkuiteo(siege.id);
+      }
+      return;
+    }
+    const customerAkId = siege.akuiteo_id;
+    let existingSites = [];
+    try { const s = await akuiteoFetch('GET', '/crm/customers/' + customerAkId + '/sites'); if (Array.isArray(s)) existingSites = s; } catch (e) { console.warn('Sites Akuiteo:', e.message); }
+    const norm = v => String(v == null ? '' : v).replace(/\s/g, '');
+    const existingSite = existingSites.find(s => full.siret && s.SIRET && norm(s.SIRET) === norm(full.siret))
+      || existingSites.find(s => full.siret && s.name && s.name.includes(full.siret))
+      || existingSites.find(s => { const a = s.address || {}; return full.code_postal && a.postalCode && full.city && a.city && a.postalCode === full.code_postal && a.city.toUpperCase() === (full.city || '').toUpperCase(); });
+    const siteName = ((full.city || full.siret || 'Établissement') + (full.siret ? ' (' + full.siret + ')' : '')).substring(0, 50);
+    let siteBody;
+    if (existingSite) { siteBody = { ...existingSite }; delete siteBody.contacts; delete siteBody.taxInformation; }
+    else siteBody = { customerId: customerAkId };
+    siteBody.name = siteName;
+    siteBody.SIRET = full.siret || siteBody.SIRET || null;
+    siteBody.validUntil = (full.etat_insee === 'C' && full.date_fermeture) ? full.date_fermeture + 'T00:00:00' : (siteBody.validUntil || null);
+    if (!siteBody.address) siteBody.address = {};
+    siteBody.address.line1 = (full.adresse_ligne1 || '').substring(0, 38) || siteBody.address.line1 || null;
+    siteBody.address.postalCode = (full.code_postal || '').substring(0, 10) || siteBody.address.postalCode || null;
+    siteBody.address.city = (full.city || '').substring(0, 38) || siteBody.address.city || null;
+    siteBody.address.country = siteBody.address.country || 'FR';
+    _applyAkGeo(siteBody.address, full.code_postal);
+    let siteId = existingSite ? existingSite.id : null;
+    if (existingSite) {
+      siteBody.id = existingSite.id;
+      await akuiteoFetch('POST', '/crm/customers/' + customerAkId + '/sites/' + existingSite.id, siteBody, { accept: 'text/plain' });
+    } else {
+      const cr = await akuiteoFetch('PUT', '/crm/customers/' + customerAkId + '/sites', siteBody, { accept: 'text/plain' });
+      const s = String(typeof cr === 'object' ? (cr && cr.id != null ? cr.id : '') : cr).trim();
+      if (/^\d+$/.test(s)) siteId = s;
+    }
+    await sb.from('clients').update({ akuiteo_site_id: siteId != null ? String(siteId) : 'synced', akuiteo_dirty: false }).eq('id', full.id);
+    await loadDB();
+    if (currentClient && currentClient.id === full.id) { const { data: rf } = await sb.from('clients').select('*').eq('id', full.id).maybeSingle(); if (rf) currentClient = rf; }
+    renderPage(currentPage);
+    toast('Établissement synchronisé comme Site dans Akuiteo' + (existingSite ? ' (mis à jour)' : ' (créé)'), 'success');
+  } catch (e) {
+    console.error('pushEtablissementAsSite', e);
+    toast('Erreur synchro établissement : ' + e.message, 'error');
+  } finally {
+    showSyncLoading(false);
+  }
+}
+
 async function pushClientToAkuiteo(clientId) {
   // Charger les données du client depuis Supabase (pas DB.clients qui est paginé)
   const { data: full } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
   if (!full) { toast('Société non trouvée en base', 'error'); return; }
+
+  // Un établissement secondaire se synchronise comme Site du siège, pas comme client
+  if (full.est_siege === false && full.siren) { return await pushEtablissementAsSite(full); }
 
   showSyncLoading(true); setSyncText('Envoi vers Akuiteo...');
   await loadAkuiteoGeoRef().catch(() => {});
