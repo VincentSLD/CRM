@@ -6097,6 +6097,15 @@ function renderClientsFilter(f) {
 
 // ═══ CLIENT DETAIL ═══
 let currentClient = null;
+// Ouvre la fiche du siège social (même SIREN) depuis un établissement secondaire
+async function goToSiege(siren, currentId) {
+  if (!siren) return;
+  const { data } = await sb.from('clients').select('id,name,akuiteo_id,est_siege').eq('siren', siren);
+  const fam = data || [];
+  const siege = fam.find(x => x.est_siege === true && x.akuiteo_id) || fam.find(x => x.est_siege === true) || fam.find(x => x.akuiteo_id) || null;
+  if (!siege || siege.id === currentId) { toast('Aucun siège social distinct trouvé pour ce SIREN', 'warn'); return; }
+  showClient(siege.id);
+}
 async function showClient(id) {
   currentClient = DB.clients.find(c=>c.id===id);
   // Si le client n'est pas en mémoire (pagination), le charger depuis Supabase
@@ -7241,6 +7250,7 @@ function renderClientDetail() {
       </div>
     </div>
     <div class="client-actions">
+      ${(c.est_siege === false && c.siren) ? '<button class="btn" onclick="goToSiege(\'' + c.siren + '\',\'' + c.id + '\')" title="Aller à la fiche du siège social">🏢 Retour au siège social</button>' : ''}
       <button class="btn" onclick="openModal('edit-client')">✎ Modifier</button>
       ${(() => {
         const hasSirene = c.siret && c.siren && c.ape && c.forme_juridique && c.raison_sociale;
