@@ -15659,6 +15659,58 @@ async function impSiretApply() {
   renderPage(currentPage);
 }
 
+// Normalise en base les numéros de téléphone (clients + contacts) au format à espaces
+async function normaliserTelephones() {
+  if (!confirm('Normaliser tous les numéros de téléphone (clients + contacts) au format à espaces ?\n\nCela met à jour la base (seules les valeurs modifiées sont écrites).')) return;
+  showSyncLoading(true);
+  let cChanged = 0, ctChanged = 0, errs = 0;
+  const collectChanges = (rows, fields) => {
+    const out = [];
+    for (const r of rows) {
+      const upd = {};
+      for (const f of fields) { if (r[f]) { const nf = formatPhone(r[f]); if (nf && nf !== r[f]) upd[f] = nf; } }
+      if (Object.keys(upd).length) out.push({ id: r.id, upd });
+    }
+    return out;
+  };
+  const loadAll = async (table, cols) => {
+    let all = [], lastId = '';
+    while (true) {
+      let q = sb.from(table).select(cols).order('id', { ascending: true }).limit(1000);
+      if (lastId) q = q.gt('id', lastId);
+      const { data, error } = await q;
+      if (error || !data || !data.length) break;
+      all = all.concat(data); lastId = data[data.length - 1].id;
+      if (data.length < 1000) break;
+    }
+    return all;
+  };
+  const runUpdates = async (table, list, label) => {
+    let ok = 0, err = 0;
+    for (let i = 0; i < list.length; i += 15) {
+      const chunk = list.slice(i, i + 15);
+      const res = await Promise.all(chunk.map(u => sb.from(table).update(u.upd).eq('id', u.id).then(r => r.error ? 'e' : 'o').catch(() => 'e')));
+      ok += res.filter(x => x === 'o').length; err += res.filter(x => x === 'e').length;
+      setSyncText(label + ' ' + Math.min(i + 15, list.length) + ' / ' + list.length + '…');
+    }
+    return { ok, err };
+  };
+  try {
+    setSyncText('Chargement des clients…');
+    const clients = await loadAll('clients', 'id,phone,telephone2,mobile,fax');
+    const clChanges = collectChanges(clients, ['phone', 'telephone2', 'mobile', 'fax']);
+    const r1 = await runUpdates('clients', clChanges, 'Clients'); cChanged = r1.ok; errs += r1.err;
+    setSyncText('Chargement des contacts…');
+    const contacts = await loadAll('contacts', 'id,telephone,mobile');
+    const ctChanges = collectChanges(contacts, ['telephone', 'mobile']);
+    const r2 = await runUpdates('contacts', ctChanges, 'Contacts'); ctChanged = r2.ok; errs += r2.err;
+  } catch (e) { console.error('normaliserTelephones', e); }
+  showSyncLoading(false);
+  toast(cChanged + ' client(s) et ' + ctChanged + ' contact(s) normalisés' + (errs ? ', ' + errs + ' erreur(s)' : ''), errs ? 'warn' : 'success');
+  await loadDB();
+  renderPage(currentPage);
+}
+
 function renderAdmin() {
   const isAdmin = !currentCommercial || currentCommercial.role === 'admin';
   if (!isAdmin) {
@@ -15672,6 +15724,14 @@ function renderAdmin() {
     <div class="card-body" style="font-size:13px;color:var(--t3)">
       Importez un fichier Excel (colonnes <strong>Code</strong> = code Codial et <strong>SIRET VALIDES</strong>). L'outil vérifie la correspondance SIRET ↔ société et la validité (Luhn) <strong>avant</strong> d'écrire.
       <div style="margin-top:10px"><button class="btn btn-primary" onclick="openImportSiret()" style="font-size:12px">Ouvrir l'outil d'import SIRET</button></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><div class="card-title">Normaliser les numéros de téléphone</div></div>
+    <div class="card-body" style="font-size:13px;color:var(--t3)">
+      Met tous les numéros (clients + contacts) au format à espaces (ex. <strong>06 07 69 85 57</strong>) directement en base. Seules les valeurs qui changent sont mises à jour.
+      <div style="margin-top:10px"><button class="btn btn-primary" onclick="normaliserTelephones()" style="font-size:12px">Normaliser les téléphones</button></div>
     </div>
   </div>
 
