@@ -15661,9 +15661,9 @@ async function impSiretApply() {
 
 // Normalise en base les numéros de téléphone (clients + contacts) au format à espaces
 async function normaliserTelephones() {
-  if (!confirm('Normaliser tous les numéros de téléphone (clients + contacts) au format à espaces ?\n\nCela met à jour la base (seules les valeurs modifiées sont écrites).')) return;
+  if (!confirm('Normaliser tous les numéros de téléphone (clients + contacts + collaborateurs) au format à espaces ?\n\nCela met à jour la base (seules les valeurs modifiées sont écrites).')) return;
   showSyncLoading(true);
-  let cChanged = 0, ctChanged = 0, errs = 0;
+  let cChanged = 0, ctChanged = 0, coChanged = 0, errs = 0;
   const collectChanges = (rows, fields) => {
     const out = [];
     for (const r of rows) {
@@ -15704,9 +15704,13 @@ async function normaliserTelephones() {
     const contacts = await loadAll('contacts', 'id,telephone,mobile');
     const ctChanges = collectChanges(contacts, ['telephone', 'mobile']);
     const r2 = await runUpdates('contacts', ctChanges, 'Contacts'); ctChanged = r2.ok; errs += r2.err;
+    setSyncText('Chargement des collaborateurs…');
+    const collabs = await loadAll('collaborateurs', 'id,telephone,mobile');
+    const coChanges = collectChanges(collabs, ['telephone', 'mobile']);
+    const r3 = await runUpdates('collaborateurs', coChanges, 'Collaborateurs'); coChanged = r3.ok; errs += r3.err;
   } catch (e) { console.error('normaliserTelephones', e); }
   showSyncLoading(false);
-  toast(cChanged + ' client(s) et ' + ctChanged + ' contact(s) normalisés' + (errs ? ', ' + errs + ' erreur(s)' : ''), errs ? 'warn' : 'success');
+  toast(cChanged + ' client(s), ' + ctChanged + ' contact(s) et ' + coChanged + ' collaborateur(s) normalisés' + (errs ? ', ' + errs + ' erreur(s)' : ''), errs ? 'warn' : 'success');
   await loadDB();
   renderPage(currentPage);
 }
@@ -15730,7 +15734,7 @@ function renderAdmin() {
   <div class="card" style="margin-bottom:16px">
     <div class="card-header"><div class="card-title">Normaliser les numéros de téléphone</div></div>
     <div class="card-body" style="font-size:13px;color:var(--t3)">
-      Met tous les numéros (clients + contacts) au format à espaces (ex. <strong>06 07 69 85 57</strong>) directement en base. Seules les valeurs qui changent sont mises à jour.
+      Met tous les numéros (clients + contacts + collaborateurs) au format à espaces (ex. <strong>06 07 69 85 57</strong>) directement en base. Seules les valeurs qui changent sont mises à jour.
       <div style="margin-top:10px"><button class="btn btn-primary" onclick="normaliserTelephones()" style="font-size:12px">Normaliser les téléphones</button></div>
     </div>
   </div>
