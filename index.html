@@ -3754,8 +3754,8 @@ function renderContacts() {
         <td><div style="font-weight:600;font-size:13px">${fullName} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'};margin-left:4px;vertical-align:middle" title="${c.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span></div><div style="font-size:11px;color:var(--t3)">${c.code||''}</div></td>
         <td style="font-size:12px">${c.fonction||'—'}</td>
         <td style="font-size:12px">${c.email ? '<a href="mailto:'+c.email+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+c.email+'</a>' : '—'}</td>
-        <td style="font-size:12px;font-family:monospace">${c.telephone ? '<a href="tel:'+c.telephone+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+c.telephone+'</a>' : '—'}</td>
-        <td style="font-size:12px;font-family:monospace">${c.mobile ? '<a href="tel:'+c.mobile+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+c.mobile+'</a>' : '—'}</td>
+        <td style="font-size:12px;font-family:monospace">${c.telephone ? '<a href="tel:'+c.telephone+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+formatPhone(c.telephone)+'</a>' : '—'}</td>
+        <td style="font-size:12px;font-family:monospace">${c.mobile ? '<a href="tel:'+c.mobile+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+formatPhone(c.mobile)+'</a>' : '—'}</td>
         <td style="font-size:12px">${c._clientName ? '<a href="#" onclick="event.stopPropagation();showClient(&#39;'+c.client_id+'&#39;);return false" style="color:var(--accent)">'+c._clientName+'</a>' : '—'}</td>
       </tr>`;
     }).join('')}</tbody></table>
@@ -3820,8 +3820,8 @@ function renderContactDetail() {
       <div class="card-body">
         ${detailRow('Email principal', c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : null)}
         ${detailRow('Email secondaire', c.email2 ? '<a href="mailto:'+c.email2+'" style="color:var(--accent)">'+c.email2+'</a>' : null)}
-        ${detailRow('Téléphone', c.telephone ? '<a href="tel:'+c.telephone+'" style="color:var(--accent)">'+c.telephone+'</a>' : null)}
-        ${detailRow('Mobile', c.mobile ? '<a href="tel:'+c.mobile+'" style="color:var(--accent)">'+c.mobile+'</a>' : null)}
+        ${detailRow('Téléphone', c.telephone ? '<a href="tel:'+c.telephone+'" style="color:var(--accent)">'+formatPhone(c.telephone)+'</a>' : null)}
+        ${detailRow('Mobile', c.mobile ? '<a href="tel:'+c.mobile+'" style="color:var(--accent)">'+formatPhone(c.mobile)+'</a>' : null)}
       </div>
     </div>
     <div class="card">
@@ -7237,7 +7237,7 @@ function renderClientDetail() {
     <div class="client-info">
       <h2>${c.name} <span class="badge ${s.cls}" style="font-size:11px;vertical-align:middle;margin-left:8px">${s.label}</span></h2>
       <div class="client-meta">
-        <span>📋 ${c.code}</span><span>🏢 ${c.sector}</span><span>👤 ${c.contact}</span><span>✉ ${c.email}</span><span>📞 ${c.phone}</span><span>📍 ${c.city}</span>
+        <span>📋 ${c.code}</span><span>🏢 ${c.sector}</span><span>👤 ${c.contact}</span><span>✉ ${c.email}</span><span>📞 ${formatPhone(c.phone)}</span><span>📍 ${c.city}</span>
       </div>
     </div>
     <div class="client-actions">
@@ -7302,10 +7302,10 @@ function renderClientDetail() {
     ])}
     ${detailSection('Coordonnées', [
       detailRow('Email', c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : '—'),
-      detailRow('Téléphone', c.phone ? '<a href="tel:'+c.phone+'" style="color:var(--accent)">'+c.phone+'</a>' : '—'),
-      detailRow('Téléphone 2', c.telephone2 ? '<a href="tel:'+c.telephone2+'" style="color:var(--accent)">'+c.telephone2+'</a>' : '—'),
-      detailRow('Mobile', c.mobile ? '<a href="tel:'+c.mobile+'" style="color:var(--accent)">'+c.mobile+'</a>' : '—'),
-      detailRow('Fax', c.fax || '—'),
+      detailRow('Téléphone', c.phone ? '<a href="tel:'+c.phone+'" style="color:var(--accent)">'+formatPhone(c.phone)+'</a>' : '—'),
+      detailRow('Téléphone 2', c.telephone2 ? '<a href="tel:'+c.telephone2+'" style="color:var(--accent)">'+formatPhone(c.telephone2)+'</a>' : '—'),
+      detailRow('Mobile', c.mobile ? '<a href="tel:'+c.mobile+'" style="color:var(--accent)">'+formatPhone(c.mobile)+'</a>' : '—'),
+      detailRow('Fax', c.fax ? formatPhone(c.fax) : '—'),
       detailRow('Site web', c.site_web ? '<a href="' + (c.site_web.startsWith('http') ? c.site_web : 'https://'+c.site_web) + '" target="_blank" style="color:var(--accent)">' + c.site_web + '</a>' : '—'),
     ])}
     <div class="card" style="margin-bottom:16px">
@@ -7588,8 +7588,8 @@ async function loadClientContacts(clientId) {
         <td><strong>${fullName}</strong> <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ct.akuiteo_id ? '#22c55e' : '#f59e0b'};vertical-align:middle" title="${ct.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span>${ct.service ? '<div style="font-size:10px;color:var(--t3)">'+ct.service+'</div>' : ''}</td>
         <td style="font-size:12px">${ct.fonction || '—'}</td>
         <td style="font-size:12px">${ct.email ? '<a href="mailto:'+ct.email+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+ct.email+'</a>' : '—'}</td>
-        <td class="mono" style="font-size:12px">${ct.telephone ? '<a href="tel:'+ct.telephone+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+ct.telephone+'</a>' : '—'}</td>
-        <td class="mono" style="font-size:12px">${ct.mobile ? '<a href="tel:'+ct.mobile+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+ct.mobile+'</a>' : '—'}</td>
+        <td class="mono" style="font-size:12px">${ct.telephone ? '<a href="tel:'+ct.telephone+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+formatPhone(ct.telephone)+'</a>' : '—'}</td>
+        <td class="mono" style="font-size:12px">${ct.mobile ? '<a href="tel:'+ct.mobile+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+formatPhone(ct.mobile)+'</a>' : '—'}</td>
         <td><button class="btn" style="font-size:10px;padding:2px 6px;color:var(--red)" onclick="event.stopPropagation();deleteContact('${ct.id}','${clientId}')">×</button></td>
       </tr>`;
     }).join('')
@@ -10819,7 +10819,7 @@ function renderDuplicates() {
                 <strong>SIREN</strong> <code>${c.siren||'—'}</code> · <strong>SIRET</strong> <code>${c.siret||'—'}</code><br>
                 <strong>Adresse</strong> ${c.adresse_ligne1||'—'}<br>
                 <strong>CP</strong> ${c.code_postal||'—'} · <strong>Ville</strong> ${c.city||'—'}<br>
-                <strong>Tél</strong> ${c.phone||'—'} · <strong>Email</strong> ${c.email||'—'}<br>
+                <strong>Tél</strong> ${c.phone?formatPhone(c.phone):'—'} · <strong>Email</strong> ${c.email||'—'}<br>
                 <strong>Statut</strong> ${c.status||'—'} · <strong>CA</strong> ${c.ca||0}€<br>
                 ${c.legacy_id?'<strong>legacy_id</strong> '+c.legacy_id+'<br>':''}
               </div>
@@ -14727,10 +14727,13 @@ function formatPhone(val) {
   // +33 → 0
   if (digits.startsWith('+33')) digits = '0' + digits.slice(3);
   if (digits.startsWith('0033')) digits = '0' + digits.slice(4);
-  // Si 10 chiffres français → XX.XX.XX.XX.XX
+  // Si 10 chiffres français → XX XX XX XX XX (espaces)
   if (/^\d{10}$/.test(digits)) {
-    return digits.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, '$1.$2.$3.$4.$5');
+    return digits.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, '$1 $2 $3 $4 $5');
   }
+  // Autres longueurs : regrouper par paires si ce sont des chiffres
+  const d = digits.replace(/\D/g, '');
+  if (d.length >= 6 && d.length <= 14) return d.replace(/(\d{2})(?=\d)/g, '$1 ').trim();
   // Sinon retourner nettoyé
   return val.trim();
 }
@@ -14894,8 +14897,8 @@ function renderCollaborateurs() {
       <td><strong>${c.nom||'—'}</strong></td>
       <td>${c.prenom||'—'}</td>
       <td>${c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : '—'}</td>
-      <td>${c.telephone||'—'}</td>
-      <td>${c.mobile||'—'}</td>
+      <td>${c.telephone?formatPhone(c.telephone):'—'}</td>
+      <td>${c.mobile?formatPhone(c.mobile):'—'}</td>
       <td>${c.fonction||'—'}</td>
       <td>${luccaLabel}</td>
     </tr>`;}).join('')}</tbody>
