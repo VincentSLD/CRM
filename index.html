@@ -4089,7 +4089,7 @@ function scoreRing(score, size=44) {
   </div>`;
 }
 
-const statusMap = { actif:{label:'Actif',cls:'green'}, dormant:{label:'Dormant',cls:'red'}, nouveau:{label:'Nouveau',cls:'blue'} };
+const statusMap = { prospect:{label:'Prospect',cls:'amber'}, actif:{label:'Actif',cls:'green'}, dormant:{label:'Dormant',cls:'red'}, nouveau:{label:'Nouveau',cls:'blue'} };
 const devisStatusMap = { accepted:{l:'Accepté',c:'green'}, pending:{l:'En attente',c:'amber'}, sent:{l:'Envoyé',c:'blue'}, refused:{l:'Refusé',c:'red'} };
 const cmdStatusMap = { en_cours:{l:'En cours',c:'blue'}, livree:{l:'Livrée',c:'green'}, annulee:{l:'Annulée',c:'red'} };
 const facStatusMap = { payee:{l:'Payée',c:'green'}, attente:{l:'En attente',c:'amber'}, retard:{l:'En retard',c:'red'} };
@@ -5977,6 +5977,7 @@ function renderClients(filter='all') {
       </select>
       <select onchange="clientsFilterStatut=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterStatut?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterStatut?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
         <option value="" ${!clientsFilterStatut?'selected':''}>— Tous statuts —</option>
+        <option value="prospect" ${clientsFilterStatut==='prospect'?'selected':''}>Prospect</option>
         <option value="actif" ${clientsFilterStatut==='actif'?'selected':''}>Actif</option>
         <option value="dormant" ${clientsFilterStatut==='dormant'?'selected':''}>Dormant</option>
         <option value="nouveau" ${clientsFilterStatut==='nouveau'?'selected':''}>Nouveau</option>
@@ -6065,7 +6066,7 @@ function renderClients(filter='all') {
       if (badges.length) statusBadge = badges.join(' ');
       // Statut CRM (Nouveau/Actif/Dormant)
       const st = statusMap[c.status] || statusMap['nouveau'];
-      const stColor = { green: '#22c55e', red: '#ef4444', blue: '#3b82f6' }[st.cls] || '#6b7280';
+      const stColor = { green: '#22c55e', red: '#ef4444', blue: '#3b82f6', amber: '#f59e0b' }[st.cls] || '#6b7280';
       const stBadge = '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;background:' + stColor + '22;color:' + stColor + '">' + st.label + '</span>';
       // Catégorie de compte (A/B/C) — distinctes parmi les agences
       const catCompte = (() => { const cc = c.categorie_compte; if (!cc || typeof cc !== 'object') return ''; return [...new Set(Object.values(cc).map(v => (String(v || '').trim()[0] || '')).filter(x => /[ABC]/.test(x)))].sort().join(', '); })();
@@ -15896,78 +15897,78 @@ function renderAdmin() {
 
 // ═══ STATUT CLIENTS (ACTIF / DORMANT / NOUVEAU) ═══
 async function calculerStatutsClients() {
-  if (!confirm('Recalculer le statut (Actif / Dormant / Nouveau) de tous les clients ayant des factures ?')) return;
+  if (!confirm('Recalculer le statut (Prospect / Nouveau / Actif / Dormant) de tous les clients ?\n\nRègle : un client sans devis validé (aucune commande ni facture) reste « Prospect ».')) return;
 
   showSyncLoading(true);
   setSyncText('Calcul des statuts clients…');
 
   try {
-    // 1. Charger TOUTES les factures (pas seulement 1 an) pour trouver la première facture
-    setSyncText('Chargement de toutes les factures…');
-    let allFactures = [], off = 0;
-    while (true) {
-      const { data } = await sb.from('factures').select('client_id,date').order('date', {ascending: true}).range(off, off + 999);
-      if (!data || data.length === 0) break;
-      allFactures = allFactures.concat(data);
-      if (data.length < 1000) break;
-      off += 1000;
-    }
+    const loadAllPag = async (table, cols) => {
+      let all = [], off = 0;
+      while (true) {
+        const { data } = await sb.from(table).select(cols).order('id', { ascending: true }).range(off, off + 999);
+        if (!data || data.length === 0) break;
+        all = all.concat(data);
+        if (data.length < 1000) break;
+        off += 1000;
+      }
+      return all;
+    };
+    // 1. Charger factures, commandes et clients (toutes périodes)
+    setSyncText('Chargement des factures…');
+    const allFactures = await loadAllPag('factures', 'client_id,date');
+    setSyncText('Chargement des commandes…');
+    const allCommandes = await loadAllPag('commandes', 'client_id,date');
+    setSyncText('Chargement des clients…');
+    const allClients = await loadAllPag('clients', 'id,status');
 
-    setSyncText(`${allFactures.length} factures chargées — Analyse…`);
-
-    // 2. Pour chaque client : date min (première facture) et date max (dernière facture)
-    const clientDates = {};
-    for (const f of allFactures) {
-      if (!f.client_id || !f.date) continue;
-      if (!clientDates[f.client_id]) clientDates[f.client_id] = { min: f.date, max: f.date };
-      if (f.date < clientDates[f.client_id].min) clientDates[f.client_id].min = f.date;
-      if (f.date > clientDates[f.client_id].max) clientDates[f.client_id].max = f.date;
-    }
+    // 2. Activité par client : dates min/max + présence de commande/facture
+    const act = {};
+    const addAct = (cid, date, kind) => {
+      if (!cid) return;
+      if (!act[cid]) act[cid] = { min: null, max: null, hasCmd: false, hasFac: false };
+      const a = act[cid];
+      if (date) { if (!a.min || date < a.min) a.min = date; if (!a.max || date > a.max) a.max = date; }
+      if (kind === 'cmd') a.hasCmd = true; else a.hasFac = true;
+    };
+    for (const f of allFactures) addAct(f.client_id, f.date, 'fac');
+    for (const o of allCommandes) addAct(o.client_id, o.date, 'cmd');
 
     // 3. Seuil 6 mois
     const now = new Date();
     const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate()).toISOString().slice(0, 10);
 
-    // 4. Déterminer le statut
-    const clientStatuts = {};
-    let cActif = 0, cDormant = 0, cNouveau = 0;
+    // 4. Règle de statut : pas de devis validé (ni commande ni facture) → Prospect
+    const statusFor = (cid) => {
+      const a = act[cid];
+      if (!a || (!a.hasCmd && !a.hasFac) || !a.max) return 'prospect';
+      if (a.max >= sixMonthsAgo) return (a.min && a.min >= sixMonthsAgo) ? 'nouveau' : 'actif';
+      return 'dormant';
+    };
 
-    for (const [cid, dates] of Object.entries(clientDates)) {
-      if (dates.max >= sixMonthsAgo) {
-        // Dernière facture récente
-        if (dates.min >= sixMonthsAgo) {
-          clientStatuts[cid] = 'nouveau';
-          cNouveau++;
-        } else {
-          clientStatuts[cid] = 'actif';
-          cActif++;
-        }
-      } else {
-        // Toutes les factures sont anciennes
-        clientStatuts[cid] = 'dormant';
-        cDormant++;
-      }
+    // 5. Calcul pour TOUS les clients + collecte des changements
+    let cProspect = 0, cNouveau = 0, cActif = 0, cDormant = 0;
+    const changes = [];
+    for (const c of allClients) {
+      const ns = statusFor(c.id);
+      if (ns === 'prospect') cProspect++; else if (ns === 'nouveau') cNouveau++; else if (ns === 'actif') cActif++; else cDormant++;
+      if ((c.status || '') !== ns) changes.push({ id: c.id, status: ns });
     }
 
-    // 5. Mise à jour Supabase par batch
-    const clientIds = Object.keys(clientStatuts);
-    const total = clientIds.length;
+    // 6. Mise à jour Supabase (uniquement les changements)
+    const total = changes.length;
     let updated = 0, errors = 0;
-
-    for (let i = 0; i < clientIds.length; i += 20) {
-      const batch = clientIds.slice(i, i + 20);
+    for (let i = 0; i < changes.length; i += 20) {
+      const batch = changes.slice(i, i + 20);
       setSyncText(`Mise à jour ${Math.min(i + 20, total)} / ${total} clients…`);
-      const promises = batch.map(cid =>
-        sb.from('clients').update({ status: clientStatuts[cid] }).eq('id', cid)
-          .then(({ error }) => { if (error) { console.warn('Statut err', cid, error.message); errors++; } else updated++; })
-      );
-      await Promise.all(promises);
+      await Promise.all(batch.map(ch =>
+        sb.from('clients').update({ status: ch.status }).eq('id', ch.id)
+          .then(({ error }) => { if (error) { console.warn('Statut err', ch.id, error.message); errors++; } else updated++; })
+      ));
     }
 
-    // 6. Mettre à jour le cache local
-    for (const c of DB.clients) {
-      if (clientStatuts[c.id]) c.status = clientStatuts[c.id];
-    }
+    // 7. Mettre à jour le cache local
+    for (const c of DB.clients) c.status = statusFor(c.id);
 
     showSyncLoading(false);
 
@@ -15978,6 +15979,10 @@ async function calculerStatutsClients() {
         ✓ ${updated} client(s) mis à jour${errors > 0 ? ', ' + errors + ' erreur(s)' : ''}
       </div>
       <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div style="text-align:center;padding:12px 20px;background:var(--amber-bg);border-radius:8px;border:1px solid rgba(245,158,11,0.15)">
+          <div style="font-size:22px;font-weight:800;color:var(--amber)">${cProspect}</div>
+          <div style="font-size:11px;color:var(--t2)">Prospects</div>
+        </div>
         <div style="text-align:center;padding:12px 20px;background:var(--green-bg);border-radius:8px;border:1px solid rgba(52,211,153,0.15)">
           <div style="font-size:22px;font-weight:800;color:var(--green)">${cActif}</div>
           <div style="font-size:11px;color:var(--t2)">Actifs</div>
