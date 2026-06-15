@@ -22320,6 +22320,25 @@ function _applyAkRefs(akData, full) {
   const sm = full.salesman_id || _akIdFromName(r.employees, full.salesman_name); if (sm) akData.salesmanId = sm;
   if (full.mk_groupe) akData.level1grouping = full.mk_groupe;
   if (full.mk_origine) akData.level2grouping = full.mk_origine;
+  // Statut Akuiteo : "nouveau"/"actif" → ACTIF, "dormant" → DORMANT
+  const sid = _akStatusId(full.status); if (sid) akData.statusId = sid;
+}
+// Référentiel des statuts client Akuiteo (/settings/customer-status/search) : code/nom (majuscules) → id
+let _akStatuses = null;
+async function loadAkuiteoStatuses() {
+  if (_akStatuses) return _akStatuses;
+  const map = {};
+  try {
+    const search = async () => { try { return await akuiteoFetch('POST', '/settings/customer-status/search?limit=100', { code: { operator: 'LIKE', value: '%' } }); } catch (e) { return await akuiteoFetch('POST', '/settings/customer-status/search?limit=100', {}); } };
+    const list = await search().catch(() => []);
+    for (const s of (list || [])) { if (s && s.id != null) { const c = String(s.code || '').trim().toUpperCase(), n = String(s.name || '').trim().toUpperCase(); if (c) map[c] = s.id; if (n) map[n] = s.id; } }
+  } catch (e) { console.warn('[loadAkuiteoStatuses]', e.message); }
+  _akStatuses = map; return _akStatuses;
+}
+function _akStatusId(crmStatus) {
+  if (!_akStatuses) return null;
+  const target = (String(crmStatus || '').toLowerCase() === 'dormant') ? 'DORMANT' : 'ACTIF';
+  return _akStatuses[target] || null;
 }
 
 // Retrouve la fiche "siège" (client Akuiteo) d'un même SIREN. Robuste à est_siege null :
@@ -22411,6 +22430,7 @@ async function pushClientToAkuiteo(clientId) {
   showSyncLoading(true); setSyncText('Envoi vers Akuiteo...');
   await loadAkuiteoGeoRef().catch(() => {});
   await loadAkuiteoRefs().catch(() => {});
+  await loadAkuiteoStatuses().catch(() => {});
   let customerAkId = full.akuiteo_id;
   try {
     // Pour un update : lire d'abord la fiche Akuiteo existante et merger nos modifications
