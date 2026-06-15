@@ -6041,8 +6041,8 @@ function renderClients(filter='all') {
     </div>
   </details>
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Société</th><th style="width:50px">Dpt</th><th>Ville</th><th>Commercial Novam</th><th>Commercial GPH</th><th style="width:60px;text-align:center">Pappers</th><th style="width:130px;text-align:center">Statut juridique</th></tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--t3)">Aucun client/prospect trouvé</td></tr>' : filtered.map(c => {
+    <table><thead><tr><th>Société</th><th style="width:50px">Dpt</th><th>Ville</th><th>Commercial Novam</th><th>Commercial GPH</th><th style="width:80px;text-align:center">Statut</th><th style="width:80px;text-align:center" title="Catégorie de compte (A/B/C)">Cat. compte</th><th style="width:60px;text-align:center">Pappers</th><th style="width:130px;text-align:center">Statut juridique</th></tr></thead>
+    <tbody>${filtered.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3)">Aucun client/prospect trouvé</td></tr>' : filtered.map(c => {
       const pappersRef = c.siren || c.siret;
       const pappersLink = pappersRef ? '<a href="https://www.pappers.fr/entreprise/'+pappersRef+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Voir sur Pappers" style="color:#3b82f6;text-decoration:none;font-size:14px">📋</a>' : '<span style="color:var(--t3);font-size:11px">—</span>';
       const dept = c.code_postal ? c.code_postal.slice(0,2) : (c.departement || '');
@@ -6063,12 +6063,21 @@ function renderClients(filter='all') {
         badges.push('<span style="display:inline-block;padding:2px 6px;border-radius:4px;background:'+pColor+';color:#fff;font-size:10px;font-weight:700" title="'+(c.procedure_nature||pc)+(c.procedure_date?' — '+c.procedure_date:'')+'">⚠ '+pc+'</span>');
       }
       if (badges.length) statusBadge = badges.join(' ');
+      // Statut CRM (Nouveau/Actif/Dormant)
+      const st = statusMap[c.status] || statusMap['nouveau'];
+      const stColor = { green: '#22c55e', red: '#ef4444', blue: '#3b82f6' }[st.cls] || '#6b7280';
+      const stBadge = '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;background:' + stColor + '22;color:' + stColor + '">' + st.label + '</span>';
+      // Catégorie de compte (A/B/C) — distinctes parmi les agences
+      const catCompte = (() => { const cc = c.categorie_compte; if (!cc || typeof cc !== 'object') return ''; return [...new Set(Object.values(cc).map(v => (String(v || '').trim()[0] || '')).filter(x => /[ABC]/.test(x)))].sort().join(', '); })();
+      const catBadge = catCompte ? '<span style="font-weight:700;color:var(--t2)">' + catCompte + '</span>' : '<span style="color:var(--t3)">—</span>';
       return `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
         <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${color})">${ini}</div><div><div class="cell-name">${c.name||''} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'};margin-left:4px;vertical-align:middle" title="${c.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span></div><div class="cell-code">${code}</div></div></div></td>
         <td class="mono" style="font-size:12px">${dept}</td>
         <td style="font-size:12px">${c.city||''}</td>
         <td style="font-size:12px">${novam}</td>
         <td style="font-size:12px">${gph}</td>
+        <td style="text-align:center">${stBadge}</td>
+        <td style="text-align:center">${catBadge}</td>
         <td style="text-align:center">${pappersLink}</td>
         <td style="text-align:center;white-space:nowrap">${statusBadge}</td>
       </tr>`;
