@@ -15334,8 +15334,7 @@ async function syncCollaborateurs() {
       prenom: e.firstName || null,
       titre: e.title || null,
       email: e.email || null,
-      telephone: e.phone || null,
-      mobile: e.mobilePhone || null,
+      // Téléphone/mobile NON synchronisés depuis Akuiteo : saisis manuellement, on ne les écrase pas
       fonction: e.jobType || null,
       externe: e.external || false,
       generique: e.generic || false,
