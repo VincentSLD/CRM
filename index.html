@@ -18609,9 +18609,16 @@ async function sendReport() {
     if (!resp.ok) {
       const errText = await resp.text();
       console.error('[sendReport] API error:', resp.status, errText);
-      let errMsg = "Erreur d'envoi";
-      try { const e = JSON.parse(errText); errMsg = e.details || e.error || errMsg; } catch(x) { errMsg = errText || errMsg; }
-      if (resp.status === 401) errMsg = 'Session Microsoft expirée. Reconnectez-vous via Microsoft pour pouvoir envoyer.';
+      let errMsg = "Erreur d'envoi", details = '';
+      try { const e = JSON.parse(errText); details = e.details || ''; errMsg = details || e.error || errMsg; } catch(x) { errMsg = details = errText || errMsg; }
+      const d = String(details);
+      if (/AADSTS90002|Tenant .* not found/i.test(d)) {
+        errMsg = 'Configuration Microsoft invalide : AZURE_TENANT_ID incorrect (voir Vercel). Ce n\'est pas une expiration de session.';
+      } else if (resp.status === 401 && /invalid_grant|expired|AADSTS70008|AADSTS700082/i.test(d)) {
+        errMsg = 'Session Microsoft expirée. Reconnectez-vous via Microsoft pour pouvoir envoyer.';
+      } else if (resp.status === 401 && /AADSTS/i.test(d)) {
+        errMsg = 'Erreur d\'authentification Microsoft : ' + d;
+      }
       throw new Error(errMsg);
     }
 
