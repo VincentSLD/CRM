@@ -77,6 +77,18 @@ begin
 end;
 $$;
 
+-- Maintenance : vide entièrement la base documentaire (instantané, sans timeout).
+-- security definer pour pouvoir exécuter TRUNCATE.
+create or replace function public.ged_clear()
+returns void
+language plpgsql
+security definer
+as $$
+begin
+  truncate table public.ged_chunks, public.ged_documents restart identity;
+end;
+$$;
+
 -- RLS : accès réservé aux utilisateurs authentifiés (l'app utilise une session
 -- Supabase après connexion Microsoft). Le endpoint /api/ged-ask utilise la clé
 -- service role et n'est pas soumis à la RLS.

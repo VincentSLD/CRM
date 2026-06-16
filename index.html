@@ -4453,14 +4453,34 @@ async function gedRepair() {
 
 async function gedClearIndex() {
   if (!confirm('Vider entièrement la base documentaire indexée ? Cette action est irréversible.')) return;
+  const statusEl = document.getElementById('gedIndexStatus');
   try {
-    const { error } = await sb.from('ged_documents').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    if (error) throw error;
+    // Méthode rapide : TRUNCATE via RPC (instantané, quelle que soit la taille)
+    const { error: rpcErr } = await sb.rpc('ged_clear');
+    if (rpcErr) {
+      // Repli : suppression par petits lots (évite le timeout du cascade massif)
+      if (statusEl) statusEl.textContent = 'Suppression en cours…';
+      let total = 0;
+      while (true) {
+        const { data, error } = await sb.from('ged_documents').select('id').limit(25);
+        if (error) throw error;
+        if (!data || !data.length) break;
+        const { error: delErr } = await sb.from('ged_documents').delete().in('id', data.map(d => d.id));
+        if (delErr) throw delErr;
+        total += data.length;
+        if (statusEl) statusEl.textContent = `Suppression… ${total} document(s)`;
+      }
+      if (statusEl) statusEl.textContent = '';
+    }
     gedChat = [];
     gedRenderChat();
+    const rep = document.getElementById('gedReport'); if (rep) { rep.style.display = 'none'; rep.innerHTML = ''; }
     gedLoadStats();
     toast('Index vidé.', 'success');
-  } catch (e) { toast('Erreur : ' + e.message, 'error'); }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = '';
+    toast('Erreur : ' + e.message, 'error');
+  }
 }
 
 async function gedAsk() {
