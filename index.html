@@ -4158,7 +4158,7 @@ function go(page) {
   const titles = {dashboard:'Tableau de bord',analyse:'Analyse / KPI',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing','marches-publics':'Veille marchés publics','procedures-coll':'Veille procédures collectives (BODACC)',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
     cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
-    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',endev:"En Dev'"};
+    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'"};
   document.getElementById('pageTitle').textContent = titles[page]||page;
   renderPage(page);
   if(window.innerWidth<=768) toggleSidebar(false);
@@ -4182,6 +4182,7 @@ function renderEnDev() {
     { page: 'collaborateurs-lucca', label: 'Collaborateurs LUCCA', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
     { page: 'import-xml', label: 'Import XML', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' },
     { page: 'admin', label: 'Admin', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>' },
+    { page: 'ged', label: 'Assistant documentaire', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>' },
   ];
   return `
     <div style="max-width:700px;margin:0 auto">
@@ -4201,6 +4202,261 @@ function renderEnDev() {
         </div>
       </div>
     </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ASSISTANT DOCUMENTAIRE PERMANENT (GED) — indexation + RAG
+// ═══════════════════════════════════════════════════════════
+const GED_EXTS = ['pdf', 'docx', 'txt', 'csv', 'eml'];
+let gedFiles = [];
+let gedIndexing = false;
+let gedChat = [];
+
+function renderGed() {
+  return `
+  <div style="max-width:920px;margin:0 auto">
+    <div style="margin-bottom:14px"><button class="btn btn-sm" onclick="go('endev')">← Retour En Dev'</button></div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">📚 Assistant documentaire — base permanente</div></div>
+      <div class="card-body">
+        <p style="font-size:13px;color:var(--t3);margin:0 0 12px;line-height:1.5">
+          Indexez un dossier de documents (PDF, DOCX, TXT, CSV, EML) dans Supabase pour les interroger à tout moment.
+          La recherche est <strong>sémantique</strong> : posez vos questions en langage naturel, l'assistant retrouve les
+          passages pertinents parmi tous les documents indexés et répond avec ses sources.
+          Seul le <strong>texte</strong> est stocké (pas les fichiers originaux) ; le chemin réseau d'origine est conservé.
+        </p>
+        <div id="gedStats" style="font-size:13px;color:var(--t2);margin-bottom:12px">Chargement des statistiques…</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+          <button class="btn btn-primary btn-sm" id="gedIndexBtn" onclick="gedPickAndIndex()">📂 Indexer / mettre à jour un dossier</button>
+          <button class="btn btn-sm" onclick="gedLoadStats()">↻ Rafraîchir</button>
+          <button class="btn btn-sm" style="margin-left:auto;color:var(--red)" onclick="gedClearIndex()">Vider l'index</button>
+        </div>
+        <div id="gedIndexStatus" style="font-size:12px;color:var(--t3);min-height:16px;margin-bottom:6px"></div>
+        <div id="gedProgress" style="display:none;height:6px;background:var(--bg-3);border-radius:3px;overflow:hidden;margin-bottom:6px"><div id="gedProgressBar" style="height:100%;width:0;background:var(--accent);transition:width .2s"></div></div>
+        <div style="font-size:11px;color:var(--t3)">Astuce : relancez l'indexation après ajout de nouveaux documents — les fichiers déjà indexés (inchangés) sont ignorés automatiquement.</div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-header"><div class="card-title">Interroger les documents</div></div>
+      <div class="card-body">
+        <div id="gedChatMsgs" style="max-height:50vh;overflow:auto;margin-bottom:10px;padding:4px"><div class="cmd-docs-empty">Posez une question sur les documents indexés.</div></div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <textarea id="gedInput" rows="2" placeholder="Posez une question… (Entrée pour envoyer, Maj+Entrée pour un saut de ligne)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();gedAsk()}" style="flex:1;resize:vertical;min-height:50px;max-height:200px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1);font-family:inherit;line-height:1.4"></textarea>
+          <button class="btn btn-primary btn-sm" id="gedAskBtn" onclick="gedAsk()" style="height:38px">→</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function gedLoadStats() {
+  const el = document.getElementById('gedStats');
+  if (!el) return;
+  try {
+    const [docs, chunks, last] = await Promise.all([
+      sb.from('ged_documents').select('*', { count: 'exact', head: true }),
+      sb.from('ged_chunks').select('*', { count: 'exact', head: true }),
+      sb.from('ged_documents').select('indexed_at').order('indexed_at', { ascending: false }).limit(1).maybeSingle()
+    ]);
+    if (docs.error) throw docs.error;
+    const lastTxt = last.data?.indexed_at ? ` · dernière indexation : ${new Date(last.data.indexed_at).toLocaleString('fr-FR')}` : '';
+    el.innerHTML = `<strong>${docs.count || 0}</strong> document(s) indexé(s) · <strong>${chunks.count || 0}</strong> passage(s)${lastTxt}`;
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--red)">Index non disponible. Exécutez d\'abord docs/ged.sql dans Supabase.</span>';
+  }
+}
+
+async function gedScanRecursive(dirHandle, path, depth = 0) {
+  if (depth > 6) return;
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind === 'file') {
+      const ext = entry.name.split('.').pop().toLowerCase();
+      if (GED_EXTS.includes(ext)) {
+        try {
+          const file = await entry.getFile();
+          gedFiles.push({ file, name: entry.name, path: path ? path + '/' + entry.name : entry.name, ext, size: file.size, lastModified: file.lastModified });
+        } catch (e) {}
+      }
+    } else if (entry.kind === 'directory') {
+      await gedScanRecursive(entry, path ? path + '/' + entry.name : entry.name, depth + 1);
+    }
+  }
+}
+
+async function gedExtractText(file, ext) {
+  const MAX = 200000;
+  if (ext === 'txt' || ext === 'csv') return (await file.text()).slice(0, MAX);
+  if (ext === 'eml') { const raw = await file.text(); const bs = raw.indexOf('\n\n'); return (bs > 0 ? raw.slice(bs + 2) : raw).slice(0, MAX); }
+  if (ext === 'pdf') {
+    if (!window._pdfjsLib) {
+      window._pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs');
+      window._pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+    }
+    const buf = await file.arrayBuffer();
+    const doc = await window._pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+    let text = '';
+    for (let p = 1; p <= doc.numPages; p++) {
+      const pg = await doc.getPage(p);
+      const c = await pg.getTextContent();
+      text += c.items.map(it => it.str).join(' ') + '\n';
+      if (text.length > MAX) break;
+    }
+    return text.trim();
+  }
+  if (ext === 'docx') {
+    if (!window._mammoth) window._mammoth = await import('https://cdn.jsdelivr.net/npm/mammoth@1.8.0/+esm');
+    const buf = await file.arrayBuffer();
+    const r = await window._mammoth.extractRawText({ arrayBuffer: buf });
+    return (r.value || '').trim().slice(0, MAX);
+  }
+  return '';
+}
+
+function gedChunkText(text, size = 3000, overlap = 300) {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  const chunks = [];
+  let i = 0;
+  while (i < clean.length) {
+    chunks.push(clean.slice(i, i + size));
+    i += (size - overlap);
+  }
+  return chunks;
+}
+
+async function gedPickAndIndex() {
+  if (gedIndexing) return;
+  if (!window.showDirectoryPicker) { toast('Navigateur non compatible — utilisez Chrome ou Edge.', 'error'); return; }
+  let dir;
+  try { dir = await window.showDirectoryPicker(); }
+  catch (e) { if (e.name === 'AbortError') return; toast('Erreur : ' + e.message, 'error'); return; }
+
+  gedIndexing = true;
+  const btn = document.getElementById('gedIndexBtn');
+  const statusEl = document.getElementById('gedIndexStatus');
+  const progWrap = document.getElementById('gedProgress');
+  const progBar = document.getElementById('gedProgressBar');
+  if (btn) btn.disabled = true;
+  gedFiles = [];
+  if (statusEl) statusEl.textContent = 'Analyse du dossier…';
+
+  try {
+    await gedScanRecursive(dir, '');
+    if (!gedFiles.length) { if (statusEl) statusEl.textContent = 'Aucun fichier supporté trouvé (pdf, docx, txt, csv, eml).'; return; }
+
+    // Index existant (pour ignorer les fichiers déjà indexés inchangés)
+    const existing = {};
+    const { data: exData } = await sb.from('ged_documents').select('path,file_hash');
+    (exData || []).forEach(d => { existing[d.path] = d.file_hash; });
+
+    if (progWrap) progWrap.style.display = '';
+    if (progBar) progBar.style.width = '0%';
+
+    let done = 0, indexed = 0, skipped = 0, failed = 0;
+    for (const f of gedFiles) {
+      done++;
+      const hash = f.size + '-' + f.lastModified;
+      if (existing[f.path] === hash) {
+        skipped++;
+      } else {
+        try {
+          const text = await gedExtractText(f.file, f.ext);
+          if (!text || text.length < 20) { failed++; }
+          else {
+            // Si le fichier existait (modifié), on supprime l'ancienne version (cascade chunks)
+            if (existing[f.path] !== undefined) await sb.from('ged_documents').delete().eq('path', f.path);
+            const ins = await sb.from('ged_documents').insert({ path: f.path, name: f.name, ext: f.ext, size: f.size, file_hash: hash, char_count: text.length }).select('id').single();
+            if (ins.error) throw new Error(ins.error.message);
+            const docId = ins.data.id;
+            const chunks = gedChunkText(text).slice(0, 100);
+            const rows = [];
+            for (let b = 0; b < chunks.length; b += 50) {
+              const batch = chunks.slice(b, b + 50);
+              const er = await fetch('/api/embed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texts: batch }) });
+              if (!er.ok) { const e = await er.json().catch(() => ({})); throw new Error(e.details || e.error || ('embed ' + er.status)); }
+              const ej = await er.json();
+              ej.embeddings.forEach((emb, k) => rows.push({ document_id: docId, chunk_index: b + k, content: batch[k], embedding: '[' + emb.join(',') + ']' }));
+            }
+            for (let b = 0; b < rows.length; b += 50) {
+              const { error } = await sb.from('ged_chunks').insert(rows.slice(b, b + 50));
+              if (error) throw new Error(error.message);
+            }
+            existing[f.path] = hash;
+            indexed++;
+          }
+        } catch (e) { failed++; console.warn('GED index échec', f.path, e); }
+      }
+      if (progBar) progBar.style.width = (done / gedFiles.length * 100).toFixed(0) + '%';
+      if (statusEl) statusEl.textContent = `(${done}/${gedFiles.length}) ${indexed} ajoutés · ${skipped} déjà présents · ${failed} échecs`;
+    }
+
+    if (progWrap) setTimeout(() => { progWrap.style.display = 'none'; }, 1500);
+    toast(`Indexation terminée : ${indexed} ajoutés, ${skipped} déjà présents, ${failed} échecs.`, 'success');
+    gedLoadStats();
+  } catch (e) {
+    toast('Erreur indexation : ' + e.message, 'error');
+    if (statusEl) statusEl.textContent = 'Erreur : ' + e.message;
+  } finally {
+    gedIndexing = false;
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function gedClearIndex() {
+  if (!confirm('Vider entièrement la base documentaire indexée ? Cette action est irréversible.')) return;
+  try {
+    const { error } = await sb.from('ged_documents').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (error) throw error;
+    gedChat = [];
+    gedRenderChat();
+    gedLoadStats();
+    toast('Index vidé.', 'success');
+  } catch (e) { toast('Erreur : ' + e.message, 'error'); }
+}
+
+async function gedAsk() {
+  const input = document.getElementById('gedInput');
+  const q = input?.value?.trim();
+  if (!q) return;
+  const btn = document.getElementById('gedAskBtn');
+  if (btn) btn.disabled = true;
+  input.value = '';
+  gedChat.push({ question: q, answer: '<span class="cmd-docs-spin"></span> Recherche dans la base…', sources: [], confiance: 0, alertes: [], loading: true });
+  gedRenderChat();
+  try {
+    const r = await fetch('/api/ged-ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q }) });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || ('Erreur serveur ' + r.status)); }
+    const o = await r.json();
+    const last = gedChat[gedChat.length - 1];
+    last.answer = o.reponse || 'Pas de réponse.';
+    last.sources = (o.sources && o.sources.length) ? o.sources : (o.matched || []);
+    last.confiance = o.confiance || 0;
+    last.alertes = o.alertes || [];
+    last.loading = false;
+  } catch (e) {
+    const last = gedChat[gedChat.length - 1];
+    last.answer = 'Erreur : ' + cmdEsc(e.message);
+    last.loading = false;
+  }
+  gedRenderChat();
+  if (btn) btn.disabled = false;
+}
+
+function gedRenderChat() {
+  const box = document.getElementById('gedChatMsgs');
+  if (!box) return;
+  if (gedChat.length === 0) {
+    box.innerHTML = '<div class="cmd-docs-empty">Posez une question sur les documents indexés.</div>';
+    return;
+  }
+  box.innerHTML = gedChat.map(h =>
+    `<div class="cmd-chat-q">${cmdEsc(h.question)}</div>
+     <div class="cmd-chat-a">${h.answer}
+       ${!h.loading && h.alertes && h.alertes.length ? '<div style="margin-top:6px;padding:6px 10px;background:#fef3c7;border-left:3px solid #f59e0b;border-radius:4px;font-size:11px;color:#92400e"><b>Alertes :</b><ul style="margin:4px 0 0 16px;padding:0">' + h.alertes.map(a => '<li>' + cmdEsc(a) + '</li>').join('') + '</ul></div>' : ''}
+       ${!h.loading && h.sources && h.sources.length ? '<div class="srcs">' + h.sources.map(s => '<span class="src-chip">' + cmdEsc(s) + '</span>').join('') + '</div>' : ''}
+       ${!h.loading && h.confiance ? '<div class="conf">Confiance : ' + h.confiance + '%</div>' : ''}
+     </div>`
+  ).join('');
+  box.scrollTop = box.scrollHeight;
 }
 
 function toggleSidebar(force) {
@@ -4247,6 +4503,7 @@ function renderPage(page) {
     annuaire: renderAnnuaire,
     admin: renderAdmin,
     endev: renderEnDev,
+    ged: renderGed,
   };
   // Attendre les données différées si la page en a besoin
   if (_DEFERRED_PAGES.has(page) && !_deferredDataLoaded && _deferredLoadPromise) {
@@ -4286,6 +4543,7 @@ function renderPage(page) {
   if (page === 'collaborateurs-lucca') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); renderCollaborateursLuccaRefresh(); }, 50);
   if (page === 'annuaire') setTimeout(async () => { await loadAnnuaireAbsences(); renderAnnuaireRefresh(); }, 50);
   if (page === 'cr' && crViewMode === 'send') setTimeout(loadSendGroups, 50);
+  if (page === 'ged') setTimeout(() => { gedLoadStats(); gedRenderChat(); }, 50);
 }
 
 // ═══════════════════════════════════════════════════════════
