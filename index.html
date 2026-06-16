@@ -18485,19 +18485,24 @@ async function sendReport() {
   }
   htmlBody += `<br><p style="color:#888;font-size:12px">Envoyé depuis le CRM par ${senderName}</p>`;
 
-  // Envoyer via l'API
+  // Envoi via la boîte Microsoft de la personne connectée (Microsoft Graph)
+  const msRefresh = (() => { try { return localStorage.getItem('ms_graph_refresh'); } catch (e) { return null; } })();
+  if (!msRefresh && !msGraphAccessToken) {
+    toast('Pour envoyer depuis votre boîte Microsoft, reconnectez-vous via Microsoft (déconnexion puis reconnexion).', 'error');
+    return;
+  }
+
   toast('Envoi en cours...','info');
   try {
-    const resp = await fetch('/api/send-email', {
+    const resp = await fetch('/api/graph-send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        refresh_token: msRefresh || undefined,
+        access_token: msGraphAccessToken || undefined,
         to: emails,
         subject,
         html: htmlBody,
-        from_name: senderName,
-        from_email: senderEmail,
-        reply_to: senderEmail,
         cc: copyToMe && senderEmail ? [senderEmail] : undefined
       })
     });
@@ -18505,10 +18510,17 @@ async function sendReport() {
     if (!resp.ok) {
       const errText = await resp.text();
       console.error('[sendReport] API error:', resp.status, errText);
-      let errMsg = 'Erreur envoi email';
+      let errMsg = "Erreur d'envoi";
       try { const e = JSON.parse(errText); errMsg = e.details || e.error || errMsg; } catch(x) { errMsg = errText || errMsg; }
+      if (resp.status === 401) errMsg = 'Session Microsoft expirée. Reconnectez-vous via Microsoft pour pouvoir envoyer.';
       throw new Error(errMsg);
     }
+
+    // Récupérer le refresh token renouvelé (Microsoft fait tourner les jetons)
+    try {
+      const okData = await resp.clone().json();
+      if (okData && okData.refresh_token) localStorage.setItem('ms_graph_refresh', okData.refresh_token);
+    } catch (e) {}
 
     // Enregistrer l'envoi dans Supabase
     const envoi = {
@@ -22954,6 +22966,7 @@ function toast(msg, type='info', duration=3500) {
 let currentUser = null;
 let currentCommercial = null;
 let authMode = 'login'; // 'login' or 'signup'
+let msGraphAccessToken = null; // Jeton d'accès Microsoft Graph (capté au login OAuth)
 const ADMIN_EMAILS = ['vsalaud@be-gph.fr'];
 
 // Vérifie si l'utilisateur a accès au CRM (table crm_access)
@@ -23016,6 +23029,13 @@ sb.auth.onAuthStateChange((event, session) => {
     _recoveryMode = true;
     console.log('[Auth] PASSWORD_RECOVERY event, session:', !!session);
     showResetForm();
+  }
+  // Capter les jetons Microsoft Graph dès le retour OAuth (uniquement présents à ce moment)
+  if (session && session.provider_token) {
+    msGraphAccessToken = session.provider_token;
+    if (session.provider_refresh_token) {
+      try { localStorage.setItem('ms_graph_refresh', session.provider_refresh_token); } catch (e) {}
+    }
   }
 });
 // Vérifier aussi l'URL au chargement
@@ -23133,7 +23153,7 @@ async function signInWithMicrosoft() {
   try {
     const { error } = await sb.auth.signInWithOAuth({
       provider: 'azure',
-      options: { scopes: 'openid email profile', redirectTo: window.location.origin }
+      options: { scopes: 'openid email profile offline_access https://graph.microsoft.com/Mail.Send', redirectTo: window.location.origin }
     });
     if (error) throw error;
     // La page est redirigée vers Microsoft ; au retour, onAuthStateChange prend le relais.

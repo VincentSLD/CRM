@@ -21,7 +21,8 @@ Pour qu'il fonctionne, il reste **2 configurations** à faire (une fois).
    → **Nouveau secret client** → noter la **Valeur** (*Value*, pas l'ID secret) —
    elle n'est visible qu'une fois.
 6. Menu **Autorisations d'API** (*API permissions*) → **Ajouter une autorisation**
-   → **Microsoft Graph** → **Autorisations déléguées** : cocher `openid`, `email`, `profile`
+   → **Microsoft Graph** → **Autorisations déléguées** : cocher `openid`, `email`,
+   `profile`, et **`Mail.Send`** (envoi de CR depuis la boîte de l'utilisateur)
    → puis **Accorder le consentement administrateur pour <votre organisation>**.
 
 ## 2. Supabase — Dashboard du projet (interface en anglais)
@@ -33,6 +34,21 @@ Pour qu'il fonctionne, il reste **2 configurations** à faire (une fois).
    - **Azure Tenant URL** = `https://login.microsoftonline.com/<DIRECTORY_TENANT_ID>`
 3. **Authentication → URL Configuration** → ajouter l'URL de l'app (Vercel) dans
    **Redirect URLs** (ex. `https://crm-nine-livid.vercel.app`) et en **Site URL**.
+
+## 3. Vercel — variables d'environnement (envoi des CR via Microsoft Graph)
+
+L'envoi des comptes-rendus se fait désormais depuis la **vraie boîte Microsoft** de
+la personne connectée (`/api/graph-send` → `POST /me/sendMail`). L'endpoint échange le
+refresh token Microsoft (capté au login, scope `offline_access`) contre un jeton
+d'accès. Ajouter dans **Vercel → Settings → Environment Variables** (même app que ci-dessus) :
+
+- `AZURE_CLIENT_ID` = Application (client) ID
+- `AZURE_CLIENT_SECRET` = la Value du client secret (la même que dans Supabase)
+- `AZURE_TENANT_ID` = Directory (tenant) ID
+
+> Après mise en place, chaque utilisateur doit **se déconnecter puis se reconnecter
+> via Microsoft une fois** pour accorder la permission `Mail.Send` et fournir le
+> refresh token. L'email envoyé apparaît alors dans ses **Éléments envoyés**.
 
 ## Comportement
 
