@@ -18464,10 +18464,11 @@ function _fmtDateFR(v) {
 async function _buildSendDefaultMessage() {
   const r = currentReport;
   if (!r) return '';
-  const lines = [];
-  lines.push('Date du RDV : ' + _fmtDateFR(r.date_raw || r.date));
-  lines.push('Type : ' + (r.type_cr || '—'));
-  lines.push('Rédacteur : ' + (r.redacteur_nom || '—'));
+  // Chaque entrée de "parts" est séparée par une ligne vide (espacement)
+  const parts = [];
+  parts.push('Date du RDV : ' + _fmtDateFR(r.date_raw || r.date));
+  parts.push('Type : ' + (r.type_cr || '—'));
+  parts.push('Rédacteur : ' + (r.redacteur_nom || '—'));
 
   const socs = r.clients_list || [];
   const cons = r.contacts_list || [];
@@ -18485,19 +18486,22 @@ async function _buildSendDefaultMessage() {
     (data || []).forEach(c => { conClient[c.id] = c.client_id; });
   }
 
-  lines.push('Sociétés et contacts :');
+  // Bloc "Sociétés et contacts" : le titre et la liste restent groupés (sauts simples)
+  const socBlock = ['Sociétés et contacts :'];
   socs.forEach(s => {
     const info = cpMap[s.id] || {};
     const loc = [info.code_postal, info.city].filter(Boolean).join(' ');
     const sName = s.name || info.name || '—';
     const socContacts = cons.filter(c => conClient[c.id] === s.id).map(c => c.name).filter(Boolean);
-    lines.push('- ' + sName + (loc ? ' (' + loc + ')' : '') + (socContacts.length ? ' : ' + socContacts.join(', ') : ''));
+    socBlock.push('- ' + sName + (loc ? ' (' + loc + ')' : '') + (socContacts.length ? ' : ' + socContacts.join(', ') : ''));
   });
   // Contacts non rattachés à une société listée
   const orphan = cons.filter(c => !socs.some(s => s.id === conClient[c.id])).map(c => c.name).filter(Boolean);
-  if (orphan.length) lines.push('- Autres contacts : ' + orphan.join(', '));
+  if (orphan.length) socBlock.push('- Autres contacts : ' + orphan.join(', '));
+  parts.push(socBlock.join('\n'));
 
-  return lines.join('\n');
+  // Ligne vide entre chaque partie
+  return parts.join('\n\n');
 }
 
 async function openSendModal() {
