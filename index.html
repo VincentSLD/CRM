@@ -858,6 +858,21 @@ tbody tr:last-child td { border-bottom: none; }
 
 .tb-div { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
 
+.cr-palette {
+  display: none;
+  position: absolute; top: 100%; left: 0; z-index: 60;
+  background: var(--bg-1); border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  grid-template-columns: repeat(4, 20px); gap: 5px; margin-top: 4px;
+}
+.cr-sw {
+  width: 20px; height: 20px; border: 1px solid rgba(0,0,0,0.2);
+  border-radius: 4px; cursor: pointer; padding: 0;
+}
+.cr-sw:hover { transform: scale(1.12); }
+.cr-sw-none { background: #fff; position: relative; }
+.cr-sw-none::after { content: ''; position: absolute; left: 1px; right: 1px; top: 9px; height: 2px; background: #e11d48; transform: rotate(-45deg); }
+
 .tb.recording { color: var(--red); animation: rec-pulse 1.2s infinite; }
 
 @keyframes rec-pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
@@ -2930,6 +2945,31 @@ function fmtRTE(editorId, command) {
   if (el) el.focus();
   document.execCommand(command);
 }
+
+// Palettes couleur / surlignage de l'éditeur de CR
+function crTogglePalette(id) {
+  ['crFgPalette', 'crBgPalette'].forEach(p => {
+    const el = document.getElementById(p);
+    if (el) el.style.display = (p === id && el.style.display !== 'grid') ? 'grid' : 'none';
+  });
+}
+function crApplyColor(kind, color) {
+  // La sélection est conservée grâce au preventDefault sur mousedown des boutons
+  try { document.execCommand('styleWithCSS', false, true); } catch (e) {}
+  if (kind === 'fore') {
+    document.execCommand('foreColor', false, color);
+  } else {
+    // hiliteColor (Firefox) ou backColor (Chromium) ; 'transparent' retire le surlignage
+    if (!document.execCommand('hiliteColor', false, color)) document.execCommand('backColor', false, color);
+  }
+  crTogglePalette(''); // ferme les palettes
+}
+// Fermer les palettes au clic à l'extérieur
+document.addEventListener('click', e => {
+  if (!e.target.closest('#crFgPalette') && !e.target.closest('#crBgPalette') && !e.target.closest('.editor-toolbar .tb')) {
+    crTogglePalette('');
+  }
+});
 
 // Compresse une image (data URL) à max 800px de large + qualité jpeg 0.8
 async function compressImage(dataUrl, maxWidth = 800, quality = 0.8) {
@@ -13872,6 +13912,33 @@ function getCREditorHTML(r) {
           <button class="tb" title="Gras" onclick="document.execCommand('bold')"><b>B</b></button>
           <button class="tb" title="Italique" onclick="document.execCommand('italic')"><i>I</i></button>
           <button class="tb" title="Souligné" onclick="document.execCommand('underline')"><u>U</u></button>
+          <div class="tb-div"></div>
+          <div style="position:relative;display:inline-block">
+            <button class="tb" title="Couleur du texte" onmousedown="event.preventDefault()" onclick="crTogglePalette('crFgPalette')"><span style="border-bottom:3px solid #e11d48;line-height:1;font-weight:700">A</span></button>
+            <div id="crFgPalette" class="cr-palette">
+              <button class="cr-sw" style="background:#1a1a1a" title="Noir" onmousedown="event.preventDefault()" onclick="crApplyColor('fore','#1a1a1a')"></button>
+              <button class="cr-sw" style="background:#e11d48" title="Rouge" onmousedown="event.preventDefault()" onclick="crApplyColor('fore','#e11d48')"></button>
+              <button class="cr-sw" style="background:#2563eb" title="Bleu" onmousedown="event.preventDefault()" onclick="crApplyColor('fore','#2563eb')"></button>
+              <button class="cr-sw" style="background:#16a34a" title="Vert" onmousedown="event.preventDefault()" onclick="crApplyColor('fore','#16a34a')"></button>
+              <button class="cr-sw" style="background:#ea580c" title="Orange" onmousedown="event.preventDefault()" onclick="crApplyColor('fore','#ea580c')"></button>
+              <button class="cr-sw" style="background:#7c3aed" title="Violet" onmousedown="event.preventDefault()" onclick="crApplyColor('fore','#7c3aed')"></button>
+              <button class="cr-sw" style="background:#0891b2" title="Cyan" onmousedown="event.preventDefault()" onclick="crApplyColor('fore','#0891b2')"></button>
+              <button class="cr-sw" style="background:#6b7280" title="Gris" onmousedown="event.preventDefault()" onclick="crApplyColor('fore','#6b7280')"></button>
+            </div>
+          </div>
+          <div style="position:relative;display:inline-block">
+            <button class="tb" title="Surligner" onmousedown="event.preventDefault()" onclick="crTogglePalette('crBgPalette')"><span style="background:#fde047;padding:0 3px;border-radius:2px;color:#1a1a1a;font-weight:700">A</span></button>
+            <div id="crBgPalette" class="cr-palette">
+              <button class="cr-sw" style="background:#fde047" title="Jaune" onmousedown="event.preventDefault()" onclick="crApplyColor('hilite','#fde047')"></button>
+              <button class="cr-sw" style="background:#bbf7d0" title="Vert" onmousedown="event.preventDefault()" onclick="crApplyColor('hilite','#bbf7d0')"></button>
+              <button class="cr-sw" style="background:#bfdbfe" title="Bleu" onmousedown="event.preventDefault()" onclick="crApplyColor('hilite','#bfdbfe')"></button>
+              <button class="cr-sw" style="background:#fbcfe8" title="Rose" onmousedown="event.preventDefault()" onclick="crApplyColor('hilite','#fbcfe8')"></button>
+              <button class="cr-sw" style="background:#fed7aa" title="Orange" onmousedown="event.preventDefault()" onclick="crApplyColor('hilite','#fed7aa')"></button>
+              <button class="cr-sw" style="background:#e9d5ff" title="Violet" onmousedown="event.preventDefault()" onclick="crApplyColor('hilite','#e9d5ff')"></button>
+              <button class="cr-sw" style="background:#fecaca" title="Rouge" onmousedown="event.preventDefault()" onclick="crApplyColor('hilite','#fecaca')"></button>
+              <button class="cr-sw cr-sw-none" title="Aucun (retirer)" onmousedown="event.preventDefault()" onclick="crApplyColor('hilite','transparent')"></button>
+            </div>
+          </div>
           <div class="tb-div"></div>
           <button class="tb" title="Liste" onclick="document.execCommand('insertUnorderedList')">☰</button>
           <button class="tb" title="Numérotée" onclick="document.execCommand('insertOrderedList')">1.</button>
