@@ -18464,6 +18464,16 @@ document.addEventListener('click', e => {
   }
 });
 
+// Convertit un Blob en chaîne base64 (sans le préfixe data:) pour les PJ Graph
+function _blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+}
+
 async function sendReport() {
   const emailsRaw = document.getElementById('sendEmails')?.value || '';
   const emails = emailsRaw.split(/[;,\s]+/).map(e => e.trim()).filter(e => e && e.includes('@'));
@@ -18475,6 +18485,8 @@ async function sendReport() {
   const contenu = currentReport?.contenu || currentReport?.text || '';
   const includeFull = document.getElementById('sendOptFull')?.checked;
   const copyToMe = document.getElementById('sendOptCopy')?.checked;
+  const withPJ = document.getElementById('sendOptPJ')?.checked;
+  const reportPJ = (currentReport && currentReport.pieces_jointes) ? currentReport.pieces_jointes : [];
 
   // Construire le HTML de l'email
   const senderName = currentCommercial?.nom || 'CRM';
@@ -18494,6 +18506,15 @@ async function sendReport() {
     return;
   }
 
+  // Garde de taille des pièces jointes (envoi direct Graph ≈ 3 Mo max)
+  if (withPJ && reportPJ.length) {
+    const totalSize = reportPJ.reduce((s, p) => s + (p.size || 0), 0);
+    if (totalSize > 3 * 1024 * 1024) {
+      toast('Pièces jointes trop volumineuses (' + (Math.round(totalSize / 1048576 * 10) / 10) + ' Mo, max 3 Mo) pour l\'envoi par email.', 'error');
+      return;
+    }
+  }
+
   toast('Envoi en cours...','info');
   // Sablier sur le bouton pendant la diffusion
   const sendBtn = document.getElementById('sendReportBtn');
@@ -18505,6 +18526,19 @@ async function sendReport() {
     sendBtn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><span style="display:inline-block;animation:spin 1s linear infinite">⏳</span>Envoi en cours…</span>';
   }
   try {
+    // Préparer les pièces jointes (téléchargement depuis le storage + base64)
+    let attachments = [];
+    if (withPJ && reportPJ.length) {
+      for (const pj of reportPJ) {
+        try {
+          const { data: blob, error } = await sb.storage.from('cr-attachments').download(pj.path);
+          if (error || !blob) { console.warn('PJ non téléchargée:', pj.name, error); continue; }
+          const contentBytes = await _blobToBase64(blob);
+          attachments.push({ name: pj.name, contentType: pj.type || blob.type || 'application/octet-stream', contentBytes });
+        } catch (e) { console.warn('Erreur PJ', pj.name, e); }
+      }
+    }
+
     const resp = await fetch('/api/graph-send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -18514,7 +18548,8 @@ async function sendReport() {
         to: emails,
         subject,
         html: htmlBody,
-        cc: copyToMe && senderEmail ? [senderEmail] : undefined
+        cc: copyToMe && senderEmail ? [senderEmail] : undefined,
+        attachments: attachments.length ? attachments : undefined
       })
     });
 

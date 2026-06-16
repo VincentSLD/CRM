@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
-  const { refresh_token, access_token, to, subject, html, text, cc } = req.body || {};
+  const { refresh_token, access_token, to, subject, html, text, cc, attachments } = req.body || {};
 
   if (!to || !to.length) return res.status(400).json({ error: 'Destinataire(s) manquant(s)' });
   if (!subject) return res.status(400).json({ error: 'Objet manquant' });
@@ -65,12 +65,22 @@ export default async function handler(req, res) {
   // Construire le message Graph
   const toRecipients = (Array.isArray(to) ? to : [to]).map(a => ({ emailAddress: { address: a } }));
   const ccRecipients = (cc ? (Array.isArray(cc) ? cc : [cc]) : []).map(a => ({ emailAddress: { address: a } }));
+  const graphAttachments = (Array.isArray(attachments) ? attachments : [])
+    .filter(a => a && a.name && a.contentBytes)
+    .map(a => ({
+      '@odata.type': '#microsoft.graph.fileAttachment',
+      name: a.name,
+      contentType: a.contentType || 'application/octet-stream',
+      contentBytes: a.contentBytes
+    }));
+
   const message = {
     message: {
       subject,
       body: { contentType: html ? 'HTML' : 'Text', content: html || text || '' },
       toRecipients,
-      ccRecipients
+      ccRecipients,
+      ...(graphAttachments.length ? { attachments: graphAttachments } : {})
     },
     saveToSentItems: true
   };
