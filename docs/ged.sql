@@ -62,6 +62,21 @@ as $$
   limit match_count;
 $$;
 
+-- Maintenance : supprime les documents enregistrés sans aucun passage
+-- (incohérences éventuelles), pour qu'ils soient repris à la prochaine indexation.
+create or replace function public.ged_delete_empty()
+returns int
+language plpgsql
+as $$
+declare n int;
+begin
+  delete from public.ged_documents d
+  where not exists (select 1 from public.ged_chunks c where c.document_id = d.id);
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
 -- RLS : accès réservé aux utilisateurs authentifiés (l'app utilise une session
 -- Supabase après connexion Microsoft). Le endpoint /api/ged-ask utilise la clé
 -- service role et n'est pas soumis à la RLS.

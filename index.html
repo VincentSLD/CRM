@@ -4208,6 +4208,7 @@ function renderEnDev() {
 //  ASSISTANT DOCUMENTAIRE PERMANENT (GED) — indexation + RAG
 // ═══════════════════════════════════════════════════════════
 const GED_EXTS = ['pdf', 'docx', 'txt', 'csv', 'eml'];
+const GED_MAX_CHUNKS = 300;   // passages max par document
 let gedFiles = [];
 let gedIndexing = false;
 let gedChat = [];
@@ -4229,10 +4230,12 @@ function renderGed() {
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
           <button class="btn btn-primary btn-sm" id="gedIndexBtn" onclick="gedPickAndIndex()">📂 Indexer / mettre à jour un dossier</button>
           <button class="btn btn-sm" onclick="gedLoadStats()">↻ Rafraîchir</button>
+          <button class="btn btn-sm" onclick="gedRepair()" title="Supprime les documents enregistrés sans aucun passage (à reprendre à la prochaine indexation)">🛠 Réparer</button>
           <button class="btn btn-sm" style="margin-left:auto;color:var(--red)" onclick="gedClearIndex()">Vider l'index</button>
         </div>
         <div id="gedIndexStatus" style="font-size:12px;color:var(--t3);min-height:16px;margin-bottom:6px"></div>
         <div id="gedProgress" style="display:none;height:6px;background:var(--bg-3);border-radius:3px;overflow:hidden;margin-bottom:6px"><div id="gedProgressBar" style="height:100%;width:0;background:var(--accent);transition:width .2s"></div></div>
+        <div id="gedReport" style="display:none;margin-bottom:6px"></div>
         <div style="font-size:11px;color:var(--t3)">Astuce : relancez l'indexation après ajout de nouveaux documents — les fichiers déjà indexés (inchangés) sont ignorés automatiquement.</div>
       </div>
     </div>
@@ -4284,7 +4287,7 @@ async function gedScanRecursive(dirHandle, path, depth = 0) {
 }
 
 async function gedExtractText(file, ext) {
-  const MAX = 200000;
+  const MAX = 600000;
   if (ext === 'txt' || ext === 'csv') return (await file.text()).slice(0, MAX);
   if (ext === 'eml') { const raw = await file.text(); const bs = raw.indexOf('\n\n'); return (bs > 0 ? raw.slice(bs + 2) : raw).slice(0, MAX); }
   if (ext === 'pdf') {
@@ -4352,45 +4355,61 @@ async function gedPickAndIndex() {
     if (progBar) progBar.style.width = '0%';
 
     let done = 0, indexed = 0, skipped = 0, failed = 0;
+    const issues = [];
     for (const f of gedFiles) {
       done++;
       const hash = f.size + '-' + f.lastModified;
       if (existing[f.path] === hash) {
         skipped++;
       } else {
+        let docId = null;
         try {
           const text = await gedExtractText(f.file, f.ext);
-          if (!text || text.length < 20) { failed++; }
-          else {
-            // Si le fichier existait (modifié), on supprime l'ancienne version (cascade chunks)
-            if (existing[f.path] !== undefined) await sb.from('ged_documents').delete().eq('path', f.path);
-            const ins = await sb.from('ged_documents').insert({ path: f.path, name: f.name, ext: f.ext, size: f.size, file_hash: hash, char_count: text.length }).select('id').single();
-            if (ins.error) throw new Error(ins.error.message);
-            const docId = ins.data.id;
-            const chunks = gedChunkText(text).slice(0, 100);
-            const rows = [];
-            for (let b = 0; b < chunks.length; b += 50) {
-              const batch = chunks.slice(b, b + 50);
-              const er = await fetch('/api/embed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texts: batch }) });
-              if (!er.ok) { const e = await er.json().catch(() => ({})); throw new Error(e.details || e.error || ('embed ' + er.status)); }
-              const ej = await er.json();
-              ej.embeddings.forEach((emb, k) => rows.push({ document_id: docId, chunk_index: b + k, content: batch[k], embedding: '[' + emb.join(',') + ']' }));
-            }
-            for (let b = 0; b < rows.length; b += 50) {
-              const { error } = await sb.from('ged_chunks').insert(rows.slice(b, b + 50));
-              if (error) throw new Error(error.message);
-            }
-            existing[f.path] = hash;
-            indexed++;
+          if (!text || text.length < 20) {
+            throw new Error(f.ext === 'pdf' ? 'aucun texte extrait (PDF scanné/image ?)' : 'aucun texte extrait');
           }
-        } catch (e) { failed++; console.warn('GED index échec', f.path, e); }
+          // 1) Découpage + embeddings AVANT toute écriture (évite les documents sans passages)
+          const allChunks = gedChunkText(text);
+          const partial = allChunks.length > GED_MAX_CHUNKS;
+          const chunks = allChunks.slice(0, GED_MAX_CHUNKS);
+          const rows = [];
+          for (let b = 0; b < chunks.length; b += 50) {
+            const batch = chunks.slice(b, b + 50);
+            const er = await fetch('/api/embed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texts: batch }) });
+            if (!er.ok) { const e = await er.json().catch(() => ({})); throw new Error(e.details || e.error || ('embed ' + er.status)); }
+            const ej = await er.json();
+            if (!ej.embeddings || ej.embeddings.length !== batch.length) throw new Error('embeddings incomplets renvoyés');
+            ej.embeddings.forEach((emb, k) => rows.push({ chunk_index: b + k, content: batch[k], embedding: '[' + emb.join(',') + ']' }));
+          }
+          if (!rows.length) throw new Error('aucun passage généré');
+          // 2) Remplacer l'ancienne version éventuelle (fichier modifié)
+          if (existing[f.path] !== undefined) await sb.from('ged_documents').delete().eq('path', f.path);
+          // 3) Insérer le document, puis ses passages ; rollback en cas d'échec
+          const ins = await sb.from('ged_documents').insert({ path: f.path, name: f.name, ext: f.ext, size: f.size, file_hash: hash, char_count: text.length }).select('id').single();
+          if (ins.error) throw new Error(ins.error.message);
+          docId = ins.data.id;
+          for (let b = 0; b < rows.length; b += 50) {
+            const slice = rows.slice(b, b + 50).map(r => ({ ...r, document_id: docId }));
+            const { error } = await sb.from('ged_chunks').insert(slice);
+            if (error) throw new Error(error.message);
+          }
+          existing[f.path] = hash;
+          indexed++;
+          if (partial) issues.push({ path: f.path, type: 'warn', reason: `indexé partiellement (texte volumineux tronqué à ${GED_MAX_CHUNKS} passages)` });
+        } catch (e) {
+          failed++;
+          if (docId) { try { await sb.from('ged_documents').delete().eq('id', docId); } catch (x) {} } // rollback : pas de document sans passages
+          issues.push({ path: f.path, type: 'error', reason: e.message });
+          console.warn('GED index échec', f.path, e);
+        }
       }
       if (progBar) progBar.style.width = (done / gedFiles.length * 100).toFixed(0) + '%';
       if (statusEl) statusEl.textContent = `(${done}/${gedFiles.length}) ${indexed} ajoutés · ${skipped} déjà présents · ${failed} échecs`;
     }
 
     if (progWrap) setTimeout(() => { progWrap.style.display = 'none'; }, 1500);
-    toast(`Indexation terminée : ${indexed} ajoutés, ${skipped} déjà présents, ${failed} échecs.`, 'success');
+    gedRenderReport(issues, { indexed, skipped, failed, total: gedFiles.length });
+    toast(`Indexation terminée : ${indexed} ajoutés, ${skipped} déjà présents, ${failed} échecs.`, failed ? 'warning' : 'success');
     gedLoadStats();
   } catch (e) {
     toast('Erreur indexation : ' + e.message, 'error');
@@ -4398,6 +4417,38 @@ async function gedPickAndIndex() {
   } finally {
     gedIndexing = false;
     if (btn) btn.disabled = false;
+  }
+}
+
+function gedRenderReport(issues, summary) {
+  const el = document.getElementById('gedReport');
+  if (!el) return;
+  if (!issues || !issues.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const errs = issues.filter(i => i.type === 'error');
+  const warns = issues.filter(i => i.type === 'warn');
+  const rows = issues.map(i =>
+    `<div style="display:flex;gap:8px;font-size:11px;padding:2px 0;border-bottom:1px solid var(--border)">
+      <span>${i.type === 'error' ? '✗' : '⚠️'}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${cmdEsc(i.path)}">${cmdEsc(i.path)}</span>
+      <span style="color:${i.type === 'error' ? 'var(--red)' : '#92400e'};white-space:nowrap">${cmdEsc(i.reason)}</span>
+    </div>`).join('');
+  el.style.display = '';
+  el.innerHTML = `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--bg-2)">
+    <div style="font-size:12px;font-weight:600;margin-bottom:4px">Rapport d'indexation — ${errs.length} non indexé(s), ${warns.length} partiel(s)</div>
+    <div style="max-height:180px;overflow:auto">${rows}</div>
+    ${errs.length ? '<div style="font-size:11px;color:var(--t3);margin-top:6px">Les PDF « scannés » (images sans couche texte) ne peuvent pas être vectorisés tels quels. Dites-moi si vous voulez activer une reconnaissance de texte (OCR) pour ces documents.</div>' : ''}
+  </div>`;
+}
+
+async function gedRepair() {
+  try {
+    const { data, error } = await sb.rpc('ged_delete_empty');
+    if (error) throw error;
+    const n = (typeof data === 'number') ? data : (Array.isArray(data) ? data[0] : 0);
+    toast(`Réparation : ${n || 0} document(s) sans passage supprimé(s). Relancez l'indexation pour les reprendre.`, 'success');
+    gedLoadStats();
+  } catch (e) {
+    toast('Réparation indisponible : ' + e.message + ' (avez-vous exécuté la mise à jour de docs/ged.sql ?)', 'error');
   }
 }
 
