@@ -18384,6 +18384,55 @@ function openDynModal(name, title, bodyHtml, footerHtml, maxWidth) {
 let sendRecipients = []; // [{id, name, email}]
 let sendSearchTimeout = null;
 
+// Date au format JJ/MM/AAAA
+function _fmtDateFR(v) {
+  if (!v) return '—';
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return String(v);
+  const p = n => String(n).padStart(2, '0');
+  return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear();
+}
+
+// Construit le message complémentaire pré-rempli avant diffusion
+async function _buildSendDefaultMessage() {
+  const r = currentReport;
+  if (!r) return '';
+  const lines = [];
+  lines.push('Date du RDV : ' + _fmtDateFR(r.date_raw || r.date));
+  lines.push('Type : ' + (r.type_cr || '—'));
+  lines.push('Rédacteur : ' + (r.redacteur_nom || '—'));
+
+  const socs = r.clients_list || [];
+  const cons = r.contacts_list || [];
+
+  // CP / ville des sociétés
+  const cpMap = {};
+  if (socs.length) {
+    const { data } = await sb.from('clients').select('id,name,city,code_postal').in('id', socs.map(s => s.id));
+    (data || []).forEach(c => { cpMap[c.id] = c; });
+  }
+  // Rattachement contact -> société
+  const conClient = {};
+  if (cons.length) {
+    const { data } = await sb.from('contacts').select('id,client_id').in('id', cons.map(c => c.id));
+    (data || []).forEach(c => { conClient[c.id] = c.client_id; });
+  }
+
+  lines.push('Sociétés et contacts :');
+  socs.forEach(s => {
+    const info = cpMap[s.id] || {};
+    const loc = [info.code_postal, info.city].filter(Boolean).join(' ');
+    const sName = s.name || info.name || '—';
+    const socContacts = cons.filter(c => conClient[c.id] === s.id).map(c => c.name).filter(Boolean);
+    lines.push('- ' + sName + (loc ? ' (' + loc + ')' : '') + (socContacts.length ? ' : ' + socContacts.join(', ') : ''));
+  });
+  // Contacts non rattachés à une société listée
+  const orphan = cons.filter(c => !socs.some(s => s.id === conClient[c.id])).map(c => c.name).filter(Boolean);
+  if (orphan.length) lines.push('- Autres contacts : ' + orphan.join(', '));
+
+  return lines.join('\n');
+}
+
 async function openSendModal() {
   const body = document.getElementById('editorBody');
   if (!body || !body.innerText.trim()) { toast('Écrivez du contenu avant d\'envoyer','error'); return; }
@@ -18405,6 +18454,10 @@ async function openSendModal() {
     await loadSendGroups();
     const subj = document.getElementById('sendSubject');
     if (subj) subj.value = _sendData.titre || 'Compte-rendu' + (_sendData.clientName ? ' — ' + _sendData.clientName : '');
+    const msgEl = document.getElementById('sendMessage');
+    if (msgEl && !msgEl.value.trim()) {
+      try { msgEl.value = await _buildSendDefaultMessage(); } catch (e) { console.warn('Message auto CR:', e); }
+    }
   }, 50);
 }
 
