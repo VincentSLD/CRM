@@ -4,21 +4,27 @@ Le bouton « Se connecter avec Microsoft » est déjà dans l'application
 (`signInWithMicrosoft()` → `sb.auth.signInWithOAuth({ provider: 'azure' })`).
 Pour qu'il fonctionne, il reste **2 configurations** à faire (une fois).
 
-## 1. Microsoft Entra ID (Azure AD) — par un admin du tenant
+## 1. Microsoft Entra ID (Azure AD) — par un admin du locataire (portail en français)
 
-1. Portail Entra → **App registrations** → **New registration**.
-2. **Supported account types** : « Comptes de cet annuaire organisationnel uniquement »
-   (single-tenant → accès restreint à votre administration).
-3. **Redirect URI** (plateforme **Web**) :
+1. Portail Microsoft Entra (entra.microsoft.com) ou Azure → **Inscriptions d'applications**
+   (*App registrations*) → **Nouvelle inscription** (*New registration*).
+2. **Types de comptes pris en charge** : cocher
+   **« Comptes dans cet annuaire d'organisation uniquement »**
+   (mono-locataire → accès restreint à votre administration).
+3. **URI de redirection** (*Redirect URI*) → plateforme **Web** :
    `https://asuccniyofzvwgooxjah.supabase.co/auth/v1/callback`
-4. Après création, noter :
-   - **Application (client) ID**
-   - **Directory (tenant) ID**
-5. **Certificates & secrets** → **New client secret** → noter la **Value** (pas l'ID).
-6. **API permissions** → Microsoft Graph (déléguées) : `openid`, `email`, `profile`
-   (puis « Grant admin consent »).
+   puis **S'inscrire**.
+4. Sur la page **Vue d'ensemble** (*Overview*), noter :
+   - **ID d'application (client)** (*Application (client) ID*)
+   - **ID de l'annuaire (locataire)** (*Directory (tenant) ID*)
+5. Menu **Certificats et secrets** (*Certificates & secrets*) → onglet **Secrets client**
+   → **Nouveau secret client** → noter la **Valeur** (*Value*, pas l'ID secret) —
+   elle n'est visible qu'une fois.
+6. Menu **Autorisations d'API** (*API permissions*) → **Ajouter une autorisation**
+   → **Microsoft Graph** → **Autorisations déléguées** : cocher `openid`, `email`, `profile`
+   → puis **Accorder le consentement administrateur pour <votre organisation>**.
 
-## 2. Supabase — Dashboard du projet
+## 2. Supabase — Dashboard du projet (interface en anglais)
 
 1. **Authentication → Providers → Azure** → **Enable**.
 2. Renseigner :
