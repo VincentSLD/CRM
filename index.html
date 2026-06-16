@@ -18468,7 +18468,9 @@ async function sendReport() {
   const emailsRaw = document.getElementById('sendEmails')?.value || '';
   const emails = emailsRaw.split(/[;,\s]+/).map(e => e.trim()).filter(e => e && e.includes('@'));
   if (!emails.length) { toast('Ajoutez au moins un email destinataire','error'); return; }
-  const subject = document.getElementById('sendSubject')?.value || 'Compte-rendu';
+  const subjectRaw = (document.getElementById('sendSubject')?.value || 'Compte-rendu').trim();
+  const SUBJECT_PREFIX = 'Compte-Rendu CRM : ';
+  const subject = subjectRaw.toLowerCase().startsWith(SUBJECT_PREFIX.toLowerCase()) ? subjectRaw : SUBJECT_PREFIX + subjectRaw;
   const message = document.getElementById('sendMessage')?.value || '';
   const contenu = currentReport?.contenu || currentReport?.text || '';
   const includeFull = document.getElementById('sendOptFull')?.checked;
