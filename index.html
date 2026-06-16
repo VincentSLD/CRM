@@ -12863,11 +12863,9 @@ async function showCommandeDetail(id) {
           <div class="card-header"><div class="card-title">Dossier chantier — Documents &amp; Assistant IA</div></div>
           <div class="card-body">
             <div class="cmd-docs-path">
-              <input type="text" id="cmdDossierChemin" placeholder="\\\\SERVEUR\\Projets\\..." value="${cmdEsc(c.dossier_chemin||'')}" title="Chemin du dossier réseau">
-              <button class="btn btn-sm" onclick="cmdSaveDossierChemin()">Sauvegarder</button>
+              <input type="text" id="cmdDossierChemin" placeholder="\\\\SERVEUR\\Projets\\..." value="${cmdEsc(c.dossier_chemin||'')}" title="Chemin du dossier réseau" readonly>
               <button class="btn btn-primary btn-sm" id="cmdScanBtn" onclick="cmdScanDirectory()">Parcourir le dossier</button>
             </div>
-            <div id="cmdPathShortcuts" style="display:none;margin-bottom:8px;gap:6px;flex-wrap:wrap;align-items:center"></div>
             <div class="cmd-docs-files" id="cmdDocsFileList">
               <div class="cmd-docs-empty">Cliquez « Parcourir le dossier » pour scanner un répertoire.</div>
             </div>
@@ -12884,9 +12882,9 @@ async function showCommandeDetail(id) {
               <div class="cmd-docs-chat-msgs" id="cmdDocsChatMsgs">
                 <div class="cmd-docs-empty">Indexez des documents pour pouvoir les interroger.</div>
               </div>
-              <div class="cmd-docs-chat-input">
-                <input type="text" id="cmdDocsInput" placeholder="Posez une question sur les documents…" onkeydown="if(event.key==='Enter')cmdAskDocQuestion()">
-                <button class="btn btn-primary btn-sm" id="cmdDocsAskBtn" onclick="cmdAskDocQuestion()">→</button>
+              <div class="cmd-docs-chat-input" style="align-items:flex-end">
+                <textarea id="cmdDocsInput" rows="3" placeholder="Posez une question sur les documents… (Entrée pour envoyer, Maj+Entrée pour un saut de ligne)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();cmdAskDocQuestion()}" style="flex:1;resize:vertical;min-height:70px;max-height:240px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1);font-family:inherit;line-height:1.4"></textarea>
+                <button class="btn btn-primary btn-sm" id="cmdDocsAskBtn" onclick="cmdAskDocQuestion()" style="height:38px">→</button>
               </div>
             </div>
           </div>
@@ -12905,21 +12903,7 @@ async function showCommandeDetail(id) {
     if (!resolved) return;
     const paths = [resolved.chemin1, resolved.chemin2].filter(Boolean);
     if (paths.length === 0) return;
-    const shortcutsEl = document.getElementById('cmdPathShortcuts');
-    if (shortcutsEl) {
-      shortcutsEl.style.display = 'flex';
-      shortcutsEl.innerHTML = '<span style="font-size:11px;color:var(--t3);align-self:center">Chemins configurés :</span>';
-      paths.forEach((p, i) => {
-        const btn = document.createElement('button');
-        btn.className = 'btn btn-sm' + (c.dossier_chemin === p ? ' btn-primary' : '');
-        btn.style.cssText = 'font-family:monospace;font-size:11px';
-        btn.title = p;
-        btn.setAttribute('data-path', p);
-        btn.textContent = p.length > 60 ? '...' + p.slice(-57) : p;
-        btn.onclick = () => cmdSelectConfiguredPath(p);
-        shortcutsEl.appendChild(btn);
-      });
-    }
+    // Auto-remplissage du chemin (visible, sans bouton ni raccourcis)
     if (!c.dossier_chemin && paths.length > 0) {
       const pathInput = document.getElementById('cmdDossierChemin');
       if (pathInput) pathInput.value = paths[0];
