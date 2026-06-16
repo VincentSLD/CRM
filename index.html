@@ -1694,6 +1694,11 @@ tbody tr:last-child td { border-bottom: none; }
         </div>
         <button type="submit" class="btn-login" id="loginBtn">Se connecter</button>
       </form>
+      <div style="display:flex;align-items:center;gap:8px;margin:14px 0;color:var(--t3);font-size:12px"><div style="flex:1;height:1px;background:var(--border)"></div>ou<div style="flex:1;height:1px;background:var(--border)"></div></div>
+      <button type="button" id="msLoginBtn" onclick="signInWithMicrosoft()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:#fff;color:#1a1a1a;font-size:13px;font-weight:600;cursor:pointer">
+        <svg width="16" height="16" viewBox="0 0 21 21" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+        Se connecter avec Microsoft
+      </button>
       <div id="forgotPasswordLink" style="text-align:center;margin-top:10px">
         <a onclick="forgotPassword()" style="font-size:12px;color:var(--accent);cursor:pointer;text-decoration:underline">Mot de passe oublié ?</a>
       </div>
@@ -23128,6 +23133,24 @@ function toggleAuthMode() {
     toggleLink.textContent = 'Créer un compte';
   }
   document.getElementById('loginError').classList.remove('show');
+}
+
+// Connexion via Microsoft (Entra ID / Azure AD) — SSO OAuth Supabase
+async function signInWithMicrosoft() {
+  const errEl = document.getElementById('loginError');
+  const btn = document.getElementById('msLoginBtn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; }
+  try {
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: 'azure',
+      options: { scopes: 'openid email profile', redirectTo: window.location.origin }
+    });
+    if (error) throw error;
+    // La page est redirigée vers Microsoft ; au retour, onAuthStateChange prend le relais.
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+    if (errEl) { errEl.textContent = 'Connexion Microsoft indisponible : ' + (e.message || e); errEl.classList.add('show'); }
+  }
 }
 
 async function doAuth() {
