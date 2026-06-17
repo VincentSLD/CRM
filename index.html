@@ -4232,6 +4232,7 @@ function renderGed() {
         <div id="gedStats" style="font-size:13px;color:var(--t2);margin-bottom:12px">Chargement des statistiques…</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
           <button class="btn btn-primary btn-sm" id="gedIndexBtn" onclick="gedPickAndIndex()">📂 Indexer / mettre à jour un dossier</button>
+          <button class="btn btn-sm" onclick="gedBackfillPositions()" title="Extrait la position GPS des documents déjà indexés sans refaire les embeddings">📍 Extraire les positions</button>
           <button class="btn btn-sm" onclick="gedLoadStats()">↻ Rafraîchir</button>
           <button class="btn btn-sm" onclick="gedRepair()" title="Supprime les documents enregistrés sans aucun passage (à reprendre à la prochaine indexation)">🛠 Réparer</button>
           <button class="btn btn-sm" style="margin-left:auto;color:var(--red)" onclick="gedClearIndex()">Vider l'index</button>
@@ -4240,6 +4241,20 @@ function renderGed() {
         <div id="gedProgress" style="display:none;height:6px;background:var(--bg-3);border-radius:3px;overflow:hidden;margin-bottom:6px"><div id="gedProgressBar" style="height:100%;width:0;background:var(--accent);transition:width .2s"></div></div>
         <div id="gedReport" style="display:none;margin-bottom:6px"></div>
         <div style="font-size:11px;color:var(--t3)">Astuce : relancez l'indexation après ajout de nouveaux documents — les fichiers déjà indexés (inchangés) sont ignorés automatiquement.</div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-header"><div class="card-title">🗺️ Études de sol autour d'un point</div></div>
+      <div class="card-body">
+        <p style="font-size:12px;color:var(--t3);margin:0 0 10px">Saisissez une position GPS (ou une adresse) et un rayon pour lister les rapports environnants, avec leur résumé et leurs conclusions.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px">
+          <div style="flex:2;min-width:200px"><label class="fl" style="font-size:11px">Adresse (optionnel)</label><div style="display:flex;gap:6px"><input class="fi" id="gedAddr" placeholder="ex. 12 rue des Halles, Nantes" onkeydown="if(event.key==='Enter')gedGeocodeAddress()"><button class="btn btn-sm" onclick="gedGeocodeAddress()">Localiser</button></div></div>
+          <div style="width:120px"><label class="fl" style="font-size:11px">Latitude</label><input class="fi" id="gedLat" placeholder="47.2184"></div>
+          <div style="width:120px"><label class="fl" style="font-size:11px">Longitude</label><input class="fi" id="gedLon" placeholder="-1.5536"></div>
+          <div style="width:110px"><label class="fl" style="font-size:11px">Rayon (m)</label><input class="fi" id="gedRadius" type="number" value="1000" min="50" step="50"></div>
+          <button class="btn btn-primary btn-sm" id="gedGeoBtn" onclick="gedGeoSearch()">Chercher autour</button>
+        </div>
+        <div id="gedGeoResults"></div>
       </div>
     </div>
     <div class="card" style="margin-top:16px">
@@ -4259,14 +4274,15 @@ async function gedLoadStats() {
   const el = document.getElementById('gedStats');
   if (!el) return;
   try {
-    const [docs, chunks, last] = await Promise.all([
+    const [docs, chunks, geo, last] = await Promise.all([
       sb.from('ged_documents').select('*', { count: 'exact', head: true }),
       sb.from('ged_chunks').select('*', { count: 'exact', head: true }),
+      sb.from('ged_documents').select('*', { count: 'exact', head: true }).not('lat', 'is', null),
       sb.from('ged_documents').select('indexed_at').order('indexed_at', { ascending: false }).limit(1).maybeSingle()
     ]);
     if (docs.error) throw docs.error;
     const lastTxt = last.data?.indexed_at ? ` · dernière indexation : ${new Date(last.data.indexed_at).toLocaleString('fr-FR')}` : '';
-    el.innerHTML = `<strong>${docs.count || 0}</strong> document(s) indexé(s) · <strong>${chunks.count || 0}</strong> passage(s)${lastTxt}`;
+    el.innerHTML = `<strong>${docs.count || 0}</strong> document(s) indexé(s) · <strong>${chunks.count || 0}</strong> passage(s) · <strong>${geo.count || 0}</strong> géolocalisé(s)${lastTxt}`;
   } catch (e) {
     el.innerHTML = '<span style="color:var(--red)">Index non disponible. Exécutez d\'abord docs/ged.sql dans Supabase.</span>';
   }
@@ -4329,6 +4345,42 @@ function gedChunkText(text, size = 3000, overlap = 300) {
   return chunks;
 }
 
+// Extraction des coordonnées GPS (lat/lon) du texte d'un rapport.
+// Gère le décimal (virgule ou point), le format DMS (47°13'06"N), et valide
+// les plages métropole France pour limiter les faux positifs.
+function _gedNum(s) { return parseFloat(String(s).replace(',', '.')); }
+function _gedValidFR(lat, lon) { return lat >= 41 && lat <= 51.7 && lon >= -5.6 && lon <= 10; }
+function gedExtractLatLon(text) {
+  if (!text) return null;
+  // A) DMS : 47°13'06"N  1°33'12"O/W
+  const dmsRe = /(\d{1,3})\s*[°º]\s*(\d{1,2})\s*['′′\s]\s*(\d{1,2}(?:[.,]\d+)?)\s*["″″]?\s*([NSEOW])/gi;
+  const dms = [];
+  let m;
+  while ((m = dmsRe.exec(text))) {
+    let dd = parseInt(m[1], 10) + parseInt(m[2], 10) / 60 + _gedNum(m[3]) / 3600;
+    const dir = m[4].toUpperCase();
+    if (dir === 'S' || dir === 'W' || dir === 'O') dd = -dd;
+    dms.push({ dd, axis: (dir === 'N' || dir === 'S') ? 'lat' : 'lon' });
+  }
+  const dmsLat = dms.find(v => v.axis === 'lat'), dmsLon = dms.find(v => v.axis === 'lon');
+  if (dmsLat && dmsLon && _gedValidFR(dmsLat.dd, dmsLon.dd)) return { lat: +dmsLat.dd.toFixed(6), lon: +dmsLon.dd.toFixed(6) };
+  // B) Décimal avec libellés
+  const latLab = text.match(/lat(?:itude)?\s*[:=]?\s*(-?\d{1,2}[.,]\d{3,})/i);
+  const lonLab = text.match(/long?(?:itude)?\s*[:=]?\s*(-?\d{1,3}[.,]\d{3,})/i);
+  if (latLab && lonLab) {
+    const lat = _gedNum(latLab[1]), lon = _gedNum(lonLab[1]);
+    if (_gedValidFR(lat, lon)) return { lat: +lat.toFixed(6), lon: +lon.toFixed(6) };
+  }
+  // C) Paire décimale générique "47.2184, -1.5536"
+  const pairRe = /(-?\d{2}[.,]\d{3,})\s*[,;/]\s*(-?\d{1,3}[.,]\d{3,})/g;
+  while ((m = pairRe.exec(text))) {
+    const a = _gedNum(m[1]), b = _gedNum(m[2]);
+    if (_gedValidFR(a, b)) return { lat: +a.toFixed(6), lon: +b.toFixed(6) };
+    if (_gedValidFR(b, a)) return { lat: +b.toFixed(6), lon: +a.toFixed(6) };
+  }
+  return null;
+}
+
 async function gedPickAndIndex() {
   if (gedIndexing) return;
   if (!window.showDirectoryPicker) { toast('Navigateur non compatible — utilisez Chrome ou Edge.', 'error'); return; }
@@ -4386,8 +4438,9 @@ async function gedPickAndIndex() {
           if (!rows.length) throw new Error('aucun passage généré');
           // 2) Supprimer toute version précédente de ce chemin (idempotent → évite les conflits de clé unique)
           { const { error: delErr } = await sb.from('ged_documents').delete().eq('path', f.path); if (delErr) throw new Error('suppression ancienne version : ' + delErr.message); }
-          // 3) Insérer le document, puis ses passages ; rollback en cas d'échec
-          const ins = await sb.from('ged_documents').insert({ path: f.path, name: f.name, ext: f.ext, size: f.size, file_hash: hash, char_count: text.length }).select('id').single();
+          // 3) Insérer le document (avec position GPS si trouvée), puis ses passages ; rollback en cas d'échec
+          const geo = gedExtractLatLon(text);
+          const ins = await sb.from('ged_documents').insert({ path: f.path, name: f.name, ext: f.ext, size: f.size, file_hash: hash, char_count: text.length, lat: geo ? geo.lat : null, lon: geo ? geo.lon : null }).select('id').single();
           if (ins.error) throw new Error(ins.error.message);
           docId = ins.data.id;
           for (let b = 0; b < rows.length; b += 50) {
@@ -4530,6 +4583,119 @@ function gedRenderChat() {
      </div>`
   ).join('');
   box.scrollTop = box.scrollHeight;
+}
+
+// Backfill des positions GPS sur les documents déjà indexés (sans refaire les embeddings)
+async function gedBackfillPositions() {
+  if (gedIndexing) return;
+  if (!window.showDirectoryPicker) { toast('Navigateur non compatible — utilisez Chrome ou Edge.', 'error'); return; }
+  let dir;
+  try { dir = await window.showDirectoryPicker(); }
+  catch (e) { if (e.name === 'AbortError') return; toast('Erreur : ' + e.message, 'error'); return; }
+
+  gedIndexing = true;
+  const statusEl = document.getElementById('gedIndexStatus');
+  const progWrap = document.getElementById('gedProgress');
+  const progBar = document.getElementById('gedProgressBar');
+  gedFiles = [];
+  if (statusEl) statusEl.textContent = 'Analyse du dossier…';
+  try {
+    await gedScanRecursive(dir, '');
+    if (!gedFiles.length) { if (statusEl) statusEl.textContent = 'Aucun fichier supporté trouvé.'; return; }
+
+    // Documents indexés : path -> {id, hasPos} (paginé)
+    const existing = {};
+    { let off = 0; while (true) { const { data, error } = await sb.from('ged_documents').select('path,lat').range(off, off + 999); if (error || !data || !data.length) break; data.forEach(d => { existing[d.path] = (d.lat != null); }); if (data.length < 1000) break; off += 1000; } }
+
+    if (progWrap) progWrap.style.display = '';
+    if (progBar) progBar.style.width = '0%';
+    let done = 0, found = 0, already = 0, none = 0, notIndexed = 0;
+    for (const f of gedFiles) {
+      done++;
+      if (!(f.path in existing)) { notIndexed++; }
+      else if (existing[f.path] === true) { already++; }
+      else {
+        try {
+          const text = await gedExtractText(f.file, f.ext);
+          const geo = gedExtractLatLon(text);
+          if (geo) {
+            const { error } = await sb.from('ged_documents').update({ lat: geo.lat, lon: geo.lon }).eq('path', f.path);
+            if (!error) found++;
+          } else { none++; }
+        } catch (e) { none++; console.warn('GED position échec', f.path, e); }
+      }
+      if (progBar) progBar.style.width = (done / gedFiles.length * 100).toFixed(0) + '%';
+      if (statusEl) statusEl.textContent = `(${done}/${gedFiles.length}) ${found} position(s) ajoutée(s) · ${already} déjà géolocalisés · ${none} sans coordonnées`;
+    }
+    if (progWrap) setTimeout(() => { progWrap.style.display = 'none'; }, 1500);
+    toast(`Positions : ${found} ajoutée(s), ${none} sans coordonnées détectées.`, 'success');
+    gedLoadStats();
+  } catch (e) {
+    toast('Erreur : ' + e.message, 'error');
+  } finally {
+    gedIndexing = false;
+  }
+}
+
+async function gedGeocodeAddress() {
+  const q = document.getElementById('gedAddr')?.value?.trim();
+  if (!q) { toast('Saisissez une adresse.', 'warning'); return; }
+  try {
+    const r = await fetch('https://api-adresse.data.gouv.fr/search/?limit=1&q=' + encodeURIComponent(q));
+    const j = await r.json();
+    const feat = j.features && j.features[0];
+    if (!feat) { toast('Adresse introuvable.', 'error'); return; }
+    const [lon, lat] = feat.geometry.coordinates;
+    document.getElementById('gedLat').value = lat.toFixed(6);
+    document.getElementById('gedLon').value = lon.toFixed(6);
+    toast('📍 ' + (feat.properties.label || q), 'success');
+  } catch (e) { toast('Erreur géocodage : ' + e.message, 'error'); }
+}
+
+async function gedGeoSearch() {
+  const lat = parseFloat(document.getElementById('gedLat')?.value);
+  const lon = parseFloat(document.getElementById('gedLon')?.value);
+  const radius = parseFloat(document.getElementById('gedRadius')?.value) || 1000;
+  const box = document.getElementById('gedGeoResults');
+  if (isNaN(lat) || isNaN(lon)) { toast('Latitude/longitude invalides (ou localisez une adresse).', 'error'); return; }
+  const btn = document.getElementById('gedGeoBtn');
+  if (btn) btn.disabled = true;
+  if (box) box.innerHTML = '<div class="cmd-docs-empty"><span class="cmd-docs-spin"></span> Recherche des rapports environnants…</div>';
+  try {
+    const { data, error } = await sb.rpc('ged_nearby', { in_lat: lat, in_lon: lon, radius_m: radius, max_count: 50 });
+    if (error) throw error;
+    if (!data || !data.length) {
+      if (box) box.innerHTML = `<div class="cmd-docs-empty">Aucun rapport géolocalisé dans un rayon de ${radius} m. (Avez-vous lancé « 📍 Extraire les positions » ?)</div>`;
+      return;
+    }
+    if (box) box.innerHTML = `<div style="font-size:12px;color:var(--t2);margin-bottom:8px"><strong>${data.length}</strong> rapport(s) dans un rayon de ${radius} m :</div>` +
+      data.map((d, i) => `<div class="ged-geo-item" style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px">
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-weight:600;font-size:13px;flex:1">${cmdEsc(d.name || d.path)}</span>
+          <span style="font-size:11px;color:var(--accent);white-space:nowrap">${Math.round(d.distance_m)} m</span>
+        </div>
+        <div style="font-size:11px;color:var(--t3)">${cmdEsc(d.path)}</div>
+        <div id="gedSum_${i}" style="font-size:12px;color:var(--t2);margin-top:6px"><span class="cmd-docs-spin"></span> résumé…</div>
+      </div>`).join('');
+    // Générer les résumés/conclusions (séquentiel, plafonné)
+    const MAX_SUM = 15;
+    for (let i = 0; i < data.length && i < MAX_SUM; i++) {
+      const el = document.getElementById('gedSum_' + i);
+      try {
+        const r = await fetch('/api/ged-summary', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document_id: data[i].id }) });
+        const o = await r.json();
+        if (!r.ok) throw new Error(o.error || 'Erreur résumé');
+        if (el) el.innerHTML = `<div>${o.resume || '—'}</div>` + (o.conclusion ? `<div style="margin-top:4px;padding:6px 8px;background:var(--bg-2);border-left:3px solid var(--accent);border-radius:4px"><b>Conclusions :</b> ${o.conclusion}</div>` : '');
+      } catch (e) { if (el) el.innerHTML = '<span style="color:var(--red)">Résumé indisponible : ' + cmdEsc(e.message) + '</span>'; }
+    }
+    if (data.length > MAX_SUM) {
+      for (let i = MAX_SUM; i < data.length; i++) { const el = document.getElementById('gedSum_' + i); if (el) el.innerHTML = '<span style="color:var(--t3)">(résumé non généré — affinez le rayon pour réduire la liste)</span>'; }
+    }
+  } catch (e) {
+    if (box) box.innerHTML = '<div class="cmd-docs-empty" style="color:var(--red)">Erreur : ' + cmdEsc(e.message) + ' (la fonction ged_nearby est-elle créée ? Exécutez docs/ged.sql.)</div>';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function toggleSidebar(force) {

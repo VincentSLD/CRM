@@ -26,6 +26,11 @@ create table if not exists public.ged_documents (
   indexed_at  timestamptz default now()
 );
 
+-- Position géographique du projet (extraite du rapport) — pour la recherche par rayon
+alter table public.ged_documents add column if not exists lat double precision;
+alter table public.ged_documents add column if not exists lon double precision;
+alter table public.ged_documents add column if not exists commune text;
+
 -- Les passages (chunks) d'un document avec leur embedding
 create table if not exists public.ged_chunks (
   id           bigserial primary key,
@@ -60,6 +65,34 @@ as $$
   join public.ged_documents d on d.id = c.document_id
   order by c.embedding <=> query_embedding
   limit match_count;
+$$;
+
+-- Recherche des rapports situés dans un rayon (mètres) autour d'un point GPS.
+-- Distance de Haversine (rayon terrestre 6371 km). Renvoie les plus proches d'abord.
+create or replace function public.ged_nearby(
+  in_lat double precision,
+  in_lon double precision,
+  radius_m double precision default 1000,
+  max_count int default 50
+)
+returns table (
+  id uuid, name text, path text, commune text,
+  lat double precision, lon double precision, distance_m double precision
+)
+language sql stable
+as $$
+  select * from (
+    select d.id, d.name, d.path, d.commune, d.lat, d.lon,
+      6371000 * 2 * asin(sqrt(
+        power(sin(radians(d.lat - in_lat) / 2), 2) +
+        cos(radians(in_lat)) * cos(radians(d.lat)) * power(sin(radians(d.lon - in_lon) / 2), 2)
+      )) as distance_m
+    from public.ged_documents d
+    where d.lat is not null and d.lon is not null
+  ) q
+  where q.distance_m <= radius_m
+  order by q.distance_m
+  limit max_count;
 $$;
 
 -- Maintenance : supprime les documents enregistrés sans aucun passage
