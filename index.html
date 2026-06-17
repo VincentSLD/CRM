@@ -8054,7 +8054,7 @@ function ccaExportPDF() {
     const caDevis = rows.filter(r => r.type === 'devis').reduce((a, r) => a + r.montant, 0);
     const caCmd = rows.filter(r => r.type === 'commandes').reduce((a, r) => a + r.montant, 0);
     const caFact = rows.filter(r => r.type === 'factures').reduce((a, r) => a + r.montant, 0);
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     doc.setFontSize(14); doc.text('Analyse du compte — ' + (c.name || ''), 14, 16);
     doc.setFontSize(9);
     const periode = (ccaF.from || ccaF.to) ? ('Période : ' + (ccaF.from || '…') + ' au ' + (ccaF.to || '…')) : 'Période : toutes dates';
@@ -8066,10 +8066,11 @@ function ccaExportPDF() {
     for (let i = 0; i < imgs.length; i++) {
       const ch = ccaCharts[imgs[i]]; if (!ch) continue;
       const img = ch.toBase64Image('image/png', 1);
-      const x = (i % 2 === 0) ? 14 : 108;
-      if (i % 2 === 0 && y > 250) { doc.addPage(); y = 16; }
-      doc.addImage(img, 'PNG', x, y, 88, 52);
-      if (i % 2 === 1) y += 58;
+      const col = i % 3;                 // 3 graphiques par ligne (paysage)
+      const x = 14 + col * 94;
+      if (col === 0 && y > 150) { doc.addPage(); y = 16; }
+      doc.addImage(img, 'PNG', x, y, 88, 50);
+      if (col === 2) y += 56;
     }
     doc.addPage();
     const docLbl = { devis: 'Devis', commandes: 'Commande', factures: 'Facture' };
