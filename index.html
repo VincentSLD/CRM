@@ -7771,7 +7771,7 @@ async function syncSitesVersAkuiteo() {
 //  Rôles : client (client_id) / architecte / apporteur / gros-œuvre (par nom)
 // ═══════════════════════════════════════════════════════════
 let ccaRows = null, ccaCharts = {}, ccaFsBound = false;
-let ccaF = { role: '', dt: { devis: true, commandes: true, factures: true }, from: '', to: '', agence: '', metier: '', presta: '', statut: '' };
+let ccaF = { role: '', dt: { devis: true, commandes: true, factures: true }, from: '', to: '', agence: '', metier: '', presta: '', statut: '', estab: '' };
 
 const CCA_COLS = {
   devis: 'id,ref,montant,date,statut,societe,type_prestation,gros_oeuvre,architecte,apporteur_affaire,client_id,client_name,sujet',
@@ -7804,22 +7804,38 @@ function _ccaNorm(t, d) {
   };
 }
 
+// Charge le siège + tous les établissements secondaires (même SIREN)
+async function _ccaLoadEtabs(c) {
+  const etabs = [{ id: c.id, name: c.name || '', city: c.city || '', siret: c.siret || '', est_siege: c.est_siege !== false }];
+  if (c.siren) {
+    const { data } = await sb.from('clients').select('id,name,city,siret,est_siege').eq('siren', c.siren).neq('id', c.id).limit(500);
+    (data || []).forEach(e => etabs.push({ id: e.id, name: e.name || '', city: e.city || '', siret: e.siret || '', est_siege: e.est_siege !== false }));
+  }
+  etabs.forEach(e => { e.label = (e.name || '') + (e.city ? ' (' + e.city + ')' : '') + (e.est_siege ? ' — siège' : ''); });
+  return etabs;
+}
+
+let ccaEtabs = [];
 async function _ccaFetch(c) {
-  const name = (c.name || '').trim();
+  ccaEtabs = await _ccaLoadEtabs(c);
+  const etabIds = ccaEtabs.map(e => e.id);
+  const etabById = {}; ccaEtabs.forEach(e => { etabById[e.id] = e; });
+  const names = [...new Set(ccaEtabs.map(e => e.name).filter(Boolean))];
   const map = new Map();
-  const add = (rows, role) => { for (const d of (rows || [])) { const k = d._t + '_' + d.id; let r = map.get(k); if (!r) { r = _ccaNorm(d._t, d); map.set(k, r); } r.roles.add(role); } };
+  // estabFn(d) → libellé de l'établissement auquel rattacher le document (1re affectation conservée)
+  const add = (rows, role, estabFn) => { for (const d of (rows || [])) { const k = d._t + '_' + d.id; let r = map.get(k); if (!r) { r = _ccaNorm(d._t, d); r.estab = estabFn(d) || '—'; map.set(k, r); } r.roles.add(role); } };
   for (const t of ['devis', 'commandes', 'factures']) {
     const tag = arr => arr.map(x => (x._t = t, x));
-    const sel = async (cols, fn) => { const r = await fn(sb.from(t).select(cols)).limit(3000); return r; };
-    // Rôle « client » (avec repli si colonnes optionnelles absentes)
-    let rc = await sel(CCA_COLS[t], q => q.eq('client_id', c.id));
-    if (rc.error) rc = await sel(CCA_COLS_FB[t], q => q.eq('client_id', c.id));
-    add(tag(rc.error ? [] : (rc.data || [])), 'client');
-    // Rôles par nom (ignorés si la colonne n'existe pas)
-    if (name) {
-      for (const [role, col] of [['architecte', 'architecte'], ['apporteur', 'apporteur_affaire'], ['gros_oeuvre', 'gros_oeuvre']]) {
-        const r = await sel(CCA_COLS[t], q => q.ilike(col, '%' + name + '%'));
-        add(tag(r.error ? [] : (r.data || [])), role);
+    const run = async (cols, fn) => { const r = await fn(sb.from(t).select(cols)).limit(5000); return r; };
+    // Rôle « client » : tous les établissements à la fois (client_id), repli colonnes si besoin
+    let rc = await run(CCA_COLS[t], q => q.in('client_id', etabIds));
+    if (rc.error) rc = await run(CCA_COLS_FB[t], q => q.in('client_id', etabIds));
+    add(tag(rc.error ? [] : (rc.data || [])), 'client', d => (etabById[d.client_id] && etabById[d.client_id].label) || d.client_name || '—');
+    // Rôles par nom : établissement = valeur du champ (apporteur/architecte/GO). Ignoré si colonne absente.
+    for (const [role, col] of [['architecte', 'architecte'], ['apporteur', 'apporteur_affaire'], ['gros_oeuvre', 'gros_oeuvre']]) {
+      for (const nm of names) {
+        const r = await run(CCA_COLS[t], q => q.ilike(col, '%' + nm + '%'));
+        add(tag(r.error ? [] : (r.data || [])), role, d => (d[col] || nm));
       }
     }
   }
@@ -7836,6 +7852,7 @@ function _ccaFiltered() {
     if (ccaF.metier && r.metier !== ccaF.metier) return false;
     if (ccaF.presta && r.type_prestation !== ccaF.presta) return false;
     if (ccaF.statut && r.statut !== ccaF.statut) return false;
+    if (ccaF.estab && r.estab !== ccaF.estab) return false;
     return true;
   });
 }
@@ -7843,7 +7860,7 @@ function _ccaFiltered() {
 async function ccaOpen() {
   const c = currentClient;
   if (!c) return;
-  ccaF = { role: '', dt: { devis: true, commandes: true, factures: true }, from: '', to: '', agence: '', metier: '', presta: '', statut: '' };
+  ccaF = { role: '', dt: { devis: true, commandes: true, factures: true }, from: '', to: '', agence: '', metier: '', presta: '', statut: '', estab: '' };
   let ov = document.getElementById('ccaOverlay');
   if (!ov) { ov = document.createElement('div'); ov.id = 'ccaOverlay'; document.body.appendChild(ov); }
   ov.style.cssText = 'position:fixed;inset:0;z-index:2000;background:var(--bg-1);display:flex;flex-direction:column';
@@ -7899,7 +7916,8 @@ function _ccaRenderFilters() {
     fld('Agence', `<select class="fi" id="ccaAgence" onchange="ccaApply()" style="font-size:12px;padding:5px 8px">${opt(_ccaUniq(r => r.agence), '')}</select>`) +
     fld('Métier', `<select class="fi" id="ccaMetier" onchange="ccaApply()" style="font-size:12px;padding:5px 8px">${opt(_ccaUniq(r => r.metier), '')}</select>`) +
     fld('Type de mission', `<select class="fi" id="ccaPresta" onchange="ccaApply()" style="font-size:12px;padding:5px 8px">${opt(_ccaUniq(r => r.type_prestation), '')}</select>`) +
-    fld('Statut', `<select class="fi" id="ccaStatut" onchange="ccaApply()" style="font-size:12px;padding:5px 8px">${opt(_ccaUniq(r => r.statut), '')}</select>`);
+    fld('Statut', `<select class="fi" id="ccaStatut" onchange="ccaApply()" style="font-size:12px;padding:5px 8px">${opt(_ccaUniq(r => r.statut), '')}</select>`) +
+    fld('Établissement', `<select class="fi" id="ccaEtab" onchange="ccaApply()" style="font-size:12px;padding:5px 8px;max-width:240px">${opt(_ccaUniq(r => r.estab), '')}</select>`);
 }
 
 function ccaApply() {
@@ -7911,6 +7929,7 @@ function ccaApply() {
   ccaF.metier = document.getElementById('ccaMetier')?.value || '';
   ccaF.presta = document.getElementById('ccaPresta')?.value || '';
   ccaF.statut = document.getElementById('ccaStatut')?.value || '';
+  ccaF.estab = document.getElementById('ccaEtab')?.value || '';
   _ccaRenderBody();
 }
 
@@ -7955,16 +7974,19 @@ function _ccaRenderBody() {
       ${chartCard('CA par métier', 'ccaChartMetier')}
       ${chartCard('CA par agence', 'ccaChartAgence')}
     </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+      ${chartCard('CA par établissement / site', 'ccaChartEtab', 260)}
+    </div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px">
       <div style="font-size:13px;font-weight:600;margin-bottom:8px">Documents (${nbDocs}${nbDocs > MAX_ROWS ? ' — ' + MAX_ROWS + ' affichés' : ''})</div>
       <div style="overflow:auto;max-height:340px">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead><tr style="text-align:left;color:var(--t3);border-bottom:1px solid var(--border)">
-            <th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Réf</th><th style="padding:6px 8px">Date</th><th style="padding:6px 8px">Agence</th><th style="padding:6px 8px">Mission</th><th style="padding:6px 8px">Rôle</th><th style="padding:6px 8px">Statut</th><th style="padding:6px 8px;text-align:right">Montant HT</th>
+            <th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Réf</th><th style="padding:6px 8px">Date</th><th style="padding:6px 8px">Établissement</th><th style="padding:6px 8px">Agence</th><th style="padding:6px 8px">Mission</th><th style="padding:6px 8px">Rôle</th><th style="padding:6px 8px">Statut</th><th style="padding:6px 8px;text-align:right">Montant HT</th>
           </tr></thead>
           <tbody>${tableRows.map(r => `<tr style="border-bottom:1px solid var(--border)">
-            <td style="padding:6px 8px">${docLbl[r.type]}</td><td style="padding:6px 8px">${cmdEsc(r.ref)}</td><td style="padding:6px 8px">${cmdEsc(r.date)}</td><td style="padding:6px 8px">${cmdEsc(r.agence)}</td><td style="padding:6px 8px">${cmdEsc(r.type_prestation || '—')}</td><td style="padding:6px 8px">${[...r.roles].join(', ')}</td><td style="padding:6px 8px">${cmdEsc(r.statut)}</td><td style="padding:6px 8px;text-align:right">${fmt(r.montant)}</td>
-          </tr>`).join('') || '<tr><td colspan="8" style="padding:14px;text-align:center;color:var(--t3)">Aucun document pour ces filtres.</td></tr>'}</tbody>
+            <td style="padding:6px 8px">${docLbl[r.type]}</td><td style="padding:6px 8px">${cmdEsc(r.ref)}</td><td style="padding:6px 8px">${cmdEsc(r.date)}</td><td style="padding:6px 8px">${cmdEsc(r.estab || '—')}</td><td style="padding:6px 8px">${cmdEsc(r.agence)}</td><td style="padding:6px 8px">${cmdEsc(r.type_prestation || '—')}</td><td style="padding:6px 8px">${[...r.roles].join(', ')}</td><td style="padding:6px 8px">${cmdEsc(r.statut)}</td><td style="padding:6px 8px;text-align:right">${fmt(r.montant)}</td>
+          </tr>`).join('') || '<tr><td colspan="9" style="padding:14px;text-align:center;color:var(--t3)">Aucun document pour ces filtres.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
@@ -8018,6 +8040,10 @@ function _ccaBuildCharts(rows, t) {
   const byAg = _ccaSumBy(rows, r => r.agence || '—');
   const agE = Object.entries(byAg).sort((a, b) => b[1] - a[1]).slice(0, 10);
   _ccaBar('ccaChartAgence', agE.map(e => e[0]), agE.map(e => e[1]), '#06b6d4');
+  // 6) Par établissement / site
+  const byEt = _ccaSumBy(rows, r => r.estab || '—');
+  const etE = Object.entries(byEt).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  _ccaBar('ccaChartEtab', etE.map(e => e[0]), etE.map(e => e[1]), '#ec4899', true);
 }
 
 function ccaExportPDF() {
@@ -8036,7 +8062,7 @@ function ccaExportPDF() {
     doc.text(periode + '   |   ' + roleTxt, 14, 22);
     doc.text('CA total HT : ' + fmt(caDevis + caCmd + caFact) + '  (devis ' + fmt(caDevis) + ' · commandes ' + fmt(caCmd) + ' · factures ' + fmt(caFact) + ')', 14, 27);
     let y = 34;
-    const imgs = ['ccaChartType', 'ccaChartTime', 'ccaChartPresta', 'ccaChartMetier', 'ccaChartAgence'];
+    const imgs = ['ccaChartType', 'ccaChartTime', 'ccaChartPresta', 'ccaChartMetier', 'ccaChartAgence', 'ccaChartEtab'];
     for (let i = 0; i < imgs.length; i++) {
       const ch = ccaCharts[imgs[i]]; if (!ch) continue;
       const img = ch.toBase64Image('image/png', 1);
@@ -8048,8 +8074,8 @@ function ccaExportPDF() {
     doc.addPage();
     const docLbl = { devis: 'Devis', commandes: 'Commande', factures: 'Facture' };
     doc.autoTable({
-      head: [['Type', 'Réf', 'Date', 'Agence', 'Mission', 'Rôle', 'Statut', 'Montant HT']],
-      body: rows.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(r => [docLbl[r.type], r.ref, r.date, r.agence, r.type_prestation || '—', [...r.roles].join('/'), r.statut, fmt(r.montant)]),
+      head: [['Type', 'Réf', 'Date', 'Établissement', 'Agence', 'Mission', 'Rôle', 'Statut', 'Montant HT']],
+      body: rows.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(r => [docLbl[r.type], r.ref, r.date, r.estab || '—', r.agence, r.type_prestation || '—', [...r.roles].join('/'), r.statut, fmt(r.montant)]),
       startY: 16, styles: { fontSize: 7, cellPadding: 1.5 }, headStyles: { fillColor: [79, 143, 247] }
     });
     doc.save('analyse_compte_' + (c.code || c.name || 'client').replace(/[^a-z0-9]/gi, '_') + '.pdf');
