@@ -7766,6 +7766,296 @@ async function syncSitesVersAkuiteo() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+//  ANALYSE DU COMPTE CLIENT — multi-filtres, graphiques, PDF
+//  Rôles : client (client_id) / architecte / apporteur / gros-œuvre (par nom)
+// ═══════════════════════════════════════════════════════════
+let ccaRows = null, ccaCharts = {}, ccaFsBound = false;
+let ccaF = { role: '', dt: { devis: true, commandes: true, factures: true }, from: '', to: '', agence: '', metier: '', presta: '', statut: '' };
+
+const CCA_COLS = {
+  devis: 'id,ref,montant,date,statut,societe,type_prestation,gros_oeuvre,architecte,apporteur_affaire,client_id,client_name,sujet',
+  commandes: 'id,ref,montant,date,statut,societe,type_prestation,gros_oeuvre,architecte,apporteur_affaire,client_id,client_name,nom',
+  factures: 'id,ref,montant,montant_ttc,date,statut,societe,type_prestation,gros_oeuvre,architecte,apporteur_affaire,client_id,client_name'
+};
+const CCA_COLS_FB = {
+  devis: 'id,ref,montant,date,statut,societe,client_id,client_name,sujet',
+  commandes: 'id,ref,montant,date,statut,societe,client_id,client_name,nom',
+  factures: 'id,ref,montant,montant_ttc,date,statut,societe,client_id,client_name'
+};
+
+let _ccaChartJs = null;
+function _loadChartJs() {
+  if (window.Chart) return Promise.resolve();
+  if (_ccaChartJs) return _ccaChartJs;
+  _ccaChartJs = new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+  return _ccaChartJs;
+}
+
+function _ccaNorm(t, d) {
+  return {
+    type: t, id: d.id, ref: d.ref || '', label: d.nom || d.sujet || d.ref || '',
+    montant: Number(d.montant) || 0, ttc: Number(d.montant_ttc) || 0,
+    date: d.date || '', year: (d.date || '').slice(0, 4),
+    statut: d.statut || '', agence: d.societe || '',
+    type_prestation: d.type_prestation || '', metier: deriveMetier(d.type_prestation) || '—',
+    gros_oeuvre: d.gros_oeuvre || '', architecte: d.architecte || '', apporteur: d.apporteur_affaire || '',
+    roles: new Set()
+  };
+}
+
+async function _ccaFetch(c) {
+  const name = (c.name || '').trim();
+  const map = new Map();
+  const add = (rows, role) => { for (const d of (rows || [])) { const k = d._t + '_' + d.id; let r = map.get(k); if (!r) { r = _ccaNorm(d._t, d); map.set(k, r); } r.roles.add(role); } };
+  for (const t of ['devis', 'commandes', 'factures']) {
+    const tag = arr => arr.map(x => (x._t = t, x));
+    const sel = async (cols, fn) => { const r = await fn(sb.from(t).select(cols)).limit(3000); return r; };
+    // Rôle « client » (avec repli si colonnes optionnelles absentes)
+    let rc = await sel(CCA_COLS[t], q => q.eq('client_id', c.id));
+    if (rc.error) rc = await sel(CCA_COLS_FB[t], q => q.eq('client_id', c.id));
+    add(tag(rc.error ? [] : (rc.data || [])), 'client');
+    // Rôles par nom (ignorés si la colonne n'existe pas)
+    if (name) {
+      for (const [role, col] of [['architecte', 'architecte'], ['apporteur', 'apporteur_affaire'], ['gros_oeuvre', 'gros_oeuvre']]) {
+        const r = await sel(CCA_COLS[t], q => q.ilike(col, '%' + name + '%'));
+        add(tag(r.error ? [] : (r.data || [])), role);
+      }
+    }
+  }
+  return [...map.values()];
+}
+
+function _ccaFiltered() {
+  return (ccaRows || []).filter(r => {
+    if (!ccaF.dt[r.type]) return false;
+    if (ccaF.role && !r.roles.has(ccaF.role)) return false;
+    if (ccaF.from && r.date && r.date < ccaF.from) return false;
+    if (ccaF.to && r.date && r.date > ccaF.to) return false;
+    if (ccaF.agence && r.agence !== ccaF.agence) return false;
+    if (ccaF.metier && r.metier !== ccaF.metier) return false;
+    if (ccaF.presta && r.type_prestation !== ccaF.presta) return false;
+    if (ccaF.statut && r.statut !== ccaF.statut) return false;
+    return true;
+  });
+}
+
+async function ccaOpen() {
+  const c = currentClient;
+  if (!c) return;
+  ccaF = { role: '', dt: { devis: true, commandes: true, factures: true }, from: '', to: '', agence: '', metier: '', presta: '', statut: '' };
+  let ov = document.getElementById('ccaOverlay');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'ccaOverlay'; document.body.appendChild(ov); }
+  ov.style.cssText = 'position:fixed;inset:0;z-index:2000;background:var(--bg-1);display:flex;flex-direction:column';
+  ov.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--card)">
+      <div style="font-weight:700;font-size:15px;flex:1">📊 Analyse du compte — ${cmdEsc(c.name || '')}</div>
+      <button class="btn btn-sm" onclick="ccaExportPDF()">🖨 Export PDF</button>
+      <button class="btn btn-sm" onclick="ccaToggleFullscreen()" title="Plein écran">⛶ Plein écran</button>
+      <button class="btn btn-sm" onclick="ccaClose()">✕ Fermer</button>
+    </div>
+    <div id="ccaFilters" style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;background:var(--card)"></div>
+    <div id="ccaBody" style="flex:1;overflow:auto;padding:16px"><div style="text-align:center;padding:40px;color:var(--t3)"><span class="cmd-docs-spin"></span> Chargement et analyse du compte…</div></div>`;
+  try {
+    await _loadChartJs();
+    ccaRows = await _ccaFetch(c);
+    _ccaRenderFilters();
+    ccaApply();
+  } catch (e) {
+    document.getElementById('ccaBody').innerHTML = '<div style="color:var(--red);padding:20px">Erreur : ' + cmdEsc(e.message) + '</div>';
+  }
+}
+
+function ccaClose() {
+  Object.values(ccaCharts).forEach(ch => { try { ch.destroy(); } catch (e) {} });
+  ccaCharts = {};
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (fsEl) { (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document); }
+  const ov = document.getElementById('ccaOverlay'); if (ov) ov.remove();
+}
+
+function ccaToggleFullscreen() {
+  const ov = document.getElementById('ccaOverlay'); if (!ov) return;
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (!fsEl) { (ov.requestFullscreen || ov.webkitRequestFullscreen || (() => {})).call(ov); }
+  else { (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document); }
+}
+
+function _ccaUniq(fn) { return [...new Set((ccaRows || []).map(fn).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr')); }
+
+function _ccaRenderFilters() {
+  const el = document.getElementById('ccaFilters'); if (!el) return;
+  const opt = (arr, sel) => '<option value="">— Tous —</option>' + arr.map(v => `<option value="${cmdEsc(v)}"${v === sel ? ' selected' : ''}>${cmdEsc(v)}</option>`).join('');
+  const fld = (lbl, inner) => `<div><label class="fl" style="font-size:11px">${lbl}</label>${inner}</div>`;
+  el.innerHTML =
+    fld('Rôle du compte', `<select class="fi" id="ccaRole" onchange="ccaApply()" style="font-size:12px;padding:5px 8px">
+        <option value="">Tous rôles</option><option value="client">Client</option><option value="architecte">Architecte</option><option value="apporteur">Apporteur d'affaire</option><option value="gros_oeuvre">Gros-œuvre</option></select>`) +
+    fld('Documents', `<div style="display:flex;gap:8px;font-size:12px;padding-top:4px">
+        <label style="cursor:pointer"><input type="checkbox" id="ccaDtDevis" checked onchange="ccaApply()"> Devis</label>
+        <label style="cursor:pointer"><input type="checkbox" id="ccaDtCmd" checked onchange="ccaApply()"> Commandes</label>
+        <label style="cursor:pointer"><input type="checkbox" id="ccaDtFact" checked onchange="ccaApply()"> Factures</label></div>`) +
+    fld('Du', `<input type="date" class="fi" id="ccaFrom" onchange="ccaApply()" style="font-size:12px;padding:4px 8px;width:auto">`) +
+    fld('au', `<input type="date" class="fi" id="ccaTo" onchange="ccaApply()" style="font-size:12px;padding:4px 8px;width:auto">`) +
+    fld('Agence', `<select class="fi" id="ccaAgence" onchange="ccaApply()" style="font-size:12px;padding:5px 8px">${opt(_ccaUniq(r => r.agence), '')}</select>`) +
+    fld('Métier', `<select class="fi" id="ccaMetier" onchange="ccaApply()" style="font-size:12px;padding:5px 8px">${opt(_ccaUniq(r => r.metier), '')}</select>`) +
+    fld('Type de mission', `<select class="fi" id="ccaPresta" onchange="ccaApply()" style="font-size:12px;padding:5px 8px">${opt(_ccaUniq(r => r.type_prestation), '')}</select>`) +
+    fld('Statut', `<select class="fi" id="ccaStatut" onchange="ccaApply()" style="font-size:12px;padding:5px 8px">${opt(_ccaUniq(r => r.statut), '')}</select>`);
+}
+
+function ccaApply() {
+  ccaF.role = document.getElementById('ccaRole')?.value || '';
+  ccaF.dt = { devis: !!document.getElementById('ccaDtDevis')?.checked, commandes: !!document.getElementById('ccaDtCmd')?.checked, factures: !!document.getElementById('ccaDtFact')?.checked };
+  ccaF.from = document.getElementById('ccaFrom')?.value || '';
+  ccaF.to = document.getElementById('ccaTo')?.value || '';
+  ccaF.agence = document.getElementById('ccaAgence')?.value || '';
+  ccaF.metier = document.getElementById('ccaMetier')?.value || '';
+  ccaF.presta = document.getElementById('ccaPresta')?.value || '';
+  ccaF.statut = document.getElementById('ccaStatut')?.value || '';
+  _ccaRenderBody();
+}
+
+function _ccaSumBy(rows, keyFn) { const m = {}; rows.forEach(r => { const k = keyFn(r) || '—'; m[k] = (m[k] || 0) + r.montant; }); return m; }
+
+function _ccaRenderBody() {
+  const body = document.getElementById('ccaBody'); if (!body) return;
+  const rows = _ccaFiltered();
+  const caDevis = rows.filter(r => r.type === 'devis').reduce((a, r) => a + r.montant, 0);
+  const caCmd = rows.filter(r => r.type === 'commandes').reduce((a, r) => a + r.montant, 0);
+  const caFact = rows.filter(r => r.type === 'factures').reduce((a, r) => a + r.montant, 0);
+  const nDevis = rows.filter(r => r.type === 'devis').length;
+  const nCmd = rows.filter(r => r.type === 'commandes').length;
+  const caTotal = caDevis + caCmd + caFact;
+  const nbDocs = rows.length;
+  const panier = nbDocs ? caTotal / nbDocs : 0;
+  const transfo = nDevis ? Math.round(nCmd / nDevis * 100) : 0;
+
+  const kpi = (label, val, sub) => `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;min-width:150px;flex:1">
+      <div style="font-size:11px;color:var(--t3)">${label}</div><div style="font-size:20px;font-weight:700;color:var(--t1)">${val}</div>${sub ? '<div style="font-size:11px;color:var(--t3)">' + sub + '</div>' : ''}</div>`;
+  const chartCard = (title, id, h) => `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;flex:1;min-width:300px"><div style="font-size:13px;font-weight:600;margin-bottom:8px">${title}</div><div style="position:relative;height:${h || 220}px"><canvas id="${id}"></canvas></div></div>`;
+
+  const MAX_ROWS = 300;
+  const tableRows = rows.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, MAX_ROWS);
+  const docLbl = { devis: 'Devis', commandes: 'Commande', factures: 'Facture' };
+
+  body.innerHTML = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      ${kpi('CA total (HT)', fmt(caTotal), nbDocs + ' document(s)')}
+      ${kpi('CA devis', fmt(caDevis), nDevis + ' devis')}
+      ${kpi('CA commandes', fmt(caCmd), nCmd + ' commande(s)')}
+      ${kpi('CA factures', fmt(caFact), rows.filter(r => r.type === 'factures').length + ' facture(s)')}
+      ${kpi('Panier moyen', fmt(panier))}
+      ${kpi('Taux transfo devis→cmd', transfo + ' %')}
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+      ${chartCard('CA par type de document', 'ccaChartType')}
+      ${chartCard('CA dans le temps (par an)', 'ccaChartTime')}
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+      ${chartCard('CA par type de mission', 'ccaChartPresta', 260)}
+      ${chartCard('CA par métier', 'ccaChartMetier')}
+      ${chartCard('CA par agence', 'ccaChartAgence')}
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px">Documents (${nbDocs}${nbDocs > MAX_ROWS ? ' — ' + MAX_ROWS + ' affichés' : ''})</div>
+      <div style="overflow:auto;max-height:340px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="text-align:left;color:var(--t3);border-bottom:1px solid var(--border)">
+            <th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Réf</th><th style="padding:6px 8px">Date</th><th style="padding:6px 8px">Agence</th><th style="padding:6px 8px">Mission</th><th style="padding:6px 8px">Rôle</th><th style="padding:6px 8px">Statut</th><th style="padding:6px 8px;text-align:right">Montant HT</th>
+          </tr></thead>
+          <tbody>${tableRows.map(r => `<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:6px 8px">${docLbl[r.type]}</td><td style="padding:6px 8px">${cmdEsc(r.ref)}</td><td style="padding:6px 8px">${cmdEsc(r.date)}</td><td style="padding:6px 8px">${cmdEsc(r.agence)}</td><td style="padding:6px 8px">${cmdEsc(r.type_prestation || '—')}</td><td style="padding:6px 8px">${[...r.roles].join(', ')}</td><td style="padding:6px 8px">${cmdEsc(r.statut)}</td><td style="padding:6px 8px;text-align:right">${fmt(r.montant)}</td>
+          </tr>`).join('') || '<tr><td colspan="8" style="padding:14px;text-align:center;color:var(--t3)">Aucun document pour ces filtres.</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  _ccaBuildCharts(rows, { caDevis, caCmd, caFact });
+}
+
+function _ccaMkChart(id, config) {
+  if (ccaCharts[id]) { try { ccaCharts[id].destroy(); } catch (e) {} }
+  const ctx = document.getElementById(id); if (!ctx || !window.Chart) return;
+  ccaCharts[id] = new Chart(ctx, config);
+}
+
+const CCA_PALETTE = ['#4f8ff7', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#ef4444', '#84cc16', '#6366f1', '#f97316'];
+function _ccaBar(id, labels, data, color, horizontal) {
+  _ccaMkChart(id, {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: Array.isArray(color) ? color : (color || '#4f8ff7') }] },
+    options: { indexAxis: horizontal ? 'y' : 'x', plugins: { legend: { display: false } }, scales: { x: { ticks: { font: { size: 10 } } }, y: { ticks: { font: { size: 10 } } } }, maintainAspectRatio: false }
+  });
+}
+
+function _ccaBuildCharts(rows, t) {
+  // 1) Par type de document
+  _ccaBar('ccaChartType', ['Devis', 'Commandes', 'Factures'], [t.caDevis, t.caCmd, t.caFact], ['#f59e0b', '#4f8ff7', '#10b981']);
+  // 2) Dans le temps (par an), empilé par type
+  const years = [...new Set(rows.map(r => r.year).filter(Boolean))].sort();
+  const byTypeYear = type => years.map(y => rows.filter(r => r.type === type && r.year === y).reduce((a, r) => a + r.montant, 0));
+  _ccaMkChart('ccaChartTime', {
+    type: 'bar',
+    data: { labels: years, datasets: [
+      { label: 'Devis', data: byTypeYear('devis'), backgroundColor: '#f59e0b' },
+      { label: 'Commandes', data: byTypeYear('commandes'), backgroundColor: '#4f8ff7' },
+      { label: 'Factures', data: byTypeYear('factures'), backgroundColor: '#10b981' }
+    ] },
+    options: { plugins: { legend: { display: true, labels: { font: { size: 10 } } } }, scales: { x: { stacked: true }, y: { stacked: true } }, maintainAspectRatio: false }
+  });
+  // 3) Par type de mission (top 10)
+  const byPresta = _ccaSumBy(rows, r => r.type_prestation || '—');
+  const prestaSorted = Object.entries(byPresta).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  _ccaBar('ccaChartPresta', prestaSorted.map(e => e[0]), prestaSorted.map(e => e[1]), '#8b5cf6', true);
+  // 4) Par métier (doughnut)
+  const byMetier = _ccaSumBy(rows, r => r.metier || '—');
+  const mE = Object.entries(byMetier).sort((a, b) => b[1] - a[1]);
+  _ccaMkChart('ccaChartMetier', {
+    type: 'doughnut',
+    data: { labels: mE.map(e => e[0]), datasets: [{ data: mE.map(e => e[1]), backgroundColor: CCA_PALETTE }] },
+    options: { plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } }, maintainAspectRatio: false }
+  });
+  // 5) Par agence
+  const byAg = _ccaSumBy(rows, r => r.agence || '—');
+  const agE = Object.entries(byAg).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  _ccaBar('ccaChartAgence', agE.map(e => e[0]), agE.map(e => e[1]), '#06b6d4');
+}
+
+function ccaExportPDF() {
+  try {
+    const { jsPDF } = window.jspdf;
+    const c = currentClient || {};
+    const rows = _ccaFiltered();
+    const caDevis = rows.filter(r => r.type === 'devis').reduce((a, r) => a + r.montant, 0);
+    const caCmd = rows.filter(r => r.type === 'commandes').reduce((a, r) => a + r.montant, 0);
+    const caFact = rows.filter(r => r.type === 'factures').reduce((a, r) => a + r.montant, 0);
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    doc.setFontSize(14); doc.text('Analyse du compte — ' + (c.name || ''), 14, 16);
+    doc.setFontSize(9);
+    const periode = (ccaF.from || ccaF.to) ? ('Période : ' + (ccaF.from || '…') + ' au ' + (ccaF.to || '…')) : 'Période : toutes dates';
+    const roleTxt = ccaF.role ? ('Rôle : ' + ccaF.role) : 'Rôles : tous';
+    doc.text(periode + '   |   ' + roleTxt, 14, 22);
+    doc.text('CA total HT : ' + fmt(caDevis + caCmd + caFact) + '  (devis ' + fmt(caDevis) + ' · commandes ' + fmt(caCmd) + ' · factures ' + fmt(caFact) + ')', 14, 27);
+    let y = 34;
+    const imgs = ['ccaChartType', 'ccaChartTime', 'ccaChartPresta', 'ccaChartMetier', 'ccaChartAgence'];
+    for (let i = 0; i < imgs.length; i++) {
+      const ch = ccaCharts[imgs[i]]; if (!ch) continue;
+      const img = ch.toBase64Image('image/png', 1);
+      const x = (i % 2 === 0) ? 14 : 108;
+      if (i % 2 === 0 && y > 250) { doc.addPage(); y = 16; }
+      doc.addImage(img, 'PNG', x, y, 88, 52);
+      if (i % 2 === 1) y += 58;
+    }
+    doc.addPage();
+    const docLbl = { devis: 'Devis', commandes: 'Commande', factures: 'Facture' };
+    doc.autoTable({
+      head: [['Type', 'Réf', 'Date', 'Agence', 'Mission', 'Rôle', 'Statut', 'Montant HT']],
+      body: rows.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(r => [docLbl[r.type], r.ref, r.date, r.agence, r.type_prestation || '—', [...r.roles].join('/'), r.statut, fmt(r.montant)]),
+      startY: 16, styles: { fontSize: 7, cellPadding: 1.5 }, headStyles: { fillColor: [79, 143, 247] }
+    });
+    doc.save('analyse_compte_' + (c.code || c.name || 'client').replace(/[^a-z0-9]/gi, '_') + '.pdf');
+  } catch (e) { toast('Erreur export PDF : ' + e.message, 'error'); }
+}
+
 function renderClientDetail() {
   const c = currentClient;
   if(!c) return '<p>Société non trouvée</p>';
@@ -7815,6 +8105,7 @@ function renderClientDetail() {
         const label = synced ? '✔ Synchronisé' : ((c.akuiteo_id || c.akuiteo_site_id) ? '⬆ Synchroniser' : '⬆ Sync Akuiteo');
         return '<button class="btn ' + cls + '" onclick="pushClientToAkuiteo(\'' + c.id + '\')" title="' + title + '">' + label + '</button>';
       })()}
+      <button class="btn" onclick="ccaOpen()" title="Analyse multi-filtres du compte (CA, rôles, missions, graphiques, PDF)">📊 Analyser le compte</button>
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
       <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer ce client/prospect">Supprimer</button>
     </div>
