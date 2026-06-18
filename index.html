@@ -17445,7 +17445,7 @@ function abcEditClose() { const ov = document.getElementById('abcEditOverlay'); 
 function abcEditRenderBar(agList) {
   const el = document.getElementById('abcEditBar'); if (!el) return;
   el.innerHTML = `<label style="font-size:12px;color:var(--t3)">Agence</label>
-    <select onchange="abcEditAgence=this.value;abcEditRenderTable()" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">${agList.map(a => `<option value="${cmdEsc(a)}"${a === abcEditAgence ? ' selected' : ''}>${cmdEsc(a)}</option>`).join('')}</select>
+    <select onchange="abcEditAgence=this.value;abcEditRenderTable()" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">${agList.map(a => `<option value="${cmdEsc(a)}"${a === abcEditAgence ? ' selected' : ''}>${a === 'GROUPE' ? 'GROUPE (toutes agences)' : cmdEsc(a)}</option>`).join('')}</select>
     <input type="text" placeholder="Rechercher un client…" value="${cmdEsc(abcEditSearch)}" oninput="abcEditSearch=this.value;abcEditRenderTable()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);min-width:220px">
     <span id="abcEditCount" style="font-size:11px;color:var(--t3)"></span>
     <span style="font-size:11px;color:var(--t3);margin-left:auto">Modifiez le rang et/ou la catégorie, puis « Enregistrer ».</span>`;
@@ -17607,6 +17607,27 @@ async function calculerCategoriesABC() {
       clientRangs[cid] = Object.keys(rangObj).length > 0 ? rangObj : null;
     }
 
+    // 4b. Classement « GROUPE » : CA cumulé toutes agences (pseudo-agence "GROUPE", en parallèle)
+    const groupCA = {};
+    for (const soc of societes) for (const [cid, ca] of Object.entries(bySociete[soc])) groupCA[cid] = (groupCA[cid] || 0) + ca;
+    const gSorted = Object.entries(groupCA).map(([cid, ca]) => ({ cid, ca })).filter(x => x.ca > 0).sort((a, b) => b.ca - a.ca);
+    const gTotal = gSorted.reduce((s, x) => s + x.ca, 0);
+    let statsGroupe = null;
+    if (gTotal > 0) {
+      const gt50 = gTotal * 0.50, gt80 = gTotal * 0.80;
+      let gcum = 0, grg = 0, gA = 0, gB = 0, gC = 0;
+      for (const { cid, ca } of gSorted) {
+        grg++; gcum += ca;
+        const cat = gcum <= gt50 ? 'A- Stratégique' : gcum <= gt80 ? 'B- Tactique' : 'C- Listé';
+        if (cat[0] === 'A') gA++; else if (cat[0] === 'B') gB++; else gC++;
+        if (!clientCategories[cid] || typeof clientCategories[cid] !== 'object') clientCategories[cid] = {};
+        clientCategories[cid].GROUPE = cat;
+        if (!clientRangs[cid] || typeof clientRangs[cid] !== 'object') clientRangs[cid] = {};
+        clientRangs[cid].GROUPE = grg;
+      }
+      statsGroupe = { A: gA, B: gB, C: gC, totalCA: gTotal };
+    }
+
     // 5. Clients avec catégorie existante mais plus de CA → mettre à null
     setSyncText('Chargement des catégories existantes…');
     let existingWithCat = [], off = 0;
@@ -17732,6 +17753,17 @@ async function calculerCategoriesABC() {
           + '<td style="padding:6px 10px;text-align:right"><span style="background:rgba(245,158,11,.15);color:#f59e0b;padding:2px 8px;border-radius:4px;font-weight:600">' + s.B + '</span></td>'
           + '<td style="padding:6px 10px;text-align:right"><span style="background:rgba(107,114,128,.15);color:#6b7280;padding:2px 8px;border-radius:4px;font-weight:600">' + s.C + '</span></td>'
           + '<td style="padding:6px 10px;text-align:right;font-weight:500">' + (s.A + s.B + s.C) + '</td>'
+          + '</tr>';
+      }
+      if (statsGroupe) {
+        const s = statsGroupe;
+        html += '<tr style="border-top:2px solid var(--border);background:var(--bg-3)">'
+          + '<td style="padding:6px 10px;font-weight:700">GROUPE <span style="font-weight:400;font-size:11px;color:var(--t3)">(toutes agences)</span></td>'
+          + '<td style="padding:6px 10px;text-align:right;font-family:\'DM Mono\',monospace">' + Math.round(s.totalCA).toLocaleString('fr-FR') + ' €</td>'
+          + '<td style="padding:6px 10px;text-align:right"><span style="background:rgba(59,130,246,.15);color:#3b82f6;padding:2px 8px;border-radius:4px;font-weight:600">' + s.A + '</span></td>'
+          + '<td style="padding:6px 10px;text-align:right"><span style="background:rgba(245,158,11,.15);color:#f59e0b;padding:2px 8px;border-radius:4px;font-weight:600">' + s.B + '</span></td>'
+          + '<td style="padding:6px 10px;text-align:right"><span style="background:rgba(107,114,128,.15);color:#6b7280;padding:2px 8px;border-radius:4px;font-weight:600">' + s.C + '</span></td>'
+          + '<td style="padding:6px 10px;text-align:right;font-weight:700">' + (s.A + s.B + s.C) + '</td>'
           + '</tr>';
       }
       html += '</tbody></table>';
