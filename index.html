@@ -3072,6 +3072,7 @@ let clientsFilterCatCompte = '';
 let clientsFilterCatRole = 'client'; // 'client' | 'apporteur' | 'architecte' | 'gros_oeuvre' (colonne ciblée par le filtre Cat. compte)
 let clientsFilterReseauxPro = '';
 let clientsHideRadiees = true; // masquer les entreprises radiées INSEE (etat_insee = 'C') — coché par défaut
+let _clientsServerLoaded = false; // 1er chargement serveur de la liste clients (pour appliquer les filtres dès l'entrée)
 const CLIENTS_PER_PAGE = 50;
 let clientsFilterOpts = { depts: [], novam: [], gph: [], categorie: [], sousCategorie: [], categoriePro: [], secteur: [], type: [], groupe: [], origine: [], reseauxPro: [] };
 let clientsFilterOptsVariants = {};
@@ -4781,6 +4782,11 @@ function renderPage(page) {
   }
   if (page === 'clients' && !clientsFilterOptsLoaded) {
     loadClientsFilterOpts().then(() => { if (currentPage === 'clients') renderPage('clients'); });
+  }
+  // Premier affichage de la liste : recharger via loadClientsPage pour appliquer le filtre serveur (radiées masquées)
+  if (page === 'clients' && !_clientsServerLoaded) {
+    _clientsServerLoaded = true;
+    loadClientsPage(clientsPage || 0, clientsLetter, clientsSearch);
   }
   if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); }, 50);
   if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); }, 50);
@@ -6593,7 +6599,8 @@ async function deleteClientConcurrent(linkId, clientId) {
 }
 
 function renderClients(filter='all') {
-  const filtered = filter==='all' ? DB.clients : DB.clients.filter(c=>c.status===filter);
+  let filtered = filter==='all' ? DB.clients : DB.clients.filter(c=>c.status===filter);
+  if (clientsHideRadiees) filtered = filtered.filter(c => c.etat_insee !== 'C');
   const effectivePageSize = clientsFilterCatCompte ? clientsTotalCount : CLIENTS_PER_PAGE;
   const totalPages = clientsFilterCatCompte ? 1 : Math.ceil(clientsTotalCount / CLIENTS_PER_PAGE);
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
