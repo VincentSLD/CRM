@@ -171,6 +171,11 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS categorie_gros_oeuvre_rang JSONB;
 -- JSONB par agence, ex: {"SA85": true, "GPH85": true}. Coché manuellement dans la fiche.
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS categorie_compte_plus JSONB;
 
+-- ═══ Statut client : autoriser "prospect" (en plus de actif/dormant/nouveau) ═══
+-- Le calcul des statuts produit aussi "prospect" ; l'ancienne contrainte le rejetait (erreur 400).
+ALTER TABLE clients DROP CONSTRAINT IF EXISTS clients_status_check;
+ALTER TABLE clients ADD CONSTRAINT clients_status_check CHECK (status IS NULL OR status IN ('actif','dormant','nouveau','prospect'));
+
 -- ═══ Campagnes marketing (ciblage emails) ═══
 CREATE TABLE IF NOT EXISTS campagnes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
