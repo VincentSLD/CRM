@@ -153,6 +153,10 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS date_fermeture_insee    DATE;     -
 CREATE INDEX IF NOT EXISTS idx_clients_procedure_collective ON clients(procedure_collective) WHERE procedure_collective IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_clients_etat_insee ON clients(etat_insee) WHERE etat_insee = 'C';
 
+-- ═══ Rang ABC par agence (classement CA décroissant, 1 = plus gros) ═══
+-- JSONB par agence, ex: {"SA85": 12, "GPH85": 3}. Renseigné par la catégorisation ABC.
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS categorie_compte_rang JSONB;
+
 -- ═══ Campagnes marketing (ciblage emails) ═══
 CREATE TABLE IF NOT EXISTS campagnes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,

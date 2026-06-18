@@ -8339,9 +8339,11 @@ function renderClientDetail() {
       detailRow('Catégorie du compte', (() => {
         const cc = c.categorie_compte;
         if (!cc || typeof cc !== 'object' || Object.keys(cc).length === 0) return '—';
+        const rg = c.categorie_compte_rang && typeof c.categorie_compte_rang === 'object' ? c.categorie_compte_rang : {};
         return Object.entries(cc).map(([ag, val]) => {
           const bg = val.startsWith('A') ? '#3b82f6' : val.startsWith('B') ? '#f59e0b' : '#6b7280';
-          return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + bg + ';color:#fff;margin:1px 4px 1px 0">' + ag + ' : ' + val + '</span>';
+          const rank = rg[ag];
+          return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + bg + ';color:#fff;margin:1px 4px 1px 0">' + ag + ' : ' + val + (rank ? ' (' + rank + ')' : '') + '</span>';
         }).join('');
       })()),
       detailRow('Société Akuiteo', c.code_societe || '—'),
@@ -17169,8 +17171,9 @@ async function calculerCategoriesABC() {
 
     const societes = Object.keys(bySociete).sort();
 
-    // 3. Classification ABC par agence
+    // 3. Classification ABC par agence (+ rang par CA décroissant)
     const abcBySociete = {};
+    const rangBySociete = {};
     const statsBySociete = {};
 
     for (const soc of societes) {
@@ -17184,10 +17187,13 @@ async function calculerCategoriesABC() {
 
       const t50 = totalCA * 0.50;
       const t80 = totalCA * 0.80;
-      let cumul = 0, cA = 0, cB = 0, cC = 0;
+      let cumul = 0, cA = 0, cB = 0, cC = 0, rang = 0;
       const abcMap = {};
+      const rangMap = {};
 
       for (const { cid, ca } of sorted) {
+        rang++;
+        rangMap[cid] = rang; // 1 = plus gros CA de l'agence
         cumul += ca;
         if (cumul <= t50) { abcMap[cid] = 'A- Stratégique'; cA++; }
         else if (cumul <= t80) { abcMap[cid] = 'B- Tactique'; cB++; }
@@ -17195,6 +17201,7 @@ async function calculerCategoriesABC() {
       }
 
       abcBySociete[soc] = abcMap;
+      rangBySociete[soc] = rangMap;
       statsBySociete[soc] = { A: cA, B: cB, C: cC, totalCA };
     }
 
@@ -17205,12 +17212,15 @@ async function calculerCategoriesABC() {
     }
 
     const clientCategories = {};
+    const clientRangs = {};
     for (const cid of allClientIds) {
       const catObj = {};
+      const rangObj = {};
       for (const soc of societes) {
-        if (abcBySociete[soc]?.[cid]) catObj[soc] = abcBySociete[soc][cid];
+        if (abcBySociete[soc]?.[cid]) { catObj[soc] = abcBySociete[soc][cid]; rangObj[soc] = rangBySociete[soc][cid]; }
       }
       clientCategories[cid] = Object.keys(catObj).length > 0 ? catObj : null;
+      clientRangs[cid] = Object.keys(rangObj).length > 0 ? rangObj : null;
     }
 
     // 5. Clients avec catégorie existante mais plus de CA → mettre à null
@@ -17224,8 +17234,12 @@ async function calculerCategoriesABC() {
       off += 1000;
     }
     for (const row of existingWithCat) {
-      if (!allClientIds.has(row.id)) clientCategories[row.id] = null;
+      if (!allClientIds.has(row.id)) { clientCategories[row.id] = null; clientRangs[row.id] = null; }
     }
+
+    // Détecter si la colonne de rang existe (sinon on l'ignore proprement)
+    let hasRangCol = true;
+    try { const { error } = await sb.from('clients').select('categorie_compte_rang').limit(1); if (error) hasRangCol = false; } catch (e) { hasRangCol = false; }
 
     // 6. Mise à jour Supabase par batch
     const clientIds = Object.keys(clientCategories);
@@ -17235,16 +17249,18 @@ async function calculerCategoriesABC() {
     for (let i = 0; i < clientIds.length; i += 20) {
       const batch = clientIds.slice(i, i + 20);
       setSyncText(`Mise à jour ${Math.min(i + 20, total)} / ${total} clients…`);
-      const promises = batch.map(cid =>
-        sb.from('clients').update({ categorie_compte: clientCategories[cid] }).eq('id', cid)
-          .then(({ error }) => { if (error) { console.warn('ABC err', cid, error.message); errors++; } else updated++; })
-      );
+      const promises = batch.map(cid => {
+        const upd = { categorie_compte: clientCategories[cid] };
+        if (hasRangCol) upd.categorie_compte_rang = clientRangs[cid] || null;
+        return sb.from('clients').update(upd).eq('id', cid)
+          .then(({ error }) => { if (error) { console.warn('ABC err', cid, error.message); errors++; } else updated++; });
+      });
       await Promise.all(promises);
     }
 
     // 7. Mettre à jour le cache local
     for (const c of DB.clients) {
-      if (clientCategories.hasOwnProperty(c.id)) c.categorie_compte = clientCategories[c.id];
+      if (clientCategories.hasOwnProperty(c.id)) { c.categorie_compte = clientCategories[c.id]; c.categorie_compte_rang = clientRangs[c.id] || null; }
     }
 
     showSyncLoading(false);
