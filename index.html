@@ -8196,20 +8196,39 @@ function _ccaRenderBody() {
       ${chartCard('CA par établissement / site', 'ccaChartEtab', 260)}
     </div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px">
-      <div style="font-size:13px;font-weight:600;margin-bottom:8px">Documents (${nbDocs}${nbDocs > MAX_ROWS ? ' — ' + MAX_ROWS + ' affichés' : ''})</div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">Documents (${nbDocs}${nbDocs > MAX_ROWS ? ' — ' + MAX_ROWS + ' affichés' : ''})
+        <span id="ccaSelCount" style="font-size:11px;font-weight:400;color:var(--t3)"></span>
+        <span style="font-size:11px;font-weight:400;color:var(--t3);margin-left:auto">Cochez les lignes à inclure dans le PDF</span>
+      </div>
       <div style="overflow:auto;max-height:340px">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead><tr style="text-align:left;color:var(--t3);border-bottom:1px solid var(--border)">
+            <th style="padding:6px 8px;width:28px"><input type="checkbox" id="ccaSelAll" checked onchange="ccaToggleSelectAll(this.checked)" title="Tout sélectionner"></th>
             <th style="padding:6px 8px">Type</th><th style="padding:6px 8px">Réf</th><th style="padding:6px 8px">Date</th><th style="padding:6px 8px">Établissement</th><th style="padding:6px 8px">Agence</th><th style="padding:6px 8px">Mission</th><th style="padding:6px 8px">Rôle</th><th style="padding:6px 8px">Statut</th><th style="padding:6px 8px;text-align:right">Montant HT</th>
           </tr></thead>
           <tbody>${tableRows.map(r => `<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:6px 8px"><input type="checkbox" class="cca-sel" data-key="${r.type}_${r.id}" checked onchange="ccaUpdateSelCount()"></td>
             <td style="padding:6px 8px">${docLbl[r.type]}</td><td style="padding:6px 8px">${cmdEsc(r.ref)}</td><td style="padding:6px 8px">${cmdEsc(r.date)}</td><td style="padding:6px 8px">${cmdEsc(r.estab || '—')}</td><td style="padding:6px 8px">${cmdEsc(r.agence)}</td><td style="padding:6px 8px">${cmdEsc(r.type_prestation || '—')}</td><td style="padding:6px 8px">${[...r.roles].join(', ')}</td><td style="padding:6px 8px">${cmdEsc(r.statut)}</td><td style="padding:6px 8px;text-align:right">${fmt(r.montant)}</td>
-          </tr>`).join('') || '<tr><td colspan="9" style="padding:14px;text-align:center;color:var(--t3)">Aucun document pour ces filtres.</td></tr>'}</tbody>
+          </tr>`).join('') || '<tr><td colspan="10" style="padding:14px;text-align:center;color:var(--t3)">Aucun document pour ces filtres.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
 
   _ccaBuildCharts(rows, { caDevis, caCmd, caFact });
+  ccaUpdateSelCount();
+}
+
+function ccaUpdateSelCount() {
+  const boxes = [...document.querySelectorAll('.cca-sel')];
+  const checked = boxes.filter(b => b.checked).length;
+  const el = document.getElementById('ccaSelCount');
+  if (el) el.textContent = checked + ' / ' + boxes.length + ' sélectionnée(s) pour le PDF';
+  const all = document.getElementById('ccaSelAll');
+  if (all) { all.checked = boxes.length > 0 && checked === boxes.length; all.indeterminate = checked > 0 && checked < boxes.length; }
+}
+function ccaToggleSelectAll(ch) {
+  document.querySelectorAll('.cca-sel').forEach(b => { b.checked = ch; });
+  ccaUpdateSelCount();
 }
 
 function _ccaMkChart(id, config) {
@@ -8268,7 +8287,13 @@ function ccaExportPDF() {
   try {
     const { jsPDF } = window.jspdf;
     const c = currentClient || {};
-    const rows = _ccaFiltered();
+    // Lignes sélectionnées (cases cochées) — sinon toutes les lignes filtrées
+    const selKeys = new Set([...document.querySelectorAll('.cca-sel:checked')].map(cb => cb.dataset.key));
+    let rows = _ccaFiltered();
+    if (document.querySelector('.cca-sel')) {
+      rows = rows.filter(r => selKeys.has(r.type + '_' + r.id));
+      if (!rows.length) { toast('Aucune ligne sélectionnée pour le PDF.', 'warning'); return; }
+    }
     const caDevis = rows.filter(r => r.type === 'devis').reduce((a, r) => a + r.montant, 0);
     const caCmd = rows.filter(r => r.type === 'commandes').reduce((a, r) => a + r.montant, 0);
     const caFact = rows.filter(r => r.type === 'factures').reduce((a, r) => a + r.montant, 0);
