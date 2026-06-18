@@ -17407,7 +17407,7 @@ function _ccRoleBadges(catObj, rangObj) {
 }
 
 // ═══ Édition manuelle du classement ABC (tableau par agence) ═══
-let abcEditData = null, abcEditDirty = new Set(), abcEditAgence = '', abcEditSearch = '';
+let abcEditData = null, abcEditDirty = new Set(), abcEditAgence = '', abcEditSearch = '', abcEditCA = {};
 async function abcEditOpen() {
   let ov = document.getElementById('abcEditOverlay');
   if (!ov) { ov = document.createElement('div'); ov.id = 'abcEditOverlay'; document.body.appendChild(ov); }
@@ -17423,13 +17423,22 @@ async function abcEditOpen() {
     <div id="abcEditBar" style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--card,#fff)"></div>
     <div id="abcEditBody" style="flex:1;overflow:auto;padding:16px"><div style="text-align:center;padding:40px;color:var(--t3)"><span class="cmd-docs-spin"></span> Chargement…</div></div>`;
   try {
-    abcEditData = []; abcEditDirty = new Set(); abcEditSearch = '';
+    abcEditData = []; abcEditDirty = new Set(); abcEditSearch = ''; abcEditCA = {};
     let off = 0;
     while (true) {
-      const { data, error } = await sb.from('clients').select('id,name,city,categorie_compte,categorie_compte_rang').or('categorie_compte.not.is.null,categorie_compte_rang.not.is.null').range(off, off + 999);
+      const { data, error } = await sb.from('clients').select('id,name,city,account_manager_name,salesman_name,categorie_compte,categorie_compte_rang').or('categorie_compte.not.is.null,categorie_compte_rang.not.is.null').range(off, off + 999);
       if (error || !data || !data.length) break;
-      abcEditData = abcEditData.concat(data.map(c => ({ id: c.id, name: c.name || '', city: c.city || '', cc: (c.categorie_compte && typeof c.categorie_compte === 'object') ? { ...c.categorie_compte } : {}, rg: (c.categorie_compte_rang && typeof c.categorie_compte_rang === 'object') ? { ...c.categorie_compte_rang } : {} })));
+      abcEditData = abcEditData.concat(data.map(c => ({ id: c.id, name: c.name || '', city: c.city || '', novam: c.account_manager_name ? fmtCommercialName(c.account_manager_name) : '', gph: c.salesman_name ? fmtCommercialName(c.salesman_name) : '', cc: (c.categorie_compte && typeof c.categorie_compte === 'object') ? { ...c.categorie_compte } : {}, rg: (c.categorie_compte_rang && typeof c.categorie_compte_rang === 'object') ? { ...c.categorie_compte_rang } : {} })));
       if (data.length < 1000) break; off += 1000;
+    }
+    // CA facturé 12 mois glissants par client → {agence: ca, GROUPE: total}
+    const _now = new Date(); const _cut = new Date(_now.getFullYear() - 1, _now.getMonth(), _now.getDate()).toISOString().slice(0, 10);
+    let offF = 0;
+    while (true) {
+      const { data, error } = await sb.from('factures').select('client_id,societe,montant,date').gte('date', _cut).range(offF, offF + 999);
+      if (error || !data || !data.length) break;
+      for (const f of data) { if (!f.client_id) continue; const m = Number(f.montant) || 0; const o = abcEditCA[f.client_id] || (abcEditCA[f.client_id] = {}); if (f.societe) o[f.societe] = (o[f.societe] || 0) + m; o.GROUPE = (o.GROUPE || 0) + m; }
+      if (data.length < 1000) break; offF += 1000;
     }
     const ags = new Set();
     abcEditData.forEach(c => { Object.keys(c.cc).forEach(a => ags.add(a)); Object.keys(c.rg).forEach(a => ags.add(a)); });
@@ -17465,12 +17474,15 @@ function abcEditRenderTable() {
     <option value="C- Listé"${val === 'C- Listé' ? ' selected' : ''}>C- Listé</option></select>`;
   body.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px">
     <thead><tr style="text-align:left;color:var(--t3);border-bottom:1px solid var(--border)">
-      <th style="padding:6px 8px;width:80px">Rang</th><th style="padding:6px 8px">Client</th><th style="padding:6px 8px;width:170px">Catégorie</th></tr></thead>
-    <tbody>${rows.map(c => `<tr style="border-bottom:1px solid var(--border)${abcEditDirty.has(c.id) ? ';background:rgba(245,158,11,0.10)' : ''}">
-      <td style="padding:6px 8px"><input type="number" min="1" value="${c.rg[ag] != null ? c.rg[ag] : ''}" onchange="abcEditSetRang('${c.id}',this.value)" style="width:64px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--card,#fff);color:var(--t1)"></td>
+      <th style="padding:6px 8px;width:70px">Rang</th><th style="padding:6px 8px">Client</th><th style="padding:6px 8px;width:120px;text-align:right">CA 12 mois</th><th style="padding:6px 8px">Commercial Novam</th><th style="padding:6px 8px">Commercial GPH</th><th style="padding:6px 8px;width:150px">Catégorie</th></tr></thead>
+    <tbody>${rows.map(c => { const ca = (abcEditCA[c.id] && abcEditCA[c.id][ag]) || 0; return `<tr style="border-bottom:1px solid var(--border)${abcEditDirty.has(c.id) ? ';background:rgba(245,158,11,0.10)' : ''}">
+      <td style="padding:6px 8px"><input type="number" min="1" value="${c.rg[ag] != null ? c.rg[ag] : ''}" onchange="abcEditSetRang('${c.id}',this.value)" style="width:60px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--card,#fff);color:var(--t1)"></td>
       <td style="padding:6px 8px"><a href="#" onclick="abcEditClose();showClient('${c.id}');return false" style="color:var(--accent);text-decoration:none;font-weight:600">${cmdEsc(c.name)}</a>${c.city ? ' <span style="color:var(--t3);font-size:11px">' + cmdEsc(c.city) + '</span>' : ''}</td>
+      <td style="padding:6px 8px;text-align:right;font-family:'DM Mono',monospace">${fmt(ca)}</td>
+      <td style="padding:6px 8px">${cmdEsc(c.novam || '—')}</td>
+      <td style="padding:6px 8px">${cmdEsc(c.gph || '—')}</td>
       <td style="padding:6px 8px">${catSel(c.id, c.cc[ag] || '')}</td>
-    </tr>`).join('') || '<tr><td colspan="3" style="padding:14px;text-align:center;color:var(--t3)">Aucun client pour cette agence.</td></tr>'}</tbody></table>`;
+    </tr>`; }).join('') || '<tr><td colspan="6" style="padding:14px;text-align:center;color:var(--t3)">Aucun client pour cette agence.</td></tr>'}</tbody></table>`;
 }
 function abcEditSetCat(cid, val) { const c = abcEditData.find(x => x.id === cid); if (!c) return; if (val) c.cc[abcEditAgence] = val; else delete c.cc[abcEditAgence]; abcEditDirty.add(cid); }
 function abcEditSetRang(cid, val) { const c = abcEditData.find(x => x.id === cid); if (!c) return; const n = parseInt(val, 10); if (val === '' || isNaN(n)) delete c.rg[abcEditAgence]; else c.rg[abcEditAgence] = n; abcEditDirty.add(cid); }
@@ -17505,8 +17517,8 @@ function abcEditExportCSV() {
   const ag = abcEditAgence; const rows = _abcEditRows();
   if (!rows.length) { toast('Rien à exporter.', 'info'); return; }
   const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-  const lines = [['Agence', 'Rang', 'Client', 'Ville', 'Catégorie'].map(esc).join(';')];
-  rows.forEach(c => lines.push([ag, c.rg[ag] != null ? c.rg[ag] : '', c.name, c.city, c.cc[ag] || ''].map(esc).join(';')));
+  const lines = [['Agence', 'Rang', 'Client', 'Ville', 'CA 12 mois', 'Commercial Novam', 'Commercial GPH', 'Catégorie'].map(esc).join(';')];
+  rows.forEach(c => lines.push([ag, c.rg[ag] != null ? c.rg[ag] : '', c.name, c.city, Math.round((abcEditCA[c.id] && abcEditCA[c.id][ag]) || 0), c.novam || '', c.gph || '', c.cc[ag] || ''].map(esc).join(';')));
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob); const a = document.createElement('a');
   a.href = url; a.download = 'classement_abc_' + String(ag).replace(/[^a-z0-9]/gi, '_') + '.csv'; a.click();
@@ -17520,9 +17532,9 @@ function abcEditExportPDF() {
     doc.setFontSize(14); doc.text('Classement ABC — ' + ag, 14, 16);
     doc.setFontSize(9); doc.text(rows.length + ' client(s)', 14, 22);
     doc.autoTable({
-      head: [['Rang', 'Client', 'Ville', 'Catégorie']],
-      body: rows.map(c => [c.rg[ag] != null ? c.rg[ag] : '', c.name, c.city, c.cc[ag] || '']),
-      startY: 28, styles: { fontSize: 8, cellPadding: 1.5 }, headStyles: { fillColor: [79, 143, 247] }
+      head: [['Rang', 'Client', 'Ville', 'CA 12 mois', 'Comm. Novam', 'Comm. GPH', 'Catégorie']],
+      body: rows.map(c => [c.rg[ag] != null ? c.rg[ag] : '', c.name, c.city, fmt((abcEditCA[c.id] && abcEditCA[c.id][ag]) || 0), c.novam || '', c.gph || '', c.cc[ag] || '']),
+      startY: 28, styles: { fontSize: 7, cellPadding: 1.2 }, headStyles: { fillColor: [79, 143, 247] }
     });
     doc.save('classement_abc_' + String(ag).replace(/[^a-z0-9]/gi, '_') + '.pdf');
   } catch (e) { toast('Erreur export PDF : ' + e.message, 'error'); }
