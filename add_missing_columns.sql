@@ -157,6 +157,16 @@ CREATE INDEX IF NOT EXISTS idx_clients_etat_insee ON clients(etat_insee) WHERE e
 -- JSONB par agence, ex: {"SA85": 12, "GPH85": 3}. Renseigné par la catégorisation ABC.
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS categorie_compte_rang JSONB;
 
+-- ═══ Catégorisation ABC par RÔLE (CA facturé attribué au rôle, par agence) ═══
+-- Mêmes valeurs que categorie_compte ("A- Stratégique"/"B- Tactique"/"C- Listé"), JSONB par agence,
+-- + rang par agence. Renseignées par la catégorisation ABC (rôles apporteur/architecte/gros-œuvre).
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS categorie_apporteur        JSONB;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS categorie_apporteur_rang   JSONB;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS categorie_architecte       JSONB;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS categorie_architecte_rang  JSONB;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS categorie_gros_oeuvre      JSONB;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS categorie_gros_oeuvre_rang JSONB;
+
 -- ═══ Campagnes marketing (ciblage emails) ═══
 CREATE TABLE IF NOT EXISTS campagnes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,

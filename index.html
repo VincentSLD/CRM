@@ -3069,6 +3069,7 @@ let clientsFilterOrigine = '';
 let clientsFilterSiret = ''; // '' | 'yes' | 'no'
 let clientsFilterSiege = ''; // '' | 'siege' | 'etablissement'
 let clientsFilterCatCompte = '';
+let clientsFilterCatRole = 'client'; // 'client' | 'apporteur' | 'architecte' | 'gros_oeuvre' (colonne ciblée par le filtre Cat. compte)
 let clientsFilterReseauxPro = '';
 let clientsHideRadiees = true; // masquer les entreprises radiées INSEE (etat_insee = 'C') — coché par défaut
 const CLIENTS_PER_PAGE = 50;
@@ -3626,17 +3627,18 @@ async function loadClientsPage(page, letter, search) {
   if (clientsFilterReseauxPro) query = query.contains('reseaux_pro', [clientsFilterReseauxPro]);
   // Masquer les entreprises radiées INSEE (etat_insee = 'C')
   if (clientsHideRadiees) query = query.or('etat_insee.is.null,etat_insee.neq.C');
-  // Catégorie du compte (JSONB — filtre côté client après requête)
-  if (clientsFilterCatCompte) query = query.not('categorie_compte', 'is', null);
+  // Catégorie du compte / par rôle (JSONB — filtre côté client après requête)
+  const _catCol = { apporteur: 'categorie_apporteur', architecte: 'categorie_architecte', gros_oeuvre: 'categorie_gros_oeuvre' }[clientsFilterCatRole] || 'categorie_compte';
+  if (clientsFilterCatCompte) query = query.not(_catCol, 'is', null);
   query = query.order('name', {ascending: true}).range(from, to);
 
   const { data, count } = await query;
   clientsTotalCount = count || 0;
   let mappedClients = (data || []).map(mapClient);
-  // Post-filtrage catégorie du compte (on vérifie si une agence a la valeur)
+  // Post-filtrage catégorie (on vérifie si une agence a la valeur) sur la colonne du rôle choisi
   if (clientsFilterCatCompte) {
     mappedClients = mappedClients.filter(c => {
-      const cc = c.categorie_compte;
+      const cc = c[_catCol];
       return cc && typeof cc === 'object' && Object.values(cc).includes(clientsFilterCatCompte);
     });
     clientsTotalCount = mappedClients.length;
@@ -3663,6 +3665,7 @@ function resetClientsFilters() {
   clientsFilterSiret = '';
   clientsFilterSiege = '';
   clientsFilterCatCompte = '';
+  clientsFilterCatRole = 'client';
   clientsFilterReseauxPro = '';
   clientsLetter = '';
   clientsSearch = '';
@@ -6649,8 +6652,14 @@ function renderClients(filter='all') {
         <option value="yes" ${clientsFilterSync==='yes'?'selected':''}>🟢 Synchronisés</option>
         <option value="no" ${clientsFilterSync==='no'?'selected':''}>🟠 Non synchro</option>
       </select>
+      <select onchange="clientsFilterCatRole=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" title="Rôle ciblé par le filtre catégorie" style="padding:5px 8px;border:1px solid ${clientsFilterCatRole!=='client'?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterCatRole!=='client'?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
+        <option value="client" ${clientsFilterCatRole==='client'?'selected':''}>Rôle : Client facturé</option>
+        <option value="apporteur" ${clientsFilterCatRole==='apporteur'?'selected':''}>Rôle : Apporteur</option>
+        <option value="architecte" ${clientsFilterCatRole==='architecte'?'selected':''}>Rôle : Architecte</option>
+        <option value="gros_oeuvre" ${clientsFilterCatRole==='gros_oeuvre'?'selected':''}>Rôle : Gros-œuvre</option>
+      </select>
       <select onchange="clientsFilterCatCompte=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterCatCompte?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterCatCompte?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
-        <option value="" ${!clientsFilterCatCompte?'selected':''}>— Cat. compte —</option>
+        <option value="" ${!clientsFilterCatCompte?'selected':''}>— Cat. (A/B/C) —</option>
         <option value="A- Stratégique" ${clientsFilterCatCompte==='A- Stratégique'?'selected':''}>A- Stratégique</option>
         <option value="B- Tactique" ${clientsFilterCatCompte==='B- Tactique'?'selected':''}>B- Tactique</option>
         <option value="C- Listé" ${clientsFilterCatCompte==='C- Listé'?'selected':''}>C- Listé</option>
@@ -8064,6 +8073,14 @@ function _ccaRenderBody() {
   const nbDocs = rows.length;
   const panier = nbDocs ? caTotal / nbDocs : 0;
   const transfo = nDevis ? Math.round(nCmd / nDevis * 100) : 0;
+  // Catégorie ABC correspondant au rôle filtré
+  const _rcKey = { apporteur: 'categorie_apporteur', architecte: 'categorie_architecte', gros_oeuvre: 'categorie_gros_oeuvre' }[ccaF.role] || 'categorie_compte';
+  const _rcObj = currentClient && currentClient[_rcKey];
+  const _rcRang = currentClient && currentClient[_rcKey + '_rang'];
+  const _roleLbl = { apporteur: 'apporteur', architecte: 'architecte', gros_oeuvre: 'gros-œuvre' }[ccaF.role] || 'client facturé';
+  const _roleCatStr = (_rcObj && typeof _rcObj === 'object' && Object.keys(_rcObj).length)
+    ? Object.entries(_rcObj).map(([ag, v]) => { const r = _rcRang && _rcRang[ag]; return ag + ': ' + String(v).charAt(0) + (r ? ' (' + r + ')' : ''); }).join(' · ')
+    : '—';
 
   const kpi = (label, val, sub) => `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;min-width:150px;flex:1">
       <div style="font-size:11px;color:var(--t3)">${label}</div><div style="font-size:20px;font-weight:700;color:var(--t1)">${val}</div>${sub ? '<div style="font-size:11px;color:var(--t3)">' + sub + '</div>' : ''}</div>`;
@@ -8081,6 +8098,7 @@ function _ccaRenderBody() {
       ${kpi('CA factures', fmt(caFact), rows.filter(r => r.type === 'factures').length + ' facture(s)')}
       ${kpi('Panier moyen', fmt(panier))}
       ${kpi('Taux transfo devis→cmd', transfo + ' %')}
+      ${kpi('Catégorie ABC (' + _roleLbl + ')', '<span style="font-size:13px">' + _roleCatStr + '</span>')}
     </div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
       ${chartCard('CA par type de document', 'ccaChartType')}
@@ -8346,6 +8364,14 @@ function renderClientDetail() {
           return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + bg + ';color:#fff;margin:1px 4px 1px 0">' + ag + ' : ' + val + (rank ? ' (' + rank + ')' : '') + '</span>';
         }).join('');
       })()),
+      ...(() => {
+        const out = [];
+        const add = (lbl, co, ro) => { if (co && typeof co === 'object' && Object.keys(co).length) out.push(detailRow(lbl, _ccRoleBadges(co, ro))); };
+        add('Cat. Apporteur', c.categorie_apporteur, c.categorie_apporteur_rang);
+        add('Cat. Architecte', c.categorie_architecte, c.categorie_architecte_rang);
+        add('Cat. Gros-œuvre', c.categorie_gros_oeuvre, c.categorie_gros_oeuvre_rang);
+        return out;
+      })(),
       detailRow('Société Akuiteo', c.code_societe || '—'),
       detailRow('Code CODIAL <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.code_codial || '—'),
       detailRow('Compta CODIAL <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.compta_codial || '—'),
@@ -17144,6 +17170,49 @@ async function calculerSiegeEtablissement() {
 }
 
 // ═══ CATÉGORISATION ABC DES CLIENTS ═══
+// Factures 12 mois avec champs de rôle (pour l'ABC par rôle), pagination keyset + repli colonnes
+async function _abcFetchRoleFactures(cutoff) {
+  const colSets = [
+    'id,societe,montant,date,apporteur_affaire,architecte,gros_oeuvre',
+    'id,societe,montant,date,apporteur_affaire,architecte'
+  ];
+  let ci = 0, all = [], lastId = '', first = true;
+  while (true) {
+    let q = sb.from('factures').select(colSets[ci]).gte('date', cutoff).order('id', { ascending: true }).limit(1000);
+    if (lastId) q = q.gt('id', lastId);
+    const { data, error } = await q;
+    if (error) { if (first && ci < colSets.length - 1) { ci++; continue; } break; }
+    if (!data || !data.length) break;
+    all = all.concat(data); lastId = data[data.length - 1].id; first = false;
+    if (data.length < 1000) break;
+  }
+  return all;
+}
+
+// Index nom normalisé → [client_id] (pour rattacher un rôle nommé à une/des fiche(s))
+async function _abcBuildClientNameIndex() {
+  const idx = {}; let off = 0;
+  while (true) {
+    const { data } = await sb.from('clients').select('id,name').range(off, off + 999);
+    if (!data || !data.length) break;
+    for (const c of data) { const nn = _normApporteurName(c.name); if (!nn) continue; (idx[nn] = idx[nn] || []).push(c.id); }
+    if (data.length < 1000) break;
+    off += 1000;
+  }
+  return idx;
+}
+
+// Badges A/B/C (+ rang) par agence pour une catégorie de rôle
+function _ccRoleBadges(catObj, rangObj) {
+  if (!catObj || typeof catObj !== 'object' || !Object.keys(catObj).length) return '—';
+  const rg = rangObj && typeof rangObj === 'object' ? rangObj : {};
+  return Object.entries(catObj).map(([ag, val]) => {
+    const bg = String(val).startsWith('A') ? '#3b82f6' : String(val).startsWith('B') ? '#f59e0b' : '#6b7280';
+    const rank = rg[ag];
+    return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + bg + ';color:#fff;margin:1px 4px 1px 0">' + ag + ' : ' + val + (rank ? ' (' + rank + ')' : '') + '</span>';
+  }).join('');
+}
+
 async function calculerCategoriesABC() {
   if (!confirm('Recalculer la catégorisation ABC de tous les clients ?\nCela mettra à jour le champ « Catégorie du compte » pour chaque agence.')) return;
 
@@ -17237,12 +17306,59 @@ async function calculerCategoriesABC() {
       if (!allClientIds.has(row.id)) { clientCategories[row.id] = null; clientRangs[row.id] = null; }
     }
 
-    // Détecter si la colonne de rang existe (sinon on l'ignore proprement)
+    // Détecter si les colonnes optionnelles existent (rang + rôles)
     let hasRangCol = true;
     try { const { error } = await sb.from('clients').select('categorie_compte_rang').limit(1); if (error) hasRangCol = false; } catch (e) { hasRangCol = false; }
+    let hasRoleCols = true;
+    try { const { error } = await sb.from('clients').select('categorie_apporteur').limit(1); if (error) hasRoleCols = false; } catch (e) { hasRoleCols = false; }
 
-    // 6. Mise à jour Supabase par batch
-    const clientIds = Object.keys(clientCategories);
+    // 5b. Catégorisation ABC par RÔLE (apporteur / architecte / gros-œuvre) sur le CA facturé attribué
+    const ROLES = [['apporteur', 'apporteur_affaire'], ['architecte', 'architecte'], ['gros_oeuvre', 'gros_oeuvre']];
+    const roleCat = { apporteur: {}, architecte: {}, gros_oeuvre: {} };
+    const roleRang = { apporteur: {}, architecte: {}, gros_oeuvre: {} };
+    if (hasRoleCols) {
+      setSyncText('Catégorisation par rôle (apporteur, architecte, gros-œuvre)…');
+      const roleFactures = await _abcFetchRoleFactures(cutoff);
+      const nameIndex = await _abcBuildClientNameIndex();
+      for (const [role, col] of ROLES) {
+        const byAg = {};
+        for (const f of roleFactures) {
+          const raw = _anClean(f[col]); if (!raw || !f.societe) continue;
+          const nn = _normApporteurName(raw);
+          (byAg[f.societe] = byAg[f.societe] || {});
+          byAg[f.societe][nn] = (byAg[f.societe][nn] || 0) + Number(f.montant || 0);
+        }
+        for (const ag of Object.keys(byAg)) {
+          const sorted = Object.entries(byAg[ag]).map(([nn, ca]) => ({ nn, ca })).filter(x => x.ca > 0).sort((a, b) => b.ca - a.ca);
+          const tot = sorted.reduce((s, x) => s + x.ca, 0); if (tot <= 0) continue;
+          const t50 = tot * 0.5, t80 = tot * 0.8; let cum = 0, rg = 0;
+          for (const { nn, ca } of sorted) {
+            rg++; cum += ca;
+            const cat = cum <= t50 ? 'A- Stratégique' : cum <= t80 ? 'B- Tactique' : 'C- Listé';
+            for (const cid of (nameIndex[nn] || [])) {
+              (roleCat[role][cid] = roleCat[role][cid] || {})[ag] = cat;
+              (roleRang[role][cid] = roleRang[role][cid] || {})[ag] = rg;
+            }
+          }
+        }
+      }
+    }
+
+    // 6. Ensemble des clients à mettre à jour : facturé + rôles + anciennes catégories de rôle à nettoyer
+    const idsToUpdate = new Set(Object.keys(clientCategories));
+    for (const r of ['apporteur', 'architecte', 'gros_oeuvre']) Object.keys(roleCat[r]).forEach(id => idsToUpdate.add(id));
+    if (hasRoleCols) {
+      let off3 = 0;
+      while (true) {
+        const { data, error } = await sb.from('clients').select('id').or('categorie_apporteur.not.is.null,categorie_architecte.not.is.null,categorie_gros_oeuvre.not.is.null').range(off3, off3 + 999);
+        if (error || !data || !data.length) break;
+        data.forEach(row => idsToUpdate.add(row.id));
+        if (data.length < 1000) break;
+        off3 += 1000;
+      }
+    }
+
+    const clientIds = [...idsToUpdate];
     const total = clientIds.length;
     let updated = 0, errors = 0;
 
@@ -17250,8 +17366,14 @@ async function calculerCategoriesABC() {
       const batch = clientIds.slice(i, i + 20);
       setSyncText(`Mise à jour ${Math.min(i + 20, total)} / ${total} clients…`);
       const promises = batch.map(cid => {
-        const upd = { categorie_compte: clientCategories[cid] };
-        if (hasRangCol) upd.categorie_compte_rang = clientRangs[cid] || null;
+        const upd = {};
+        if (clientCategories.hasOwnProperty(cid)) { upd.categorie_compte = clientCategories[cid]; if (hasRangCol) upd.categorie_compte_rang = clientRangs[cid] || null; }
+        if (hasRoleCols) {
+          upd.categorie_apporteur = roleCat.apporteur[cid] || null; upd.categorie_apporteur_rang = roleRang.apporteur[cid] || null;
+          upd.categorie_architecte = roleCat.architecte[cid] || null; upd.categorie_architecte_rang = roleRang.architecte[cid] || null;
+          upd.categorie_gros_oeuvre = roleCat.gros_oeuvre[cid] || null; upd.categorie_gros_oeuvre_rang = roleRang.gros_oeuvre[cid] || null;
+        }
+        if (Object.keys(upd).length === 0) return Promise.resolve();
         return sb.from('clients').update(upd).eq('id', cid)
           .then(({ error }) => { if (error) { console.warn('ABC err', cid, error.message); errors++; } else updated++; });
       });
@@ -17261,6 +17383,11 @@ async function calculerCategoriesABC() {
     // 7. Mettre à jour le cache local
     for (const c of DB.clients) {
       if (clientCategories.hasOwnProperty(c.id)) { c.categorie_compte = clientCategories[c.id]; c.categorie_compte_rang = clientRangs[c.id] || null; }
+      if (hasRoleCols && idsToUpdate.has(c.id)) {
+        c.categorie_apporteur = roleCat.apporteur[c.id] || null; c.categorie_apporteur_rang = roleRang.apporteur[c.id] || null;
+        c.categorie_architecte = roleCat.architecte[c.id] || null; c.categorie_architecte_rang = roleRang.architecte[c.id] || null;
+        c.categorie_gros_oeuvre = roleCat.gros_oeuvre[c.id] || null; c.categorie_gros_oeuvre_rang = roleRang.gros_oeuvre[c.id] || null;
+      }
     }
 
     showSyncLoading(false);
