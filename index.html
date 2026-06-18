@@ -3145,7 +3145,7 @@ async function loadClientsFilterOpts() {
     addIf(sets.novam, r.account_manager_name);
     addIf(sets.gph, r.salesman_name);
     if (r.commerciaux_associes) {
-      r.commerciaux_associes.split(/[,;]/).map(s => s.trim()).filter(Boolean).forEach(n => sets.gph.add(n));
+      r.commerciaux_associes.split(/[,;]/).map(s => s.trim().replace(/\s*\(principal\)/gi, '').trim()).filter(Boolean).forEach(n => sets.gph.add(n));
     }
     addIf(sets.categorie, r.mk_categorie);
     addIf(sets.sousCategorie, r.mk_sous_categorie);
@@ -3384,6 +3384,7 @@ function sortTh(table, col, label, filterFn) {
 function mapClient(c) {
   return {
     ...c,
+    commerciaux_associes: c.commerciaux_associes ? String(c.commerciaux_associes).replace(/\s*\(principal\)/gi, '') : c.commerciaux_associes,
     sentiment: { pos: c.sentiment_pos, neu: c.sentiment_neu, neg: c.sentiment_neg },
     lastContact: timeAgo(c.last_contact),
     devis: 0
@@ -21439,7 +21440,7 @@ async function syncAkuiteoQuick() {
           const names = detail.salesmen.map(s => {
             const e = s.employee;
             const name = e ? ((e.name||'') + ' ' + (e.firstName||'')).trim() : s.employeeId;
-            return s.mainLinkedSalesman ? name + ' (principal)' : name;
+            return name;
           });
           salesmenUpdates.push({ id: crmClient.id, commerciaux_associes: names.join(', ') });
         }
