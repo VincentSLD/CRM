@@ -3070,6 +3070,7 @@ let clientsFilterSiret = ''; // '' | 'yes' | 'no'
 let clientsFilterSiege = ''; // '' | 'siege' | 'etablissement'
 let clientsFilterCatCompte = '';
 let clientsFilterReseauxPro = '';
+let clientsHideRadiees = true; // masquer les entreprises radiées INSEE (etat_insee = 'C') — coché par défaut
 const CLIENTS_PER_PAGE = 50;
 let clientsFilterOpts = { depts: [], novam: [], gph: [], categorie: [], sousCategorie: [], categoriePro: [], secteur: [], type: [], groupe: [], origine: [], reseauxPro: [] };
 let clientsFilterOptsVariants = {};
@@ -3623,6 +3624,8 @@ async function loadClientsPage(page, letter, search) {
   if (clientsFilterSiege === 'etablissement') query = query.eq('est_siege', false);
   // Réseaux pro (array contains)
   if (clientsFilterReseauxPro) query = query.contains('reseaux_pro', [clientsFilterReseauxPro]);
+  // Masquer les entreprises radiées INSEE (etat_insee = 'C')
+  if (clientsHideRadiees) query = query.or('etat_insee.is.null,etat_insee.neq.C');
   // Catégorie du compte (JSONB — filtre côté client après requête)
   if (clientsFilterCatCompte) query = query.not('categorie_compte', 'is', null);
   query = query.order('name', {ascending: true}).range(from, to);
@@ -6600,6 +6603,9 @@ function renderClients(filter='all') {
       <button class="btn" onclick="exportCSV('clients')">⤓ Export CSV</button>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--t2);cursor:pointer;white-space:nowrap" title="Masquer les entreprises radiées (état INSEE)">
+        <input type="checkbox" ${clientsHideRadiees ? 'checked' : ''} onchange="clientsHideRadiees=this.checked;loadClientsPage(0,clientsLetter,clientsSearch)"> Masquer radiées
+      </label>
       <input type="text" id="clientSearchInput" placeholder="Rechercher un client/prospect..." value="${clientsSearch}"
         style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:220px;background:var(--card);color:var(--t1)"
         onkeydown="if(event.key==='Enter'){loadClientsPage(0, '', this.value)}">
