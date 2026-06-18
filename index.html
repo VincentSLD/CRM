@@ -3752,6 +3752,7 @@ let contactsTotalCount = 0;
 let contactsList = [];
 let contactsLoaded = false;
 let currentContact = null;
+let _contactReturnClient = null; // fiche client d'origine (pour y revenir après édition)
 let contactsFilterNovam = ''; // normKey (commercial du client lié)
 let contactsFilterGph = '';
 
@@ -3815,7 +3816,8 @@ async function loadContactsPage(page, letter, search) {
   renderPage('contacts');
 }
 
-async function showContact(id) {
+async function showContact(id, fromClientId) {
+  _contactReturnClient = fromClientId || null;
   const c = contactsList.find(x => x.id === id);
   if (c) {
     currentContact = c;
@@ -4025,6 +4027,12 @@ function renderContactDetail() {
       <div class="card-header"><div class="card-title">Modifier le contact</div></div>
       <div class="card-body">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:12px">
+          <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Civilité</label>
+            <select id="ec-titre" class="fi" style="padding:6px 8px;font-size:12px">
+              <option value=""${!c.titre?' selected':''}>—</option>
+              <option value="M."${c.titre==='M.'?' selected':''}>M.</option>
+              <option value="Mme"${c.titre==='Mme'?' selected':''}>Mme</option>
+            </select></div>
           <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Prénom</label>
             <input type="text" id="ec-prenom" value="${(c.prenom||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
           <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Nom</label>
@@ -4059,6 +4067,7 @@ function toggleEditContact() {
 async function saveEditContact() {
   if (!currentContact) return;
   const update = {
+    titre: document.getElementById('ec-titre')?.value || null,
     prenom: document.getElementById('ec-prenom')?.value.trim() || null,
     nom: document.getElementById('ec-nom')?.value.trim() || null,
     fonction: document.getElementById('ec-fonction')?.value.trim() || null,
@@ -4071,15 +4080,20 @@ async function saveEditContact() {
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
   toast('Contact mis à jour', 'success');
   Object.assign(currentContact, update);
-  renderPage('contact-detail');
-  if (currentContact.client_id && currentClient && currentClient.akuiteo_id) {
+  const cid = currentContact.client_id;
+  if (cid && typeof crContactsCache === 'object') delete crContactsCache[cid]; // invalider le cache CR
+  const akId = currentClient && currentClient.akuiteo_id;
+  if (cid && akId) {
     if (confirm('Voulez-vous synchroniser ce contact vers Akuiteo ?')) {
       await pushContactToAkuiteo(currentContact.id);
     } else {
-      await sb.from('clients').update({ akuiteo_dirty: true }).eq('id', currentContact.client_id);
+      await sb.from('clients').update({ akuiteo_dirty: true }).eq('id', cid);
       if (currentClient) currentClient.akuiteo_dirty = true;
     }
   }
+  // Retour à la fiche client si le contact a été ouvert depuis celle-ci, sinon rester sur la fiche contact
+  if (_contactReturnClient) { const rc = _contactReturnClient; _contactReturnClient = null; showClient(rc); }
+  else renderPage('contact-detail');
 }
 
 function generateAlerts() {
@@ -8753,8 +8767,8 @@ async function loadClientContacts(clientId) {
   }
   el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Fonction</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th></th></tr></thead><tbody>'
     + data.map(ct => {
-      const fullName = [ct.titre, ct.prenom, ct.nom].filter(Boolean).join(' ');
-      return `<tr style="cursor:pointer" onclick="showContact('${ct.id}')">
+      const fullName = [ct.titre, (ct.nom || '').toUpperCase(), ct.prenom].filter(Boolean).join(' ');
+      return `<tr style="cursor:pointer" onclick="showContact('${ct.id}','${clientId}')">
         <td><strong>${fullName}</strong> <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ct.akuiteo_id ? '#22c55e' : '#f59e0b'};vertical-align:middle" title="${ct.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span>${ct.service ? '<div style="font-size:10px;color:var(--t3)">'+ct.service+'</div>' : ''}</td>
         <td style="font-size:12px">${ct.fonction || '—'}</td>
         <td style="font-size:12px">${ct.email ? '<a href="mailto:'+ct.email+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+ct.email+'</a>' : '—'}</td>
@@ -8817,6 +8831,7 @@ async function saveNewContact(clientId) {
       }
     }
     contactsLoaded = false;
+    if (typeof crContactsCache === 'object') delete crContactsCache[clientId]; // invalider le cache CR
     renderPage(currentPage);
     // Recharger les contacts APRÈS le rendu (sinon le tableau est écrasé par "Chargement...")
     setTimeout(() => loadClientContacts(clientId), 50);
@@ -8832,6 +8847,7 @@ async function deleteContact(contactId, clientId) {
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
   toast('Contact supprimé', 'success');
   contactsLoaded = false;
+  if (typeof crContactsCache === 'object') delete crContactsCache[clientId]; // invalider le cache CR
   // Recharger directement le tableau sans re-render complet
   await loadClientContacts(clientId);
 }
@@ -15364,7 +15380,7 @@ async function searchCRContact(q) {
     dd.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucun contact trouvé</div>' + createBtn;
   } else {
     dd.innerHTML = filtered.slice(0, 10).map(c => {
-      const fullName = [c.prenom, c.nom].filter(Boolean).join(' ');
+      const fullName = [(c.nom || '').toUpperCase(), c.prenom].filter(Boolean).join(' ');
       return `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
         onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
         onclick="selectCRContact('${c.id}','${fullName.replace(/'/g,"&#39;")}')">
