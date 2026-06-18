@@ -15379,7 +15379,7 @@ async function searchCRContact(q) {
   if (!filtered.length) {
     dd.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucun contact trouvé</div>' + createBtn;
   } else {
-    dd.innerHTML = filtered.slice(0, 10).map(c => {
+    dd.innerHTML = filtered.slice(0, 100).map(c => {
       const fullName = [(c.nom || '').toUpperCase(), c.prenom].filter(Boolean).join(' ');
       return `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)"
         onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
