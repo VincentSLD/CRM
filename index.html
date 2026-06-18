@@ -16915,7 +16915,7 @@ function renderAdmin() {
 
 // ═══ STATUT CLIENTS (ACTIF / DORMANT / NOUVEAU) ═══
 async function calculerStatutsClients() {
-  if (!confirm('Recalculer le statut (Prospect / Nouveau / Actif / Dormant) de tous les clients ?\n\nRègle : un client sans devis validé (aucune commande ni facture) reste « Prospect ».')) return;
+  if (!confirm('Recalculer le statut (Prospect / Nouveau / Actif / Dormant) de tous les clients ?\n\nRègle : un compte sans aucune activité (ni commande/facture directe, ni rôle apporteur/architecte/gros-œuvre sur une affaire facturée) reste « Prospect ». Un partenaire (apporteur/architecte/gros-œuvre) récent non facturé est considéré « Actif ».')) return;
 
   showSyncLoading(true);
   setSyncText('Calcul des statuts clients…');
@@ -16932,35 +16932,70 @@ async function calculerStatutsClients() {
       }
       return all;
     };
-    // 1. Charger factures, commandes et clients (toutes périodes)
+    // Loader paginé avec repli de colonnes (champs de rôle optionnels)
+    const loadAllPagF = async (table, colSets) => {
+      let ci = 0, all = [], off = 0, first = true;
+      while (true) {
+        const { data, error } = await sb.from(table).select(colSets[ci]).order('id', { ascending: true }).range(off, off + 999);
+        if (error) { if (first && ci < colSets.length - 1) { ci++; continue; } break; }
+        if (!data || data.length === 0) break;
+        all = all.concat(data); first = false;
+        if (data.length < 1000) break;
+        off += 1000;
+      }
+      return all;
+    };
+
+    // 1. Charger factures, commandes (avec champs de rôle), clients + index nom→client
+    const ROLE_FB = ['client_id,date,apporteur_affaire,architecte,gros_oeuvre', 'client_id,date,apporteur_affaire,architecte', 'client_id,date'];
     setSyncText('Chargement des factures…');
-    const allFactures = await loadAllPag('factures', 'client_id,date');
+    const allFactures = await loadAllPagF('factures', ROLE_FB);
     setSyncText('Chargement des commandes…');
-    const allCommandes = await loadAllPag('commandes', 'client_id,date');
+    const allCommandes = await loadAllPagF('commandes', ROLE_FB);
     setSyncText('Chargement des clients…');
     const allClients = await loadAllPag('clients', 'id,status');
+    setSyncText('Index des noms (rôles)…');
+    const nameIndex = await _abcBuildClientNameIndex();
 
-    // 2. Activité par client : dates min/max + présence de commande/facture
+    // 2. Activité par client : dates min/max + présence commande/facture/rôle
     const act = {};
     const addAct = (cid, date, kind) => {
       if (!cid) return;
-      if (!act[cid]) act[cid] = { min: null, max: null, hasCmd: false, hasFac: false };
+      if (!act[cid]) act[cid] = { min: null, max: null, hasCmd: false, hasFac: false, hasRole: false };
       const a = act[cid];
       if (date) { if (!a.min || date < a.min) a.min = date; if (!a.max || date > a.max) a.max = date; }
-      if (kind === 'cmd') a.hasCmd = true; else a.hasFac = true;
+      if (kind === 'cmd') a.hasCmd = true; else if (kind === 'fac') a.hasFac = true; else a.hasRole = true;
     };
     for (const f of allFactures) addAct(f.client_id, f.date, 'fac');
     for (const o of allCommandes) addAct(o.client_id, o.date, 'cmd');
+    // Rôles (apporteur / architecte / gros-œuvre) sur factures + commandes → activité du partenaire nommé
+    const ROLE_COLS = ['apporteur_affaire', 'architecte', 'gros_oeuvre'];
+    const addRoles = (rows) => {
+      for (const r of rows) {
+        for (const col of ROLE_COLS) {
+          const raw = _anClean(r[col]); if (!raw) continue;
+          const nn = _normApporteurName(raw);
+          for (const cid of (nameIndex[nn] || [])) addAct(cid, r.date, 'role');
+        }
+      }
+    };
+    addRoles(allFactures); addRoles(allCommandes);
 
     // 3. Seuil 6 mois
     const now = new Date();
     const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate()).toISOString().slice(0, 10);
 
-    // 4. Règle de statut : pas de devis validé (ni commande ni facture) → Prospect
+    // 4. Règle de statut (intègre les rôles) :
+    //    - aucune activité (ni direct ni rôle) → Prospect
+    //    - activité récente : partenaire (rôle) non facturé → Actif ; sinon Nouveau (1re activité < 6 mois) ou Actif
+    //    - dernière activité > 6 mois → Dormant
     const statusFor = (cid) => {
       const a = act[cid];
-      if (!a || (!a.hasCmd && !a.hasFac) || !a.max) return 'prospect';
-      if (a.max >= sixMonthsAgo) return (a.min && a.min >= sixMonthsAgo) ? 'nouveau' : 'actif';
+      if (!a || (!a.hasCmd && !a.hasFac && !a.hasRole) || !a.max) return 'prospect';
+      if (a.max >= sixMonthsAgo) {
+        if (!a.hasCmd && !a.hasFac && a.hasRole) return 'actif'; // apporteur/architecte/gros-œuvre récent, non facturé directement
+        return (a.min && a.min >= sixMonthsAgo) ? 'nouveau' : 'actif';
+      }
       return 'dormant';
     };
 
