@@ -17017,7 +17017,10 @@ function renderAdmin() {
   <div class="card" style="margin-top:16px">
     <div class="card-header" style="flex-wrap:wrap;gap:8px">
       <div class="card-title">Catégorisation ABC des clients</div>
-      <button class="btn btn-primary" onclick="calculerCategoriesABC()" style="font-size:12px">Calculer</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" onclick="abcEditOpen()" style="font-size:12px">📋 Éditer le classement</button>
+        <button class="btn btn-primary" onclick="calculerCategoriesABC()" style="font-size:12px">Calculer</button>
+      </div>
     </div>
     <div class="card-body">
       <p style="font-size:13px;color:var(--t2);margin-bottom:12px">
@@ -17401,6 +17404,93 @@ function _ccRoleBadges(catObj, rangObj) {
     const rank = rg[ag];
     return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + bg + ';color:#fff;margin:1px 4px 1px 0">' + ag + ' : ' + val + (rank ? ' (' + rank + ')' : '') + '</span>';
   }).join('');
+}
+
+// ═══ Édition manuelle du classement ABC (tableau par agence) ═══
+let abcEditData = null, abcEditDirty = new Set(), abcEditAgence = '', abcEditSearch = '';
+async function abcEditOpen() {
+  let ov = document.getElementById('abcEditOverlay');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'abcEditOverlay'; document.body.appendChild(ov); }
+  ov.style.cssText = 'position:fixed;inset:0;z-index:2000;background:var(--bg-1,#fff);display:flex;flex-direction:column';
+  ov.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--card,#fff)">
+      <div style="font-weight:700;font-size:15px;flex:1">📋 Classement ABC — édition</div>
+      <button class="btn btn-sm btn-primary" id="abcEditSaveBtn" onclick="abcEditSave()">💾 Enregistrer</button>
+      <button class="btn btn-sm" onclick="abcEditClose()">✕ Fermer</button>
+    </div>
+    <div id="abcEditBar" style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--card,#fff)"></div>
+    <div id="abcEditBody" style="flex:1;overflow:auto;padding:16px"><div style="text-align:center;padding:40px;color:var(--t3)"><span class="cmd-docs-spin"></span> Chargement…</div></div>`;
+  try {
+    abcEditData = []; abcEditDirty = new Set(); abcEditSearch = '';
+    let off = 0;
+    while (true) {
+      const { data, error } = await sb.from('clients').select('id,name,city,categorie_compte,categorie_compte_rang').or('categorie_compte.not.is.null,categorie_compte_rang.not.is.null').range(off, off + 999);
+      if (error || !data || !data.length) break;
+      abcEditData = abcEditData.concat(data.map(c => ({ id: c.id, name: c.name || '', city: c.city || '', cc: (c.categorie_compte && typeof c.categorie_compte === 'object') ? { ...c.categorie_compte } : {}, rg: (c.categorie_compte_rang && typeof c.categorie_compte_rang === 'object') ? { ...c.categorie_compte_rang } : {} })));
+      if (data.length < 1000) break; off += 1000;
+    }
+    const ags = new Set();
+    abcEditData.forEach(c => { Object.keys(c.cc).forEach(a => ags.add(a)); Object.keys(c.rg).forEach(a => ags.add(a)); });
+    const agList = [...ags].sort();
+    abcEditAgence = agList[0] || '';
+    abcEditRenderBar(agList);
+    abcEditRenderTable();
+  } catch (e) {
+    const b = document.getElementById('abcEditBody'); if (b) b.innerHTML = '<div style="color:var(--red);padding:20px">Erreur : ' + cmdEsc(e.message) + '</div>';
+  }
+}
+function abcEditClose() { const ov = document.getElementById('abcEditOverlay'); if (ov) ov.remove(); abcEditData = null; abcEditDirty = new Set(); }
+function abcEditRenderBar(agList) {
+  const el = document.getElementById('abcEditBar'); if (!el) return;
+  el.innerHTML = `<label style="font-size:12px;color:var(--t3)">Agence</label>
+    <select onchange="abcEditAgence=this.value;abcEditRenderTable()" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">${agList.map(a => `<option value="${cmdEsc(a)}"${a === abcEditAgence ? ' selected' : ''}>${cmdEsc(a)}</option>`).join('')}</select>
+    <input type="text" placeholder="Rechercher un client…" value="${cmdEsc(abcEditSearch)}" oninput="abcEditSearch=this.value;abcEditRenderTable()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);min-width:220px">
+    <span id="abcEditCount" style="font-size:11px;color:var(--t3)"></span>
+    <span style="font-size:11px;color:var(--t3);margin-left:auto">Modifiez le rang et/ou la catégorie, puis « Enregistrer ».</span>`;
+}
+function abcEditRenderTable() {
+  const body = document.getElementById('abcEditBody'); if (!body || !abcEditData) return;
+  const ag = abcEditAgence;
+  const q = (abcEditSearch || '').toLowerCase();
+  let rows = abcEditData.filter(c => (ag in c.cc) || (ag in c.rg));
+  if (q) rows = rows.filter(c => c.name.toLowerCase().includes(q));
+  rows.sort((a, b) => { const ra = a.rg[ag] != null ? a.rg[ag] : 99999, rb = b.rg[ag] != null ? b.rg[ag] : 99999; if (ra !== rb) return ra - rb; return a.name.localeCompare(b.name, 'fr'); });
+  const cnt = document.getElementById('abcEditCount'); if (cnt) cnt.textContent = rows.length + ' client(s) pour ' + ag;
+  const catSel = (cid, val) => `<select onchange="abcEditSetCat('${cid}',this.value)" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--card,#fff);color:var(--t1)">
+    <option value=""${!val ? ' selected' : ''}>— Aucune —</option>
+    <option value="A- Stratégique"${val === 'A- Stratégique' ? ' selected' : ''}>A- Stratégique</option>
+    <option value="B- Tactique"${val === 'B- Tactique' ? ' selected' : ''}>B- Tactique</option>
+    <option value="C- Listé"${val === 'C- Listé' ? ' selected' : ''}>C- Listé</option></select>`;
+  body.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="text-align:left;color:var(--t3);border-bottom:1px solid var(--border)">
+      <th style="padding:6px 8px;width:80px">Rang</th><th style="padding:6px 8px">Client</th><th style="padding:6px 8px;width:170px">Catégorie</th></tr></thead>
+    <tbody>${rows.map(c => `<tr style="border-bottom:1px solid var(--border)${abcEditDirty.has(c.id) ? ';background:rgba(245,158,11,0.10)' : ''}">
+      <td style="padding:6px 8px"><input type="number" min="1" value="${c.rg[ag] != null ? c.rg[ag] : ''}" onchange="abcEditSetRang('${c.id}',this.value)" style="width:64px;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--card,#fff);color:var(--t1)"></td>
+      <td style="padding:6px 8px"><a href="#" onclick="abcEditClose();showClient('${c.id}');return false" style="color:var(--accent);text-decoration:none;font-weight:600">${cmdEsc(c.name)}</a>${c.city ? ' <span style="color:var(--t3);font-size:11px">' + cmdEsc(c.city) + '</span>' : ''}</td>
+      <td style="padding:6px 8px">${catSel(c.id, c.cc[ag] || '')}</td>
+    </tr>`).join('') || '<tr><td colspan="3" style="padding:14px;text-align:center;color:var(--t3)">Aucun client pour cette agence.</td></tr>'}</tbody></table>`;
+}
+function abcEditSetCat(cid, val) { const c = abcEditData.find(x => x.id === cid); if (!c) return; if (val) c.cc[abcEditAgence] = val; else delete c.cc[abcEditAgence]; abcEditDirty.add(cid); }
+function abcEditSetRang(cid, val) { const c = abcEditData.find(x => x.id === cid); if (!c) return; const n = parseInt(val, 10); if (val === '' || isNaN(n)) delete c.rg[abcEditAgence]; else c.rg[abcEditAgence] = n; abcEditDirty.add(cid); }
+async function abcEditSave() {
+  if (!abcEditDirty.size) { toast('Aucune modification à enregistrer.', 'info'); return; }
+  const btn = document.getElementById('abcEditSaveBtn'); if (btn) btn.disabled = true;
+  let ok = 0, err = 0;
+  const ids = [...abcEditDirty];
+  for (let i = 0; i < ids.length; i += 20) {
+    const batch = ids.slice(i, i + 20);
+    await Promise.all(batch.map(cid => {
+      const c = abcEditData.find(x => x.id === cid);
+      const cc = Object.keys(c.cc).length ? c.cc : null;
+      const rg = Object.keys(c.rg).length ? c.rg : null;
+      return sb.from('clients').update({ categorie_compte: cc, categorie_compte_rang: rg }).eq('id', cid)
+        .then(({ error }) => { if (error) { err++; console.warn('ABC edit', cid, error.message); } else ok++; });
+    }));
+  }
+  if (btn) btn.disabled = false;
+  abcEditDirty = new Set();
+  abcEditRenderTable();
+  toast('Classement enregistré : ' + ok + ' client(s)' + (err ? ', ' + err + ' erreur(s)' : ''), err ? 'warn' : 'success');
 }
 
 async function calculerCategoriesABC() {
