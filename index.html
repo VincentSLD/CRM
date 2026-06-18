@@ -4920,7 +4920,7 @@ function renderPage(page) {
 //  ANALYSE / KPI — indicateurs + cartographie "qui travaille avec qui"
 // ═══════════════════════════════════════════════════════════
 let anFrom = '', anTo = '';            // plage de dates (date de facture)
-let anAgence = '', anMetier = '';      // filtres
+let anAgences = [], anMetiers = [];    // filtres multi-sélection
 let _anData = null, _anLoading = false;
 let _anNetwork = null, _anNetFocus = '';
 let _anNetTypes = { agence: true, client: true, architecte: true, apporteur: true, gros_oeuvre: false };
@@ -4997,8 +4997,8 @@ async function loadAnalyseData() {
 
 function _anFiltered() {
   let rows = _anData || [];
-  if (anAgence) rows = rows.filter(f => (f.societe || '') === anAgence);
-  if (anMetier) rows = rows.filter(f => f._metier === anMetier);
+  if (anAgences.length) rows = rows.filter(f => anAgences.includes(f.societe || ''));
+  if (anMetiers.length) rows = rows.filter(f => anMetiers.includes(f._metier));
   return rows;
 }
 
@@ -5011,9 +5011,7 @@ function initAnalyse() {
   }
 }
 function anSetDates(from, to) { anFrom = from; anTo = to; _anData = null; _anNetwork = null; _anMap = null; renderPage('analyse'); }
-function anSetAgence(v) { anAgence = v; _anNetwork = null; _anMap = null; renderPage('analyse'); }
-function anSetMetier(v) { anMetier = v; _anNetwork = null; _anMap = null; renderPage('analyse'); }
-function anReset() { const r = _anDefaultRange(); anFrom = r.from; anTo = r.to; anAgence = ''; anMetier = ''; _anNetFocus = ''; _anData = null; _anNetwork = null; _anMap = null; renderPage('analyse'); }
+function anReset() { const r = _anDefaultRange(); anFrom = r.from; anTo = r.to; anAgences = []; anMetiers = []; _anNetFocus = ''; _anData = null; _anNetwork = null; _anMap = null; renderPage('analyse'); }
 function anToggleNetType(t, on) { _anNetTypes[t] = on; buildAnalyseNetwork(); }
 function anClearFocus() { _anNetFocus = ''; buildAnalyseNetwork(); document.getElementById('anFocusLabel') && (document.getElementById('anFocusLabel').textContent = ''); }
 
@@ -5047,6 +5045,37 @@ function _anRankCard(title, entries, total, accent) {
   </div></div>`;
 }
 
+// ═══ Composant multi-sélection (menu déroulant à cases à cocher) ═══
+// live=true : applique à chaque coche (onApply). live=false : applique à la fermeture du menu.
+const _msReg = {};
+function _msEsc(s) { return String(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+function msDef(key, options, selected, onApply, live) {
+  _msReg[key] = { options: options || [], selected: new Set(selected || []), onApply, live: live !== false, _dirty: false };
+}
+function msButton(key, label) {
+  const r = _msReg[key]; if (!r) return '';
+  const n = r.selected.size, active = n > 0;
+  const items = (r.options.length ? r.options.map(o => `<label style="display:flex;align-items:center;gap:6px;padding:4px 10px;cursor:pointer;font-size:12px;white-space:nowrap" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><input type="checkbox" value="${_msEsc(o.v)}" ${r.selected.has(o.v) ? 'checked' : ''} onchange="msSet('${key}',this.value,this.checked)"> ${o.label}</label>`).join('') : '<div style="padding:8px 10px;font-size:11px;color:var(--t3)">Aucune valeur</div>');
+  return `<div class="ms-wrap" style="position:relative;display:inline-block">
+    <button type="button" onclick="msToggle('${key}',event)" style="padding:5px 8px;border:1px solid ${active ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:${active ? 'rgba(245,158,11,0.15)' : 'var(--card)'};color:var(--t1);cursor:pointer;min-width:120px;text-align:left">${label}${n ? ' · ' + n : ''} ▾</button>
+    <div class="ms-pop" id="mspop-${key}" style="display:none;position:absolute;top:100%;left:0;z-index:1000;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.18);max-height:300px;overflow:auto;margin-top:3px;min-width:170px">
+      <div style="display:flex;gap:10px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:11px;position:sticky;top:0;background:var(--card)"><a href="#" onclick="msAll('${key}',true);return false" style="color:var(--accent)">Tout</a><a href="#" onclick="msAll('${key}',false);return false" style="color:var(--accent)">Aucun</a></div>
+      ${items}
+    </div>
+  </div>`;
+}
+function _msCommit(key) { const r = _msReg[key]; if (r && r._dirty) { r._dirty = false; if (r.onApply) r.onApply([...r.selected]); } }
+function msToggle(key, ev) {
+  if (ev) ev.stopPropagation();
+  const el = document.getElementById('mspop-' + key); if (!el) return;
+  const open = el.style.display === 'block';
+  document.querySelectorAll('.ms-pop').forEach(p => { if (p !== el && p.style.display === 'block') { p.style.display = 'none'; _msCommit(p.id.replace('mspop-', '')); } });
+  if (open) { el.style.display = 'none'; _msCommit(key); } else { el.style.display = 'block'; }
+}
+function msSet(key, v, on) { const r = _msReg[key]; if (!r) return; if (on) r.selected.add(v); else r.selected.delete(v); if (r.live) { if (r.onApply) r.onApply([...r.selected]); } else { r._dirty = true; } }
+function msAll(key, on) { const r = _msReg[key]; if (!r) return; r.selected = on ? new Set(r.options.map(o => o.v)) : new Set(); const pop = document.getElementById('mspop-' + key); if (pop) pop.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = on); if (r.live) { if (r.onApply) r.onApply([...r.selected]); } else { r._dirty = true; } }
+document.addEventListener('click', e => { if (!e.target.closest('.ms-wrap')) document.querySelectorAll('.ms-pop').forEach(p => { if (p.style.display === 'block') { p.style.display = 'none'; _msCommit(p.id.replace('mspop-', '')); } }); });
+
 function renderAnalyse() {
   if (!anFrom || !anTo) { const r = _anDefaultRange(); anFrom = r.from; anTo = r.to; }
   const agences = [...new Set((_anData || []).map(f => f.societe).filter(Boolean))].sort();
@@ -5057,15 +5086,8 @@ function renderAnalyse() {
     <input type="date" value="${anFrom}" onchange="anSetDates(this.value, anTo)" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1)">
     <label style="font-size:12px;color:var(--t3)">au</label>
     <input type="date" value="${anTo}" onchange="anSetDates(anFrom, this.value)" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1)">
-    <select onchange="anSetAgence(this.value)" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1)">
-      <option value="">Toutes agences</option>
-      ${agences.map(a => `<option value="${a}" ${anAgence === a ? 'selected' : ''}>${a}</option>`).join('')}
-    </select>
-    <select onchange="anSetMetier(this.value)" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1)">
-      <option value="">Tous métiers</option>
-      <option value="Géotechnique" ${anMetier === 'Géotechnique' ? 'selected' : ''}>Géotechnique</option>
-      <option value="Structure" ${anMetier === 'Structure' ? 'selected' : ''}>Structure</option>
-    </select>
+    ${(() => { msDef('anAgence', agences.map(a => ({ v: a, label: a })), anAgences, arr => { anAgences = arr; _anNetwork = null; _anMap = null; renderPage('analyse'); }, false); return msButton('anAgence', 'Agences'); })()}
+    ${(() => { msDef('anMetier', [{ v: 'Géotechnique', label: 'Géotechnique' }, { v: 'Structure', label: 'Structure' }], anMetiers, arr => { anMetiers = arr; _anNetwork = null; _anMap = null; renderPage('analyse'); }, false); return msButton('anMetier', 'Métiers'); })()}
     <button class="btn" style="font-size:12px" onclick="anReset()">Réinitialiser</button>
   </div>`;
 
@@ -8029,7 +8051,7 @@ async function syncSitesVersAkuiteo() {
 //  Rôles : client (client_id) / architecte / apporteur / gros-œuvre (par nom)
 // ═══════════════════════════════════════════════════════════
 let ccaRows = null, ccaCharts = {}, ccaFsBound = false;
-let ccaF = { role: '', dt: { devis: true, commandes: true, factures: true }, from: '', to: '', agence: '', metier: '', presta: '', statut: '', estab: '' };
+let ccaF = { roles: [], dt: { devis: true, commandes: true, factures: true }, from: '', to: '', agences: [], metiers: [], prestas: [], statuts: [], estabs: [] };
 
 const CCA_COLS = {
   devis: 'id,ref,montant,date,statut,societe,type_prestation,gros_oeuvre,architecte,apporteur_affaire,client_id,client_name,sujet',
@@ -8101,16 +8123,17 @@ async function _ccaFetch(c) {
 }
 
 function _ccaFiltered() {
+  const inArr = (a, v) => !a || !a.length || a.includes(v);
   return (ccaRows || []).filter(r => {
     if (!ccaF.dt[r.type]) return false;
-    if (ccaF.role && !r.roles.has(ccaF.role)) return false;
+    if (ccaF.roles && ccaF.roles.length && !ccaF.roles.some(ro => r.roles.has(ro))) return false;
     if (ccaF.from && r.date && r.date < ccaF.from) return false;
     if (ccaF.to && r.date && r.date > ccaF.to) return false;
-    if (ccaF.agence && r.agence !== ccaF.agence) return false;
-    if (ccaF.metier && r.metier !== ccaF.metier) return false;
-    if (ccaF.presta && r.type_prestation !== ccaF.presta) return false;
-    if (ccaF.statut && r.statut !== ccaF.statut) return false;
-    if (ccaF.estab && r.estab !== ccaF.estab) return false;
+    if (!inArr(ccaF.agences, r.agence)) return false;
+    if (!inArr(ccaF.metiers, r.metier)) return false;
+    if (!inArr(ccaF.prestas, r.type_prestation)) return false;
+    if (!inArr(ccaF.statuts, r.statut)) return false;
+    if (!inArr(ccaF.estabs, r.estab)) return false;
     return true;
   });
 }
@@ -8118,7 +8141,7 @@ function _ccaFiltered() {
 async function ccaOpen() {
   const c = currentClient;
   if (!c) return;
-  ccaF = { role: '', dt: { devis: true, commandes: true, factures: true }, from: '', to: '', agence: '', metier: '', presta: '', statut: '', estab: '' };
+  ccaF = { roles: [], dt: { devis: true, commandes: true, factures: true }, from: '', to: '', agences: [], metiers: [], prestas: [], statuts: [], estabs: [] };
   let ov = document.getElementById('ccaOverlay');
   if (!ov) { ov = document.createElement('div'); ov.id = 'ccaOverlay'; document.body.appendChild(ov); }
   ov.style.cssText = 'position:fixed;inset:0;z-index:2000;background:var(--bg-1);display:flex;flex-direction:column';
@@ -8160,34 +8183,33 @@ function _ccaUniq(fn) { return [...new Set((ccaRows || []).map(fn).filter(Boolea
 
 function _ccaRenderFilters() {
   const el = document.getElementById('ccaFilters'); if (!el) return;
-  const opt = (arr, sel) => '<option value="">— Tous —</option>' + arr.map(v => `<option value="${cmdEsc(v)}"${v === sel ? ' selected' : ''}>${cmdEsc(v)}</option>`).join('');
-  const fld = (lbl, inner) => `<div><label class="fl" style="font-size:11px">${lbl}</label>${inner}</div>`;
+  const fld = (lbl, inner) => `<div><label class="fl" style="font-size:11px">${lbl}</label><div>${inner}</div></div>`;
+  const optsOf = fn => _ccaUniq(fn).map(v => ({ v, label: v }));
+  msDef('ccaRole', [{ v: 'client', label: 'Client' }, { v: 'architecte', label: 'Architecte' }, { v: 'apporteur', label: "Apporteur d'affaire" }, { v: 'gros_oeuvre', label: 'Gros-œuvre' }], ccaF.roles, arr => { ccaF.roles = arr; ccaApply(); });
+  msDef('ccaAgence', optsOf(r => r.agence), ccaF.agences, arr => { ccaF.agences = arr; ccaApply(); });
+  msDef('ccaMetier', optsOf(r => r.metier), ccaF.metiers, arr => { ccaF.metiers = arr; ccaApply(); });
+  msDef('ccaPresta', optsOf(r => r.type_prestation), ccaF.prestas, arr => { ccaF.prestas = arr; ccaApply(); });
+  msDef('ccaStatut', optsOf(r => r.statut), ccaF.statuts, arr => { ccaF.statuts = arr; ccaApply(); });
+  msDef('ccaEtab', optsOf(r => r.estab), ccaF.estabs, arr => { ccaF.estabs = arr; ccaApply(); });
   el.innerHTML =
-    fld('Rôle du compte', `<select class="fi" id="ccaRole" onchange="ccaApply()" style="font-size:12px;padding:5px 8px">
-        <option value="">Tous rôles</option><option value="client">Client</option><option value="architecte">Architecte</option><option value="apporteur">Apporteur d'affaire</option><option value="gros_oeuvre">Gros-œuvre</option></select>`) +
+    fld('Rôle du compte', msButton('ccaRole', 'Rôles')) +
     fld('Documents', `<div style="display:flex;gap:8px;font-size:12px;padding-top:4px">
         <label style="cursor:pointer"><input type="checkbox" id="ccaDtDevis" checked onchange="ccaApply()"> Devis</label>
         <label style="cursor:pointer"><input type="checkbox" id="ccaDtCmd" checked onchange="ccaApply()"> Commandes</label>
         <label style="cursor:pointer"><input type="checkbox" id="ccaDtFact" checked onchange="ccaApply()"> Factures</label></div>`) +
     fld('Du', `<input type="date" class="fi" id="ccaFrom" onchange="ccaApply()" style="font-size:12px;padding:4px 8px;width:auto">`) +
     fld('au', `<input type="date" class="fi" id="ccaTo" onchange="ccaApply()" style="font-size:12px;padding:4px 8px;width:auto">`) +
-    fld('Agence', `<select class="fi" id="ccaAgence" onchange="ccaApply()" style="font-size:12px;padding:5px 8px">${opt(_ccaUniq(r => r.agence), '')}</select>`) +
-    fld('Métier', `<select class="fi" id="ccaMetier" onchange="ccaApply()" style="font-size:12px;padding:5px 8px">${opt(_ccaUniq(r => r.metier), '')}</select>`) +
-    fld('Type de mission', `<select class="fi" id="ccaPresta" onchange="ccaApply()" style="font-size:12px;padding:5px 8px">${opt(_ccaUniq(r => r.type_prestation), '')}</select>`) +
-    fld('Statut', `<select class="fi" id="ccaStatut" onchange="ccaApply()" style="font-size:12px;padding:5px 8px">${opt(_ccaUniq(r => r.statut), '')}</select>`) +
-    fld('Établissement', `<select class="fi" id="ccaEtab" onchange="ccaApply()" style="font-size:12px;padding:5px 8px;max-width:240px">${opt(_ccaUniq(r => r.estab), '')}</select>`);
+    fld('Agence', msButton('ccaAgence', 'Agences')) +
+    fld('Métier', msButton('ccaMetier', 'Métiers')) +
+    fld('Type de mission', msButton('ccaPresta', 'Missions')) +
+    fld('Statut', msButton('ccaStatut', 'Statuts')) +
+    fld('Établissement', msButton('ccaEtab', 'Établissements'));
 }
 
 function ccaApply() {
-  ccaF.role = document.getElementById('ccaRole')?.value || '';
   ccaF.dt = { devis: !!document.getElementById('ccaDtDevis')?.checked, commandes: !!document.getElementById('ccaDtCmd')?.checked, factures: !!document.getElementById('ccaDtFact')?.checked };
   ccaF.from = document.getElementById('ccaFrom')?.value || '';
   ccaF.to = document.getElementById('ccaTo')?.value || '';
-  ccaF.agence = document.getElementById('ccaAgence')?.value || '';
-  ccaF.metier = document.getElementById('ccaMetier')?.value || '';
-  ccaF.presta = document.getElementById('ccaPresta')?.value || '';
-  ccaF.statut = document.getElementById('ccaStatut')?.value || '';
-  ccaF.estab = document.getElementById('ccaEtab')?.value || '';
   _ccaRenderBody();
 }
 
@@ -8205,11 +8227,12 @@ function _ccaRenderBody() {
   const nbDocs = rows.length;
   const panier = nbDocs ? caTotal / nbDocs : 0;
   const transfo = nDevis ? Math.round(nCmd / nDevis * 100) : 0;
-  // Catégorie ABC correspondant au rôle filtré
-  const _rcKey = { apporteur: 'categorie_apporteur', architecte: 'categorie_architecte', gros_oeuvre: 'categorie_gros_oeuvre' }[ccaF.role] || 'categorie_compte';
+  // Catégorie ABC correspondant au rôle filtré (si un seul rôle sélectionné)
+  const _singleRole = (ccaF.roles && ccaF.roles.length === 1) ? ccaF.roles[0] : '';
+  const _rcKey = { apporteur: 'categorie_apporteur', architecte: 'categorie_architecte', gros_oeuvre: 'categorie_gros_oeuvre' }[_singleRole] || 'categorie_compte';
   const _rcObj = currentClient && currentClient[_rcKey];
   const _rcRang = currentClient && currentClient[_rcKey + '_rang'];
-  const _roleLbl = { apporteur: 'apporteur', architecte: 'architecte', gros_oeuvre: 'gros-œuvre' }[ccaF.role] || 'client facturé';
+  const _roleLbl = { apporteur: 'apporteur', architecte: 'architecte', gros_oeuvre: 'gros-œuvre' }[_singleRole] || 'client facturé';
   const _roleCatStr = (_rcObj && typeof _rcObj === 'object' && Object.keys(_rcObj).length)
     ? Object.entries(_rcObj).map(([ag, v]) => { const r = _rcRang && _rcRang[ag]; return ag + ': ' + String(v).charAt(0) + (r ? ' (' + r + ')' : ''); }).join(' · ')
     : '—';
@@ -8350,7 +8373,7 @@ function ccaExportPDF() {
     doc.setFontSize(14); doc.text('Analyse du compte — ' + (c.name || ''), 14, 16);
     doc.setFontSize(9);
     const periode = (ccaF.from || ccaF.to) ? ('Période : ' + (ccaF.from || '…') + ' au ' + (ccaF.to || '…')) : 'Période : toutes dates';
-    const roleTxt = ccaF.role ? ('Rôle : ' + ccaF.role) : 'Rôles : tous';
+    const roleTxt = (ccaF.roles && ccaF.roles.length) ? ('Rôles : ' + ccaF.roles.join(', ')) : 'Rôles : tous';
     doc.text(periode + '   |   ' + roleTxt, 14, 22);
     doc.text('CA total HT : ' + fmt(caDevis + caCmd + caFact) + '  (devis ' + fmt(caDevis) + ' · commandes ' + fmt(caCmd) + ' · factures ' + fmt(caFact) + ')', 14, 27);
     let y = 34;
