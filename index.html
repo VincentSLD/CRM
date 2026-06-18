@@ -3667,6 +3667,7 @@ function resetClientsFilters() {
   clientsFilterCatCompte = '';
   clientsFilterCatRole = 'client';
   clientsFilterReseauxPro = '';
+  clientsHideRadiees = true;
   clientsLetter = '';
   clientsSearch = '';
   loadClientsPage(0, '', '');
@@ -6606,9 +6607,6 @@ function renderClients(filter='all') {
       <button class="btn" onclick="exportCSV('clients')">⤓ Export CSV</button>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
-      <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--t2);cursor:pointer;white-space:nowrap" title="Masquer les entreprises radiées (état INSEE)">
-        <input type="checkbox" ${clientsHideRadiees ? 'checked' : ''} onchange="clientsHideRadiees=this.checked;loadClientsPage(0,clientsLetter,clientsSearch)"> Masquer radiées
-      </label>
       <input type="text" id="clientSearchInput" placeholder="Rechercher un client/prospect..." value="${clientsSearch}"
         style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:220px;background:var(--card);color:var(--t1)"
         onkeydown="if(event.key==='Enter'){loadClientsPage(0, '', this.value)}">
@@ -6620,14 +6618,17 @@ function renderClients(filter='all') {
     <button class="btn ${!clientsLetter?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'','')">Tous</button>
     ${letters.map(l => `<button class="btn ${clientsLetter===l?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'${l}','')">${l}</button>`).join('')}
   </div>
-  <details style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-3)"${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterSiege||clientsFilterCatCompte) ? ' open' : ''}>
+  <details style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-3)"${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterSiege||clientsFilterCatCompte||!clientsHideRadiees) ?' open' : ''}>
     <summary style="padding:8px 10px;cursor:pointer;font-size:11px;font-weight:600;color:var(--t3);user-select:none;list-style:none;display:flex;align-items:center;gap:6px">
       <span style="transition:transform .2s;display:inline-block">&#9654;</span> Filtres & Infos Entreprise
-      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterSiege||clientsFilterCatCompte) ? '<span style="display:inline-block;padding:1px 6px;border-radius:10px;background:var(--accent);color:#fff;font-size:10px;font-weight:700">filtres actifs</span>' : ''}
+      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterSiege||clientsFilterCatCompte||!clientsHideRadiees) ?'<span style="display:inline-block;padding:1px 6px;border-radius:10px;background:var(--accent);color:#fff;font-size:10px;font-weight:700">filtres actifs</span>' : ''}
       ${!clientsFilterOptsLoaded ? '<span style="font-size:11px;color:var(--t3)">⏳ chargement options...</span>' : ''}
     </summary>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border-top:1px solid var(--border)">
       <span style="font-size:11px;color:var(--t3);font-weight:600">Filtres :</span>
+      <label title="Masquer les entreprises radiées (état INSEE)" style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:4px 8px;border:1px solid ${clientsHideRadiees?'#f59e0b':'var(--border)'};border-radius:6px;background:${clientsHideRadiees?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
+        <input type="checkbox" ${clientsHideRadiees ? 'checked' : ''} onchange="clientsHideRadiees=this.checked;loadClientsPage(0,clientsLetter,clientsSearch)"> Masquer radiées
+      </label>
       <select onchange="clientsFilterDept=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterDept?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterDept?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:90px">
         <option value="">— Dpt —</option>
         ${clientsFilterOpts.depts.map(d => `<option value="${d}"${clientsFilterDept===d?' selected':''}>${d}</option>`).join('')}
@@ -6664,7 +6665,7 @@ function renderClients(filter='all') {
         <option value="B- Tactique" ${clientsFilterCatCompte==='B- Tactique'?'selected':''}>B- Tactique</option>
         <option value="C- Listé" ${clientsFilterCatCompte==='C- Listé'?'selected':''}>C- Listé</option>
       </select>
-      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterSiege||clientsFilterCatCompte) ? `<button class="btn" style="font-size:12px;padding:5px 10px;color:var(--red)" onclick="resetClientsFilters()">✕ Effacer tout</button>` : ''}
+      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterSiege||clientsFilterCatCompte||!clientsHideRadiees) ?`<button class="btn" style="font-size:12px;padding:5px 10px;color:var(--red)" onclick="resetClientsFilters()">✕ Effacer tout</button>` : ''}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border-top:1px solid var(--border)">
       <span style="font-size:11px;color:var(--t3);font-weight:600">Infos Entreprise :</span>
