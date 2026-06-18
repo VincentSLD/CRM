@@ -13749,7 +13749,11 @@ function renderCustomData(cd) {
       if (v.type === 'DATE' && displayVal) {
         try { displayVal = fmtDateFR(new Date(displayVal).toISOString().substring(0, 10)); } catch(e) {}
       } else if (v.type === 'BOOLEAN') {
-        displayVal = displayVal ? 'Oui' : 'Non';
+        // Akuiteo peut renvoyer un booléen, un nombre ou une CHAÎNE ("false"/"0"/"") → toutes truthy en JS.
+        // On n'affiche "Oui" que si la valeur est réellement vraie ; sinon on laisse vide (pas de "Non" parasite).
+        const s = String(displayVal == null ? '' : displayVal).trim().toLowerCase();
+        const isTrue = displayVal === true || displayVal === 1 || ['true', '1', 'oui', 'yes', 'vrai', 'o', 'x'].includes(s);
+        displayVal = isTrue ? 'Oui' : null;
       } else if (v.type === 'NUMBER' && displayVal != null) {
         displayVal = fmt(displayVal);
       }
