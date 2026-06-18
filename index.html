@@ -3094,6 +3094,7 @@ const CLIENTS_PER_PAGE = 50;
 let clientsFilterOpts = { depts: [], novam: [], gph: [], categorie: [], sousCategorie: [], categoriePro: [], secteur: [], type: [], groupe: [], origine: [], reseauxPro: [] };
 let clientsFilterOptsVariants = {};
 let clientsGphVariants = {}; // normKey -> [variantes de nom] pour le filtre Commercial GPH (dédoublonnage)
+let clientsNovamVariants = {}; // idem pour le filtre Commercial Novam
 let clientsFilterOptsLoaded = false;
 
 function _normFilterKey(s) {
@@ -3120,6 +3121,38 @@ function _expandFilterVariants(field, selected) {
   const map = clientsFilterOptsVariants[field];
   if (!map || !selected) return [selected];
   return map[selected] || [selected];
+}
+
+// Formate un nom de commercial en "NOM Prénom" : retire le code "(XXX)" et place le(s) token(s)
+// en MAJUSCULES (le nom de famille) en premier. Gère les listes séparées par , ou ;.
+function fmtCommercialName(str) {
+  if (!str) return str;
+  if (/[;,]/.test(str)) return String(str).split(/\s*[;,]\s*/).filter(Boolean).map(fmtCommercialName).join(', ');
+  let s = String(str).replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!s) return String(str).trim();
+  const tokens = s.split(' ');
+  if (tokens.length < 2) return s;
+  const isSurname = t => t.length > 1 && t === t.toLocaleUpperCase('fr') && /[A-ZÀ-ÖØ-Þ]/.test(t);
+  const sur = tokens.filter(isSurname);
+  const giv = tokens.filter(t => !isSurname(t));
+  if (sur.length && giv.length) return (sur.join(' ') + ' ' + giv.join(' ')).trim();
+  return s; // ambigu (tout en maj ou tout en minuscule) : on conserve
+}
+
+// Regroupe des libellés de commercial par identité (tokens triés, code ignoré) → options dédoublonnées
+function _buildCommGroups(set) {
+  const groups = {};
+  for (const raw of set) {
+    const ov = String(raw).replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!ov) continue;
+    const key = ov.toLocaleUpperCase('fr').split(' ').filter(Boolean).sort().join(' ');
+    if (!key) continue;
+    (groups[key] = groups[key] || new Set()).add(ov);
+  }
+  const variants = {};
+  const opts = Object.entries(groups).map(([key, vs]) => { variants[key] = [...vs]; return { key, label: fmtCommercialName([...vs][0]) }; })
+    .sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+  return { opts, variants };
 }
 
 async function loadClientsFilterOpts() {
@@ -3159,20 +3192,9 @@ async function loadClientsFilterOpts() {
   }
   const sortFr = arr => [...arr].sort((a, b) => a.localeCompare(b, 'fr'));
   clientsFilterOpts.depts = [...sets.dept].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
-  clientsFilterOpts.novam = sortFr(sets.novam);
-  // Commercial GPH : regrouper les variantes de format (ordre des mots, code "(XXX)") en une seule entrée
-  const _gphStrip = s => String(s).replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
-  const _gphKey = s => _gphStrip(s).toUpperCase().split(' ').filter(Boolean).sort().join(' ');
-  const gphGroups = {};
-  for (const raw of sets.gph) {
-    const ov = _gphStrip(raw); if (!ov) continue;
-    const key = _gphKey(raw); if (!key) continue;
-    if (!gphGroups[key]) gphGroups[key] = { label: ov, variants: new Set() };
-    gphGroups[key].variants.add(ov);
-    if (ov.length < gphGroups[key].label.length) gphGroups[key].label = ov; // libellé le plus court
-  }
-  clientsGphVariants = {};
-  clientsFilterOpts.gph = Object.entries(gphGroups).map(([key, g]) => { clientsGphVariants[key] = [...g.variants]; return { key, label: g.label }; }).sort((a, b) => a.label.localeCompare(b.label, 'fr'));
+  // Commerciaux Novam & GPH : regrouper les variantes de format (ordre des mots, code "(XXX)") + libellé "NOM Prénom"
+  { const g = _buildCommGroups(sets.novam); clientsFilterOpts.novam = g.opts; clientsNovamVariants = g.variants; }
+  { const g = _buildCommGroups(sets.gph); clientsFilterOpts.gph = g.opts; clientsGphVariants = g.variants; }
   const dedupFields = ['categorie','sousCategorie','categoriePro','secteur','type','groupe','origine'];
   for (const f of dedupFields) {
     const { values, variants } = _dedupFilterValues(sortFr(sets[f]));
@@ -3397,7 +3419,9 @@ function sortTh(table, col, label, filterFn) {
 function mapClient(c) {
   return {
     ...c,
-    commerciaux_associes: c.commerciaux_associes ? String(c.commerciaux_associes).replace(/\s*\(principal\)/gi, '') : c.commerciaux_associes,
+    account_manager_name: c.account_manager_name ? fmtCommercialName(c.account_manager_name) : c.account_manager_name,
+    salesman_name: c.salesman_name ? fmtCommercialName(c.salesman_name) : c.salesman_name,
+    commerciaux_associes: c.commerciaux_associes ? fmtCommercialName(String(c.commerciaux_associes).replace(/\s*\(principal\)/gi, '')) : c.commerciaux_associes,
     sentiment: { pos: c.sentiment_pos, neu: c.sentiment_neu, neg: c.sentiment_neg },
     lastContact: timeAgo(c.last_contact),
     devis: 0
@@ -3636,7 +3660,12 @@ async function loadClientsPage(page, letter, search) {
     if (/^\d{1,3}[A-B]?$/i.test(d)) query = query.ilike('code_postal', d + '%');
     else query = query.ilike('departement', '%' + d + '%');
   }
-  if (clientsFilterNovam) query = query.ilike('account_manager_name', '%' + clientsFilterNovam + '%');
+  if (clientsFilterNovam) {
+    const vs = (clientsNovamVariants[clientsFilterNovam] && clientsNovamVariants[clientsFilterNovam].length) ? clientsNovamVariants[clientsFilterNovam] : [clientsFilterNovam];
+    const ors = [];
+    for (const v of vs) { const ve = v.replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim(); if (ve) ors.push(`account_manager_name.ilike.%${ve}%`); }
+    if (ors.length) query = query.or(ors.join(','));
+  }
   if (clientsFilterGph) {
     const vs = (clientsGphVariants[clientsFilterGph] && clientsGphVariants[clientsFilterGph].length) ? clientsGphVariants[clientsFilterGph] : [clientsFilterGph];
     const ors = [];
@@ -5548,7 +5577,7 @@ async function renderDashClientLists() {
         for (const ci of cInfos) map[ci.id] = ci;
         for (const c of top100) {
           const info = map[c.id];
-          if (info) { c.account_manager_name = info.account_manager_name; c.salesman_name = info.salesman_name; }
+          if (info) { c.account_manager_name = fmtCommercialName(info.account_manager_name); c.salesman_name = fmtCommercialName(info.salesman_name); }
         }
       }
     } catch (e) { console.warn('Erreur chargement commerciaux Top 100:', e.message); }
@@ -5562,6 +5591,7 @@ async function renderDashClientLists() {
       .in('status', ['nouveau', 'dormant'])
       .limit(300);
     const all = data || [];
+    all.forEach(c => { c.account_manager_name = fmtCommercialName(c.account_manager_name); c.salesman_name = fmtCommercialName(c.salesman_name); });
     nouveaux = all.filter(c => c.status === 'nouveau').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     dormants = all.filter(c => c.status === 'dormant').sort((a, b) => (a.last_contact || '').localeCompare(b.last_contact || ''));
     if (selectedSocietes.size > 0) {
@@ -6264,7 +6294,7 @@ async function showConcurrentFiche(id) {
     let clients = [];
     if (ids.length) { const { data } = await sb.from('clients').select('id,name,city,code_postal,departement,status,account_manager_name,salesman_name,ca').in('id', ids); clients = data || []; }
     const linkBy = {}; (links || []).forEach(l => { linkBy[l.client_id] = l; });
-    const rows = ids.map(cid => { const cl = clients.find(x => x.id === cid) || { id: cid, name: '(client supprimé)' }; const lk = linkBy[cid] || {}; return { ...cl, _metiers: Array.isArray(lk.metiers) ? lk.metiers : [], _notes: lk.notes || '' }; });
+    const rows = ids.map(cid => { const cl = clients.find(x => x.id === cid) || { id: cid, name: '(client supprimé)' }; const lk = linkBy[cid] || {}; return { ...cl, account_manager_name: cl.account_manager_name ? fmtCommercialName(cl.account_manager_name) : cl.account_manager_name, _metiers: Array.isArray(lk.metiers) ? lk.metiers : [], _notes: lk.notes || '' }; });
     _cnfRender(c, rows);
   } catch (e) {
     const b = document.getElementById('cnfBody'); if (b) b.innerHTML = '<div style="color:var(--red);padding:20px">Erreur : ' + cmdEsc(e.message) + '</div>';
@@ -6687,7 +6717,7 @@ function renderClients(filter='all') {
       </select>
       <select onchange="clientsFilterNovam=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterNovam?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterNovam?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:170px;max-width:220px">
         <option value="">— Commercial Novam —</option>
-        ${clientsFilterOpts.novam.map(n => `<option value="${n.replace(/"/g,'&quot;')}"${clientsFilterNovam===n?' selected':''}>${n}</option>`).join('')}
+        ${clientsFilterOpts.novam.map(o => `<option value="${String(o.key).replace(/"/g,'&quot;')}"${clientsFilterNovam===o.key?' selected':''}>${o.label}</option>`).join('')}
       </select>
       <select onchange="clientsFilterGph=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterGph?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterGph?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:170px;max-width:220px">
         <option value="">— Commercial GPH —</option>
@@ -13599,9 +13629,9 @@ async function loadApporteurCommMap() {
         if (!data || !data.length) break;
         for (const c of data) {
           const rec = {
-            novam: c.account_manager_name || null,
-            gph: c.salesman_name || null,
-            resp: c.responsable_site_name || null,
+            novam: c.account_manager_name ? fmtCommercialName(c.account_manager_name) : null,
+            gph: c.salesman_name ? fmtCommercialName(c.salesman_name) : null,
+            resp: c.responsable_site_name ? fmtCommercialName(c.responsable_site_name) : null,
             respId: c.responsable_site_id || null,
             siren: c.siren || null,
             cp: c.code_postal || null,
