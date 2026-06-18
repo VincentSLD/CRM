@@ -167,6 +167,10 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS categorie_architecte_rang  JSONB;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS categorie_gros_oeuvre      JSONB;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS categorie_gros_oeuvre_rang JSONB;
 
+-- ═══ Comptes clés "++" par agence (clients très importants avec spécificités) ═══
+-- JSONB par agence, ex: {"SA85": true, "GPH85": true}. Coché manuellement dans la fiche.
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS categorie_compte_plus JSONB;
+
 -- ═══ Campagnes marketing (ciblage emails) ═══
 CREATE TABLE IF NOT EXISTS campagnes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,

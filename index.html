@@ -3072,6 +3072,7 @@ let clientsFilterCatCompte = '';
 let clientsFilterCatRole = 'client'; // 'client' | 'apporteur' | 'architecte' | 'gros_oeuvre' (colonne ciblée par le filtre Cat. compte)
 let clientsFilterReseauxPro = '';
 let clientsHideRadiees = true; // masquer les entreprises radiées INSEE (etat_insee = 'C') — coché par défaut
+let clientsFilterPlus = ''; // '' | 'yes' | 'no' — comptes clés (++)
 let _clientsServerLoaded = false; // 1er chargement serveur de la liste clients (pour appliquer les filtres dès l'entrée)
 const CLIENTS_PER_PAGE = 50;
 let clientsFilterOpts = { depts: [], novam: [], gph: [], categorie: [], sousCategorie: [], categoriePro: [], secteur: [], type: [], groupe: [], origine: [], reseauxPro: [] };
@@ -3628,6 +3629,9 @@ async function loadClientsPage(page, letter, search) {
   if (clientsFilterReseauxPro) query = query.contains('reseaux_pro', [clientsFilterReseauxPro]);
   // Masquer les entreprises radiées INSEE (etat_insee = 'C')
   if (clientsHideRadiees) query = query.or('etat_insee.is.null,etat_insee.neq.C');
+  // Comptes clés (++)
+  if (clientsFilterPlus === 'yes') query = query.not('categorie_compte_plus', 'is', null);
+  if (clientsFilterPlus === 'no') query = query.is('categorie_compte_plus', null);
   // Catégorie du compte / par rôle (JSONB — filtre côté client après requête)
   const _catCol = { apporteur: 'categorie_apporteur', architecte: 'categorie_architecte', gros_oeuvre: 'categorie_gros_oeuvre' }[clientsFilterCatRole] || 'categorie_compte';
   if (clientsFilterCatCompte) query = query.not(_catCol, 'is', null);
@@ -3669,6 +3673,7 @@ function resetClientsFilters() {
   clientsFilterCatRole = 'client';
   clientsFilterReseauxPro = '';
   clientsHideRadiees = true;
+  clientsFilterPlus = '';
   clientsLetter = '';
   clientsSearch = '';
   loadClientsPage(0, '', '');
@@ -6625,10 +6630,10 @@ function renderClients(filter='all') {
     <button class="btn ${!clientsLetter?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'','')">Tous</button>
     ${letters.map(l => `<button class="btn ${clientsLetter===l?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'${l}','')">${l}</button>`).join('')}
   </div>
-  <details style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-3)"${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterSiege||clientsFilterCatCompte||!clientsHideRadiees) ?' open' : ''}>
+  <details style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-3)"${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterSiege||clientsFilterCatCompte||!clientsHideRadiees||clientsFilterPlus) ?' open' : ''}>
     <summary style="padding:8px 10px;cursor:pointer;font-size:11px;font-weight:600;color:var(--t3);user-select:none;list-style:none;display:flex;align-items:center;gap:6px">
       <span style="transition:transform .2s;display:inline-block">&#9654;</span> Filtres & Infos Entreprise
-      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterSiege||clientsFilterCatCompte||!clientsHideRadiees) ?'<span style="display:inline-block;padding:1px 6px;border-radius:10px;background:var(--accent);color:#fff;font-size:10px;font-weight:700">filtres actifs</span>' : ''}
+      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterSiege||clientsFilterCatCompte||!clientsHideRadiees||clientsFilterPlus) ?'<span style="display:inline-block;padding:1px 6px;border-radius:10px;background:var(--accent);color:#fff;font-size:10px;font-weight:700">filtres actifs</span>' : ''}
       ${!clientsFilterOptsLoaded ? '<span style="font-size:11px;color:var(--t3)">⏳ chargement options...</span>' : ''}
     </summary>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border-top:1px solid var(--border)">
@@ -6636,6 +6641,11 @@ function renderClients(filter='all') {
       <label title="Masquer les entreprises radiées (état INSEE)" style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:4px 8px;border:1px solid ${clientsHideRadiees?'#f59e0b':'var(--border)'};border-radius:6px;background:${clientsHideRadiees?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
         <input type="checkbox" ${clientsHideRadiees ? 'checked' : ''} onchange="clientsHideRadiees=this.checked;loadClientsPage(0,clientsLetter,clientsSearch)"> Masquer radiées
       </label>
+      <select onchange="clientsFilterPlus=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" title="Comptes clés (++)" style="padding:5px 8px;border:1px solid ${clientsFilterPlus?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterPlus?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
+        <option value="" ${!clientsFilterPlus?'selected':''}>— ++ (clés) —</option>
+        <option value="yes" ${clientsFilterPlus==='yes'?'selected':''}>✓ Comptes clés (++)</option>
+        <option value="no" ${clientsFilterPlus==='no'?'selected':''}>✗ Sans ++</option>
+      </select>
       <select onchange="clientsFilterDept=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterDept?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterDept?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:90px">
         <option value="">— Dpt —</option>
         ${clientsFilterOpts.depts.map(d => `<option value="${d}"${clientsFilterDept===d?' selected':''}>${d}</option>`).join('')}
@@ -6672,7 +6682,7 @@ function renderClients(filter='all') {
         <option value="B- Tactique" ${clientsFilterCatCompte==='B- Tactique'?'selected':''}>B- Tactique</option>
         <option value="C- Listé" ${clientsFilterCatCompte==='C- Listé'?'selected':''}>C- Listé</option>
       </select>
-      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterSiege||clientsFilterCatCompte||!clientsHideRadiees) ?`<button class="btn" style="font-size:12px;padding:5px 10px;color:var(--red)" onclick="resetClientsFilters()">✕ Effacer tout</button>` : ''}
+      ${(clientsFilterDept||clientsFilterNovam||clientsFilterGph||clientsFilterStatut||clientsFilterSync||clientsFilterCategorie||clientsFilterSousCategorie||clientsFilterCategoriePro||clientsFilterSecteur||clientsFilterType||clientsFilterGroupe||clientsFilterOrigine||clientsFilterSiret||clientsFilterSiege||clientsFilterCatCompte||!clientsHideRadiees||clientsFilterPlus) ?`<button class="btn" style="font-size:12px;padding:5px 10px;color:var(--red)" onclick="resetClientsFilters()">✕ Effacer tout</button>` : ''}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border-top:1px solid var(--border)">
       <span style="font-size:11px;color:var(--t3);font-weight:600">Infos Entreprise :</span>
@@ -8363,13 +8373,18 @@ function renderClientDetail() {
       detailRow('Commercial Novam', c.account_manager_name ? '<strong>' + c.account_manager_name + '</strong>' : resolveManagerName(c.account_manager_id) || '—'),
       detailRow('Commercial GPH', c.salesman_name ? '<strong>' + c.salesman_name + '</strong>' + (c.commerciaux_associes && c.commerciaux_associes !== c.salesman_name ? '<br><span style="font-size:11px;color:var(--t3)">' + c.commerciaux_associes + '</span>' : '') : c.commerciaux_associes || '—'),
       detailRow('Catégorie du compte', (() => {
-        const cc = c.categorie_compte;
-        if (!cc || typeof cc !== 'object' || Object.keys(cc).length === 0) return '—';
-        const rg = c.categorie_compte_rang && typeof c.categorie_compte_rang === 'object' ? c.categorie_compte_rang : {};
-        return Object.entries(cc).map(([ag, val]) => {
+        const cc = (c.categorie_compte && typeof c.categorie_compte === 'object') ? c.categorie_compte : {};
+        const rg = (c.categorie_compte_rang && typeof c.categorie_compte_rang === 'object') ? c.categorie_compte_rang : {};
+        const pl = (c.categorie_compte_plus && typeof c.categorie_compte_plus === 'object') ? c.categorie_compte_plus : {};
+        const ags = [...new Set([...Object.keys(cc), ...Object.keys(pl)])];
+        if (!ags.length) return '—';
+        return ags.map(ag => {
+          const val = cc[ag] || '';
           const bg = val.startsWith('A') ? '#3b82f6' : val.startsWith('B') ? '#f59e0b' : '#6b7280';
           const rank = rg[ag];
-          return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + bg + ';color:#fff;margin:1px 4px 1px 0">' + ag + ' : ' + val + (rank ? ' (' + rank + ')' : '') + '</span>';
+          const plusBadge = pl[ag] ? ' <span style="background:#fff;color:#dc2626;border-radius:3px;padding:0 3px;font-weight:800;margin-left:3px" title="Client clé">++</span>' : '';
+          const label = val ? (val + (rank ? ' (' + rank + ')' : '')) : 'Client clé';
+          return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + (val ? bg : '#dc2626') + ';color:#fff;margin:1px 4px 1px 0">' + ag + ' : ' + label + plusBadge + '</span>';
         }).join('');
       })()),
       ...(() => {
@@ -19541,16 +19556,18 @@ async function fillAkuiteoDropdowns(prefix, client) {
   if (el('date-remise-convention')) el('date-remise-convention').value = c.date_remise_convention || c.custom_data?.['1-date01']?.value || '';
   if (el('date-signature-convention')) el('date-signature-convention').value = c.date_signature_convention || c.custom_data?.['1-date02']?.value || '';
   if (el('commentaires-tarification')) el('commentaires-tarification').value = c.commentaires_tarification || c.custom_data?.['1-alpha01']?.value || '';
-  fillCategorieCompteDropdowns(prefix, c.categorie_compte);
+  fillCategorieCompteDropdowns(prefix, c.categorie_compte, c.categorie_compte_plus);
 }
-function fillCategorieCompteDropdowns(prefix, catCompte) {
+function fillCategorieCompteDropdowns(prefix, catCompte, catPlus) {
   const container = document.getElementById(prefix + '-categorie-compte');
   if (!container) return;
   const societes = getAllSocietes();
   if (societes.length === 0) societes.push('(défaut)');
   const current = (catCompte && typeof catCompte === 'object') ? catCompte : {};
+  const plus = (catPlus && typeof catPlus === 'object') ? catPlus : {};
   container.innerHTML = societes.map(soc => {
     const val = current[soc] || '';
+    const isPlus = !!plus[soc];
     return `<div class="fg" style="margin:0;min-width:150px">
       <label class="fl" style="font-size:10px">${soc}</label>
       <select class="fi" data-societe="${soc}" style="font-size:12px">
@@ -19559,6 +19576,9 @@ function fillCategorieCompteDropdowns(prefix, catCompte) {
         <option value="B- Tactique"${val==='B- Tactique'?' selected':''}>B- Tactique</option>
         <option value="C- Listé"${val==='C- Listé'?' selected':''}>C- Listé</option>
       </select>
+      <label style="display:flex;align-items:center;gap:4px;font-size:11px;margin-top:3px;cursor:pointer;color:var(--t2)" title="Client clé : très important pour nous, avec spécificités">
+        <input type="checkbox" data-societe-plus="${soc}"${isPlus ? ' checked' : ''}> <strong>++</strong> client clé
+      </label>
     </div>`;
   }).join('');
 }
@@ -19569,6 +19589,13 @@ function readCategorieCompte(prefix) {
   container.querySelectorAll('select[data-societe]').forEach(sel => {
     if (sel.value) result[sel.dataset.societe] = sel.value;
   });
+  return Object.keys(result).length > 0 ? result : null;
+}
+function readCategorieComptePlus(prefix) {
+  const container = document.getElementById(prefix + '-categorie-compte');
+  if (!container) return null;
+  const result = {};
+  container.querySelectorAll('input[data-societe-plus]').forEach(cb => { if (cb.checked) result[cb.dataset.societePlus] = true; });
   return Object.keys(result).length > 0 ? result : null;
 }
 function closeModal(id) { const el=document.getElementById('modal-'+id); if(el) el.classList.remove('active'); }
@@ -20432,6 +20459,7 @@ async function submitNewClient() {
       ape: document.getElementById('nc-ape').value.trim() || null,
       reference_externe: document.getElementById('nc-refext')?.value?.trim() || null,
       categorie_compte: readCategorieCompte('nc'),
+      categorie_compte_plus: readCategorieComptePlus('nc'),
       notes: document.getElementById('nc-notes').value.trim() || null,
       habitudes_techniques: document.getElementById('nc-hab-tech').innerHTML.trim() || null,
       habitudes_geotechniques: document.getElementById('nc-hab-geo').innerHTML.trim() || null,
@@ -20632,6 +20660,7 @@ async function submitEditClient() {
       reference_externe: document.getElementById('ec-refext')?.value?.trim() || null,
       tva_intracommunautaire: document.getElementById('ec-tva').value.trim() || null,
       categorie_compte: readCategorieCompte('ec'),
+      categorie_compte_plus: readCategorieComptePlus('ec'),
       notes: document.getElementById('ec-notes').value.trim() || null,
       habitudes_techniques: document.getElementById('ec-hab-tech').innerHTML.trim() || null,
       habitudes_geotechniques: document.getElementById('ec-hab-geo').innerHTML.trim() || null,
