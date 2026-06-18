@@ -3775,10 +3775,15 @@ async function loadContactsPage(page, letter, search) {
   // Charger les noms des clients liés (pour afficher la société du contact)
   const clientIds = [...new Set(contactsList.map(c => c.client_id).filter(Boolean))];
   if (clientIds.length > 0) {
-    const { data: cls } = await sb.from('clients').select('id,name').in('id', clientIds);
-    const nameMap = {};
-    for (const cl of (cls||[])) nameMap[cl.id] = cl.name;
-    for (const ct of contactsList) ct._clientName = nameMap[ct.client_id] || null;
+    const { data: cls } = await sb.from('clients').select('id,name,account_manager_name,salesman_name').in('id', clientIds);
+    const map = {};
+    for (const cl of (cls||[])) map[cl.id] = cl;
+    for (const ct of contactsList) {
+      const cl = map[ct.client_id];
+      ct._clientName = cl ? cl.name : null;
+      ct._novam = (cl && cl.account_manager_name) ? fmtCommercialName(cl.account_manager_name) : '';
+      ct._gph = (cl && cl.salesman_name) ? fmtCommercialName(cl.salesman_name) : '';
+    }
   }
   contactsLoaded = true;
   renderPage('contacts');
@@ -3875,8 +3880,8 @@ function renderContacts() {
     ${letters.map(l => `<button class="btn ${contactsLetter===l?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadContactsPage(0,'${l}','')">${l}</button>`).join('')}
   </div>
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Nom Prénom</th><th>Fonction</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th>Société</th></tr></thead>
-    <tbody>${contactsList.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--t3)">Aucun contact trouvé</td></tr>' : contactsList.map(c => {
+    <table><thead><tr><th>Nom Prénom</th><th>Fonction</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th>Société</th><th>Commercial Novam</th><th>Commercial GPH</th></tr></thead>
+    <tbody>${contactsList.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucun contact trouvé</td></tr>' : contactsList.map(c => {
       const fullName = [c.titre, c.prenom, c.nom].filter(Boolean).join(' ');
       return `<tr onclick="showContact('${c.id}')" style="cursor:pointer">
         <td><div style="font-weight:600;font-size:13px">${fullName} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'};margin-left:4px;vertical-align:middle" title="${c.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span></div><div style="font-size:11px;color:var(--t3)">${c.code||''}</div></td>
@@ -3885,6 +3890,8 @@ function renderContacts() {
         <td style="font-size:12px;font-family:monospace">${c.telephone ? '<a href="tel:'+c.telephone+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+formatPhone(c.telephone)+'</a>' : '—'}</td>
         <td style="font-size:12px;font-family:monospace">${c.mobile ? '<a href="tel:'+c.mobile+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+formatPhone(c.mobile)+'</a>' : '—'}</td>
         <td style="font-size:12px">${c._clientName ? '<a href="#" onclick="event.stopPropagation();showClient(&#39;'+c.client_id+'&#39;);return false" style="color:var(--accent)">'+c._clientName+'</a>' : '—'}</td>
+        <td style="font-size:12px">${c._novam || '—'}</td>
+        <td style="font-size:12px">${c._gph || '—'}</td>
       </tr>`;
     }).join('')}</tbody></table>
   </div></div></div>
