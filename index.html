@@ -3752,6 +3752,25 @@ let contactsTotalCount = 0;
 let contactsList = [];
 let contactsLoaded = false;
 let currentContact = null;
+let contactsFilterNovam = ''; // normKey (commercial du client lié)
+let contactsFilterGph = '';
+
+// Ids des clients correspondant à un commercial (Novam/GPH), via les variantes regroupées
+async function _clientIdsForComm(field, key, variants, extraField) {
+  const vs = (variants[key] && variants[key].length) ? variants[key] : [key];
+  const ors = [];
+  for (const v of vs) { const ve = String(v).replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim(); if (!ve) continue; ors.push(`${field}.ilike.%${ve}%`); if (extraField) ors.push(`${extraField}.ilike.%${ve}%`); }
+  if (!ors.length) return [];
+  let all = [], off = 0;
+  while (true) {
+    const { data, error } = await sb.from('clients').select('id').or(ors.join(',')).range(off, off + 999);
+    if (error || !data || !data.length) break;
+    all = all.concat(data.map(d => d.id));
+    if (data.length < 1000) break;
+    off += 1000;
+  }
+  return all;
+}
 
 async function loadContactsPage(page, letter, search) {
   contactsPage = page;
@@ -3766,6 +3785,13 @@ async function loadContactsPage(page, letter, search) {
   }
   if (search) {
     query = query.or(`nom.ilike.%${search}%,prenom.ilike.%${search}%,email.ilike.%${search}%,fonction.ilike.%${search}%`);
+  }
+  // Filtre par commercial du client lié (Novam / GPH) : restreindre aux contacts des clients concernés
+  if (contactsFilterNovam || contactsFilterGph) {
+    let ids = null;
+    if (contactsFilterNovam) ids = await _clientIdsForComm('account_manager_name', contactsFilterNovam, clientsNovamVariants);
+    if (contactsFilterGph) { const g = await _clientIdsForComm('salesman_name', contactsFilterGph, clientsGphVariants, 'commerciaux_associes'); ids = ids ? ids.filter(x => g.includes(x)) : g; }
+    query = query.in('client_id', (ids && ids.length) ? ids : ['__none__']);
   }
   query = query.order('nom', { ascending: true }).range(from, to);
 
@@ -3874,6 +3900,19 @@ function renderContacts() {
       <button class="btn" onclick="loadContactsPage(0, '', document.getElementById('contactSearchInput').value)">Rechercher</button>
       ${contactsSearch ? '<button class="btn" onclick="document.getElementById(&#39;contactSearchInput&#39;).value=&#39;&#39;;loadContactsPage(0,&#39;&#39;,&#39;&#39;)">Effacer</button>' : ''}
     </div>
+  </div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+    <span style="font-size:11px;color:var(--t3);font-weight:600">Filtrer par commercial :</span>
+    <select onchange="contactsFilterNovam=this.value;loadContactsPage(0,contactsLetter,contactsSearch)" style="padding:5px 8px;border:1px solid ${contactsFilterNovam?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${contactsFilterNovam?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:170px;max-width:220px">
+      <option value="">— Commercial Novam —</option>
+      ${(clientsFilterOpts.novam||[]).map(o => `<option value="${String(o.key).replace(/"/g,'&quot;')}"${contactsFilterNovam===o.key?' selected':''}>${o.label}</option>`).join('')}
+    </select>
+    <select onchange="contactsFilterGph=this.value;loadContactsPage(0,contactsLetter,contactsSearch)" style="padding:5px 8px;border:1px solid ${contactsFilterGph?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${contactsFilterGph?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:170px;max-width:220px">
+      <option value="">— Commercial GPH —</option>
+      ${(clientsFilterOpts.gph||[]).map(o => `<option value="${String(o.key).replace(/"/g,'&quot;')}"${contactsFilterGph===o.key?' selected':''}>${o.label}</option>`).join('')}
+    </select>
+    ${(contactsFilterNovam||contactsFilterGph) ? `<button class="btn" style="font-size:12px;padding:5px 10px;color:var(--red)" onclick="contactsFilterNovam='';contactsFilterGph='';loadContactsPage(0,contactsLetter,contactsSearch)">✕ Effacer</button>` : ''}
+    ${!clientsFilterOptsLoaded ? '<span style="font-size:11px;color:var(--t3)">⏳ chargement des options…</span>' : ''}
   </div>
   <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:12px">
     <button class="btn ${!contactsLetter?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadContactsPage(0,'','')">Tous</button>
@@ -4858,6 +4897,9 @@ function renderPage(page) {
   }
   if (page === 'clients' && !clientsFilterOptsLoaded) {
     loadClientsFilterOpts().then(() => { if (currentPage === 'clients') renderPage('clients'); });
+  }
+  if (page === 'contacts' && !clientsFilterOptsLoaded) {
+    loadClientsFilterOpts().then(() => { if (currentPage === 'contacts') renderPage('contacts'); });
   }
   // Premier affichage de la liste : recharger via loadClientsPage pour appliquer le filtre serveur (radiées masquées)
   if (page === 'clients' && !_clientsServerLoaded) {
