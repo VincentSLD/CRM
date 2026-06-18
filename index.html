@@ -3093,6 +3093,7 @@ let _clientsServerLoaded = false; // 1er chargement serveur de la liste clients 
 const CLIENTS_PER_PAGE = 50;
 let clientsFilterOpts = { depts: [], novam: [], gph: [], categorie: [], sousCategorie: [], categoriePro: [], secteur: [], type: [], groupe: [], origine: [], reseauxPro: [] };
 let clientsFilterOptsVariants = {};
+let clientsGphVariants = {}; // normKey -> [variantes de nom] pour le filtre Commercial GPH (dédoublonnage)
 let clientsFilterOptsLoaded = false;
 
 function _normFilterKey(s) {
@@ -3159,7 +3160,19 @@ async function loadClientsFilterOpts() {
   const sortFr = arr => [...arr].sort((a, b) => a.localeCompare(b, 'fr'));
   clientsFilterOpts.depts = [...sets.dept].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
   clientsFilterOpts.novam = sortFr(sets.novam);
-  clientsFilterOpts.gph = sortFr(sets.gph);
+  // Commercial GPH : regrouper les variantes de format (ordre des mots, code "(XXX)") en une seule entrée
+  const _gphStrip = s => String(s).replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  const _gphKey = s => _gphStrip(s).toUpperCase().split(' ').filter(Boolean).sort().join(' ');
+  const gphGroups = {};
+  for (const raw of sets.gph) {
+    const ov = _gphStrip(raw); if (!ov) continue;
+    const key = _gphKey(raw); if (!key) continue;
+    if (!gphGroups[key]) gphGroups[key] = { label: ov, variants: new Set() };
+    gphGroups[key].variants.add(ov);
+    if (ov.length < gphGroups[key].label.length) gphGroups[key].label = ov; // libellé le plus court
+  }
+  clientsGphVariants = {};
+  clientsFilterOpts.gph = Object.entries(gphGroups).map(([key, g]) => { clientsGphVariants[key] = [...g.variants]; return { key, label: g.label }; }).sort((a, b) => a.label.localeCompare(b.label, 'fr'));
   const dedupFields = ['categorie','sousCategorie','categoriePro','secteur','type','groupe','origine'];
   for (const f of dedupFields) {
     const { values, variants } = _dedupFilterValues(sortFr(sets[f]));
@@ -3624,7 +3637,12 @@ async function loadClientsPage(page, letter, search) {
     else query = query.ilike('departement', '%' + d + '%');
   }
   if (clientsFilterNovam) query = query.ilike('account_manager_name', '%' + clientsFilterNovam + '%');
-  if (clientsFilterGph) query = query.or(`salesman_name.ilike.%${clientsFilterGph}%,commerciaux_associes.ilike.%${clientsFilterGph}%`);
+  if (clientsFilterGph) {
+    const vs = (clientsGphVariants[clientsFilterGph] && clientsGphVariants[clientsFilterGph].length) ? clientsGphVariants[clientsFilterGph] : [clientsFilterGph];
+    const ors = [];
+    for (const v of vs) { const ve = v.replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim(); if (!ve) continue; ors.push(`salesman_name.ilike.%${ve}%`, `commerciaux_associes.ilike.%${ve}%`); }
+    if (ors.length) query = query.or(ors.join(','));
+  }
   if (clientsFilterStatut) query = query.eq('status', clientsFilterStatut);
   if (clientsFilterSync === 'yes') query = query.not('akuiteo_id', 'is', null);
   if (clientsFilterSync === 'no') query = query.is('akuiteo_id', null);
@@ -6673,7 +6691,7 @@ function renderClients(filter='all') {
       </select>
       <select onchange="clientsFilterGph=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterGph?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterGph?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:170px;max-width:220px">
         <option value="">— Commercial GPH —</option>
-        ${clientsFilterOpts.gph.map(n => `<option value="${n.replace(/"/g,'&quot;')}"${clientsFilterGph===n?' selected':''}>${n}</option>`).join('')}
+        ${clientsFilterOpts.gph.map(o => `<option value="${String(o.key).replace(/"/g,'&quot;')}"${clientsFilterGph===o.key?' selected':''}>${o.label}</option>`).join('')}
       </select>
       <select onchange="clientsFilterStatut=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterStatut?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterStatut?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
         <option value="" ${!clientsFilterStatut?'selected':''}>— Tous statuts —</option>
