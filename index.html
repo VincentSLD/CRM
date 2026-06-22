@@ -3547,7 +3547,7 @@ async function loadDB() {
     _deferredLoadPromise = (async () => {
       const t1 = Date.now();
       const [rAll, nAll, maAll, afAll, luccaAll, akAll, contactsCount, concurrentsCount, campagnesCount, relancesAll] = await Promise.all([
-        (async () => { const RCOLS = 'id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at'; let all=[],off=0; while(true){ const {data}=await sb.from('reports').select(RCOLS).order('date',{ascending:false}).range(off,off+999); if(!data||!data.length) break; all=all.concat(data); if(data.length<1000) break; off+=1000; } return all; })(),
+        (async () => { const RCOLS = 'id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,affaire_id,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at'; let all=[],off=0; while(true){ const {data}=await sb.from('reports').select(RCOLS).order('date',{ascending:false}).range(off,off+999); if(!data||!data.length) break; all=all.concat(data); if(data.length<1000) break; off+=1000; } return all; })(),
         sb.from('notifications').select('id,type,text,time_label,read,created_at').order('created_at', {ascending:false}).limit(100).then(r => r.data || []),
         fetchFast('marches', MARCHE_LITE, 'date_debut', true),
         fetchFast('affaires', AFFAIRE_LITE, 'date_debut', true),
@@ -9364,6 +9364,7 @@ function renderAffaireDetail() {
   const devis = DB.devis.filter(d => d.affaire_id === a.id);
   const cmd = DB.commandes.filter(c => c.affaire_id === a.id);
   const fact = DB.factures.filter(f => f.affaire_id === a.id);
+  const crsLies = (DB.reports || []).filter(r => r.affaire_id === a.id);
   const totalDevisHT = devis.reduce((s, d) => s + Number(d.montant || 0), 0);
   const totalCmdHT = cmd.reduce((s, c) => s + Number(c.montant || 0), 0);
   const totalFactHT = fact.reduce((s, f) => s + Number(f.montant || 0), 0);
@@ -9387,6 +9388,16 @@ function renderAffaireDetail() {
       <div style="font-size:20px;font-weight:700;color:var(--green)">${fact.length}</div>
       <div style="font-size:11px;color:var(--t3)">Factures (${fmt(totalFactHT)})</div>
     </div></div>
+    <div class="card"><div class="card-body" style="text-align:center;padding:12px">
+      <div style="font-size:20px;font-weight:700;color:#6366f1">${crsLies.length}</div>
+      <div style="font-size:11px;color:var(--t3)">Comptes-rendus</div>
+    </div></div>
+  </div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><div class="card-title">Comptes-rendus liés (${crsLies.length})</div></div>
+    <div class="card-body" style="padding:0">
+      ${crsLies.length ? '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Titre</th><th>Type</th><th>Rédacteur</th></tr></thead><tbody>' + crsLies.slice().sort((x, y) => (y.date_raw || y.date || '').localeCompare(x.date_raw || x.date || '')).map(r => `<tr style="cursor:pointer" onclick="openCRDetail('${r.id}')"><td style="font-size:12px">${r.date_raw ? fmtDateFR(r.date_raw) : (r.date || '—')}</td><td style="font-size:12px"><strong>${cmdEsc(r.titre || '(Sans titre)')}</strong></td><td style="font-size:12px">${cmdEsc(r.type_cr || '')}</td><td style="font-size:12px">${cmdEsc(r.redacteur_nom || '')}</td></tr>`).join('') + '</tbody></table></div>' : '<div style="padding:14px;text-align:center;color:var(--t3);font-size:13px">Aucun compte-rendu lié à cette affaire</div>'}
+    </div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
     ${detailSection('Informations', [
@@ -14614,6 +14625,32 @@ function crFilterInput(field, val) {
 }
 let _crSelectedClients = [];  // [{id, name}, ...]
 let _crSelectedContacts = []; // [{id, name}, ...]
+let _crSelectedAffaire = null; // {id, label} — affaire liée au CR (optionnel)
+function _crAffaireLabel(a) { return [a.code_projet, a.nom, a.ville].filter(Boolean).join(' — ') || a.nom || a.ref || a.id; }
+async function searchCRAffaire(q) {
+  const dd = document.getElementById('crAffaireDropdown'); if (!dd) return;
+  if (!_crSelectedClients.length) { dd.style.display = 'none'; return; }
+  const ids = new Set(_crSelectedClients.map(c => c.id));
+  const ql = (q || '').toLowerCase();
+  let list = (DB.affaires || []).filter(a => ids.has(a.client_id));
+  if (ql) list = list.filter(a => [a.nom, a.code_projet, a.ville, a.code_postal].some(v => (v || '').toLowerCase().includes(ql)));
+  list = list.slice(0, 100);
+  const clear = _crSelectedAffaire ? `<div style="padding:8px 12px;cursor:pointer;font-size:12px;color:var(--red);border-top:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="removeCRAffaire()">✕ Retirer l'affaire liée</div>` : '';
+  if (!list.length) { dd.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucune affaire pour cette société</div>' + clear; }
+  else dd.innerHTML = list.map(a => { const lbl = _crAffaireLabel(a); return `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="selectCRAffaire('${a.id}','${lbl.replace(/'/g, "&#39;")}')">${cmdEsc(lbl)}${a.agence ? ' <span style="color:var(--t3);font-size:11px">(' + cmdEsc(a.agence) + ')</span>' : ''}</div>`; }).join('') + clear;
+  dd.style.display = 'block';
+}
+function selectCRAffaire(id, label) { _crSelectedAffaire = { id, label }; const dd = document.getElementById('crAffaireDropdown'); if (dd) dd.style.display = 'none'; const inp = document.getElementById('crAffaireSearch'); if (inp) inp.value = ''; renderCRAffaireChip(); }
+function removeCRAffaire() { _crSelectedAffaire = null; const dd = document.getElementById('crAffaireDropdown'); if (dd) dd.style.display = 'none'; renderCRAffaireChip(); }
+function renderCRAffaireChip() {
+  const el = document.getElementById('crAffaireChip'); if (!el) return;
+  el.innerHTML = _crSelectedAffaire ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#10b98122;color:#0e9f6e;border:1px solid #10b98144">${cmdEsc(_crSelectedAffaire.label)} <span style="cursor:pointer;opacity:0.6;font-size:14px" onclick="removeCRAffaire()">&times;</span></span>` : '';
+}
+function _crAffaireFromId(id) {
+  if (!id) return null;
+  const a = (DB.affaires || []).find(x => x.id === id);
+  return a ? { id: a.id, label: _crAffaireLabel(a) } : { id, label: 'Affaire ' + id };
+}
 
 function renderCR() {
   if (crViewMode === 'send') return renderCRSend();
@@ -14904,6 +14941,7 @@ function backToCRList() {
   crAttachments = [];
   _crSelectedClients = [];
   _crSelectedContacts = [];
+  _crSelectedAffaire = null;
   renderPage('cr');
 }
 
@@ -14966,9 +15004,11 @@ function backFromSend() {
   if (currentReport) {
     _crSelectedClients = [...(currentReport.clients_list || [])];
     _crSelectedContacts = [...(currentReport.contacts_list || [])];
+    _crSelectedAffaire = _crAffaireFromId(currentReport.affaire_id);
     setTimeout(() => {
       renderCRClientChips();
       renderCRContactChips();
+      renderCRAffaireChip();
       const co = document.getElementById('crContactSearch');
       if (co) { co.disabled = !_crSelectedClients.length; co.style.opacity = _crSelectedClients.length ? '1' : '0.5'; }
     }, 50);
@@ -15036,6 +15076,17 @@ function getCREditorHTML(r) {
           ${_crSelectedClients.length ? '' : 'disabled'}
           oninput="searchCRContact(this.value)" onfocus="searchCRContact(this.value)">
         <div id="crContactDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.2)"></div>
+      </div>
+    </div>
+    <div class="cr-fields-row" style="padding:0 16px 12px 16px;border-bottom:1px solid var(--border)">
+      <div style="position:relative">
+        <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Affaire liée</label>
+        <div id="crAffaireChip" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px"></div>
+        <input type="text" id="crAffaireSearch" placeholder="Rechercher une affaire (nom, code projet, ville)..." autocomplete="off"
+          style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1);opacity:${_crSelectedClients.length ? '1' : '0.5'}"
+          ${_crSelectedClients.length ? '' : 'disabled'}
+          oninput="searchCRAffaire(this.value)" onfocus="searchCRAffaire(this.value)">
+        <div id="crAffaireDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.2)"></div>
       </div>
     </div>
     <div style="padding:0">
@@ -15125,6 +15176,7 @@ async function openCRDetail(reportId) {
   };
   _crSelectedClients = [...currentReport.clients_list];
   _crSelectedContacts = [...currentReport.contacts_list];
+  _crSelectedAffaire = _crAffaireFromId(currentReport.affaire_id);
   crAttachments = currentReport.pieces_jointes || [];
   crViewMode = 'detail';
   renderPage('cr');
@@ -15132,6 +15184,7 @@ async function openCRDetail(reportId) {
   setTimeout(() => {
     renderCRClientChips();
     renderCRContactChips();
+    renderCRAffaireChip();
     // Activer champ contacts si clients sélectionnés
     const co = document.getElementById('crContactSearch');
     if (co) { co.disabled = !_crSelectedClients.length; co.style.opacity = _crSelectedClients.length ? '1' : '0.5'; }
@@ -15144,6 +15197,7 @@ function openCRModal() {
   crAttachments = [];
   _crSelectedClients = [];
   _crSelectedContacts = [];
+  _crSelectedAffaire = null;
   crViewMode = 'detail';
   renderPage('cr');
 }
@@ -15152,6 +15206,7 @@ function clearEditor() {
   crAttachments = [];
   _crSelectedClients = [];
   _crSelectedContacts = [];
+  _crSelectedAffaire = null;
   _crPrefill = null;
   crViewMode = 'list';
   closeCRModal();
@@ -15170,6 +15225,7 @@ function goToCR(clientId, clientName, contactId, contactName) {
   crAttachments = [];
   _crSelectedClients = [];
   _crSelectedContacts = [];
+  _crSelectedAffaire = null;
   _crPrefill = { clientId, clientName, contactId: contactId || null, contactName: contactName || null };
   crViewMode = 'detail';
   currentPage = 'cr';
@@ -15268,6 +15324,9 @@ function selectCRClient(id, name) {
   const co = document.getElementById('crContactSearch');
   co.disabled = false;
   co.style.opacity = '1';
+  // Activer le champ affaire
+  const af = document.getElementById('crAffaireSearch');
+  if (af) { af.disabled = false; af.style.opacity = '1'; }
   // Charger les contacts de ce client
   loadCRContacts(id);
 }
@@ -15281,12 +15340,16 @@ function removeCRClient(idx) {
     renderCRContactChips();
   }
   renderCRClientChips();
-  // Si plus de client, désactiver contacts
+  // Si plus de client, désactiver contacts + affaire
   if (!_crSelectedClients.length) {
     const co = document.getElementById('crContactSearch');
     if (co) { co.disabled = true; co.style.opacity = '0.5'; }
     _crSelectedContacts = [];
     renderCRContactChips();
+    const af = document.getElementById('crAffaireSearch');
+    if (af) { af.disabled = true; af.style.opacity = '0.5'; }
+    _crSelectedAffaire = null;
+    renderCRAffaireChip();
   }
 }
 
@@ -15346,6 +15409,8 @@ async function selectCRReseau(reseau) {
   renderCRContactChips();
   const co = document.getElementById('crContactSearch');
   if (co && _crSelectedClients.length) { co.disabled = false; co.style.opacity = '1'; }
+  const afR = document.getElementById('crAffaireSearch');
+  if (afR && _crSelectedClients.length) { afR.disabled = false; afR.style.opacity = '1'; }
   toast(`Réseau « ${reseau} » : ${nbSoc} société(s) ajoutée(s). Choisissez les contacts (${nbCon} disponible(s)).`, 'success');
 }
 
@@ -15478,6 +15543,9 @@ document.addEventListener('click', e => {
   if (!e.target.closest('#crReseauSearch') && !e.target.closest('#crReseauDropdown')) {
     const d = document.getElementById('crReseauDropdown'); if(d) d.style.display='none';
   }
+  if (!e.target.closest('#crAffaireSearch') && !e.target.closest('#crAffaireDropdown')) {
+    const d = document.getElementById('crAffaireDropdown'); if(d) d.style.display='none';
+  }
   if (!e.target.closest('#ec-reseaux-input') && !e.target.closest('#ec-reseaux-dd')) {
     const d = document.getElementById('ec-reseaux-dd'); if(d) d.style.display='none';
   }
@@ -15591,6 +15659,7 @@ async function saveReport(silent) {
     // Nouvelles colonnes (tous les éléments)
     clients_list: clientsList,
     contacts_list: contactsList,
+    affaire_id: _crSelectedAffaire ? _crSelectedAffaire.id : null,
     titre: titre,
     contenu: body.innerHTML,
     type_cr: typeCr,

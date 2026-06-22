@@ -197,6 +197,9 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS legacy_id TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS code_codial TEXT;
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS legacy_id TEXT;
 ALTER TABLE reports ADD COLUMN IF NOT EXISTS legacy_id TEXT;
+-- Lien d'un compte-rendu vers une affaire (optionnel)
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS affaire_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_reports_affaire_id ON reports(affaire_id) WHERE affaire_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_clients_legacy_id ON clients(legacy_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_legacy_id ON contacts(legacy_id);
 CREATE INDEX IF NOT EXISTS idx_reports_legacy_id ON reports(legacy_id);
