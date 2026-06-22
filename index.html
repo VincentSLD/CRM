@@ -3873,7 +3873,8 @@ function renderContacts() {
             <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'}" title="${c.akuiteo_id ? 'Synchronisé' : 'Non synchronisé'}"></span>
           </div>
           ${c.fonction ? '<div style="font-size:12px;color:var(--t2);margin-bottom:2px">' + c.fonction + '</div>' : ''}
-          ${c._clientName ? '<div style="font-size:11px;color:var(--accent);margin-bottom:6px">' + c._clientName + '</div>' : ''}
+          ${c._clientName ? '<div style="font-size:11px;color:var(--accent);margin-bottom:2px">' + c._clientName + '</div>' : ''}
+          ${(c._novam || c._gph) ? '<div style="font-size:11px;color:var(--t3);margin-bottom:6px">' + [c._novam ? 'Novam : ' + c._novam : '', c._gph ? 'GPH : ' + c._gph : ''].filter(Boolean).join(' · ') + '</div>' : ''}
           <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center" onclick="event.stopPropagation()">
             ${_callBtns(c, fullName, 'card')}
             ${c.email ? '<a href="mailto:'+c.email+'" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:4px 10px;border:1px solid var(--border);border-radius:6px;color:var(--accent);text-decoration:none">✉ Email</a>' : ''}
