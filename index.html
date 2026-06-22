@@ -6601,6 +6601,7 @@ async function saveConcurrent() {
 
 async function deleteConcurrent(id) {
   if (!confirm('Supprimer ce concurrent ? Toutes les liaisons clients seront aussi supprimées.')) return;
+  if (!(await requireDeletePassword())) return;
   await sb.from('concurrents').delete().eq('id', id);
   toast('Concurrent supprimé', 'success');
   concurrentsLoaded = false;
@@ -6746,6 +6747,7 @@ async function saveClientConcurrent() {
 
 async function deleteClientConcurrent(linkId, clientId) {
   if (!confirm('Retirer ce concurrent de la fiche client ?')) return;
+  if (!(await requireDeletePassword())) return;
   const { error } = await sb.from('client_concurrents').delete().eq('id', linkId);
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
   toast('Concurrent retiré', 'success');
@@ -8844,6 +8846,7 @@ async function saveNewContact(clientId) {
 
 async function deleteContact(contactId, clientId) {
   if (!confirm('Supprimer ce contact ?')) return;
+  if (!(await requireDeletePassword())) return;
   const { error } = await sb.from('contacts').delete().eq('id', contactId);
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
   toast('Contact supprimé', 'success');
@@ -11441,11 +11444,7 @@ async function esDeleteClient(idx) {
     (cascade.length ? '\n\nLes éléments suivants seront aussi supprimés :\n• ' + cascade.join('\n• ') : '\n\nAucune liaison détectée.') +
     '\n\nCette action est irréversible.';
   if (!confirm(confirmMsg)) return;
-  const pwd = (typeof loadDeletePassword === 'function') ? await loadDeletePassword() : '';
-  if (pwd) {
-    const input = prompt('Entrez le mot de passe de suppression :');
-    if (input !== pwd) { toast('Mot de passe incorrect', 'error'); return; }
-  }
+  if (!(await requireDeletePassword())) return;
   if (linkedReports.length) {
     const { error: crErr } = await sb.from('reports').delete().eq('client_id', c.id);
     if (crErr) { toast('Erreur CR: ' + crErr.message, 'error'); return; }
@@ -11877,6 +11876,7 @@ async function dupDelete(clientId, clientName) {
   if (!confirm('⚠ Supprimer "' + clientName + '" ?' +
     (cascade.length ? '\n\nLes éléments suivants seront aussi supprimés :\n• ' + cascade.join('\n• ') : '\n\nAucune liaison.') +
     '\n\nIrréversible.')) return false;
+  if (!(await requireDeletePassword())) return false;
   if (counts.reports)  await sb.from('reports').delete().eq('client_id', clientId);
   if (counts.contacts) await sb.from('contacts').delete().eq('client_id', clientId);
   const { error } = await sb.from('clients').delete().eq('id', clientId);
@@ -11916,6 +11916,7 @@ async function dupMerge(groupIdx, keepId, removeId) {
     'de la source seront rattachées à la cible, puis la source sera supprimée.' +
     (_dupPushAkuiteo && keep.akuiteo_id ? '\nCôté Akuiteo : la fiche cible (' + keep.akuiteo_id + ') sera mise à jour avec les champs fusionnés.' : '') +
     warn + '\n\nIrréversible.')) return;
+  if (!(await requireDeletePassword())) return;
   showSyncLoading(true); setSyncText('Fusion en cours...');
   try {
     // 1) Charger les fiches complètes des deux côtés pour fusionner les champs
@@ -15251,6 +15252,7 @@ async function loadReport(id) {
 async function deleteReport() {
   if (!currentReport) return;
   if (!confirm('Supprimer ce compte-rendu ?')) return;
+  if (!(await requireDeletePassword())) return;
   // Supprimer les PJ du storage
   if (currentReport.pieces_jointes && currentReport.pieces_jointes.length) {
     const paths = currentReport.pieces_jointes.map(pj => pj.path);
@@ -21184,6 +21186,37 @@ async function saveDeletePassword() {
   }
 }
 
+// ═══ DEMANDE DE MOT DE PASSE (saisie masquée) ═══
+let _pwdAskResolve = null;
+function askPasswordModal(message) {
+  return new Promise(resolve => {
+    _pwdAskResolve = resolve;
+    let ov = document.getElementById('pwdAskOverlay');
+    if (!ov) { ov = document.createElement('div'); ov.id = 'pwdAskOverlay'; document.body.appendChild(ov); }
+    ov.style.cssText = 'position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center';
+    ov.innerHTML = `<div style="background:var(--card,#fff);border:1px solid var(--border);border-radius:12px;padding:18px 20px;width:340px;max-width:92vw;box-shadow:0 12px 40px rgba(0,0,0,.25)">
+      <div style="font-weight:700;font-size:14px;margin-bottom:10px">🔒 ${cmdEsc(message || 'Mot de passe requis')}</div>
+      <input type="password" id="pwdAskInput" autocomplete="off" placeholder="Mot de passe" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg-1,#fff);color:var(--t1);box-sizing:border-box" onkeydown="if(event.key==='Enter')_pwdAskOk();else if(event.key==='Escape')_pwdAskCancel()">
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-sm" onclick="_pwdAskCancel()">Annuler</button>
+        <button class="btn btn-sm btn-primary" onclick="_pwdAskOk()">Valider</button>
+      </div>
+    </div>`;
+    setTimeout(() => { const i = document.getElementById('pwdAskInput'); if (i) i.focus(); }, 50);
+  });
+}
+function _pwdAskOk() { const v = document.getElementById('pwdAskInput')?.value || ''; const ov = document.getElementById('pwdAskOverlay'); if (ov) ov.remove(); const r = _pwdAskResolve; _pwdAskResolve = null; if (r) r(v); }
+function _pwdAskCancel() { const ov = document.getElementById('pwdAskOverlay'); if (ov) ov.remove(); const r = _pwdAskResolve; _pwdAskResolve = null; if (r) r(null); }
+// Garde commun à toutes les suppressions : vérifie le mot de passe configuré (Admin). Renvoie true si autorisé.
+async function requireDeletePassword() {
+  const pwd = await loadDeletePassword();
+  if (!pwd) return true; // aucune protection configurée
+  const input = await askPasswordModal('Mot de passe requis pour supprimer');
+  if (input === null) return false; // annulé
+  if (input !== pwd) { toast('Mot de passe incorrect', 'error'); return false; }
+  return true;
+}
+
 // ═══ CHEMINS DOSSIERS CHANTIER PAR SOCIÉTÉ (Supabase crm_config) ═══
 async function loadDossierCheminsSocietes() {
   try {
@@ -21454,11 +21487,7 @@ async function deleteClient(clientId, clientName) {
     (linkedReports.length ? `${linkedReports.length} compte(s)-rendu(s) seront également supprimés.\n\n` : '') +
     'Cette action est irréversible.';
   if (!confirm(confirmMsg)) return;
-  const pwd = await loadDeletePassword();
-  if (pwd) {
-    const input = prompt('Entrez le mot de passe de suppression :');
-    if (input !== pwd) { toast('Mot de passe incorrect', 'error'); return; }
-  }
+  if (!(await requireDeletePassword())) return;
   // Si le client a un akuiteo_id, l'exclure de la synchro pour éviter la re-création
   const clientToDelete = DB.clients.find(c => c.id === clientId) || currentClient;
   if (clientToDelete?.akuiteo_id) {
