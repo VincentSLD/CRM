@@ -3652,7 +3652,9 @@ async function loadClientsPage(page, letter, search) {
     query = query.ilike('name', letter + '%');
   }
   if (search) {
-    query = query.or(`name.ilike.%${search}%,code.ilike.%${search}%,city.ilike.%${search}%,sector.ilike.%${search}%,email.ilike.%${search}%,raison_sociale.ilike.%${search}%,raison_sociale2.ilike.%${search}%`);
+    // Recherche tolérante à la ponctuation/espaces (ex. "6K" trouve "6.K ARCHI")
+    const _cols = ['name', 'code', 'city', 'sector', 'email', 'raison_sociale', 'raison_sociale2'];
+    for (const w of search.trim().split(/\s+/).filter(Boolean)) query = query.or(_looseIlikeOr(_cols, w));
   }
   // Filtres complémentaires (server-side) — multi-sélection
   if (clientsFilterDept.length) {
@@ -3785,7 +3787,8 @@ async function loadContactsPage(page, letter, search) {
     query = query.ilike('nom', letter + '%');
   }
   if (search) {
-    query = query.or(`nom.ilike.%${search}%,prenom.ilike.%${search}%,email.ilike.%${search}%,fonction.ilike.%${search}%`);
+    const _cols = ['nom', 'prenom', 'email', 'fonction'];
+    for (const w of search.trim().split(/\s+/).filter(Boolean)) query = query.or(_looseIlikeOr(_cols, w));
   }
   // Filtre par commercial du client lié (Novam / GPH) : restreindre aux contacts des clients concernés
   if (contactsFilterNovam || contactsFilterGph) {
@@ -4306,9 +4309,9 @@ function go(page) {
 }
 
 let endevUnlocked = false;
-function goEnDev() {
+async function goEnDev() {
   if (endevUnlocked) { go('endev'); return; }
-  const pwd = prompt("Mot de passe requis pour accéder à En Dev' :");
+  const pwd = await askPasswordModal("Mot de passe requis pour accéder à En Dev'");
   if (pwd === null) return;
   if (pwd === '025120') { endevUnlocked = true; go('endev'); }
   else { toast("Mot de passe incorrect", "error"); }
@@ -14632,9 +14635,9 @@ async function searchCRAffaire(q) {
   const dd = document.getElementById('crAffaireDropdown'); if (!dd) return;
   if (!_crSelectedClients.length) { dd.style.display = 'none'; return; }
   const ids = new Set(_crSelectedClients.map(c => c.id));
-  const ql = (q || '').toLowerCase();
+  const ql = (q || '').trim();
   let list = (DB.affaires || []).filter(a => ids.has(a.client_id));
-  if (ql) list = list.filter(a => [a.nom, a.code_projet, a.ville, a.code_postal].some(v => (v || '').toLowerCase().includes(ql)));
+  if (ql) list = list.filter(a => _looseMatch(ql, [a.nom, a.code_projet, a.ville, a.code_postal].filter(Boolean).join(' ')));
   list = list.slice(0, 100);
   const clear = _crSelectedAffaire ? `<div style="padding:8px 12px;cursor:pointer;font-size:12px;color:var(--red);border-top:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="removeCRAffaire()">✕ Retirer l'affaire liée</div>` : '';
   if (!list.length) { dd.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucune affaire pour cette société</div>' + clear; }
@@ -15273,6 +15276,20 @@ async function deleteReport() {
 
 // Recherche client pour CR (multi-select)
 let crClientTimeout = null;
+// Recherche tolérante : alnum minuscule (pour comparaison côté client)
+function _looseAlnum(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+// Construit une clause OR ilike "lettre par lettre" pour un mot sur plusieurs colonnes (côté serveur)
+function _looseIlikeOr(cols, word) {
+  const n = String(word).replace(/[^a-zA-Z0-9]/g, '');
+  const pat = n ? '%' + n.split('').join('%') + '%' : '%' + word + '%';
+  return cols.map(c => c + '.ilike.' + pat).join(',');
+}
+// Vrai si chaque mot de la requête (alnum) est contenu, dans l'ordre des lettres, dans le texte cible
+function _looseMatch(query, target) {
+  const hay = _looseAlnum(target);
+  return String(query || '').trim().split(/\s+/).filter(Boolean).every(w => { const nw = _looseAlnum(w); return !nw || hay.includes(nw); });
+}
+
 async function searchCRClient(q) {
   const dd = document.getElementById('crClientDropdown');
   if (!q || q.length < 1) { dd.style.display='none'; return; }
@@ -15434,12 +15451,8 @@ async function searchCRContact(q) {
     }
   }
 
-  const ql = (q||'').toLowerCase();
-  const filtered = ql ? allContacts.filter(c =>
-    (c.nom||'').toLowerCase().includes(ql) ||
-    (c.prenom||'').toLowerCase().includes(ql) ||
-    (c.fonction||'').toLowerCase().includes(ql)
-  ) : allContacts;
+  const ql = (q || '').trim();
+  const filtered = ql ? allContacts.filter(c => _looseMatch(ql, (c.nom || '') + ' ' + (c.prenom || '') + ' ' + (c.fonction || ''))) : allContacts;
 
   const createBtn = `<div style="padding:10px 12px;cursor:pointer;font-size:12px;color:var(--accent);font-weight:600;border-top:1px solid var(--border)"
     onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
