@@ -15278,14 +15278,14 @@ async function searchCRClient(q) {
   if (!q || q.length < 1) { dd.style.display='none'; return; }
   clearTimeout(crClientTimeout);
   crClientTimeout = setTimeout(async () => {
-    // Recherche "contient" chaque mot séparément
+    // Recherche tolérante à la ponctuation/espaces : chaque mot devient un motif "lettre par lettre"
+    // ex. "6K" -> "%6%K%" qui retrouve "6.K ARCHI". Chaque mot doit matcher (nom ou code).
     const words = q.trim().split(/\s+/).filter(Boolean);
     let query = sb.from('clients').select('id,name,code,city');
-    if (words.length === 1) {
-      query = query.or(`name.ilike.%${words[0]}%,code.ilike.%${words[0]}%`);
-    } else {
-      // Chaque mot doit être contenu dans le nom
-      for (const w of words) query = query.ilike('name', `%${w}%`);
+    for (const w of words) {
+      const norm = w.replace(/[^a-zA-Z0-9]/g, '');
+      const pat = norm ? '%' + norm.split('').join('%') + '%' : '%' + w + '%';
+      query = query.or(`name.ilike.${pat},code.ilike.${pat}`);
     }
     const { data } = await query.order('name').limit(100);
     const selectedIds = new Set(_crSelectedClients.map(c => c.id));
