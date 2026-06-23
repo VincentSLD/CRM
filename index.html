@@ -15313,16 +15313,19 @@ async function searchCRClient(q) {
   if (!q || q.length < 1) { dd.style.display='none'; return; }
   clearTimeout(crClientTimeout);
   crClientTimeout = setTimeout(async () => {
-    // Recherche tolérante à la ponctuation/espaces : chaque mot devient un motif "lettre par lettre"
-    // ex. "6K" -> "%6%K%" qui retrouve "6.K ARCHI". Chaque mot doit matcher (nom ou code).
+    // Recherche en 2 temps : 1) mots entiers (contigus, précis) ; 2) repli tolérant ("6K" -> "6.K")
     const words = q.trim().split(/\s+/).filter(Boolean);
-    let query = sb.from('clients').select('id,name,code,city');
-    for (const w of words) {
-      const norm = w.replace(/[^a-zA-Z0-9]/g, '');
-      const pat = norm ? '%' + norm.split('').join('%') + '%' : '%' + w + '%';
-      query = query.or(`name.ilike.${pat},code.ilike.${pat}`);
-    }
-    const { data } = await query.order('name').limit(100);
+    const COLS = ['name', 'code'];
+    const build = (loose) => {
+      let query = sb.from('clients').select('id,name,code,city');
+      for (const w of words) {
+        if (loose) { query = query.or(_looseIlikeOr(COLS, w)); }
+        else { const pat = '%' + w.replace(/[%,]/g, '') + '%'; query = query.or(COLS.map(c => c + '.ilike.' + pat).join(',')); }
+      }
+      return query.order('name').limit(100);
+    };
+    let { data } = await build(false);
+    if (!data || !data.length) { ({ data } = await build(true)); }
     const selectedIds = new Set(_crSelectedClients.map(c => c.id));
     const filtered = (data || []).filter(c => !selectedIds.has(c.id));
     filtered.sort((a, b) => _searchScore(q, b.name, b.code) - _searchScore(q, a.name, a.code) || (a.name || '').localeCompare(b.name || '', 'fr'));
