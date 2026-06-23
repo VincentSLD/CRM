@@ -200,6 +200,20 @@ ALTER TABLE reports ADD COLUMN IF NOT EXISTS legacy_id TEXT;
 -- Lien d'un compte-rendu vers une affaire (optionnel)
 ALTER TABLE reports ADD COLUMN IF NOT EXISTS affaire_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_reports_affaire_id ON reports(affaire_id) WHERE affaire_id IS NOT NULL;
+
+-- ═══ Journal de connexions au CRM ═══
+-- Une ligne par connexion réussie (qui s'est identifié et quand).
+CREATE TABLE IF NOT EXISTS connexions_log (
+  id BIGSERIAL PRIMARY KEY,
+  user_id TEXT,
+  email TEXT,
+  nom TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE connexions_log ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "connexions_log_all" ON connexions_log;
+CREATE POLICY "connexions_log_all" ON connexions_log FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE INDEX IF NOT EXISTS idx_connexions_log_created ON connexions_log(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_clients_legacy_id ON clients(legacy_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_legacy_id ON contacts(legacy_id);
 CREATE INDEX IF NOT EXISTS idx_reports_legacy_id ON reports(legacy_id);

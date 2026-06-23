@@ -4921,7 +4921,7 @@ function renderPage(page) {
     _clientsServerLoaded = true;
     loadClientsPage(clientsPage || 0, clientsLetter, clientsSearch);
   }
-  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); }, 50);
+  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); loadConnexionsLog(); }, 50);
   if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); }, 50);
   if (page === 'analyse') setTimeout(initAnalyse, 30);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
@@ -17017,6 +17017,15 @@ function renderAdmin() {
       <div id="adminAccessList" style="color:var(--t3);font-size:13px">Chargement...</div>
     </div>
   </div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <div class="card-title">Journal de connexions</div>
+      <button class="btn" onclick="loadConnexionsLog()" style="font-size:12px">↻ Rafraîchir</button>
+    </div>
+    <div class="card-body">
+      <div id="connexionsLogContainer" style="color:var(--t3);font-size:13px">Chargement...</div>
+    </div>
+  </div>
   <div class="card">
     <div class="card-header" style="flex-wrap:wrap;gap:8px">
       <div class="card-title">Commerciaux — Liaisons Akuiteo & Lucca</div>
@@ -21217,6 +21226,23 @@ async function requireDeletePassword() {
   return true;
 }
 
+// ═══ JOURNAL DE CONNEXIONS ═══
+async function loadConnexionsLog() {
+  const el = document.getElementById('connexionsLogContainer');
+  if (!el) return;
+  el.innerHTML = 'Chargement...';
+  try {
+    const { data, error } = await sb.from('connexions_log').select('email,nom,created_at').order('created_at', { ascending: false }).limit(300);
+    if (error) throw error;
+    if (!data || !data.length) { el.innerHTML = '<div style="color:var(--t3)">Aucune connexion enregistrée pour le moment.</div>'; return; }
+    el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Date &amp; heure</th><th>Utilisateur</th><th>Email</th></tr></thead><tbody>'
+      + data.map(r => '<tr><td style="font-size:12px;white-space:nowrap">' + (r.created_at ? new Date(r.created_at).toLocaleString('fr-FR') : '—') + '</td><td style="font-size:12px">' + cmdEsc(r.nom || '—') + '</td><td style="font-size:12px">' + cmdEsc(r.email || '—') + '</td></tr>').join('')
+      + '</tbody></table></div><div style="font-size:11px;color:var(--t3);margin-top:6px">' + data.length + ' dernière(s) connexion(s) affichée(s)</div>';
+  } catch (e) {
+    el.innerHTML = '<div style="color:var(--red)">Journal indisponible. Exécutez la création de la table <code>connexions_log</code> (docs add_missing_columns.sql).</div>';
+  }
+}
+
 // ═══ CHEMINS DOSSIERS CHANTIER PAR SOCIÉTÉ (Supabase crm_config) ═══
 async function loadDossierCheminsSocietes() {
   try {
@@ -25036,6 +25062,15 @@ async function onAuthSuccess(user) {
     }).select().single();
     currentCommercial = newComm;
   }
+
+  // Journal de connexion (enregistrement non bloquant)
+  try {
+    sb.from('connexions_log').insert({
+      user_id: user.id,
+      email: user.email || null,
+      nom: (currentCommercial && currentCommercial.nom) || user.user_metadata?.full_name || (user.email ? user.email.split('@')[0] : null)
+    }).then(() => {}, () => {});
+  } catch (e) {}
 
   // Initialiser le mode de vue : admins voient tout par défaut, commerciaux voient leurs données
   if (currentCommercial && currentCommercial.role === 'admin') {
