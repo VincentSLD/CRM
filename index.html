@@ -14637,7 +14637,7 @@ async function searchCRAffaire(q) {
   const ids = new Set(_crSelectedClients.map(c => c.id));
   const ql = (q || '').trim();
   let list = (DB.affaires || []).filter(a => ids.has(a.client_id));
-  if (ql) list = list.filter(a => _looseMatch(ql, [a.nom, a.code_projet, a.ville, a.code_postal].filter(Boolean).join(' ')));
+  if (ql) { list = list.filter(a => _looseMatch(ql, [a.nom, a.code_projet, a.ville, a.code_postal].filter(Boolean).join(' '))); list.sort((a, b) => _searchScore(ql, b.nom, b.code_projet, b.ville) - _searchScore(ql, a.nom, a.code_projet, a.ville)); }
   list = list.slice(0, 100);
   const clear = _crSelectedAffaire ? `<div style="padding:8px 12px;cursor:pointer;font-size:12px;color:var(--red);border-top:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="removeCRAffaire()">✕ Retirer l'affaire liée</div>` : '';
   if (!list.length) { dd.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucune affaire pour cette société</div>' + clear; }
@@ -15289,6 +15289,24 @@ function _looseMatch(query, target) {
   const hay = _looseAlnum(target);
   return String(query || '').trim().split(/\s+/).filter(Boolean).every(w => { const nw = _looseAlnum(w); return !nw || hay.includes(nw); });
 }
+// Score de pertinence : correspondance exacte > préfixe > sous-chaîne contiguë > mots contigus > lettres dans l'ordre
+function _searchScore(query, ...targets) {
+  const nq = _looseAlnum(query);
+  if (!nq) return 0;
+  const words = String(query || '').trim().split(/\s+/).filter(Boolean).map(_looseAlnum).filter(Boolean);
+  let best = 0;
+  for (const t of targets) {
+    const nt = _looseAlnum(t);
+    if (!nt) continue;
+    let s = 0;
+    if (nt === nq) s = 1000;
+    else if (nt.startsWith(nq)) s = 600;
+    else if (nt.includes(nq)) s = 400; // toutes les lettres de la requête, contiguës
+    for (const w of words) { if (nt.startsWith(w)) s += 80; else if (nt.includes(w)) s += 50; else s += 3; }
+    if (s > best) best = s;
+  }
+  return best;
+}
 
 async function searchCRClient(q) {
   const dd = document.getElementById('crClientDropdown');
@@ -15307,6 +15325,7 @@ async function searchCRClient(q) {
     const { data } = await query.order('name').limit(100);
     const selectedIds = new Set(_crSelectedClients.map(c => c.id));
     const filtered = (data || []).filter(c => !selectedIds.has(c.id));
+    filtered.sort((a, b) => _searchScore(q, b.name, b.code) - _searchScore(q, a.name, a.code) || (a.name || '').localeCompare(b.name || '', 'fr'));
     const createBtn = `<div style="padding:10px 12px;cursor:pointer;font-size:12px;color:var(--accent);font-weight:600;border-top:1px solid var(--border)"
       onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
       onclick="openNewClientFromCR()">+ Créer une nouvelle société</div>`;
@@ -15452,7 +15471,8 @@ async function searchCRContact(q) {
   }
 
   const ql = (q || '').trim();
-  const filtered = ql ? allContacts.filter(c => _looseMatch(ql, (c.nom || '') + ' ' + (c.prenom || '') + ' ' + (c.fonction || ''))) : allContacts;
+  let filtered = ql ? allContacts.filter(c => _looseMatch(ql, (c.nom || '') + ' ' + (c.prenom || '') + ' ' + (c.fonction || ''))) : allContacts;
+  if (ql) filtered = filtered.slice().sort((a, b) => _searchScore(ql, (b.nom || '') + ' ' + (b.prenom || ''), b.fonction) - _searchScore(ql, (a.nom || '') + ' ' + (a.prenom || ''), a.fonction));
 
   const createBtn = `<div style="padding:10px 12px;cursor:pointer;font-size:12px;color:var(--accent);font-weight:600;border-top:1px solid var(--border)"
     onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"
