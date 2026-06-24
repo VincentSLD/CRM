@@ -340,16 +340,16 @@ CREATE INDEX IF NOT EXISTS idx_contacts_fullnorm_trgm
 -- Fonction de recherche tolérante de contacts, classée par pertinence
 CREATE OR REPLACE FUNCTION search_contacts(q text, lim int DEFAULT 20)
 RETURNS TABLE (
-  id text, client_id text, nom text, prenom text, fonction text, service text,
-  email text, email2 text, telephone text, telephone2 text, mobile text, score real
+  id text, client_id text, nom text, prenom text, titre text, fonction text, service text,
+  email text, email2 text, telephone text, mobile text, score real
 )
 LANGUAGE sql STABLE AS $$
   WITH qn AS (
     SELECT regexp_replace(lower(coalesce(q,'')), '[^a-z0-9]', '', 'g') AS qq,
            lower(coalesce(q,'')) AS ql
   )
-  SELECT c.id::text, c.client_id::text, c.nom::text, c.prenom::text, c.fonction::text, c.service::text,
-         c.email::text, c.email2::text, c.telephone::text, c.telephone2::text, c.mobile::text,
+  SELECT c.id::text, c.client_id::text, c.nom::text, c.prenom::text, c.titre::text, c.fonction::text, c.service::text,
+         c.email::text, c.email2::text, c.telephone::text, c.mobile::text,
          GREATEST(
            extensions.similarity(lower(coalesce(c.nom,'') || ' ' || coalesce(c.prenom,'')), qn.ql),
            extensions.similarity(lower(coalesce(c.prenom,'') || ' ' || coalesce(c.nom,'')), qn.ql),

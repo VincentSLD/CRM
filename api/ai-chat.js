@@ -222,7 +222,7 @@ STATUTS ET CATÉGORIES :
 
 Tables disponibles (schéma principal) :
 - clients : id, name, code, akuiteo_id, city, code_postal, departement, region, siren, siret, ape, forme_juridique, raison_sociale, raison_sociale2, account_manager_id, account_manager_name, salesman_name, commerciaux_associes, mk_categorie, mk_sous_categorie, mk_categorie_pro, mk_secteur, mk_type, mk_groupe, mk_origine, ca, obj, status (actif/nouveau/dormant), categorie_compte (JSONB), chiffre_affaires, effectif, capital, secteur_activite, procedure_collective, email, phone, telephone2, mobile, fax, site_web, created_at
-- contacts : id, client_id, nom, prenom, fonction, service, email, email2, telephone, telephone2, mobile, akuiteo_id
+- contacts : id, client_id, nom, prenom, titre (civilité M./Mme), fonction, service, email, email2, telephone, mobile, akuiteo_id
 - devis : id, ref, akuiteo_id, client_id, client_name, sujet, montant, statut (pending/accepted/refused/sent/signed), date, projet, agence, societe, responsable_id, commercial_id, probabilite, affaire_id, marche_id
 - commandes : id, ref, akuiteo_id, client_id, client_name, nom, montant, statut (en_cours/livree/facturee/annulee), date, livraison, projet, agence, societe, surface_facturee, affaire_id, marche_id, description, custom_data (JSONB contenant _lines: tableau de lignes avec name, quantity, unitPrice, amountTotal, startDate, endDate, estimatedDeliveryDate, estimatedBillingDate, projectedBillingDate)
 - factures : id, ref, akuiteo_id, client_id, client_name, montant, montant_ttc, reste_a_payer, statut (payee/attente/envoyee/retard), date, echeance, jours_retard, date_paiement, projet, agence, societe, type_facture, affaire_id, marche_id
@@ -242,10 +242,10 @@ Exemples :
 - Clients dormants : query_table(table="clients", filters={"status.eq":"dormant"}, select="name,city,status,categorie_compte", order="name")
 - Clients stratégiques d'une agence : query_table(table="clients", filters={"categorie_compte.cs":"{\\"GPH85\\":\\"A- Stratégique\\"}"}, select="name,city,categorie_compte")
 - Chercher une société (TOLÉRANT, à privilégier) : search_clients(q="6K") → renvoie les candidats classés ; puis query_table(table="clients", filters={"id.eq":"<id du meilleur candidat>"}) pour les détails complets.
-- Chercher une société (exact, si tu connais déjà le nom précis) : query_table(table="clients", filters={"name.ilike":"%rubato%"}, select="id,name,code,city,code_postal,ca,status,account_manager_name,salesman_name,categorie_compte,secteur_activite,telephone,telephone2,email,site_web")
-- Contacts d'une société : query_table(table="contacts", filters={"client_id.eq":"<id_client>"}, select="nom,prenom,fonction,service,email,email2,telephone,telephone2,mobile")
+- Chercher une société (exact, si tu connais déjà le nom précis) : query_table(table="clients", filters={"name.ilike":"%rubato%"}, select="id,name,code,city,code_postal,ca,status,account_manager_name,salesman_name,categorie_compte,secteur_activite,phone,telephone2,mobile,email,site_web") [NB : la table clients utilise phone et telephone2, PAS telephone]
+- Contacts d'une société : query_table(table="contacts", filters={"client_id.eq":"<id_client>"}, select="nom,prenom,titre,fonction,service,email,email2,telephone,mobile") [NB : la table contacts utilise telephone et mobile, PAS telephone2]
 - Chercher un contact par nom (TOLÉRANT, à privilégier) : search_contacts(q="dupond") → candidats classés avec coordonnées et client_id ; utilise client_id pour la société.
-- Chercher un contact par nom (exact, si nom précis connu) : query_table(table="contacts", filters={"nom.ilike":"%dupont%"}, select="nom,prenom,fonction,email,email2,telephone,telephone2,mobile,client_id")
+- Chercher un contact par nom (exact, si nom précis connu) : query_table(table="contacts", filters={"nom.ilike":"%dupont%"}, select="nom,prenom,titre,fonction,email,email2,telephone,mobile,client_id")
 
 - Devis d'un client : query_table(table="devis", filters={"client_id.eq":"<id_client>"}, select="ref,sujet,montant,statut,date,agence,probabilite", order="-date")
 - Commandes d'un client : query_table(table="commandes", filters={"client_id.eq":"<id_client>"}, select="ref,nom,montant,statut,date,livraison,agence", order="-date")
