@@ -6,11 +6,11 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABA
 const TOOLS = [
   {
     name: 'query_table',
-    description: 'Interroger une table Supabase avec filtres. Retourne les lignes. Les tables disponibles sont: clients, contacts, devis, commandes, factures, affaires, marches, reports, commerciaux.',
+    description: 'Interroger une table Supabase avec filtres. Retourne les lignes. Les tables disponibles sont: clients, contacts, devis, commandes, factures, affaires, marches, reports, commerciaux, taches_commerciales, opportunites.',
     input_schema: {
       type: 'object',
       properties: {
-        table: { type: 'string', enum: ['clients','contacts','devis','commandes','factures','affaires','marches','reports','commerciaux'] },
+        table: { type: 'string', enum: ['clients','contacts','devis','commandes','factures','affaires','marches','reports','commerciaux','taches_commerciales','opportunites'] },
         select: { type: 'string', description: 'Colonnes séparées par virgule, ex: "id,name,ca". * pour toutes.', default: '*' },
         filters: { type: 'object', description: 'Filtres. Clés: colonne.op (eq,neq,gt,gte,lt,lte,like,ilike,in,is). Ex: {"statut.eq":"retard","date.gte":"2024-01-01","name.ilike":"%rubato%"}' },
         order: { type: 'string', description: 'Colonne de tri, préfixer par "-" pour DESC. Ex: "-date"' },
@@ -36,7 +36,7 @@ const TOOLS = [
   }
 ];
 
-const TABLE_LABELS = { clients:'clients', contacts:'contacts', devis:'devis', commandes:'commandes', factures:'factures', affaires:'affaires', marches:'marchés', reports:'comptes-rendus', commerciaux:'commerciaux' };
+const TABLE_LABELS = { clients:'clients', contacts:'contacts', devis:'devis', commandes:'commandes', factures:'factures', affaires:'affaires', marches:'marchés', reports:'comptes-rendus', commerciaux:'commerciaux', taches_commerciales:'tâches commerciales', opportunites:'opportunités' };
 
 async function sbRequest(path, options = {}) {
   const url = SUPABASE_URL + '/rest/v1/' + path;
@@ -198,6 +198,8 @@ Tables disponibles (schéma principal) :
 - marches : id, ref, akuiteo_id, nom, client_id, client_name, agence, statut, date_debut, date_fin, montant, montant_ttc, nb_affaires
 - reports : id, client_id, client_name, date, titre, type_cr, statut_cr, redacteur_id, agence
 - commerciaux : id, nom, email, akuiteo_manager_id, role
+- taches_commerciales : id, titre, description, priorite (basse/normale/haute), statut (a_faire/en_cours/terminee/annulee), echeance, client_id, client_name, affaire_id, affaire_nom, createur_nom, createur_email, assigne_nom, assigne_email, created_at, done_at
+- opportunites : id, akuiteo_id, code, nom, description, client_id, client_name, contact_name, montant, devise, probabilite (%), statut (IN_PROGRESS=en cours / WON=gagnée / LOST=perdue / DISCARD=abandonnée), stage (libellé du stade), pipe (portefeuille : Marchés privés/publics), type_origine, origine, responsable, date_signature (signature prévisionnelle), date_creation
 
 Opérateurs de filtre : eq (=), neq (≠), gt (>), gte (≥), lt (<), lte (≤), like (case sensitive), ilike (case insensitive, utilise % pour wildcards), in, is (pour null : "col.is" : "null")
 
@@ -217,6 +219,10 @@ Exemples :
 - Planification commande : query_table(table="commandes", filters={"client_id.eq":"<id_client>","statut.eq":"en_cours"}, select="ref,nom,montant,statut,date,livraison,custom_data")
 - Affaires d'un client : query_table(table="affaires", filters={"client_id.eq":"<id_client>"}, select="nom,code_projet,statut,date_debut,date_fin,montant,agence", order="-date_debut")
 - Marchés d'un client : query_table(table="marches", filters={"client_id.eq":"<id_client>"}, select="ref,nom,statut,date_debut,date_fin,montant,nb_affaires,agence", order="-date_debut")
+- Tâches d'un client : query_table(table="taches_commerciales", filters={"client_id.eq":"<id_client>"}, select="titre,description,priorite,statut,echeance,assigne_nom,createur_nom,affaire_nom", order="echeance")
+- Tâches en cours assignées à quelqu'un : query_table(table="taches_commerciales", filters={"assigne_email.eq":"<email>","statut.in":"(a_faire,en_cours)"}, select="titre,priorite,statut,echeance,client_name", order="echeance")
+- Opportunités d'un client : query_table(table="opportunites", filters={"client_id.eq":"<id_client>"}, select="nom,code,stage,statut,montant,probabilite,pipe,type_origine,responsable,contact_name,date_signature", order="-date_signature")
+- Pipeline opportunités en cours : query_table(table="opportunites", filters={"statut.eq":"IN_PROGRESS"}, select="nom,client_name,stage,montant,probabilite,responsable,date_signature", order="-montant")
 
 IMPORTANT pour les recherches société/contacts :
 - Quand on te demande une société, cherche d'abord dans la table clients, puis récupère ses contacts avec client_id. Cherche aussi les devis, commandes et factures si pertinent.
@@ -233,6 +239,8 @@ Quand on te demande un "historique", "point complet", "résumé", "où on en est
 4. Commandes en cours : pour CHAQUE établissement, chercher : query_table(table="commandes", filters={"client_id.eq":"<id>","statut.eq":"en_cours"}, select="ref,nom,montant,statut,date,livraison,agence,surface_facturee,custom_data", order="-date") — commandes actives avec dates de livraison (DLR) et planification. Dans custom_data._lines : extraire estimatedDeliveryDate (date de livraison prévue), estimatedBillingDate (date de facturation prévue), projectedBillingDate (date de facturation projetée), startDate, endDate pour chaque ligne
 5. Factures : pour CHAQUE établissement : query_table(table="factures", filters={"client_id.eq":"<id>"}, select="ref,montant,reste_a_payer,statut,date,echeance,jours_retard,agence", order="-date") — reste à facturer (montant commande - factures émises) et factures impayées (statut "attente" ou "retard" avec jours de retard et reste_a_payer)
 6. Derniers comptes-rendus : query_table(table="reports", filters={"client_id.eq":"<id>"}, select="titre,date,type_cr,agence", order="-date", limit=5) — les 5 derniers CR pour contexte relationnel
+7. Opportunités : pour CHAQUE établissement, query_table(table="opportunites", filters={"client_id.eq":"<id>"}, select="nom,code,stage,statut,montant,probabilite,pipe,responsable,contact_name,date_signature", order="-date_signature") — opportunités commerciales en cours/gagnées/perdues, avec stade, montant, probabilité et date de signature prévisionnelle
+8. Tâches commerciales : pour CHAQUE établissement, query_table(table="taches_commerciales", filters={"client_id.eq":"<id>"}, select="titre,priorite,statut,echeance,assigne_nom,affaire_nom", order="echeance") — tâches à faire / en cours liées au client (qui doit faire quoi, pour quand)
 
 PRÉSENTATION PAR ÉTABLISSEMENT :
 Si le client a des établissements secondaires avec de l'activité (devis, commandes ou factures), tu DOIS séparer les informations par établissement :
@@ -242,6 +250,8 @@ Si le client a des établissements secondaires avec de l'activité (devis, comma
 - 📦 Commandes en cours : ref, nom, montant, DLR, planification...
 - 💰 Reste à facturer : ...
 - ⚠️ Factures impayées : ...
+- 🎯 Opportunités : nom, stade, montant, probabilité, signature prévue...
+- ✅ Tâches : titre, statut, échéance, assigné à...
 
 🏢 <b>NOM ÉTABLISSEMENT SECONDAIRE 1</b> (Secondaire — SIRET xxx — Ville)
 - 📝 Pipeline devis : ...
@@ -265,6 +275,8 @@ S'il n'y a qu'un seul établissement (pas de SIREN ou pas d'autres établissemen
 - 📦 Commandes en cours : pour chaque commande, afficher ref, nom, montant, date de livraison (DLR = champ "livraison"), et si custom_data disponible : dates prévisionnelles par ligne (livraison estimée, facturation estimée/projetée)
 - 💰 Reste à facturer : montant total restant à facturer sur les commandes en cours
 - ⚠️ Factures impayées : nombre, montant total, jours de retard
+- 🎯 Opportunités : pour chaque opportunité en cours/récente : nom, stade, montant, probabilité, date de signature prévisionnelle, responsable, contact
+- ✅ Tâches commerciales : tâches à faire / en cours (titre, priorité, échéance, assigné à) ; signale les tâches en retard (échéance dépassée et statut non terminé)
 - 📞 Dernières interactions : résumé des derniers CR
 
 Réponds en français, concis, avec des chiffres exacts issus des outils. Format monnaie : k€ ou M€ pour les grands nombres.
