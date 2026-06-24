@@ -32,6 +32,18 @@ const TOOLS = [
     }
   },
   {
+    name: 'search_contacts',
+    description: "Recherche TOLÉRANTE d'un contact (personne) par nom et/ou prénom : insensible à la ponctuation, aux espaces, à la casse, à l'ordre nom/prénom ET aux fautes de frappe (trigrammes). À utiliser EN PRIORITÉ pour retrouver une personne quand le nom est incertain (dictée vocale, orthographe approximative). Retourne les candidats classés par pertinence avec leurs coordonnées et client_id. Utilise client_id pour retrouver la société associée.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        q: { type: 'string', description: 'Nom et/ou prénom recherché (partiel, mal orthographié, ordre indifférent)' },
+        limit: { type: 'integer', default: 20, maximum: 50 }
+      },
+      required: ['q']
+    }
+  },
+  {
     name: 'aggregate_table',
     description: 'Calcule une agrégation (somme, moyenne, nombre) sur une table avec filtres et groupement. Utile pour CA, montants totaux, etc.',
     input_schema: {
@@ -81,10 +93,10 @@ function buildQueryParams(filters, select, order, limit) {
 
 async function executeTool(name, input) {
   try {
-    if (name === 'search_clients') {
+    if (name === 'search_clients' || name === 'search_contacts') {
       const { q, limit = 20 } = input || {};
       if (!q || !String(q).trim()) return { ok: false, error: 'q (texte recherché) requis' };
-      const data = await sbRequest('rpc/search_clients', { method: 'POST', body: JSON.stringify({ q: String(q), lim: Math.min(limit || 20, 50) }) });
+      const data = await sbRequest('rpc/' + name, { method: 'POST', body: JSON.stringify({ q: String(q), lim: Math.min(limit || 20, 50) }) });
       return { ok: true, count: Array.isArray(data) ? data.length : 0, rows: data };
     }
     if (name === 'query_table') {
@@ -145,6 +157,7 @@ async function callClaude(ANTHROPIC_KEY, body) {
 function toolLabel(tu) {
   const tbl = TABLE_LABELS[tu.input?.table] || tu.input?.table || 'données';
   if (tu.name === 'search_clients') return 'Recherche société « ' + (tu.input?.q || '') + ' »';
+  if (tu.name === 'search_contacts') return 'Recherche contact « ' + (tu.input?.q || '') + ' »';
   if (tu.name === 'query_table') return 'Consultation ' + tbl;
   if (tu.name === 'aggregate_table') return 'Calcul sur ' + tbl;
   return tu.name;
@@ -194,7 +207,7 @@ RÈGLES STRICTES :
 3. Si tu estimes qu'une recherche externe (web, marché, concurrence) serait utile, DEMANDE d'abord l'autorisation à l'utilisateur avant de répondre. N'invente jamais de données externes.
 4. Enchaîne plusieurs appels d'outils si nécessaire pour répondre précisément.
 5. Sois TOUJOURS force de proposition : après avoir répondu à une question, propose des analyses complémentaires, des pistes d'action concrètes ou des alertes pertinentes.
-6. Quand on te demande des infos sur une société ou un contact, cherche TOUJOURS dans le CRM d'abord. Pour retrouver une société par son nom, utilise EN PRIORITÉ l'outil search_clients (recherche tolérante) PLUTÔT qu'un query_table avec ilike : il retrouve la société même si le nom est abrégé, mal orthographié ou ponctué différemment (ex. "6K" → "6.K ARCHI"). Ne conclus JAMAIS qu'un client est absent de la base sans avoir essayé search_clients. Récupère ensuite ses contacts avec client_id et affiche TOUTES les coordonnées disponibles.
+6. Quand on te demande des infos sur une société ou un contact, cherche TOUJOURS dans le CRM d'abord. Pour retrouver une société par son nom, utilise EN PRIORITÉ l'outil search_clients (recherche tolérante) PLUTÔT qu'un query_table avec ilike : il retrouve la société même si le nom est abrégé, mal orthographié ou ponctué différemment (ex. "6K" → "6.K ARCHI"). Ne conclus JAMAIS qu'un client est absent de la base sans avoir essayé search_clients. De même, pour retrouver une personne par son nom, utilise EN PRIORITÉ search_contacts (tolérant). Récupère ensuite ses contacts avec client_id et affiche TOUTES les coordonnées disponibles.
 7. Quand tu affiches des coordonnées, utilise des liens HTML cliquables : <a href="mailto:email">email</a> pour les emails et affiche les numéros de téléphone en clair (ils seront automatiquement rendus cliquables par le CRM). Formate les numéros au format XX XX XX XX XX.
 
 TON RÔLE STRATÉGIQUE :
@@ -231,7 +244,8 @@ Exemples :
 - Chercher une société (TOLÉRANT, à privilégier) : search_clients(q="6K") → renvoie les candidats classés ; puis query_table(table="clients", filters={"id.eq":"<id du meilleur candidat>"}) pour les détails complets.
 - Chercher une société (exact, si tu connais déjà le nom précis) : query_table(table="clients", filters={"name.ilike":"%rubato%"}, select="id,name,code,city,code_postal,ca,status,account_manager_name,salesman_name,categorie_compte,secteur_activite,telephone,telephone2,email,site_web")
 - Contacts d'une société : query_table(table="contacts", filters={"client_id.eq":"<id_client>"}, select="nom,prenom,fonction,service,email,email2,telephone,telephone2,mobile")
-- Chercher un contact par nom : query_table(table="contacts", filters={"nom.ilike":"%dupont%"}, select="nom,prenom,fonction,email,email2,telephone,telephone2,mobile,client_id")
+- Chercher un contact par nom (TOLÉRANT, à privilégier) : search_contacts(q="dupond") → candidats classés avec coordonnées et client_id ; utilise client_id pour la société.
+- Chercher un contact par nom (exact, si nom précis connu) : query_table(table="contacts", filters={"nom.ilike":"%dupont%"}, select="nom,prenom,fonction,email,email2,telephone,telephone2,mobile,client_id")
 
 - Devis d'un client : query_table(table="devis", filters={"client_id.eq":"<id_client>"}, select="ref,sujet,montant,statut,date,agence,probabilite", order="-date")
 - Commandes d'un client : query_table(table="commandes", filters={"client_id.eq":"<id_client>"}, select="ref,nom,montant,statut,date,livraison,agence", order="-date")

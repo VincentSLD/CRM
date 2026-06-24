@@ -330,3 +330,39 @@ LANGUAGE sql STABLE AS $$
   LIMIT LEAST(COALESCE(lim, 20), 50);
 $$;
 GRANT EXECUTE ON FUNCTION search_clients(text, int) TO anon, authenticated, service_role;
+
+-- Index trigram sur le nom complet du contact (nom + prénom) normalisé
+CREATE INDEX IF NOT EXISTS idx_contacts_fullnorm_trgm
+  ON contacts USING gin (regexp_replace(lower(coalesce(nom,'') || coalesce(prenom,'')), '[^a-z0-9]', '', 'g') gin_trgm_ops);
+
+-- Fonction de recherche tolérante de contacts, classée par pertinence
+CREATE OR REPLACE FUNCTION search_contacts(q text, lim int DEFAULT 20)
+RETURNS TABLE (
+  id text, client_id text, nom text, prenom text, fonction text, service text,
+  email text, email2 text, telephone text, telephone2 text, mobile text, score real
+)
+LANGUAGE sql STABLE AS $$
+  WITH qn AS (
+    SELECT regexp_replace(lower(coalesce(q,'')), '[^a-z0-9]', '', 'g') AS qq,
+           lower(coalesce(q,'')) AS ql
+  )
+  SELECT c.id::text, c.client_id::text, c.nom::text, c.prenom::text, c.fonction::text, c.service::text,
+         c.email::text, c.email2::text, c.telephone::text, c.telephone2::text, c.mobile::text,
+         GREATEST(
+           similarity(lower(coalesce(c.nom,'') || ' ' || coalesce(c.prenom,'')), qn.ql),
+           similarity(lower(coalesce(c.prenom,'') || ' ' || coalesce(c.nom,'')), qn.ql),
+           CASE
+             WHEN qn.qq <> '' AND regexp_replace(lower(coalesce(c.nom,'') || coalesce(c.prenom,'')), '[^a-z0-9]', '', 'g') LIKE '%' || qn.qq || '%' THEN 0.9
+             WHEN qn.qq <> '' AND regexp_replace(lower(coalesce(c.prenom,'') || coalesce(c.nom,'')), '[^a-z0-9]', '', 'g') LIKE '%' || qn.qq || '%' THEN 0.9
+             ELSE 0
+           END
+         )::real AS score
+  FROM contacts c, qn
+  WHERE (qn.qq <> '' AND (
+            regexp_replace(lower(coalesce(c.nom,'') || coalesce(c.prenom,'')), '[^a-z0-9]', '', 'g') LIKE '%' || qn.qq || '%'
+         OR regexp_replace(lower(coalesce(c.prenom,'') || coalesce(c.nom,'')), '[^a-z0-9]', '', 'g') LIKE '%' || qn.qq || '%'))
+     OR similarity(lower(coalesce(c.nom,'') || ' ' || coalesce(c.prenom,'')), qn.ql) > 0.25
+  ORDER BY score DESC, c.nom
+  LIMIT LEAST(COALESCE(lim, 20), 50);
+$$;
+GRANT EXECUTE ON FUNCTION search_contacts(text, int) TO anon, authenticated, service_role;
