@@ -4918,14 +4918,14 @@ function renderTaches() {
     </div>
   </div>
   ${_tachesView === 'pipeline' ? _tachesKanban(rows) : (window.innerWidth <= 768 ? _tachesMobileCards(rows) : `<div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Tâche</th><th>Échéance</th><th>Priorité</th><th>Statut</th><th>Client / Affaire</th><th>Assigné à</th><th style="text-align:center">Terminé ?</th><th>Actions</th></tr></thead>
+    <table><thead><tr><th>Tâche</th><th>Échéance</th><th>Priorité</th><th>Statut</th><th>Client / Affaire / Opportunité</th><th>Assigné à</th><th style="text-align:center">Terminé ?</th><th>Actions</th></tr></thead>
     <tbody>${rows.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--t3)">Aucune tâche</td></tr>' : rows.map(t => `
       <tr style="border-bottom:1px solid var(--border)${_tEnRetard(t) ? ';background:rgba(239,68,68,.06)' : ''}">
         <td style="padding:6px 8px"><strong style="font-size:13px">${cmdEsc(t.titre || '')}</strong>${t.description ? '<div style="font-size:11px;color:var(--t3);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + cmdEsc(t.description) + '</div>' : ''}</td>
         <td style="padding:6px 8px;font-size:12px;white-space:nowrap${_tEnRetard(t) ? ';color:var(--red);font-weight:600' : ''}">${_tEcheanceTxt(t.echeance)}${_tEnRetard(t) ? ' ⚠' : ''}</td>
         <td style="padding:6px 8px">${_tPrioBadge(t.priorite)}</td>
         <td style="padding:6px 8px">${_tStatutBadge(t.statut)}</td>
-        <td style="padding:6px 8px;font-size:12px">${t.client_id ? '<a href="#" onclick="showClient(\'' + t.client_id + '\');return false" style="color:var(--accent);text-decoration:none">' + cmdEsc(t.client_name || 'Client') + '</a>' : '—'}${t.affaire_id ? '<div style="font-size:11px;color:var(--t3)"><a href="#" onclick="showAffaireDetail(\'' + t.affaire_id + '\');return false" style="color:var(--t3)">' + cmdEsc(t.affaire_nom || 'Affaire') + '</a></div>' : ''}</td>
+        <td style="padding:6px 8px;font-size:12px">${t.client_id ? '<a href="#" onclick="showClient(\'' + t.client_id + '\');return false" style="color:var(--accent);text-decoration:none">' + cmdEsc(t.client_name || 'Client') + '</a>' : (t.client_name ? cmdEsc(t.client_name) : '—')}${t.affaire_id ? '<div style="font-size:11px;color:var(--t3)"><a href="#" onclick="showAffaireDetail(\'' + t.affaire_id + '\');return false" style="color:var(--t3)">' + cmdEsc(t.affaire_nom || 'Affaire') + '</a></div>' : ''}${t.opportunite_id ? '<div style="font-size:11px;color:var(--t3)">🎯 <a href="#" onclick="oppDetail(\'' + t.opportunite_id + '\');return false" style="color:var(--t3)">' + cmdEsc(t.opportunite_nom || 'Opportunité') + '</a></div>' : ''}</td>
         <td style="padding:6px 8px;font-size:12px">${cmdEsc(fmtCommercialName(t.assigne_nom || '') || '—')}</td>
         <td style="padding:6px 8px;text-align:center"><input type="checkbox" ${t.statut === 'terminee' ? 'checked' : ''} title="${t.statut === 'terminee' ? 'Terminée — décocher pour réactiver' : 'Cocher pour marquer terminée'}" onchange="setTacheStatut(${t.id}, this.checked ? 'terminee' : 'a_faire')" style="width:17px;height:17px;cursor:pointer;accent-color:#10b981"></td>
         <td style="padding:6px 8px;white-space:nowrap">
