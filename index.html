@@ -4851,7 +4851,7 @@ async function gedGeoSearch() {
 //  TÂCHES COMMERCIALES (liées clients/affaires, assignées, Microsoft To Do)
 // ═══════════════════════════════════════════════════════════
 let _taches = [], _tachesLoaded = false;
-let _tachesFStatut = '', _tachesFAssigne = '', _tachesMine = false;
+let _tachesFStatut = '', _tachesFAssigne = '', _tachesMine = false, _tachesView = 'liste';
 let _tacheSel = { client_id: null, client_name: null, affaire_id: null, affaire_nom: null };
 
 const TACHE_STATUTS = { a_faire: ['À faire', '#f59e0b'], en_cours: ['En cours', '#4f8ff7'], terminee: ['Terminée', '#10b981'], annulee: ['Annulée', '#6b7280'] };
@@ -4905,9 +4905,10 @@ function renderTaches() {
       <select onchange="_tachesFAssigne=this.value;renderPage('taches')" style="padding:5px 8px;border:1px solid ${_tachesFAssigne ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);max-width:200px">
         <option value="">— Assigné —</option>${comm.map(c => `<option value="${c.id}"${_tachesFAssigne === c.id ? ' selected' : ''}>${cmdEsc(fmtCommercialName(c.nom || c.email || ''))}</option>`).join('')}
       </select>
+      <button class="btn" onclick="_tachesView=(_tachesView==='pipeline'?'liste':'pipeline');renderPage('taches')" style="font-size:12px">${_tachesView === 'pipeline' ? '☰ Liste' : '▦ Pipeline'}</button>
     </div>
   </div>
-  <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
+  ${_tachesView === 'pipeline' ? _tachesKanban(rows) : `<div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
     <table><thead><tr><th>Tâche</th><th>Échéance</th><th>Priorité</th><th>Statut</th><th>Client / Affaire</th><th>Assigné à</th><th>Actions</th></tr></thead>
     <tbody>${rows.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--t3)">Aucune tâche</td></tr>' : rows.map(t => `
       <tr style="border-bottom:1px solid var(--border)${_tEnRetard(t) ? ';background:rgba(239,68,68,.06)' : ''}">
@@ -4923,7 +4924,45 @@ function renderTaches() {
           <button class="btn" style="font-size:11px;padding:2px 6px;color:var(--red)" title="Supprimer" onclick="deleteTache(${t.id})">×</button>
         </td>
       </tr>`).join('')}</tbody></table>
-  </div></div></div>`;
+  </div></div></div>`}`;
+}
+
+// Vue Kanban des tâches avec glisser-déposer (colonnes = statut)
+let _tDragId = null;
+function _tachesKanban(rows) {
+  const cols = Object.entries(TACHE_STATUTS); // [[a_faire,[lbl,color]], ...]
+  return `<div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px">${cols.map(([k, v]) => {
+    const list = rows.filter(t => t.statut === k);
+    return `<div ondragover="_tDragOver(event)" ondragleave="_tDragLeave(event)" ondrop="_tDrop(event,'${k}')" data-statut="${k}"
+        style="min-width:250px;max-width:300px;flex:0 0 auto;background:var(--bg-3);border:1px solid var(--border);border-top:3px solid ${v[1]};border-radius:10px;padding:8px;transition:background .15s">
+      <div style="font-weight:700;font-size:12px;margin-bottom:8px;display:flex;justify-content:space-between"><span>${v[0]}</span><span style="color:var(--t3);font-weight:400">${list.length}</span></div>
+      ${list.map(t => `<div draggable="true" ondragstart="_tDragStart(event,${t.id})" ondragend="_tDragEnd(event)" onclick="tacheModalOpen(${t.id})"
+        style="background:var(--card,#fff);border:1px solid var(--border);${_tEnRetard(t) ? 'border-left:3px solid var(--red);' : ''}border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:grab">
+        <div style="font-weight:600;font-size:12px">${cmdEsc(t.titre || '')}</div>
+        ${t.description ? '<div style="font-size:11px;color:var(--t3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + cmdEsc(t.description) + '</div>' : ''}
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;gap:6px;flex-wrap:wrap">
+          ${_tPrioBadge(t.priorite)}
+          <span style="font-size:11px;color:${_tEnRetard(t) ? 'var(--red)' : 'var(--t3)'};font-weight:${_tEnRetard(t) ? '600' : '400'}">${t.echeance ? _tEcheanceTxt(t.echeance) + (_tEnRetard(t) ? ' ⚠' : '') : ''}</span>
+        </div>
+        ${t.client_name ? '<div style="font-size:11px;color:var(--t3);margin-top:3px">🏢 ' + cmdEsc(t.client_name) + '</div>' : ''}
+        ${t.assigne_nom ? '<div style="font-size:11px;color:var(--t3)">👤 ' + cmdEsc(fmtCommercialName(t.assigne_nom)) + '</div>' : ''}
+      </div>`).join('') || '<div style="font-size:11px;color:var(--t3);padding:6px;text-align:center">—</div>'}
+    </div>`;
+  }).join('')}</div>
+  <div style="font-size:11px;color:var(--t3);margin-top:8px">Glissez une tâche dans une colonne pour changer son statut. Cliquez pour l'éditer.</div>`;
+}
+function _tDragStart(e, id) { _tDragId = id; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(id)); } catch (_) {} e.currentTarget.style.opacity = '0.5'; }
+function _tDragEnd(e) { e.currentTarget.style.opacity = ''; }
+function _tDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; e.currentTarget.style.background = 'var(--hover)'; }
+function _tDragLeave(e) { e.currentTarget.style.background = ''; }
+function _tDrop(e, statut) {
+  e.preventDefault(); e.currentTarget.style.background = '';
+  const id = _tDragId != null ? _tDragId : (e.dataTransfer ? e.dataTransfer.getData('text/plain') : null);
+  _tDragId = null;
+  if (id == null || id === '') return;
+  const t = _taches.find(x => String(x.id) === String(id));
+  if (!t || t.statut === statut) return;
+  setTacheStatut(id, statut);
 }
 
 // ── Modal création / édition ──
