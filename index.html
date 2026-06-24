@@ -4983,15 +4983,18 @@ function tacheModalOpen(id, prefill) {
   const comm = (DB.commerciaux || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
   const myId = currentCommercial && currentCommercial.id;
   const assigneVal = t ? t.assigne_id : myId;
+  const pf = prefill || {};
   const ech = t && t.echeance ? new Date(t.echeance) : null;
-  const echVal = ech && !isNaN(ech.getTime()) ? `${ech.getFullYear()}-${String(ech.getMonth() + 1).padStart(2, '0')}-${String(ech.getDate()).padStart(2, '0')}T${String(ech.getHours()).padStart(2, '0')}:${String(ech.getMinutes()).padStart(2, '0')}` : '';
+  let echVal = ech && !isNaN(ech.getTime()) ? `${ech.getFullYear()}-${String(ech.getMonth() + 1).padStart(2, '0')}-${String(ech.getDate()).padStart(2, '0')}T${String(ech.getHours()).padStart(2, '0')}:${String(ech.getMinutes()).padStart(2, '0')}` : '';
+  if (!t && pf.echeance) echVal = pf.echeance.length === 10 ? pf.echeance + 'T09:00' : pf.echeance;
+  const prioVal = t ? t.priorite : (pf.priorite || 'normale');
   const body = `
     <input type="hidden" id="t-id" value="${id || ''}">
-    <div class="fg"><label class="fl">Titre *</label><input class="fi" id="t-titre" value="${(t ? (t.titre || '') : (prefill && prefill.titre ? prefill.titre : '')).replace(/"/g, '&quot;')}" placeholder="Ex: Relancer pour le devis X"></div>
-    <div class="fg"><label class="fl">Description</label><textarea class="fi" id="t-desc" rows="3" style="resize:vertical">${t ? (t.description || '') : ''}</textarea></div>
+    <div class="fg"><label class="fl">Titre *</label><input class="fi" id="t-titre" value="${(t ? (t.titre || '') : (pf.titre || '')).replace(/"/g, '&quot;')}" placeholder="Ex: Relancer pour le devis X"></div>
+    <div class="fg"><label class="fl">Description</label><textarea class="fi" id="t-desc" rows="3" style="resize:vertical">${t ? (t.description || '') : (pf.description || '')}</textarea></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <div class="fg" style="flex:1;min-width:150px"><label class="fl">Échéance</label><input type="datetime-local" class="fi" id="t-echeance" value="${echVal}"></div>
-      <div class="fg" style="flex:1;min-width:120px"><label class="fl">Priorité</label><select class="fi" id="t-prio">${Object.entries(TACHE_PRIOS).map(([k, v]) => `<option value="${k}"${(t ? t.priorite : 'normale') === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></div>
+      <div class="fg" style="flex:1;min-width:120px"><label class="fl">Priorité</label><select class="fi" id="t-prio">${Object.entries(TACHE_PRIOS).map(([k, v]) => `<option value="${k}"${prioVal === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></div>
       <div class="fg" style="flex:1;min-width:120px"><label class="fl">Statut</label><select class="fi" id="t-statut">${Object.entries(TACHE_STATUTS).map(([k, v]) => `<option value="${k}"${(t ? t.statut : 'a_faire') === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></div>
     </div>
     <div class="fg"><label class="fl">Assigné à *</label><select class="fi" id="t-assigne">${comm.map(c => `<option value="${c.id}"${String(assigneVal) === String(c.id) ? ' selected' : ''}>${cmdEsc(fmtCommercialName(c.nom || c.email || ''))}${c.email ? '' : ' (sans email)'}</option>`).join('')}</select>
@@ -5354,7 +5357,7 @@ async function syncOpportunites() {
 
 // ═══ CRÉATION / ÉDITION D'OPPORTUNITÉ (écriture vers Akuiteo) ═══
 let _oppForm = null;
-async function oppModalOpen(akId) {
+async function oppModalOpen(akId, prefill) {
   try {
     closeModal('opp');
     currentPage = 'opportunite-edit';
@@ -5406,9 +5409,18 @@ async function oppModalOpen(akId) {
       country: raw.country || '',
       description: raw.description || (o && o.description) || '',
     };
+    // Pré-remplissage proposé par NOVA (nouvelle opportunité)
+    if (!akId && prefill) {
+      if (prefill.name) _oppForm.name = prefill.name;
+      if (prefill.description) _oppForm.description = prefill.description;
+      if (prefill.montant != null && prefill.montant !== '') _oppForm.montant = prefill.montant;
+      if (prefill.montantTravaux != null && prefill.montantTravaux !== '') _oppForm.montantTravaux = prefill.montantTravaux;
+      if (prefill.dateSignature) _oppForm.dateSignature = prefill.dateSignature;
+    }
     renderPage('opportunite-edit');
     if (_oppForm.clientId) _oppLoadContacts(_oppForm.clientId, _oppForm.contactAkId);
     if (_oppForm.customerAkId) _oppLoadSites(_oppForm.customerAkId, _oppForm.customerLocationId);
+    if (!akId && prefill && prefill.clientHint) { const inp = document.getElementById('of-client'); if (inp) { inp.value = prefill.clientHint; _oppClientSearch(prefill.clientHint, false); } }
   } catch (e) { toast('Erreur ouverture : ' + e.message, 'error'); }
 }
 
@@ -21022,6 +21034,10 @@ async function askAIChat(presetQuestion) {
     if (!fullResult && buf.includes('data: ')) {
       try { const ev = JSON.parse(buf.split('data: ').pop()); fullResult = ev.result || ''; } catch(e) {}
     }
+    // Détecter une action proposée par NOVA et la retirer du texte affiché
+    let _novaAction = null;
+    const _am = fullResult.match(/\[\[ACTION:(\w+)\]\]([\s\S]*?)\[\[\/ACTION\]\]/);
+    if (_am) { try { _novaAction = { type: _am[1], payload: JSON.parse(_am[2].trim()) }; } catch (e) { console.warn('action parse', e); } fullResult = fullResult.replace(_am[0], '').trim(); }
     // Affichage progressif ligne par ligne
     _aiChatHistory.push({ role: 'user', content: question });
     _aiChatHistory.push({ role: 'assistant', content: fullResult });
@@ -21047,6 +21063,8 @@ async function askAIChat(presetQuestion) {
     speakBtn.onmouseenter = () => speakBtn.style.opacity = '1';
     speakBtn.onmouseleave = () => speakBtn.style.opacity = '.4';
     loadingDiv.appendChild(speakBtn);
+    // Carte d'action (confirmation avant écriture)
+    if (_novaAction) { const card = _novaActionCard(_novaAction); if (card) loadingDiv.appendChild(card); }
     if (box) box.scrollTop = box.scrollHeight;
     aiSpeak(fullResult, loadingDiv);
     // Focus le champ pour enchaîner directement (si TTS off, pas de onend)
@@ -21054,6 +21072,51 @@ async function askAIChat(presetQuestion) {
   } catch (e) {
     loadingDiv.innerHTML = '<span style="color:var(--red)">Erreur: ' + e.message + '</span>';
   }
+}
+
+// ═══ Actions exécutables proposées par NOVA (confirmation avant écriture) ═══
+const _NOVA_ACTION_META = {
+  create_task: { icon: '✅', label: 'Créer la tâche', desc: p => 'Tâche : ' + (p.titre || '') },
+  create_opportunity: { icon: '🎯', label: 'Créer l\'opportunité', desc: p => 'Opportunité : ' + (p.name || '') + (p.client_name ? ' — ' + p.client_name : '') },
+  relance_email: { icon: '✉️', label: 'Préparer l\'email', desc: p => 'Relance : ' + (p.subject || '') },
+};
+function _novaActionCard(action) {
+  const meta = _NOVA_ACTION_META[action.type]; if (!meta) return null;
+  const card = document.createElement('div');
+  card.style.cssText = 'margin-top:8px;border:1px dashed var(--accent);border-radius:8px;padding:8px 10px;background:rgba(99,102,241,.06)';
+  const desc = document.createElement('div');
+  desc.style.cssText = 'font-size:12px;color:var(--t2);margin-bottom:6px';
+  desc.textContent = meta.icon + ' ' + (meta.desc(action.payload || {}) || '');
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-primary'; btn.style.cssText = 'font-size:12px;padding:4px 10px';
+  btn.textContent = meta.icon + ' ' + meta.label;
+  btn.onclick = () => { try { _novaExecAction(action); } catch (e) { toast('Erreur : ' + e.message, 'error'); } };
+  card.appendChild(desc); card.appendChild(btn);
+  return card;
+}
+function _novaExecAction(action) {
+  const p = action.payload || {};
+  if (action.type === 'create_task') {
+    toggleAIChat(); // fermer le panneau pour voir le formulaire
+    tacheModalOpen(null, { client_id: p.client_id || null, client_name: p.client_name || null, opportunite_id: p.opportunite_id || null, affaire_id: p.affaire_id || null, titre: p.titre || '', description: p.description || '', echeance: p.echeance || '', priorite: p.priorite || '' });
+  } else if (action.type === 'create_opportunity') {
+    toggleAIChat();
+    oppModalOpen(null, { name: p.name || '', description: p.description || '', montant: p.montant, montantTravaux: p.montant_travaux, dateSignature: p.date_signature || '', clientHint: p.client_name || '' });
+  } else if (action.type === 'relance_email') {
+    _novaRelanceCard(p);
+  }
+}
+function _novaRelanceCard(p) {
+  const subject = p.subject || 'Relance';
+  const body = p.body || '';
+  const to = p.to || '';
+  const href = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  const html = `<div style="font-size:13px"><div style="font-weight:700;margin-bottom:6px">✉️ Email de relance</div>
+    <div style="font-size:12px;color:var(--t3)">Objet</div><div style="font-size:13px;margin-bottom:6px">${cmdEsc(subject)}</div>
+    <div style="font-size:12px;color:var(--t3)">Message</div><textarea id="novaMailBody" style="width:100%;min-height:160px;border:1px solid var(--border);border-radius:6px;padding:8px;font-size:13px;background:var(--card,#fff);color:var(--t1)">${cmdEsc(body)}</textarea></div>`;
+  openDynModal('novaMail', 'Relance — ' + subject, html,
+    `<button class="btn" onclick="(function(){navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('novaMailBody').value);toast('Message copié','success');})()">📋 Copier</button>
+     <a class="btn btn-primary" href="${href.replace(/"/g, '&quot;')}" onclick="closeModal('novaMail')">✉️ Ouvrir dans ma messagerie</a>`, '560px');
 }
 
 async function aiAssist(action) {
