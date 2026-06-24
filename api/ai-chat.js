@@ -20,6 +20,18 @@ const TOOLS = [
     }
   },
   {
+    name: 'search_clients',
+    description: "Recherche TOLÉRANTE d'un client/prospect par nom : insensible à la ponctuation, aux espaces, à la casse ET aux fautes de frappe (recherche par trigrammes). À utiliser EN PRIORITÉ pour retrouver une société quand le nom exact est incertain : dictée vocale approximative, abréviation (ex. \"6K\" → \"6.K ARCHI\"), nom partiel (ex. \"LT ARCHI\"). Retourne les meilleurs candidats classés par pertinence (champ score, 1=parfait). Récupère ensuite les détails complets avec query_table(table=\"clients\", filters={\"id.eq\":\"<id>\"}).",
+    input_schema: {
+      type: 'object',
+      properties: {
+        q: { type: 'string', description: 'Texte recherché : nom de société (partiel, abrégé, mal orthographié...)' },
+        limit: { type: 'integer', default: 20, maximum: 50 }
+      },
+      required: ['q']
+    }
+  },
+  {
     name: 'aggregate_table',
     description: 'Calcule une agrégation (somme, moyenne, nombre) sur une table avec filtres et groupement. Utile pour CA, montants totaux, etc.',
     input_schema: {
@@ -69,6 +81,12 @@ function buildQueryParams(filters, select, order, limit) {
 
 async function executeTool(name, input) {
   try {
+    if (name === 'search_clients') {
+      const { q, limit = 20 } = input || {};
+      if (!q || !String(q).trim()) return { ok: false, error: 'q (texte recherché) requis' };
+      const data = await sbRequest('rpc/search_clients', { method: 'POST', body: JSON.stringify({ q: String(q), lim: Math.min(limit || 20, 50) }) });
+      return { ok: true, count: Array.isArray(data) ? data.length : 0, rows: data };
+    }
     if (name === 'query_table') {
       const { table, select = '*', filters, order, limit = 50 } = input || {};
       const qs = buildQueryParams(filters, select, order, limit);
@@ -126,6 +144,7 @@ async function callClaude(ANTHROPIC_KEY, body) {
 
 function toolLabel(tu) {
   const tbl = TABLE_LABELS[tu.input?.table] || tu.input?.table || 'données';
+  if (tu.name === 'search_clients') return 'Recherche société « ' + (tu.input?.q || '') + ' »';
   if (tu.name === 'query_table') return 'Consultation ' + tbl;
   if (tu.name === 'aggregate_table') return 'Calcul sur ' + tbl;
   return tu.name;
@@ -166,7 +185,7 @@ Les questions peuvent provenir de la dictée vocale. La reconnaissance vocale fa
 - "codial" → CODIAL (ancien ERP)
 - "précio-mètre" ou "piézaux-mètre" → piézomètre
 - "pressiaux-métrique" → pressiométrique
-Si un mot ne correspond à rien de connu, cherche phonétiquement dans les noms de clients du CRM (table clients, colonne name) avec une recherche ilike approximative.
+Si un mot ne correspond à rien de connu, utilise l'outil search_clients (recherche tolérante par trigrammes) pour retrouver la société — il gère la ponctuation, les espaces, la casse et les fautes de frappe.
 ${glossary ? `\nGLOSSAIRE CLIENTS (noms à reconnaître en priorité) :\n${glossary}` : ''}
 
 RÈGLES STRICTES :
@@ -175,7 +194,7 @@ RÈGLES STRICTES :
 3. Si tu estimes qu'une recherche externe (web, marché, concurrence) serait utile, DEMANDE d'abord l'autorisation à l'utilisateur avant de répondre. N'invente jamais de données externes.
 4. Enchaîne plusieurs appels d'outils si nécessaire pour répondre précisément.
 5. Sois TOUJOURS force de proposition : après avoir répondu à une question, propose des analyses complémentaires, des pistes d'action concrètes ou des alertes pertinentes.
-6. Quand on te demande des infos sur une société ou un contact, cherche TOUJOURS dans le CRM d'abord (table clients puis contacts avec client_id). Affiche TOUTES les coordonnées disponibles.
+6. Quand on te demande des infos sur une société ou un contact, cherche TOUJOURS dans le CRM d'abord. Pour retrouver une société par son nom, utilise EN PRIORITÉ l'outil search_clients (recherche tolérante) PLUTÔT qu'un query_table avec ilike : il retrouve la société même si le nom est abrégé, mal orthographié ou ponctué différemment (ex. "6K" → "6.K ARCHI"). Ne conclus JAMAIS qu'un client est absent de la base sans avoir essayé search_clients. Récupère ensuite ses contacts avec client_id et affiche TOUTES les coordonnées disponibles.
 7. Quand tu affiches des coordonnées, utilise des liens HTML cliquables : <a href="mailto:email">email</a> pour les emails et affiche les numéros de téléphone en clair (ils seront automatiquement rendus cliquables par le CRM). Formate les numéros au format XX XX XX XX XX.
 
 TON RÔLE STRATÉGIQUE :
@@ -209,7 +228,8 @@ Exemples :
 - Factures en retard > 10k€ : query_table(table="factures", filters={"statut.eq":"retard","montant.gt":10000}, order="-montant")
 - Clients dormants : query_table(table="clients", filters={"status.eq":"dormant"}, select="name,city,status,categorie_compte", order="name")
 - Clients stratégiques d'une agence : query_table(table="clients", filters={"categorie_compte.cs":"{\\"GPH85\\":\\"A- Stratégique\\"}"}, select="name,city,categorie_compte")
-- Chercher une société : query_table(table="clients", filters={"name.ilike":"%rubato%"}, select="id,name,code,city,code_postal,ca,status,account_manager_name,salesman_name,categorie_compte,secteur_activite,telephone,telephone2,email,site_web")
+- Chercher une société (TOLÉRANT, à privilégier) : search_clients(q="6K") → renvoie les candidats classés ; puis query_table(table="clients", filters={"id.eq":"<id du meilleur candidat>"}) pour les détails complets.
+- Chercher une société (exact, si tu connais déjà le nom précis) : query_table(table="clients", filters={"name.ilike":"%rubato%"}, select="id,name,code,city,code_postal,ca,status,account_manager_name,salesman_name,categorie_compte,secteur_activite,telephone,telephone2,email,site_web")
 - Contacts d'une société : query_table(table="contacts", filters={"client_id.eq":"<id_client>"}, select="nom,prenom,fonction,service,email,email2,telephone,telephone2,mobile")
 - Chercher un contact par nom : query_table(table="contacts", filters={"nom.ilike":"%dupont%"}, select="nom,prenom,fonction,email,email2,telephone,telephone2,mobile,client_id")
 
@@ -233,7 +253,7 @@ IMPORTANT pour les recherches société/contacts :
 
 HISTORIQUE / POINT COMPLET SUR UN CLIENT :
 Quand on te demande un "historique", "point complet", "résumé", "où on en est" ou "situation" d'un client, tu DOIS faire un tour d'horizon exhaustif en enchaînant ces requêtes :
-1. Fiche client : query_table(table="clients", filters={"id.eq":"<id>"} ou {"name.ilike":"%nom%"}) — infos générales, CA, catégorie, commercial, statut. IMPORTANT : noter le champ "siren" du client.
+1. Fiche client : si le nom est incertain, d'abord search_clients(q="<nom approximatif>") pour identifier le bon client, puis query_table(table="clients", filters={"id.eq":"<id>"}) — infos générales, CA, catégorie, commercial, statut. IMPORTANT : noter le champ "siren" du client.
 2. Établissements secondaires : SI le client a un SIREN, chercher les autres établissements : query_table(table="clients", filters={"siren.eq":"<siren>","id.neq":"<id>"}, select="id,name,city,code_postal,siret,est_siege,etat_insee,status,ca"). Cela donne la liste de TOUS les établissements du même groupe. Noter leurs id pour les étapes suivantes.
 3. Devis en cours : pour CHAQUE établissement (client principal + secondaires trouvés en étape 2), chercher les devis : query_table(table="devis", filters={"client_id.eq":"<id>","statut.in":"(pending,sent)"}, select="ref,sujet,montant,statut,date,probabilite,agence", order="-date")
 4. Commandes en cours : pour CHAQUE établissement, chercher : query_table(table="commandes", filters={"client_id.eq":"<id>","statut.eq":"en_cours"}, select="ref,nom,montant,statut,date,livraison,agence,surface_facturee,custom_data", order="-date") — commandes actives avec dates de livraison (DLR) et planification. Dans custom_data._lines : extraire estimatedDeliveryDate (date de livraison prévue), estimatedBillingDate (date de facturation prévue), projectedBillingDate (date de facturation projetée), startDate, endDate pour chaque ligne

@@ -283,3 +283,50 @@ CREATE INDEX IF NOT EXISTS idx_connexions_log_created ON connexions_log(created_
 CREATE INDEX IF NOT EXISTS idx_clients_legacy_id ON clients(legacy_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_legacy_id ON contacts(legacy_id);
 CREATE INDEX IF NOT EXISTS idx_reports_legacy_id ON reports(legacy_id);
+
+-- ═══════════════════════════════════════════════════════════
+--  RECHERCHE TOLÉRANTE (assistant IA NOVA) — indexation trigram
+--  Permet de retrouver une société malgré ponctuation/espaces/casse/fautes
+--  Ex : "6K" trouve "6.K ARCHI", "LT ARCHI" trouve l'entrée même mal saisie.
+-- ═══════════════════════════════════════════════════════════
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- Index trigram sur le nom NORMALISÉ (alphanumérique seul, minuscules) → tolérant à la ponctuation et aux espaces
+CREATE INDEX IF NOT EXISTS idx_clients_name_norm_trgm
+  ON clients USING gin (regexp_replace(lower(name), '[^a-z0-9]', '', 'g') gin_trgm_ops);
+-- Index trigram sur le nom brut → similarité / tolérance aux fautes de frappe
+CREATE INDEX IF NOT EXISTS idx_clients_name_trgm
+  ON clients USING gin (lower(name) gin_trgm_ops);
+-- Idem pour les contacts (recherche par nom)
+CREATE INDEX IF NOT EXISTS idx_contacts_nom_trgm
+  ON contacts USING gin (lower(nom) gin_trgm_ops);
+
+-- Fonction de recherche tolérante de clients/prospects, classée par pertinence
+CREATE OR REPLACE FUNCTION search_clients(q text, lim int DEFAULT 20)
+RETURNS TABLE (
+  id text, name text, code text, city text, code_postal text,
+  status text, account_manager_name text, salesman_name text, siren text, score real
+)
+LANGUAGE sql STABLE AS $$
+  WITH qn AS (
+    SELECT regexp_replace(lower(coalesce(q,'')), '[^a-z0-9]', '', 'g') AS qq,
+           lower(coalesce(q,'')) AS ql
+  )
+  SELECT c.id::text, c.name::text, c.code::text, c.city::text, c.code_postal::text,
+         c.status::text, c.account_manager_name::text, c.salesman_name::text, c.siren::text,
+         GREATEST(
+           similarity(lower(c.name), qn.ql),
+           CASE
+             WHEN qn.qq <> '' AND regexp_replace(lower(c.name), '[^a-z0-9]', '', 'g') = qn.qq THEN 1.0
+             WHEN qn.qq <> '' AND regexp_replace(lower(c.name), '[^a-z0-9]', '', 'g') LIKE qn.qq || '%' THEN 0.95
+             WHEN qn.qq <> '' AND regexp_replace(lower(c.name), '[^a-z0-9]', '', 'g') LIKE '%' || qn.qq || '%' THEN 0.9
+             ELSE 0
+           END
+         )::real AS score
+  FROM clients c, qn
+  WHERE (qn.qq <> '' AND regexp_replace(lower(c.name), '[^a-z0-9]', '', 'g') LIKE '%' || qn.qq || '%')
+     OR similarity(lower(c.name), qn.ql) > 0.25
+  ORDER BY score DESC, c.name
+  LIMIT LEAST(COALESCE(lim, 20), 50);
+$$;
+GRANT EXECUTE ON FUNCTION search_clients(text, int) TO anon, authenticated, service_role;
