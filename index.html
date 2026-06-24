@@ -5304,6 +5304,8 @@ async function oppModalOpen(akId) {
       endCustomerAkId: raw.endCustomerId || '',
       endCustomerName: (raw.endCustomer && raw.endCustomer.name) || '',
       contactAkId: raw.mainContactId || (o && o.contact_akuiteo_id) || '',
+      customerLocationId: raw.customerLocationId || '',
+      customerLocationName: (raw.customerLocation && (raw.customerLocation.fullName || raw.customerLocation.name)) || '',
       pipeId: raw.pipeId || (o && o.pipe_id) || '',
       stageId: raw.stageId || (o && o.stage_id) || '',
       originTypeId: raw.originTypeId || defOrigin || '',
@@ -5331,6 +5333,7 @@ async function oppModalOpen(akId) {
     };
     _oppRenderForm();
     if (_oppForm.clientId) _oppLoadContacts(_oppForm.clientId, _oppForm.contactAkId);
+    if (_oppForm.customerAkId) _oppLoadSites(_oppForm.customerAkId, _oppForm.customerLocationId);
   } catch (e) { toast('Erreur ouverture : ' + e.message, 'error'); }
 }
 
@@ -5412,6 +5415,9 @@ function _oppRenderForm() {
       <div style="grid-column:1/3"><label style="${lbl}">Contact</label>
         <select id="of-contact" style="${fi}" onchange="_oppForm.contactAkId=this.value">
           <option value="">${f.clientId ? '—' : '(choisir un client d\'abord)'}</option></select></div>
+      <div style="grid-column:1/3"><label style="${lbl}">Établissement (site client)</label>
+        <select id="of-site" style="${fi}" onchange="_oppForm.customerLocationId=this.value">
+          <option value="">${f.customerAkId ? '—' : '(choisir un client d\'abord)'}</option></select></div>
       <div style="grid-column:1/3;display:flex;align-items:center;gap:8px;margin-top:2px">
         <input type="checkbox" id="of-strategic" ${f.strategic ? 'checked' : ''} onchange="_oppForm.strategic=this.checked" style="width:16px;height:16px">
         <label for="of-strategic" style="font-size:13px;color:var(--t1)">Opportunité stratégique</label></div>
@@ -5427,14 +5433,8 @@ function _oppRenderForm() {
       <div><label style="${lbl}">Type d'origine *</label>
         <select id="of-origin" style="${fi}" onchange="_oppForm.originTypeId=this.value">
           ${_oppRefs.originTypes.map(t => `<option value="${t.id}"${String(f.originTypeId) === String(t.id) ? ' selected' : ''}>${cmdEsc(t.name)}</option>`).join('')}</select></div>
-      <div><label style="${lbl}">Origine (précision)</label>
+      <div style="grid-column:1/3"><label style="${lbl}">Origine (précision)</label>
         <input id="of-originText" style="${fi}" value="${esc(f.origin)}" oninput="_oppForm.origin=this.value"></div>
-      <div><label style="${lbl}">Département</label>
-        <select id="of-dept" style="${fi}" onchange="_oppForm.departmentId=this.value">
-          <option value="">—</option>${(_oppRefs.departments || []).map(d => `<option value="${d.id}"${String(f.departmentId) === String(d.id) ? ' selected' : ''}>${cmdEsc(d.name)}</option>`).join('')}</select></div>
-      <div><label style="${lbl}">Exercice</label>
-        <select id="of-year" style="${fi}" onchange="_oppForm.yearId=this.value">
-          <option value="">—</option>${(_oppRefs.years || []).map(y => `<option value="${y.id}"${String(f.yearId) === String(y.id) ? ' selected' : ''}>${cmdEsc(y.name || y.code || y.id)}</option>`).join('')}</select></div>
 
       ${sec('Équipe')}
       <div><label style="${lbl}">Responsable commercial</label>
@@ -5493,10 +5493,24 @@ async function _oppClientSearch(q, isEnd) {
   } catch (e) { box.style.display = 'none'; }
 }
 function _oppPickClient(clientId, akId, name) {
-  _oppForm.clientId = clientId; _oppForm.customerAkId = akId; _oppForm.clientName = name; _oppForm.contactAkId = '';
+  _oppForm.clientId = clientId; _oppForm.customerAkId = akId; _oppForm.clientName = name; _oppForm.contactAkId = ''; _oppForm.customerLocationId = '';
   const inp = document.getElementById('of-client'); if (inp) inp.value = name;
   const box = document.getElementById('of-clientRes'); if (box) box.style.display = 'none';
   _oppLoadContacts(clientId, '');
+  _oppLoadSites(akId, '');
+}
+// Établissements (sites) d'un client Akuiteo → customerLocationId
+async function _oppLoadSites(customerAkId, selectId) {
+  const sel = document.getElementById('of-site'); if (!sel) return;
+  try {
+    const sites = await akuiteoFetch('GET', `/crm/customers/${customerAkId}/sites`);
+    const list = Array.isArray(sites) ? sites : [];
+    sel.innerHTML = '<option value="">—</option>' + list.map(s => {
+      const nm = s.fullName || s.name || s.code || s.id;
+      return `<option value="${String(s.id)}"${String(selectId) === String(s.id) ? ' selected' : ''}>${cmdEsc(nm)}${s.address && s.address.city ? ' — ' + cmdEsc(s.address.city) : ''}</option>`;
+    }).join('');
+    if (selectId) _oppForm.customerLocationId = String(selectId);
+  } catch (e) { /* ignore */ }
 }
 function _oppPickEndClient(clientId, akId, name) {
   _oppForm.endCustomerAkId = akId; _oppForm.endCustomerName = name;
@@ -5544,6 +5558,7 @@ async function saveOpportunite() {
   setStr('title', f.title);
   setStr('endCustomerId', f.endCustomerAkId);
   setStr('mainContactId', f.contactAkId);
+  setStr('customerLocationId', f.customerLocationId);
   setStr('origin', f.origin);
   payload.strategic = !!f.strategic;
   setStr('description', f.description);
@@ -5747,6 +5762,7 @@ function oppDetail(akId) {
   const body = `
     ${row('Client', o.client_id ? `<a href="#" onclick="closeModal('opp');showClient('${o.client_id}');return false" style="color:var(--accent)">${cmdEsc(o.client_name || '')}</a>` : cmdEsc(o.client_name || '—'))}
     ${row('Client final', cmdEsc((raw.endCustomer && raw.endCustomer.name) || ''))}
+    ${row('Établissement', cmdEsc((raw.customerLocation && (raw.customerLocation.fullName || raw.customerLocation.name)) || ''))}
     ${row('Contact(s)', o.contact_id ? `<a href="#" onclick="closeModal('opp');showContact('${o.contact_id}');return false" style="color:var(--accent)">${cmdEsc(o.contact_name || '')}</a>` : cmdEsc(o.contact_name || ''))}
     ${row('Code', cmdEsc(o.code || ''))}
     ${row('Titre', cmdEsc(raw.title || ''))}
