@@ -201,6 +201,33 @@ ALTER TABLE reports ADD COLUMN IF NOT EXISTS legacy_id TEXT;
 ALTER TABLE reports ADD COLUMN IF NOT EXISTS affaire_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_reports_affaire_id ON reports(affaire_id) WHERE affaire_id IS NOT NULL;
 
+-- ═══ Tâches commerciales (liées clients/affaires, assignées entre collaborateurs) ═══
+CREATE TABLE IF NOT EXISTS taches_commerciales (
+  id BIGSERIAL PRIMARY KEY,
+  titre TEXT NOT NULL,
+  description TEXT,
+  priorite TEXT DEFAULT 'normale',   -- basse | normale | haute
+  statut TEXT DEFAULT 'a_faire',     -- a_faire | en_cours | terminee | annulee
+  echeance TIMESTAMPTZ,
+  client_id TEXT,
+  client_name TEXT,
+  affaire_id TEXT,
+  affaire_nom TEXT,
+  createur_id TEXT, createur_nom TEXT, createur_email TEXT,
+  assigne_id TEXT, assigne_nom TEXT, assigne_email TEXT,
+  todo_task_id TEXT,                 -- id de la tâche Microsoft To Do créée chez l'assigné
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  done_at TIMESTAMPTZ
+);
+ALTER TABLE taches_commerciales ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "taches_all" ON taches_commerciales;
+CREATE POLICY "taches_all" ON taches_commerciales FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE INDEX IF NOT EXISTS idx_taches_assigne ON taches_commerciales(assigne_email);
+CREATE INDEX IF NOT EXISTS idx_taches_client ON taches_commerciales(client_id);
+CREATE INDEX IF NOT EXISTS idx_taches_affaire ON taches_commerciales(affaire_id);
+CREATE INDEX IF NOT EXISTS idx_taches_statut ON taches_commerciales(statut);
+
 -- ═══ Journal de connexions au CRM ═══
 -- Une ligne par connexion réussie (qui s'est identifié et quand).
 CREATE TABLE IF NOT EXISTS connexions_log (

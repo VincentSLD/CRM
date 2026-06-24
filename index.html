@@ -1815,6 +1815,10 @@ tbody tr:last-child td { border-bottom: none; }
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         Comptes-rendus <span class="nav-badge" id="navBadgeCR"></span>
       </div>
+      <div class="nav-item" data-page="taches" onclick="go('taches')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Tâches <span class="nav-badge" id="navBadgeTaches" style="display:none;background:var(--accent)"></span>
+      </div>
       <div class="nav-item" data-page="alertes" onclick="go('alertes')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         Alertes <span class="nav-badge" id="navBadgeAlertes" style="background:var(--amber)"></span>
@@ -4301,7 +4305,7 @@ function go(page) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
   const titles = {dashboard:'Tableau de bord',analyse:'Analyse / KPI',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing','marches-publics':'Veille marchés publics','procedures-coll':'Veille procédures collectives (BODACC)',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
-    cr:'Comptes-rendus',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
+    cr:'Comptes-rendus',taches:'Tâches commerciales',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'"};
   document.getElementById('pageTitle').textContent = titles[page]||page;
   renderPage(page);
@@ -4839,6 +4843,243 @@ async function gedGeoSearch() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════
+//  TÂCHES COMMERCIALES (liées clients/affaires, assignées, Microsoft To Do)
+// ═══════════════════════════════════════════════════════════
+let _taches = [], _tachesLoaded = false;
+let _tachesFStatut = '', _tachesFAssigne = '', _tachesMine = false;
+let _tacheSel = { client_id: null, client_name: null, affaire_id: null, affaire_nom: null };
+
+const TACHE_STATUTS = { a_faire: ['À faire', '#f59e0b'], en_cours: ['En cours', '#4f8ff7'], terminee: ['Terminée', '#10b981'], annulee: ['Annulée', '#6b7280'] };
+const TACHE_PRIOS = { basse: ['Basse', '#6b7280'], normale: ['Normale', '#4f8ff7'], haute: ['Haute', '#ef4444'] };
+function _tStatutBadge(s) { const [l, c] = TACHE_STATUTS[s] || [s, '#6b7280']; return `<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;background:${c}22;color:${c}">${l}</span>`; }
+function _tPrioBadge(p) { const [l, c] = TACHE_PRIOS[p] || ['Normale', '#4f8ff7']; return `<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:${c}22;color:${c}">${l}</span>`; }
+function _tEcheanceTxt(e) { if (!e) return '—'; const d = new Date(e); if (isNaN(d.getTime())) return e; const p = n => String(n).padStart(2, '0'); return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); }
+function _tEnRetard(t) { return t.echeance && (t.statut === 'a_faire' || t.statut === 'en_cours') && new Date(t.echeance).getTime() < Date.now(); }
+
+async function loadTaches() {
+  try {
+    const { data, error } = await sb.from('taches_commerciales').select('*').order('echeance', { ascending: true, nullsFirst: false }).order('created_at', { ascending: false });
+    if (error) throw error;
+    _taches = data || [];
+  } catch (e) { _taches = []; console.warn('loadTaches', e.message); }
+  _tachesLoaded = true;
+  updateNavBadges && _updateTachesBadge();
+}
+function _updateTachesBadge() {
+  const el = document.getElementById('navBadgeTaches'); if (!el) return;
+  const myEmail = (currentCommercial && currentCommercial.email) || '';
+  const n = _taches.filter(t => (t.statut === 'a_faire' || t.statut === 'en_cours') && t.assigne_email === myEmail).length;
+  if (n > 0) { el.textContent = n; el.style.display = ''; } else { el.style.display = 'none'; }
+}
+
+function _tachesFiltered() {
+  const myEmail = (currentCommercial && currentCommercial.email) || '';
+  return _taches.filter(t => {
+    if (_tachesMine && t.assigne_email !== myEmail) return false;
+    if (_tachesFStatut && t.statut !== _tachesFStatut) return false;
+    if (_tachesFAssigne && t.assigne_id !== _tachesFAssigne) return false;
+    return true;
+  });
+}
+
+function renderTaches() {
+  if (!_tachesLoaded) return '<div style="text-align:center;padding:40px;color:var(--t3)">Chargement des tâches…</div>';
+  const rows = _tachesFiltered();
+  const comm = (DB.commerciaux || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-primary" onclick="tacheModalOpen()">+ Nouvelle tâche</button>
+      <span style="font-size:13px;color:var(--t2)">${rows.length} tâche(s)</span>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:4px 8px;border:1px solid ${_tachesMine ? '#f59e0b' : 'var(--border)'};border-radius:6px;background:${_tachesMine ? 'rgba(245,158,11,0.15)' : 'var(--card)'}"><input type="checkbox" ${_tachesMine ? 'checked' : ''} onchange="_tachesMine=this.checked;renderPage('taches')"> Mes tâches</label>
+      <select onchange="_tachesFStatut=this.value;renderPage('taches')" style="padding:5px 8px;border:1px solid ${_tachesFStatut ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+        <option value="">— Statut —</option>${Object.entries(TACHE_STATUTS).map(([k, v]) => `<option value="${k}"${_tachesFStatut === k ? ' selected' : ''}>${v[0]}</option>`).join('')}
+      </select>
+      <select onchange="_tachesFAssigne=this.value;renderPage('taches')" style="padding:5px 8px;border:1px solid ${_tachesFAssigne ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);max-width:200px">
+        <option value="">— Assigné —</option>${comm.map(c => `<option value="${c.id}"${_tachesFAssigne === c.id ? ' selected' : ''}>${cmdEsc(fmtCommercialName(c.nom || c.email || ''))}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+  <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
+    <table><thead><tr><th>Tâche</th><th>Échéance</th><th>Priorité</th><th>Statut</th><th>Client / Affaire</th><th>Assigné à</th><th>Actions</th></tr></thead>
+    <tbody>${rows.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--t3)">Aucune tâche</td></tr>' : rows.map(t => `
+      <tr style="border-bottom:1px solid var(--border)${_tEnRetard(t) ? ';background:rgba(239,68,68,.06)' : ''}">
+        <td style="padding:6px 8px"><strong style="font-size:13px">${cmdEsc(t.titre || '')}</strong>${t.description ? '<div style="font-size:11px;color:var(--t3);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + cmdEsc(t.description) + '</div>' : ''}</td>
+        <td style="padding:6px 8px;font-size:12px;white-space:nowrap${_tEnRetard(t) ? ';color:var(--red);font-weight:600' : ''}">${_tEcheanceTxt(t.echeance)}${_tEnRetard(t) ? ' ⚠' : ''}</td>
+        <td style="padding:6px 8px">${_tPrioBadge(t.priorite)}</td>
+        <td style="padding:6px 8px">${_tStatutBadge(t.statut)}</td>
+        <td style="padding:6px 8px;font-size:12px">${t.client_id ? '<a href="#" onclick="showClient(\'' + t.client_id + '\');return false" style="color:var(--accent);text-decoration:none">' + cmdEsc(t.client_name || 'Client') + '</a>' : '—'}${t.affaire_id ? '<div style="font-size:11px;color:var(--t3)"><a href="#" onclick="showAffaireDetail(\'' + t.affaire_id + '\');return false" style="color:var(--t3)">' + cmdEsc(t.affaire_nom || 'Affaire') + '</a></div>' : ''}</td>
+        <td style="padding:6px 8px;font-size:12px">${cmdEsc(fmtCommercialName(t.assigne_nom || '') || '—')}</td>
+        <td style="padding:6px 8px;white-space:nowrap">
+          ${t.statut !== 'terminee' ? '<button class="btn" style="font-size:11px;padding:2px 6px;color:var(--green)" title="Terminer" onclick="setTacheStatut(' + t.id + ',\'terminee\')">✓</button>' : ''}
+          <button class="btn" style="font-size:11px;padding:2px 6px" title="Modifier" onclick="tacheModalOpen(${t.id})">✎</button>
+          <button class="btn" style="font-size:11px;padding:2px 6px;color:var(--red)" title="Supprimer" onclick="deleteTache(${t.id})">×</button>
+        </td>
+      </tr>`).join('')}</tbody></table>
+  </div></div></div>`;
+}
+
+// ── Modal création / édition ──
+function tacheModalOpen(id, prefill) {
+  const t = id ? _taches.find(x => x.id === id) : null;
+  _tacheSel = t
+    ? { client_id: t.client_id || null, client_name: t.client_name || null, affaire_id: t.affaire_id || null, affaire_nom: t.affaire_nom || null }
+    : (prefill ? { client_id: prefill.client_id || null, client_name: prefill.client_name || null, affaire_id: prefill.affaire_id || null, affaire_nom: prefill.affaire_nom || null } : { client_id: null, client_name: null, affaire_id: null, affaire_nom: null });
+  const comm = (DB.commerciaux || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
+  const myId = currentCommercial && currentCommercial.id;
+  const assigneVal = t ? t.assigne_id : myId;
+  const ech = t && t.echeance ? new Date(t.echeance) : null;
+  const echVal = ech && !isNaN(ech.getTime()) ? `${ech.getFullYear()}-${String(ech.getMonth() + 1).padStart(2, '0')}-${String(ech.getDate()).padStart(2, '0')}T${String(ech.getHours()).padStart(2, '0')}:${String(ech.getMinutes()).padStart(2, '0')}` : '';
+  const body = `
+    <input type="hidden" id="t-id" value="${id || ''}">
+    <div class="fg"><label class="fl">Titre *</label><input class="fi" id="t-titre" value="${t ? (t.titre || '').replace(/"/g, '&quot;') : ''}" placeholder="Ex: Relancer pour le devis X"></div>
+    <div class="fg"><label class="fl">Description</label><textarea class="fi" id="t-desc" rows="3" style="resize:vertical">${t ? (t.description || '') : ''}</textarea></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div class="fg" style="flex:1;min-width:150px"><label class="fl">Échéance</label><input type="datetime-local" class="fi" id="t-echeance" value="${echVal}"></div>
+      <div class="fg" style="flex:1;min-width:120px"><label class="fl">Priorité</label><select class="fi" id="t-prio">${Object.entries(TACHE_PRIOS).map(([k, v]) => `<option value="${k}"${(t ? t.priorite : 'normale') === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></div>
+      <div class="fg" style="flex:1;min-width:120px"><label class="fl">Statut</label><select class="fi" id="t-statut">${Object.entries(TACHE_STATUTS).map(([k, v]) => `<option value="${k}"${(t ? t.statut : 'a_faire') === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></div>
+    </div>
+    <div class="fg"><label class="fl">Assigné à *</label><select class="fi" id="t-assigne">${comm.map(c => `<option value="${c.id}"${String(assigneVal) === String(c.id) ? ' selected' : ''}>${cmdEsc(fmtCommercialName(c.nom || c.email || ''))}${c.email ? '' : ' (sans email)'}</option>`).join('')}</select>
+      <div style="font-size:11px;color:var(--t3);margin-top:3px">Une tâche Microsoft To Do + un email seront créés chez l'assigné (si compte Microsoft).</div></div>
+    <div class="fg" style="position:relative"><label class="fl">Client lié</label>
+      <div id="t-client-chip" style="margin-bottom:4px"></div>
+      <input type="text" id="t-client-search" placeholder="Rechercher une société..." autocomplete="off" oninput="tacheSearchClient(this.value)" onfocus="tacheSearchClient(this.value)" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card,#fff);color:var(--t1)">
+      <div id="t-client-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.2)"></div>
+    </div>
+    <div class="fg"><label class="fl">Affaire liée</label><select class="fi" id="t-affaire"></select></div>`;
+  openDynModal('tache', id ? 'Modifier la tâche' : 'Nouvelle tâche commerciale', body,
+    `<button class="btn" onclick="closeModal('tache')">Annuler</button><button class="btn btn-primary" onclick="saveTache()">Enregistrer</button>`, '560px');
+  setTimeout(() => { tacheRenderClientChip(); tacheRenderAffaireOptions(); }, 30);
+}
+async function tacheSearchClient(q) {
+  const dd = document.getElementById('t-client-dd'); if (!dd) return;
+  const ql = (q || '').trim();
+  if (ql.length < 1) { dd.style.display = 'none'; return; }
+  const words = ql.split(/\s+/).filter(Boolean);
+  let query = sb.from('clients').select('id,name,city');
+  for (const w of words) { const pat = '%' + w.replace(/[%,]/g, '') + '%'; query = query.or(`name.ilike.${pat},code.ilike.${pat}`); }
+  let { data } = await query.order('name').limit(60);
+  if (!data || !data.length) {
+    let q2 = sb.from('clients').select('id,name,city');
+    for (const w of words) q2 = q2.or(_looseIlikeOr(['name', 'code'], w));
+    const r2 = await q2.order('name').limit(60); data = r2.data || [];
+  }
+  data = (data || []).slice().sort((a, b) => _searchScore(ql, b.name) - _searchScore(ql, a.name));
+  dd.innerHTML = data.length ? data.slice(0, 60).map(c => `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="tacheSelectClient('${c.id}','${(c.name || '').replace(/'/g, "&#39;")}')">${cmdEsc(c.name)}${c.city ? ' <span style="color:var(--t3);font-size:11px">' + cmdEsc(c.city) + '</span>' : ''}</div>`).join('') : '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucune société</div>';
+  dd.style.display = 'block';
+}
+function tacheSelectClient(id, name) { _tacheSel.client_id = id; _tacheSel.client_name = name; _tacheSel.affaire_id = null; _tacheSel.affaire_nom = null; const dd = document.getElementById('t-client-dd'); if (dd) dd.style.display = 'none'; const inp = document.getElementById('t-client-search'); if (inp) inp.value = ''; tacheRenderClientChip(); tacheRenderAffaireOptions(); }
+function tacheRenderClientChip() {
+  const el = document.getElementById('t-client-chip'); if (!el) return;
+  el.innerHTML = _tacheSel.client_id ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#6366f122;color:#6366f1;border:1px solid #6366f144">${cmdEsc(_tacheSel.client_name || '')} <span style="cursor:pointer;opacity:0.6;font-size:14px" onclick="tacheClearClient()">&times;</span></span>` : '';
+}
+function tacheClearClient() { _tacheSel.client_id = null; _tacheSel.client_name = null; _tacheSel.affaire_id = null; _tacheSel.affaire_nom = null; tacheRenderClientChip(); tacheRenderAffaireOptions(); }
+function tacheRenderAffaireOptions() {
+  const sel = document.getElementById('t-affaire'); if (!sel) return;
+  const affs = _tacheSel.client_id ? (DB.affaires || []).filter(a => a.client_id === _tacheSel.client_id) : [];
+  sel.innerHTML = '<option value="">— Aucune —</option>' + affs.map(a => { const lbl = [a.code_projet, a.nom, a.ville].filter(Boolean).join(' — ') || a.nom || a.id; return `<option value="${a.id}"${_tacheSel.affaire_id === a.id ? ' selected' : ''}>${cmdEsc(lbl)}</option>`; }).join('');
+  sel.disabled = !_tacheSel.client_id;
+}
+async function saveTache() {
+  const titre = document.getElementById('t-titre')?.value.trim();
+  if (!titre) { toast('Le titre est obligatoire', 'error'); return; }
+  const id = document.getElementById('t-id')?.value || '';
+  const assigneId = document.getElementById('t-assigne')?.value || '';
+  const assigne = (DB.commerciaux || []).find(c => String(c.id) === String(assigneId));
+  const echRaw = document.getElementById('t-echeance')?.value || '';
+  const echeance = echRaw ? echRaw + (echRaw.length === 16 ? ':00' : '') : null;
+  const affaireId = document.getElementById('t-affaire')?.value || null;
+  const affaire = affaireId ? (DB.affaires || []).find(a => a.id === affaireId) : null;
+  const statut = document.getElementById('t-statut')?.value || 'a_faire';
+  const row = {
+    titre, description: document.getElementById('t-desc')?.value.trim() || null,
+    priorite: document.getElementById('t-prio')?.value || 'normale',
+    statut,
+    echeance,
+    client_id: _tacheSel.client_id, client_name: _tacheSel.client_name,
+    affaire_id: affaireId, affaire_nom: affaire ? ([affaire.code_projet, affaire.nom].filter(Boolean).join(' — ') || affaire.nom) : (_tacheSel.affaire_nom || null),
+    assigne_id: assigne ? assigne.id : null, assigne_nom: assigne ? assigne.nom : null, assigne_email: assigne ? assigne.email : null,
+    updated_at: new Date().toISOString(),
+    done_at: statut === 'terminee' ? new Date().toISOString() : null,
+  };
+  const prev = id ? _taches.find(x => String(x.id) === String(id)) : null;
+  let saved;
+  if (id) {
+    const { data, error } = await sb.from('taches_commerciales').update(row).eq('id', id).select().single();
+    if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+    saved = data;
+  } else {
+    row.createur_id = currentCommercial ? currentCommercial.id : null;
+    row.createur_nom = currentCommercial ? currentCommercial.nom : null;
+    row.createur_email = currentCommercial ? currentCommercial.email : null;
+    const { data, error } = await sb.from('taches_commerciales').insert(row).select().single();
+    if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+    saved = data;
+  }
+  closeModal('tache');
+  toast('Tâche enregistrée', 'success');
+  // Push Microsoft To Do + email si nouvel assigné (création ou changement d'assigné)
+  const assigneeChanged = !prev || prev.assigne_email !== saved.assigne_email;
+  if (saved.assigne_email && assigneeChanged && saved.statut !== 'terminee' && saved.statut !== 'annulee') {
+    pushTacheToTodo(saved);
+  }
+  await loadTaches();
+  renderPage(currentPage === 'taches' ? 'taches' : currentPage);
+}
+async function pushTacheToTodo(t) {
+  try {
+    const ctx = [t.client_name ? 'Client : ' + t.client_name : '', t.affaire_nom ? 'Affaire : ' + t.affaire_nom : '', t.description || ''].filter(Boolean).join('\n');
+    const dueLocal = t.echeance ? (function () { const d = new Date(t.echeance); const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:00`; })() : null;
+    const r = await fetch('/api/task-todo', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'create', assigneeEmail: t.assigne_email, assignerEmail: (currentCommercial && currentCommercial.email) || null, assignerName: (currentCommercial && currentCommercial.nom) || null, title: t.titre, body: ctx, dueDateTime: dueLocal })
+    });
+    const o = await r.json().catch(() => ({}));
+    if (!r.ok) { toast('Tâche créée (To Do non synchronisé : ' + (o.error || r.status) + ')', 'warning'); return; }
+    if (o.todoTaskId) { await sb.from('taches_commerciales').update({ todo_task_id: o.todoTaskId }).eq('id', t.id); }
+    toast('Assigné notifié (Microsoft To Do + email)', 'success');
+  } catch (e) { toast('Tâche créée (notification Microsoft indisponible)', 'warning'); }
+}
+async function setTacheStatut(id, statut) {
+  const t = _taches.find(x => String(x.id) === String(id)); if (!t) return;
+  const upd = { statut, updated_at: new Date().toISOString(), done_at: statut === 'terminee' ? new Date().toISOString() : null };
+  const { error } = await sb.from('taches_commerciales').update(upd).eq('id', id);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  // Refléter dans To Do (marquer terminée)
+  if (statut === 'terminee' && t.todo_task_id && t.assigne_email) {
+    try { fetch('/api/task-todo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'complete', assigneeEmail: t.assigne_email, todoTaskId: t.todo_task_id }) }).then(() => {}, () => {}); } catch (e) {}
+  }
+  toast('Statut mis à jour', 'success');
+  await loadTaches();
+  renderPage(currentPage);
+}
+async function deleteTache(id) {
+  if (!confirm('Supprimer cette tâche ?')) return;
+  if (!(await requireDeletePassword())) return;
+  const t = _taches.find(x => String(x.id) === String(id));
+  const { error } = await sb.from('taches_commerciales').delete().eq('id', id);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  if (t && t.todo_task_id && t.assigne_email) { try { fetch('/api/task-todo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', assigneeEmail: t.assigne_email, todoTaskId: t.todo_task_id }) }).then(() => {}, () => {}); } catch (e) {} }
+  toast('Tâche supprimée', 'success');
+  await loadTaches();
+  renderPage(currentPage);
+}
+// Carte "Tâches" pour fiche client / affaire
+function renderTachesCard(opts) {
+  const list = (_taches || []).filter(t => opts.client_id ? t.client_id === opts.client_id : (opts.affaire_id ? t.affaire_id === opts.affaire_id : false));
+  const pre = opts.client_id ? `{client_id:'${opts.client_id}',client_name:'${(opts.client_name || '').replace(/'/g, "\\'")}'${opts.affaire_id ? ",affaire_id:'" + opts.affaire_id + "',affaire_nom:'" + (opts.affaire_nom || '').replace(/'/g, "\\'") + "'" : ''}}` : `{affaire_id:'${opts.affaire_id}',affaire_nom:'${(opts.affaire_nom || '').replace(/'/g, "\\'")}',client_id:'${opts.client_id_aff || ''}',client_name:'${(opts.client_name || '').replace(/'/g, "\\'")}'}`;
+  return `<div class="card" style="margin-bottom:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">Tâches (${list.length})</div>
+      <button class="btn btn-sm" onclick="tacheModalOpen(null, ${pre})">+ Tâche</button></div>
+    <div class="card-body" style="padding:0">${list.length ? '<div class="table-wrap"><table><thead><tr><th>Tâche</th><th>Échéance</th><th>Statut</th><th>Assigné</th><th></th></tr></thead><tbody>' +
+      list.map(t => `<tr style="${_tEnRetard(t) ? 'background:rgba(239,68,68,.06)' : ''}"><td style="padding:6px 8px;font-size:12px"><strong>${cmdEsc(t.titre)}</strong></td><td style="padding:6px 8px;font-size:12px;white-space:nowrap">${_tEcheanceTxt(t.echeance)}</td><td style="padding:6px 8px">${_tStatutBadge(t.statut)}</td><td style="padding:6px 8px;font-size:12px">${cmdEsc(fmtCommercialName(t.assigne_nom || '') || '—')}</td><td style="padding:6px 8px;white-space:nowrap">${t.statut !== 'terminee' ? '<button class="btn" style="font-size:11px;padding:2px 6px;color:var(--green)" title="Terminer" onclick="setTacheStatut(' + t.id + ',\'terminee\')">✓</button>' : ''}<button class="btn" style="font-size:11px;padding:2px 6px" onclick="tacheModalOpen(' + t.id + ')">✎</button></td></tr>`).join('') +
+      '</tbody></table></div>' : '<div style="padding:14px;text-align:center;color:var(--t3);font-size:13px">Aucune tâche</div>'}</div>
+  </div>`;
+}
+
 function toggleSidebar(force) {
   const s = document.getElementById('sidebar'), o = document.getElementById('sidebarOverlay');
   const open = force !== undefined ? force : !s.classList.contains('open');
@@ -4854,6 +5095,7 @@ function renderPage(page) {
     analyse: renderAnalyse,
     clients: renderClients,
     contacts: renderContacts,
+    taches: renderTaches,
     concurrence: renderConcurrence,
     'import-xml': renderImportXml,
     'enrich-siren': renderEnrichSiren,
@@ -4932,6 +5174,7 @@ function renderPage(page) {
   if (page === 'annuaire') setTimeout(async () => { await loadAnnuaireAbsences(); renderAnnuaireRefresh(); }, 50);
   if (page === 'cr' && crViewMode === 'send') setTimeout(loadSendGroups, 50);
   if (page === 'ged') setTimeout(() => { gedLoadStats(); gedRenderChat(); }, 50);
+  if (page === 'taches' && !_tachesLoaded) { loadTaches().then(() => { if (currentPage === 'taches') renderPage('taches'); }); }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -6919,6 +7162,7 @@ async function goToSiege(siren, currentId) {
   showClient(siege.id);
 }
 async function showClient(id) {
+  if (!_tachesLoaded) { try { await loadTaches(); } catch (e) {} }
   currentClient = DB.clients.find(c=>c.id===id);
   // Si le client n'est pas en mémoire (pagination), le charger depuis Supabase
   if (!currentClient) {
@@ -8438,6 +8682,7 @@ function renderClientDetail() {
       <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer ce client/prospect">Supprimer</button>
     </div>
   </div>
+  ${renderTachesCard({ client_id: c.id, client_name: c.name })}
   <div class="card" style="margin-bottom:16px">
     <div class="card-header">
       <div class="card-title">Analyse CA facturé</div>
@@ -9357,6 +9602,7 @@ function goAffairesPage(p) { affairesPage=p; document.getElementById('contentAre
 async function showAffaireDetail(id) {
   currentAffaireId = id;
   currentPage = 'affaire-detail';
+  if (!_tachesLoaded) { try { await loadTaches(); } catch (e) {} }
   await loadApporteurCommMap();
   const a = DB.affaires.find(x => x.id === id);
   if (a) document.getElementById('pageTitle').textContent = 'Affaire ' + (a.ref || a.nom || id);
@@ -9405,6 +9651,7 @@ function renderAffaireDetail() {
       ${crsLies.length ? '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Titre</th><th>Type</th><th>Rédacteur</th></tr></thead><tbody>' + crsLies.slice().sort((x, y) => (y.date_raw || y.date || '').localeCompare(x.date_raw || x.date || '')).map(r => `<tr style="cursor:pointer" onclick="openCRDetail('${r.id}')"><td style="font-size:12px">${r.date_raw ? fmtDateFR(r.date_raw) : (r.date || '—')}</td><td style="font-size:12px"><strong>${cmdEsc(r.titre || '(Sans titre)')}</strong></td><td style="font-size:12px">${cmdEsc(r.type_cr || '')}</td><td style="font-size:12px">${cmdEsc(r.redacteur_nom || '')}</td></tr>`).join('') + '</tbody></table></div>' : '<div style="padding:14px;text-align:center;color:var(--t3);font-size:13px">Aucun compte-rendu lié à cette affaire</div>'}
     </div>
   </div>
+  ${renderTachesCard({ affaire_id: a.id, affaire_nom: [a.code_projet, a.nom].filter(Boolean).join(' — ') || a.nom, client_id_aff: a.client_id, client_name: a.client_name })}
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
     ${detailSection('Informations', [
       detailRow('Référence', a.ref),
@@ -15583,6 +15830,9 @@ document.addEventListener('click', e => {
   }
   if (!e.target.closest('#crAffaireSearch') && !e.target.closest('#crAffaireDropdown')) {
     const d = document.getElementById('crAffaireDropdown'); if(d) d.style.display='none';
+  }
+  if (!e.target.closest('#t-client-search') && !e.target.closest('#t-client-dd')) {
+    const d = document.getElementById('t-client-dd'); if(d) d.style.display='none';
   }
   if (!e.target.closest('#ec-reseaux-input') && !e.target.closest('#ec-reseaux-dd')) {
     const d = document.getElementById('ec-reseaux-dd'); if(d) d.style.display='none';

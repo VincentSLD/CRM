@@ -50,6 +50,20 @@ d'accès. Ajouter dans **Vercel → Settings → Environment Variables** (même 
 > via Microsoft une fois** pour accorder la permission `Mail.Send` et fournir le
 > refresh token. L'email envoyé apparaît alors dans ses **Éléments envoyés**.
 
+## 4. Tâches commerciales → Microsoft To Do (permissions d'APPLICATION)
+
+L'assignation d'une tâche crée une tâche dans le **Microsoft To Do** de l'assigné
+(`/api/task-todo`, flux app-only client_credentials) + un email de notification.
+Dans **Entra → votre app → Autorisations d'API → Microsoft Graph → Autorisations
+d'application** (et non déléguées), ajouter puis **Accorder le consentement admin** :
+
+- **`Tasks.ReadWrite.All`** — créer/mettre à jour des tâches To Do dans la boîte de l'assigné
+- **`Mail.Send`** (Application) — envoyer l'email de notification
+
+Les variables Vercel `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`
+(déjà utilisées) suffisent. Côté Supabase, créer la table `taches_commerciales`
+(voir `add_missing_columns.sql`).
+
 ## Comportement
 
 - Au clic, l'utilisateur est redirigé vers Microsoft, puis revient connecté.
