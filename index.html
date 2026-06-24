@@ -2918,8 +2918,8 @@ tbody tr:last-child td { border-bottom: none; }
 </div>
 <!-- Languette pour réafficher NOVA quand il est masqué -->
 <div id="novaShowHandle" onclick="novaSetHidden(false)" title="Afficher NOVA" style="display:none;position:fixed;bottom:80px;right:0;width:20px;height:48px;border-radius:12px 0 0 12px;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;align-items:center;justify-content:center;cursor:pointer;box-shadow:-2px 2px 12px rgba(0,0,0,.25);z-index:900;font-size:13px;opacity:.9">✦</div>
-<div id="aiChatPanel" style="display:none;position:fixed;bottom:90px;right:24px;width:400px;max-width:calc(100vw - 32px);height:560px;max-height:calc(100vh - 120px);background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.2);z-index:900;flex-direction:column;overflow:hidden">
-  <div style="padding:14px 16px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;display:flex;align-items:center;justify-content:space-between">
+<div id="aiChatPanel" style="display:none;position:fixed;bottom:90px;right:24px;width:520px;max-width:calc(100vw - 32px);height:680px;max-height:calc(100vh - 120px);min-width:340px;min-height:380px;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.2);z-index:900;flex-direction:column;overflow:hidden;resize:both">
+  <div id="aiChatHeader" onmousedown="novaDragStart(event)" style="padding:14px 16px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;display:flex;align-items:center;justify-content:space-between;cursor:move;user-select:none">
     <div><div style="font-weight:700;font-size:14px">✦ NOVA</div><div style="font-size:11px;opacity:.85">Ton assistant IA — dis "Hey Nova"</div></div>
     <div style="display:flex;align-items:center;gap:8px">
       <button id="novaWakeToggle" onclick="toggleNovaWake()" title="Écoute permanente Hey Nova" style="background:none;border:none;color:#fff;cursor:pointer;font-size:11px;opacity:.7;padding:4px;font-weight:600">Hey Nova</button>
@@ -21031,6 +21031,29 @@ const NOVA_QUICK = {
   action: "Demande-moi sur quelle opportunité tu dois m'aider (par nom ou client), puis propose la prochaine action commerciale la plus pertinente (relance, passage en négociation, demande de pièces, RDV...) avec une échéance suggérée, en t'appuyant sur son stade, sa probabilité, sa date de signature et les tâches déjà liées.",
 };
 function novaQuick(k) { const p = NOVA_QUICK[k]; if (!p) return; const panel = document.getElementById('aiChatPanel'); if (panel && panel.style.display === 'none') toggleAIChat(); askAIChat(p); }
+
+// Déplacement de la fenêtre NOVA (drag par l'en-tête)
+let _novaDrag = null;
+function novaDragStart(e) {
+  if (e.target.closest('button')) return; // laisser les boutons de l'en-tête fonctionner
+  const panel = document.getElementById('aiChatPanel'); if (!panel) return;
+  const r = panel.getBoundingClientRect();
+  _novaDrag = { dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, h: r.height };
+  panel.style.left = r.left + 'px'; panel.style.top = r.top + 'px';
+  panel.style.right = 'auto'; panel.style.bottom = 'auto';
+  document.addEventListener('mousemove', novaDragMove);
+  document.addEventListener('mouseup', novaDragEnd);
+  e.preventDefault();
+}
+function novaDragMove(e) {
+  if (!_novaDrag) return;
+  const panel = document.getElementById('aiChatPanel'); if (!panel) return;
+  let x = e.clientX - _novaDrag.dx, y = e.clientY - _novaDrag.dy;
+  x = Math.max(4, Math.min(x, window.innerWidth - _novaDrag.w - 4));
+  y = Math.max(4, Math.min(y, window.innerHeight - 44));
+  panel.style.left = x + 'px'; panel.style.top = y + 'px';
+}
+function novaDragEnd() { _novaDrag = null; document.removeEventListener('mousemove', novaDragMove); document.removeEventListener('mouseup', novaDragEnd); }
 async function askAIChat(presetQuestion) {
   const input = document.getElementById('aiChatInput');
   const question = (presetQuestion || input?.value || '').trim();
