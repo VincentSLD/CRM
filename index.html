@@ -2931,6 +2931,10 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
   </div>
   <div id="aiChatMsgs" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--bg-1)"></div>
+  <div onclick="novaToggleQuick()" style="padding:4px 10px;border-top:1px solid var(--border);background:var(--card,#fff);display:flex;align-items:center;gap:6px;cursor:pointer;font-size:10px;font-weight:700;color:var(--t3);user-select:none">
+    <span id="novaQuickChev">▾</span> Actions rapides
+  </div>
+  <div id="novaQuickRows">
   <div style="padding:6px 10px;border-top:1px solid var(--border);display:flex;gap:6px;overflow-x:auto;background:var(--card,#fff);align-items:center">
     <span style="font-size:10px;color:var(--t3);font-weight:700;white-space:nowrap">⚡ Opportunités</span>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('prioriser')">🎯 Prioriser</button>
@@ -2948,6 +2952,7 @@ tbody tr:last-child td { border-bottom: none; }
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliImpayes')">⚠️ Impayés</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliProspects')">🌱 Prospects</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliRecherche')">🔍 Rechercher</button>
+  </div>
   </div>
   <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;background:var(--card,#fff)">
     <textarea id="aiChatInput" placeholder="Posez votre question..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();askAIChat()}" oninput="_autoResizeAIInput()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1);resize:none;overflow-y:auto;max-height:120px;line-height:1.4;font-family:inherit"></textarea>
@@ -20913,6 +20918,7 @@ function toggleAIChat() {
   const open = panel.style.display === 'flex';
   panel.style.display = open ? 'none' : 'flex';
   if (open) aiStopSpeak();
+  if (!open) _novaApplyQuickPref();
   if (!open && _aiChatHistory.length === 0) {
     const _p = _getAIUserProfile();
     const _hello = _p && _p.prenom ? `Bonjour ${_p.prenom} ! ` : 'Bonjour ! ';
@@ -21091,6 +21097,22 @@ const NOVA_QUICK = {
   cliRecherche: "Demande-moi un nom de société (même approximatif ou abrégé) puis retrouve-la dans la base avec la recherche tolérante, et affiche ses coordonnées et ses contacts (NOM Prénom, fonction, emails cliquables, téléphones).",
 };
 function novaQuick(k) { const p = NOVA_QUICK[k]; if (!p) return; const panel = document.getElementById('aiChatPanel'); if (panel && panel.style.display === 'none') toggleAIChat(); askAIChat(p); }
+function novaToggleQuick() {
+  const rows = document.getElementById('novaQuickRows'), chev = document.getElementById('novaQuickChev');
+  if (!rows) return;
+  const open = rows.style.display !== 'none';
+  rows.style.display = open ? 'none' : '';
+  if (chev) chev.textContent = open ? '▸' : '▾';
+  try { localStorage.setItem('nova_quick_open', open ? '0' : '1'); } catch (e) {}
+}
+function _novaApplyQuickPref() {
+  const rows = document.getElementById('novaQuickRows'), chev = document.getElementById('novaQuickChev');
+  if (!rows) return;
+  let pref = '1'; try { pref = localStorage.getItem('nova_quick_open') || '1'; } catch (e) {}
+  const open = pref !== '0';
+  rows.style.display = open ? '' : 'none';
+  if (chev) chev.textContent = open ? '▾' : '▸';
+}
 
 // Déplacement de la fenêtre NOVA (drag par l'en-tête)
 let _novaDrag = null;
