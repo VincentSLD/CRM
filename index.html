@@ -5882,9 +5882,11 @@ function oppDetail(akId) {
 // Carte des tâches liées à une opportunité
 function _oppTachesCard(akId, clientId, clientName, oppNom) {
   const list = (_taches || []).filter(t => t.opportunite_id === akId);
-  const rows = list.length ? '<div class="table-wrap"><table><thead><tr><th>Tâche</th><th>Échéance</th><th>Priorité</th><th>Statut</th><th>Assigné</th><th></th></tr></thead><tbody>' +
+  const apercu = d => { const s = (d || '').trim().replace(/\s+/g, ' '); return s.length > 70 ? s.slice(0, 70) + '…' : s; };
+  const rows = list.length ? '<div class="table-wrap"><table><thead><tr><th>Tâche</th><th>Description</th><th>Échéance</th><th>Priorité</th><th>Statut</th><th>Assigné</th><th></th></tr></thead><tbody>' +
     list.map(t => `<tr style="${_tEnRetard(t) ? 'background:rgba(239,68,68,.06)' : ''}">
       <td style="padding:6px 8px;font-size:12px"><strong>${cmdEsc(t.titre)}</strong></td>
+      <td style="padding:6px 8px;font-size:12px;color:var(--t2);max-width:260px" title="${cmdEsc((t.description || '').replace(/"/g, '&quot;'))}">${cmdEsc(apercu(t.description)) || '<span style="color:var(--t3)">—</span>'}</td>
       <td style="padding:6px 8px;font-size:12px;white-space:nowrap">${_tEcheanceTxt(t.echeance)}</td>
       <td style="padding:6px 8px">${_tPrioBadge(t.priorite)}</td>
       <td style="padding:6px 8px">${_tStatutBadge(t.statut)}</td>
