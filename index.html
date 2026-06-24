@@ -5307,14 +5307,40 @@ async function oppModalOpen(akId) {
   } catch (e) { toast('Erreur ouverture : ' + e.message, 'error'); }
 }
 
+// Stades valides pour un portefeuille : déduits des opportunités existantes (l'API n'expose pas le lien pipe↔stade)
+function _oppStagesForPipe(pipeId, curStageId) {
+  const stages = _oppRefs.stages;
+  let list = stages.filter(s => s.status === 'IN_PROGRESS');
+  if (pipeId) {
+    const used = new Set();
+    (_opps || []).forEach(o => { if (String(o.pipe_id) === String(pipeId) && o.stage_id) used.add(String(o.stage_id)); });
+    if (used.size) {
+      const f = stages.filter(s => used.has(String(s.id)) && s.status === 'IN_PROGRESS');
+      if (f.length) list = f;
+    }
+  }
+  list = list.slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+  // Conserver le stade courant même s'il n'est pas "en cours" (édition d'une opp gagnée/perdue)
+  if (curStageId && !list.some(s => String(s.id) === String(curStageId))) {
+    const cur = stages.find(s => String(s.id) === String(curStageId));
+    if (cur) list.unshift(cur);
+  }
+  return list;
+}
+function _oppStageOptionsHtml(list, sel) {
+  return '<option value="">—</option>' + list.map(s => `<option value="${s.id}"${String(sel) === String(s.id) ? ' selected' : ''}>${cmdEsc(s.name)}</option>`).join('');
+}
+function _oppPipeChanged(pipeId) {
+  _oppForm.pipeId = pipeId;
+  const list = _oppStagesForPipe(pipeId, _oppForm.stageId);
+  if (_oppForm.stageId && !list.some(s => String(s.id) === String(_oppForm.stageId))) _oppForm.stageId = '';
+  const sel = document.getElementById('of-stage');
+  if (sel) sel.innerHTML = _oppStageOptionsHtml(list, _oppForm.stageId);
+}
+
 function _oppRenderForm() {
   const f = _oppForm; if (!f) return;
-  const inProgress = _oppRefs.stages.filter(s => s.status === 'IN_PROGRESS').sort((a, b) => (a.order || 0) - (b.order || 0));
-  // Conserver le stade courant dans la liste même s'il n'est pas "en cours" (édition d'une opp gagnée/perdue)
-  if (f.stageId && !inProgress.some(s => String(s.id) === String(f.stageId))) {
-    const cur = _oppRefs.stages.find(s => String(s.id) === String(f.stageId));
-    if (cur) inProgress.unshift(cur);
-  }
+  const stageList = _oppStagesForPipe(f.pipeId, f.stageId);
   const esc = s => (s == null ? '' : String(s).replace(/"/g, '&quot;'));
   const lbl = 'display:block;font-size:11px;color:var(--t3);margin-bottom:3px';
   const fi = 'width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)';
@@ -5331,11 +5357,12 @@ function _oppRenderForm() {
         <select id="of-contact" style="${fi}" onchange="_oppForm.contactAkId=this.value">
           <option value="">${f.clientId ? '—' : '(choisir un client d\'abord)'}</option></select></div>
       <div><label style="${lbl}">Portefeuille *</label>
-        <select id="of-pipe" style="${fi}" onchange="_oppForm.pipeId=this.value">
+        <select id="of-pipe" style="${fi}" onchange="_oppPipeChanged(this.value)">
           <option value="">—</option>${_oppRefs.pipes.map(p => `<option value="${p.id}"${String(f.pipeId) === String(p.id) ? ' selected' : ''}>${cmdEsc(p.name)}</option>`).join('')}</select></div>
       <div><label style="${lbl}">Stade *</label>
         <select id="of-stage" style="${fi}" onchange="_oppForm.stageId=this.value">
-          <option value="">—</option>${inProgress.map(s => `<option value="${s.id}"${String(f.stageId) === String(s.id) ? ' selected' : ''}>${cmdEsc(s.name)}</option>`).join('')}</select></div>
+          ${_oppStageOptionsHtml(stageList, f.stageId)}</select>
+        <div style="font-size:10px;color:var(--t3);margin-top:2px">Stades du portefeuille sélectionné</div></div>
       <div><label style="${lbl}">Type d'origine *</label>
         <select id="of-origin" style="${fi}" onchange="_oppForm.originTypeId=this.value">
           ${_oppRefs.originTypes.map(t => `<option value="${t.id}"${String(f.originTypeId) === String(t.id) ? ' selected' : ''}>${cmdEsc(t.name)}</option>`).join('')}</select></div>
