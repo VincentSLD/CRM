@@ -2940,6 +2940,15 @@ tbody tr:last-child td { border-bottom: none; }
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('relance')">✉️ Relance</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('action')">✅ Quoi faire ?</button>
   </div>
+  <div style="padding:6px 10px;border-top:1px solid var(--border);display:flex;gap:6px;overflow-x:auto;background:var(--card,#fff);align-items:center">
+    <span style="font-size:10px;color:var(--t3);font-weight:700;white-space:nowrap">⚡ Clients</span>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliFiche')">📇 Fiche société</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliDormants')">😴 Dormants</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliTop')">🏆 Top clients</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliImpayes')">⚠️ Impayés</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliProspects')">🌱 Prospects</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliRecherche')">🔍 Rechercher</button>
+  </div>
   <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;background:var(--card,#fff)">
     <textarea id="aiChatInput" placeholder="Posez votre question..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();askAIChat()}" oninput="_autoResizeAIInput()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1);resize:none;overflow-y:auto;max-height:120px;line-height:1.4;font-family:inherit"></textarea>
     <button class="btn" id="aiDictBtn" onclick="toggleAIDictation()" title="Dictée vocale" style="font-size:12px;padding:6px 8px">
@@ -21074,6 +21083,12 @@ const NOVA_QUICK = {
   perf: "Analyse la performance commerciale des opportunités : taux de transformation (gagnées vs perdues) global ET par portefeuille, montant gagné vs perdu, et le pipeline en cours par responsable commercial. Mets en avant les points forts et les axes d'amélioration.",
   relance: "Je veux relancer un client sur une opportunité. Demande-moi de quelle opportunité il s'agit (ou propose-moi les opportunités en cours dont la signature approche), puis rédige un email de relance professionnel, personnalisé (client, objet de l'opportunité, montant), prêt à envoyer.",
   action: "Demande-moi sur quelle opportunité tu dois m'aider (par nom ou client), puis propose la prochaine action commerciale la plus pertinente (relance, passage en négociation, demande de pièces, RDV...) avec une échéance suggérée, en t'appuyant sur son stade, sa probabilité, sa date de signature et les tâches déjà liées.",
+  cliFiche: "Demande-moi le nom d'une société (client ou prospect), puis fais un point complet : coordonnées, contacts (avec téléphones et emails), catégorie ABC, commercial, statut, CA, devis/commandes/factures en cours, opportunités et tâches liées, et les derniers comptes-rendus.",
+  cliDormants: "Liste les clients dormants (aucune facture depuis plus de 6 mois) à réactiver en priorité. Pour chacun : nom, ville, CA historique, commercial. Classe par CA décroissant et propose une action de réactivation.",
+  cliTop: "Donne le top 10 des clients par chiffre d'affaires facturé sur les 12 derniers mois, avec pour chacun : CA, catégorie ABC, commercial et ville.",
+  cliImpayes: "Liste les clients ayant des factures impayées ou en retard : nom du client, montant total dû, nombre de factures concernées et jours de retard maximum. Classe par montant dû décroissant.",
+  cliProspects: "Liste les prospects (clients au statut 'nouveau' ou 'prospect') ayant au moins une opportunité en cours, à transformer en priorité. Indique pour chacun le montant des opportunités en cours et l'action à mener.",
+  cliRecherche: "Demande-moi un nom de société (même approximatif ou abrégé) puis retrouve-la dans la base avec la recherche tolérante, et affiche ses coordonnées et ses contacts (NOM Prénom, fonction, emails cliquables, téléphones).",
 };
 function novaQuick(k) { const p = NOVA_QUICK[k]; if (!p) return; const panel = document.getElementById('aiChatPanel'); if (panel && panel.style.display === 'none') toggleAIChat(); askAIChat(p); }
 
