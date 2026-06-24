@@ -5334,6 +5334,26 @@ async function oppModalOpen(akId) {
   } catch (e) { toast('Erreur ouverture : ' + e.message, 'error'); }
 }
 
+// Portefeuilles dédoublonnés : Akuiteo peut renvoyer plusieurs pipes de même code (sociétés différentes).
+// On regroupe par code et on garde celui réellement utilisé dans les opportunités (sinon le 1er).
+function _oppPipesDedup(curPipeId) {
+  const used = new Set((_opps || []).map(o => String(o.pipe_id)).filter(Boolean));
+  const byCode = {};
+  (_oppRefs.pipes || []).forEach(p => { const k = p.code || p.name || p.id; (byCode[k] = byCode[k] || []).push(p); });
+  const out = [];
+  Object.values(byCode).forEach(list => {
+    if (list.length === 1) { out.push(list[0]); return; }
+    // privilégier le pipe correspondant au choix courant, puis celui utilisé dans les opportunités
+    out.push(list.find(p => String(p.id) === String(curPipeId)) || list.find(p => used.has(String(p.id))) || list[0]);
+  });
+  // garantir la présence du pipe courant (édition)
+  if (curPipeId && !out.some(p => String(p.id) === String(curPipeId))) {
+    const cur = (_oppRefs.pipes || []).find(p => String(p.id) === String(curPipeId));
+    if (cur) out.push(cur);
+  }
+  return out.sort((a, b) => String(a.name).localeCompare(String(b.name), 'fr'));
+}
+
 // Stades valides pour un portefeuille : déduits des opportunités existantes (l'API n'expose pas le lien pipe↔stade)
 function _oppStagesForPipe(pipeId, curStageId) {
   const stages = _oppRefs.stages;
@@ -5399,7 +5419,7 @@ function _oppRenderForm() {
       ${sec('Classement')}
       <div><label style="${lbl}">Portefeuille *</label>
         <select id="of-pipe" style="${fi}" onchange="_oppPipeChanged(this.value)">
-          <option value="">—</option>${_oppRefs.pipes.map(p => `<option value="${p.id}"${String(f.pipeId) === String(p.id) ? ' selected' : ''}>${cmdEsc(p.name)}</option>`).join('')}</select></div>
+          <option value="">—</option>${_oppPipesDedup(f.pipeId).map(p => `<option value="${p.id}"${String(f.pipeId) === String(p.id) ? ' selected' : ''}>${cmdEsc(p.name)}</option>`).join('')}</select></div>
       <div><label style="${lbl}">Stade *</label>
         <select id="of-stage" style="${fi}" onchange="_oppForm.stageId=this.value">
           ${_oppStageOptionsHtml(stageList, f.stageId)}</select>
