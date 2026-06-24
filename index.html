@@ -5130,6 +5130,14 @@ function _oget(o, ...keys) { for (const k of keys) { const v = String(k).split('
 
 // Clé de la donnée personnalisée Akuiteo "Montant de travaux"
 const OPP_CD_TRAVAUX = '1-number01';
+// Nom unifié d'un employé Akuiteo : relié au collaborateur CRM (par akuiteo_id) pour éviter les doublons
+function _empDisplayName(akEmpId) {
+  if (akEmpId == null || akEmpId === '') return null;
+  const c = (collaborateursData || []).find(x => String(x.akuiteo_id) === String(akEmpId));
+  if (c) return ((c.nom || '') + ' ' + (c.prenom || '')).trim() || c.email || null;
+  const e = (akRef.employees || []).find(x => String(x.id) === String(akEmpId));
+  return e ? e.name : null;
+}
 // Tables de référence Akuiteo (stades, portefeuilles, types d'origine) — mises en cache
 let _oppRefs = null;
 async function loadOppRefs(force) {
@@ -5154,7 +5162,7 @@ async function loadOppRefs(force) {
 // Construit les lignes Supabase à partir d'objets opportunité Akuiteo (résout client/contact/réfs)
 async function _buildOppRows(all) {
   await loadAkuiteoRefs().catch(() => {});
-  const empMap = {}; (akRef.employees || []).forEach(e => { empMap[String(e.id)] = e.name; });
+  if (!(collaborateursData && collaborateursData.length)) { try { await loadCollaborateurs(); } catch (e) {} }
   const { stageMap, pipeMap, originMap } = await loadOppRefs();
   // Clients (akuiteo_id → fiche CRM)
   const custIds = [...new Set(all.map(o => _oget(o, 'customerId', 'customer.id', 'thirdPartyId')).filter(Boolean).map(String))];
@@ -5215,7 +5223,7 @@ async function _buildOppRows(all) {
       type_origine: (originId && originMap[originId]) || _oget(o, 'originType.name', 'originTypeName'),
       origine: _oget(o, 'origin', 'originLabel'),
       type_opp: _oget(o, 'type.name', 'typeName', 'projectCategory.name'),
-      responsable: _oget(o, 'salesManager.name', 'salesPerson.name', 'accountManager.name') || (respId != null ? empMap[String(respId)] : null) || null,
+      responsable: _empDisplayName(respId) || _oget(o, 'salesManager.name', 'salesPerson.name', 'accountManager.name') || null,
       responsable_id: respId != null ? String(respId) : null,
       date_signature: sig ? String(sig).slice(0, 10) : null,
       date_creation: crea || null,
@@ -5415,7 +5423,7 @@ function renderOppEditPage() {
   const lbl = 'display:block;font-size:11px;color:var(--t3);margin-bottom:3px';
   const fi = 'width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)';
   const emps = (akRef.employees || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'fr'));
-  const empOpts = sel => '<option value="">—</option>' + emps.map(e => `<option value="${e.id}"${String(sel) === String(e.id) ? ' selected' : ''}>${cmdEsc(fmtCommercialName(e.name))}</option>`).join('');
+  const empOpts = sel => '<option value="">—</option>' + emps.map(e => `<option value="${e.id}"${String(sel) === String(e.id) ? ' selected' : ''}>${cmdEsc(_empDisplayName(e.id) || fmtCommercialName(e.name))}</option>`).join('');
   const sec = t => `<div style="grid-column:1/3;font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-top:6px;border-bottom:1px solid var(--border);padding-bottom:3px">${t}</div>`;
   const body = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -5906,7 +5914,7 @@ function renderOppDetailPage() {
   if (!o) return '<div style="padding:30px;color:var(--t3)">Opportunité introuvable. <a href="#" onclick="go(\'opportunites\');return false" style="color:var(--accent)">← Retour aux opportunités</a></div>';
   const raw = o.raw || {};
   const row = (l, v) => v != null && v !== '' ? `<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="color:var(--t3);min-width:150px">${l}</span><span style="flex:1">${v}</span></div>` : '';
-  const empName = id => { if (!id) return ''; const e = (akRef.employees || []).find(x => String(x.id) === String(id)); return e ? fmtCommercialName(e.name) : ''; };
+  const empName = id => _empDisplayName(id) || '';
   const refName = (arr, id) => { if (!id || !arr) return ''; const x = arr.find(r => String(r.id) === String(id)); return x ? (x.name || x.code || '') : ''; };
   const dFR = v => v ? fmtDateFR(String(v).slice(0, 10)) : '';
   const deptName = refName(_oppRefs && _oppRefs.departments, raw.departmentId);
