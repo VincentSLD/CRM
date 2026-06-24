@@ -5101,7 +5101,7 @@ function renderTachesCard(opts) {
 //  OPPORTUNITÉS (reprises depuis Akuiteo CRM)
 // ═══════════════════════════════════════════════════════════
 let _opps = [], _oppsLoaded = false, _oppView = 'pipeline';
-let _oppFStatut = '', _oppFResp = '', _oppFPipe = '', _oppSearch = '';
+let _oppFStatut = '', _oppFResp = '', _oppFPipe = '', _oppSearch = '', _oppFSigFrom = '', _oppFSigTo = '';
 const OPP_STATUTS = { IN_PROGRESS: ['En cours', '#4f8ff7'], WON: ['Gagnée', '#10b981'], LOST: ['Perdue', '#ef4444'], DISCARD: ['Abandonnée', '#6b7280'], ARCHIVED: ['Archivée', '#6b7280'] };
 function _oppStatutBadge(s) { const [l, c] = OPP_STATUTS[s] || [s || '—', '#6b7280']; return `<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;background:${c}22;color:${c}">${l}</span>`; }
 
@@ -5234,6 +5234,8 @@ function _oppsFiltered() {
     if (_oppFStatut && o.statut !== _oppFStatut) return false;
     if (_oppFPipe && (o.pipe || '') !== _oppFPipe) return false;
     if (_oppFResp && (o.responsable || '') !== _oppFResp) return false;
+    if (_oppFSigFrom && (!o.date_signature || o.date_signature < _oppFSigFrom)) return false;
+    if (_oppFSigTo && (!o.date_signature || o.date_signature > _oppFSigTo)) return false;
     if (q && !_looseMatch(_oppSearch, (o.nom || '') + ' ' + (o.client_name || '') + ' ' + (o.code || ''))) return false;
     return true;
   });
@@ -5266,6 +5268,12 @@ function renderOpportunites() {
       <select onchange="_oppFResp=this.value;renderPage('opportunites')" style="padding:5px 8px;border:1px solid ${_oppFResp ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);max-width:200px">
         <option value="">— Responsable —</option>${resps.map(r => `<option value="${cmdEsc(r)}"${_oppFResp === r ? ' selected' : ''}>${cmdEsc(fmtCommercialName(r))}</option>`).join('')}
       </select>
+      <span style="display:inline-flex;gap:4px;align-items:center;font-size:11px;color:var(--t3)" title="Date de signature prévisionnelle">📅 Signature
+        <input type="date" value="${_oppFSigFrom}" onchange="_oppFSigFrom=this.value;renderPage('opportunites')" style="padding:4px 6px;border:1px solid ${_oppFSigFrom ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:11px;background:var(--card,#fff);color:var(--t1)">
+        <span>→</span>
+        <input type="date" value="${_oppFSigTo}" onchange="_oppFSigTo=this.value;renderPage('opportunites')" style="padding:4px 6px;border:1px solid ${_oppFSigTo ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:11px;background:var(--card,#fff);color:var(--t1)">
+        ${(_oppFSigFrom || _oppFSigTo) ? `<button class="btn" onclick="_oppFSigFrom='';_oppFSigTo='';renderPage('opportunites')" style="font-size:10px;padding:3px 6px" title="Effacer">✕</button>` : ''}
+      </span>
       <button class="btn" onclick="_oppView=(_oppView==='pipeline'?'liste':'pipeline');renderPage('opportunites')" style="font-size:12px">${_oppView === 'pipeline' ? '☰ Liste' : '▦ Pipeline'}</button>
     </div>
   </div>
