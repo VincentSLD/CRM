@@ -237,16 +237,21 @@ CREATE TABLE IF NOT EXISTS opportunites (
   client_id TEXT, client_name TEXT, customer_akuiteo_id TEXT,
   montant NUMERIC, devise TEXT,
   probabilite NUMERIC,
-  statut TEXT,                 -- IN_PROGRESS / WON / LOST / ARCHIVED
-  stage TEXT, stage_id TEXT,
-  pipe TEXT, pipe_id TEXT,
+  statut TEXT,                 -- IN_PROGRESS / WON / LOST / DISCARD / ARCHIVED
+  stage TEXT, stage_id TEXT,   -- Stade
+  pipe TEXT, pipe_id TEXT,     -- Portefeuille
+  type_origine TEXT,           -- Type d'origine (résolu via /crm/origin-types)
   origine TEXT, type_opp TEXT,
+  description TEXT,
   responsable TEXT, responsable_id TEXT,
   date_signature DATE,
   date_creation TIMESTAMPTZ,
   raw JSONB,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+-- Colonnes ajoutées après coup (si la table existait déjà)
+ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS type_origine TEXT;
 ALTER TABLE opportunites ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "opportunites_all" ON opportunites;
 CREATE POLICY "opportunites_all" ON opportunites FOR ALL TO authenticated USING (true) WITH CHECK (true);

@@ -5102,7 +5102,7 @@ function renderTachesCard(opts) {
 // ═══════════════════════════════════════════════════════════
 let _opps = [], _oppsLoaded = false, _oppView = 'pipeline';
 let _oppFStatut = '', _oppFResp = '', _oppSearch = '';
-const OPP_STATUTS = { IN_PROGRESS: ['En cours', '#4f8ff7'], WON: ['Gagnée', '#10b981'], LOST: ['Perdue', '#ef4444'], ARCHIVED: ['Archivée', '#6b7280'] };
+const OPP_STATUTS = { IN_PROGRESS: ['En cours', '#4f8ff7'], WON: ['Gagnée', '#10b981'], LOST: ['Perdue', '#ef4444'], DISCARD: ['Abandonnée', '#6b7280'], ARCHIVED: ['Archivée', '#6b7280'] };
 function _oppStatutBadge(s) { const [l, c] = OPP_STATUTS[s] || [s || '—', '#6b7280']; return `<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;background:${c}22;color:${c}">${l}</span>`; }
 
 async function loadOpportunites() {
@@ -5122,6 +5122,18 @@ async function syncOpportunites() {
   try {
     await loadAkuiteoRefs().catch(() => {});
     const empMap = {}; (akRef.employees || []).forEach(e => { empMap[String(e.id)] = e.name; });
+    // Tables de référence pour résoudre les libellés (les recherches ne renvoient que les …Id)
+    const stageMap = {}, pipeMap = {}, originMap = {};
+    try {
+      const [stages, pipes, origins] = await Promise.all([
+        akuiteoFetch('GET', '/crm/stages').catch(() => []),
+        akuiteoFetch('GET', '/crm/pipes').catch(() => []),
+        akuiteoFetch('GET', '/crm/origin-types').catch(() => []),
+      ]);
+      (Array.isArray(stages) ? stages : []).forEach(s => { stageMap[String(s.id)] = { name: s.name, status: s.status }; });
+      (Array.isArray(pipes) ? pipes : []).forEach(p => { pipeMap[String(p.id)] = p.name; });
+      (Array.isArray(origins) ? origins : []).forEach(t => { originMap[String(t.id)] = t.name; });
+    } catch (e) { console.warn('réf opportunités', e.message); }
     // 1. Récupérer toutes les opportunités (pagination). L'API exige au moins une clause :
     // on essaie plusieurs critères "attrape-tout" jusqu'à en trouver un accepté.
     const critCandidates = [
@@ -5161,28 +5173,37 @@ async function syncOpportunites() {
     const rows = all.map(o => {
       const custAk = _oget(o, 'customerId', 'customer.id', 'thirdPartyId');
       const cl = custAk != null ? clientByAk[String(custAk)] : null;
-      const respId = _oget(o, 'salesPersonId', 'accountManagerId', 'responsibleId', 'managerId', 'salesPerson.id');
-      const sig = _oget(o, 'estimatedSignatureDate', 'signatureDate', 'expectedClosingDate');
-      const crea = _oget(o, 'creationDate', 'createdDate', 'createDate');
-      const prob = _oget(o, 'probability', 'probabilityPercent', 'winProbability');
+      const respId = _oget(o, 'salesManagerId', 'salesPersonId', 'accountManagerId', 'projectManagerId', 'salesManager.id');
+      const sig = _oget(o, 'expectedSignatureDate', 'estimatedSignatureDate', 'actualSignatureDate', 'signatureDate');
+      const crea = _oget(o, 'changeTracking.createdTime', 'creationDate', 'openingDate', 'createdDate');
+      const stageId = (() => { const v = _oget(o, 'stageId', 'stage.id'); return v != null ? String(v) : null; })();
+      const pipeId = (() => { const v = _oget(o, 'pipeId', 'pipe.id'); return v != null ? String(v) : null; })();
+      const originId = (() => { const v = _oget(o, 'originTypeId', 'originType.id'); return v != null ? String(v) : null; })();
+      const stageRef = stageId ? stageMap[stageId] : null;
+      // Statut = statut du stade (IN_PROGRESS/WON/LOST/DISCARD) ; repli sur les dates si pas de stade
+      let statut = stageRef && stageRef.status ? stageRef.status : null;
+      if (!statut) { if (_oget(o, 'actualSignatureDate')) statut = 'WON'; else if (_oget(o, 'lossDate')) statut = 'LOST'; else statut = 'IN_PROGRESS'; }
+      const weight = _oget(o, 'weightingCoefficient');
       return {
         akuiteo_id: String(_oget(o, 'id') || ''),
         code: _oget(o, 'code', 'reference'),
-        nom: _oget(o, 'label', 'name', 'title', 'subject', 'code') || '(Sans titre)',
+        nom: _oget(o, 'name', 'title', 'label', 'subject', 'code') || '(Sans titre)',
+        description: _oget(o, 'description', 'comment'),
         client_id: cl ? cl.id : null,
         client_name: cl ? cl.name : (_oget(o, 'customerName', 'customer.name', 'thirdPartyName') || null),
         customer_akuiteo_id: custAk != null ? String(custAk) : null,
         montant: (() => { const v = _oget(o, 'amount', 'amountHT', 'totalAmountHT', 'estimatedAmount', 'totalAmount'); return v != null ? Number(v) : null; })(),
-        devise: _oget(o, 'currency', 'currencyCode'),
-        probabilite: prob != null ? Number(prob) : null,
-        statut: _oget(o, 'status', 'state') || 'IN_PROGRESS',
-        stage: _oget(o, 'stage.label', 'stage.name', 'stageName', 'stageLabel'),
-        stage_id: (() => { const v = _oget(o, 'stageId', 'stage.id'); return v != null ? String(v) : null; })(),
-        pipe: _oget(o, 'pipe.label', 'pipe.name', 'pipeName'),
-        pipe_id: (() => { const v = _oget(o, 'pipeId', 'pipe.id'); return v != null ? String(v) : null; })(),
-        origine: _oget(o, 'originType.label', 'originType.name', 'origin', 'originLabel'),
-        type_opp: _oget(o, 'type.label', 'type.name', 'typeName', 'typeLabel'),
-        responsable: _oget(o, 'salesPerson.name', 'accountManager.name', 'responsible.name') || (respId != null ? empMap[String(respId)] : null) || null,
+        devise: _oget(o, 'currencyCode', 'amountCurrency', 'currency'),
+        probabilite: weight != null ? Math.round(Number(weight) * 100) : null,
+        statut: statut,
+        stage: (stageRef && stageRef.name) || _oget(o, 'stage.name', 'stageName'),
+        stage_id: stageId,
+        pipe: (pipeId && pipeMap[pipeId]) || _oget(o, 'pipe.name', 'pipeName'),
+        pipe_id: pipeId,
+        type_origine: (originId && originMap[originId]) || _oget(o, 'originType.name', 'originTypeName'),
+        origine: _oget(o, 'origin', 'originLabel'),
+        type_opp: _oget(o, 'type.name', 'typeName', 'projectCategory.name'),
+        responsable: _oget(o, 'salesManager.name', 'salesPerson.name', 'accountManager.name') || (respId != null ? empMap[String(respId)] : null) || null,
         responsable_id: respId != null ? String(respId) : null,
         date_signature: sig ? String(sig).slice(0, 10) : null,
         date_creation: crea || null,
@@ -5255,7 +5276,7 @@ function renderOpportunites() {
 
 function _oppListe(rows) {
   return `<div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Opportunité</th><th>Client</th><th>Étape</th><th>Statut</th><th style="text-align:right">Montant</th><th style="text-align:right">Prob.</th><th>Signature</th><th>Responsable</th></tr></thead>
+    <table><thead><tr><th>Opportunité</th><th>Client</th><th>Stade</th><th>Statut</th><th style="text-align:right">Montant</th><th style="text-align:right">Prob.</th><th>Signature</th><th>Responsable</th></tr></thead>
     <tbody>${rows.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucune opportunité</td></tr>' : rows.map(o => `
       <tr style="cursor:pointer" onclick="oppDetail('${o.akuiteo_id}')">
         <td style="padding:6px 8px"><strong style="font-size:12px">${cmdEsc(o.nom || '')}</strong>${o.code ? '<div style="font-size:10px;color:var(--t3)">' + cmdEsc(o.code) + '</div>' : ''}</td>
@@ -5295,14 +5316,16 @@ function oppDetail(akId) {
   const body = `
     ${row('Client', o.client_id ? `<a href="#" onclick="closeModal('opp');showClient('${o.client_id}');return false" style="color:var(--accent)">${cmdEsc(o.client_name || '')}</a>` : cmdEsc(o.client_name || '—'))}
     ${row('Code', cmdEsc(o.code || ''))}
-    ${row('Étape', cmdEsc(o.stage || ''))}
-    ${row('Pipe', cmdEsc(o.pipe || ''))}
+    ${row('Stade', cmdEsc(o.stage || ''))}
+    ${row('Portefeuille', cmdEsc(o.pipe || ''))}
     ${row('Statut', _oppStatutBadge(o.statut))}
     ${row('Montant', o.montant != null ? fmt(o.montant) : '')}
     ${row('Probabilité', o.probabilite != null ? o.probabilite + '%' : '')}
     ${row('Date signature estimée', o.date_signature ? fmtDateFR(o.date_signature) : '')}
-    ${row('Type', cmdEsc(o.type_opp || ''))}
+    ${row('Type d\'origine', cmdEsc(o.type_origine || ''))}
     ${row('Origine', cmdEsc(o.origine || ''))}
+    ${row('Type', cmdEsc(o.type_opp || ''))}
+    ${row('Description', cmdEsc(o.description || ''))}
     ${row('Responsable', cmdEsc(fmtCommercialName(o.responsable || '')))}
     ${row('ID Akuiteo', cmdEsc(o.akuiteo_id))}`;
   openDynModal('opp', o.nom || 'Opportunité', body,
@@ -5315,7 +5338,7 @@ function renderOppsCard(clientId) {
   if (!list.length) return '';
   return `<div class="card" style="margin-bottom:16px">
     <div class="card-header"><div class="card-title">Opportunités (${list.length})</div></div>
-    <div class="card-body" style="padding:0"><div class="table-wrap"><table><thead><tr><th>Opportunité</th><th>Étape</th><th>Statut</th><th style="text-align:right">Montant</th><th style="text-align:right">Prob.</th></tr></thead><tbody>${list.map(o => `<tr style="cursor:pointer" onclick="oppDetail('${o.akuiteo_id}')"><td style="padding:6px 8px;font-size:12px"><strong>${cmdEsc(o.nom || '')}</strong></td><td style="padding:6px 8px;font-size:12px">${cmdEsc(o.stage || '—')}</td><td style="padding:6px 8px">${_oppStatutBadge(o.statut)}</td><td style="padding:6px 8px;text-align:right">${o.montant != null ? fmt(o.montant) : '—'}</td><td style="padding:6px 8px;text-align:right">${o.probabilite != null ? o.probabilite + '%' : '—'}</td></tr>`).join('')}</tbody></table></div></div>
+    <div class="card-body" style="padding:0"><div class="table-wrap"><table><thead><tr><th>Opportunité</th><th>Stade</th><th>Statut</th><th style="text-align:right">Montant</th><th style="text-align:right">Prob.</th></tr></thead><tbody>${list.map(o => `<tr style="cursor:pointer" onclick="oppDetail('${o.akuiteo_id}')"><td style="padding:6px 8px;font-size:12px"><strong>${cmdEsc(o.nom || '')}</strong></td><td style="padding:6px 8px;font-size:12px">${cmdEsc(o.stage || '—')}</td><td style="padding:6px 8px">${_oppStatutBadge(o.statut)}</td><td style="padding:6px 8px;text-align:right">${o.montant != null ? fmt(o.montant) : '—'}</td><td style="padding:6px 8px;text-align:right">${o.probabilite != null ? o.probabilite + '%' : '—'}</td></tr>`).join('')}</tbody></table></div></div>
   </div>`;
 }
 
