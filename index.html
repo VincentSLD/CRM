@@ -2918,7 +2918,7 @@ tbody tr:last-child td { border-bottom: none; }
 </div>
 <!-- Languette pour réafficher NOVA quand il est masqué -->
 <div id="novaShowHandle" onclick="novaSetHidden(false)" title="Afficher NOVA" style="display:none;position:fixed;bottom:80px;right:0;width:20px;height:48px;border-radius:12px 0 0 12px;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;align-items:center;justify-content:center;cursor:pointer;box-shadow:-2px 2px 12px rgba(0,0,0,.25);z-index:900;font-size:13px;opacity:.9">✦</div>
-<div id="aiChatPanel" style="display:none;position:fixed;bottom:90px;right:24px;width:520px;max-width:calc(100vw - 32px);height:680px;max-height:calc(100vh - 120px);min-width:340px;min-height:380px;background:var(--card,#fff);border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.2);z-index:900;flex-direction:column;overflow:hidden;resize:both">
+<div id="aiChatPanel" style="display:none;position:fixed;bottom:90px;right:24px;width:720px;max-width:calc(100vw - 32px);height:680px;max-height:calc(100vh - 120px);min-width:340px;min-height:380px;background:var(--card,#fff);border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.2);z-index:900;flex-direction:column;overflow:hidden;resize:both">
   <div id="aiChatHeader" onmousedown="novaDragStart(event)" style="padding:14px 16px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;display:flex;align-items:center;justify-content:space-between;cursor:move;user-select:none">
     <div><div style="font-weight:700;font-size:14px">✦ NOVA</div><div style="font-size:11px;opacity:.85">Ton assistant IA — dis "Hey Nova"</div></div>
     <div style="display:flex;align-items:center;gap:8px">
@@ -2935,7 +2935,7 @@ tbody tr:last-child td { border-bottom: none; }
     <span id="novaQuickChev">▾</span> Actions rapides
   </div>
   <div id="novaQuickRows">
-  <div style="padding:6px 10px;border-top:1px solid var(--border);display:flex;gap:6px;overflow-x:auto;background:var(--card,#fff);align-items:center">
+  <div style="padding:6px 10px;border-top:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap;background:var(--card,#fff);align-items:center">
     <span style="font-size:10px;color:var(--t3);font-weight:700;white-space:nowrap">⚡ Opportunités</span>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('prioriser')">🎯 Prioriser</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('risques')">⚠️ Risques</button>
@@ -2944,7 +2944,7 @@ tbody tr:last-child td { border-bottom: none; }
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('relance')">✉️ Relance</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('action')">✅ Quoi faire ?</button>
   </div>
-  <div style="padding:6px 10px;border-top:1px solid var(--border);display:flex;gap:6px;overflow-x:auto;background:var(--card,#fff);align-items:center">
+  <div style="padding:6px 10px;border-top:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap;background:var(--card,#fff);align-items:center">
     <span style="font-size:10px;color:var(--t3);font-weight:700;white-space:nowrap">⚡ Clients</span>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliFiche')">📇 Fiche société</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliDormants')">😴 Dormants</button>
