@@ -6026,9 +6026,17 @@ function renderOppDetailPage() {
 }
 
 // ═══ ANALYSE DES OPPORTUNITÉS ═══
+let _oppAnaYear = '', _oppAnaResp = '', _oppAnaPipe = '';
 function renderOppAnalyse() {
   if (!_oppsLoaded) return '<div style="text-align:center;padding:40px;color:var(--t3)">Chargement…</div>';
-  const opps = _opps || [];
+  const allOpps = _opps || [];
+  const years = [...new Set(allOpps.map(o => (o.date_creation || '').slice(0, 4)).filter(Boolean))].sort().reverse();
+  const respList = [...new Set(allOpps.map(o => o.responsable).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+  const pipeList = [...new Set(allOpps.map(o => o.pipe).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+  const opps = allOpps.filter(o =>
+    (!_oppAnaYear || (o.date_creation || '').slice(0, 4) === _oppAnaYear) &&
+    (!_oppAnaResp || (o.responsable || '') === _oppAnaResp) &&
+    (!_oppAnaPipe || (o.pipe || '') === _oppAnaPipe));
   const num = v => Number(v) || 0;
   const enCours = opps.filter(o => o.statut === 'IN_PROGRESS');
   const gagnees = opps.filter(o => o.statut === 'WON');
@@ -6051,23 +6059,23 @@ function renderOppAnalyse() {
   const strat = enCours.filter(o => o.raw && o.raw.strategic);
   const grosEnjeu = enCours.filter(o => num(o.montant) >= 100000).sort((a, b) => num(b.montant) - num(a.montant));
   const mtFmt = arr => fmt(arr.reduce((s, o) => s + num(o.montant), 0));
-  const alert = (cond, color, icon, titre, sousTitre, action) => cond ? `
-    <div ${action ? `onclick="${action}" style="cursor:pointer;"` : 'style=""'} class="card" style="border-left:4px solid ${color};${action ? '' : ''}">
-      <div class="card-body" style="padding:10px 12px;display:flex;align-items:center;gap:10px">
-        <div style="font-size:20px">${icon}</div>
-        <div style="flex:1"><div style="font-weight:700;font-size:13px;color:${color}">${titre}</div><div style="font-size:12px;color:var(--t2)">${sousTitre}</div></div>
-        ${action ? '<div style="color:var(--t3)">›</div>' : ''}
-      </div></div>` : '';
   const goList = `_oppView='liste';renderPage('opportunites')`;
-  const alerts = [
-    alert(depassees.length, '#ef4444', '⏰', `${depassees.length} opportunité(s) à requalifier`, `Signature prévisionnelle dépassée — total ${mtFmt(depassees)} HT. À relancer, gagner ou clôturer.`, `_oppFStatut='IN_PROGRESS';_oppFSigFrom='';_oppFSigTo='${tISO}';${goList}`),
-    alert(sous30.length, '#f59e0b', '🎯', `${sous30.length} signature(s) attendue(s) sous 30 jours`, `Total ${mtFmt(sous30)} HT à closer. À prioriser cette période.`, `_oppFStatut='IN_PROGRESS';_oppFSigFrom='${tISO}';_oppFSigTo='${in30}';${goList}`),
-    alert(sansDate.length, '#f59e0b', '📅', `${sansDate.length} opportunité(s) sans date de signature`, `Impossible de prévoir l'atterrissage. Renseignez une date prévisionnelle.`, `_oppFStatut='IN_PROGRESS';${goList}`),
-    alert(sansResp.length, '#6366f1', '👤', `${sansResp.length} opportunité(s) sans responsable`, `Affectez un responsable commercial pour le suivi.`, `_oppFStatut='IN_PROGRESS';${goList}`),
-    alert(sansContact.length, '#6366f1', '📇', `${sansContact.length} opportunité(s) sans contact`, `Ajoutez un contact pour faciliter la relance.`, null),
-    alert(grosEnjeu.length, '#10b981', '💎', `${grosEnjeu.length} opportunité(s) à fort enjeu (≥ 100 k€)`, `Total ${mtFmt(grosEnjeu)} HT. Top : ${grosEnjeu.slice(0, 3).map(o => cmdEsc(o.nom)).join(', ')}.`, null),
-    alert(strat.length, '#8b5cf6', '⭐', `${strat.length} opportunité(s) stratégique(s) en cours`, `À suivre de près — total ${mtFmt(strat)} HT.`, null),
-  ].filter(Boolean).join('');
+  const alertDefs = [
+    { cond: depassees.length, color: '#ef4444', icon: '⏰', titre: `${depassees.length} opportunité(s) à requalifier`, sous: `Signature prévisionnelle dépassée — total ${mtFmt(depassees)} HT. À relancer, gagner ou clôturer.`, action: `_oppFStatut='IN_PROGRESS';_oppFSigFrom='';_oppFSigTo='${tISO}';${goList}` },
+    { cond: sous30.length, color: '#f59e0b', icon: '🎯', titre: `${sous30.length} signature(s) attendue(s) sous 30 jours`, sous: `Total ${mtFmt(sous30)} HT à closer. À prioriser cette période.`, action: `_oppFStatut='IN_PROGRESS';_oppFSigFrom='${tISO}';_oppFSigTo='${in30}';${goList}` },
+    { cond: sansDate.length, color: '#f59e0b', icon: '📅', titre: `${sansDate.length} opportunité(s) sans date de signature`, sous: `Impossible de prévoir l'atterrissage. Renseignez une date prévisionnelle.`, action: `_oppFStatut='IN_PROGRESS';${goList}` },
+    { cond: sansResp.length, color: '#6366f1', icon: '👤', titre: `${sansResp.length} opportunité(s) sans responsable`, sous: `Affectez un responsable commercial pour le suivi.`, action: `_oppFStatut='IN_PROGRESS';${goList}` },
+    { cond: sansContact.length, color: '#6366f1', icon: '📇', titre: `${sansContact.length} opportunité(s) sans contact`, sous: `Ajoutez un contact pour faciliter la relance.`, action: null },
+    { cond: grosEnjeu.length, color: '#10b981', icon: '💎', titre: `${grosEnjeu.length} opportunité(s) à fort enjeu (≥ 100 k€)`, sous: `Total ${mtFmt(grosEnjeu)} HT. Top : ${grosEnjeu.slice(0, 3).map(o => cmdEsc(o.nom)).join(', ')}.`, action: null },
+    { cond: strat.length, color: '#8b5cf6', icon: '⭐', titre: `${strat.length} opportunité(s) stratégique(s) en cours`, sous: `À suivre de près — total ${mtFmt(strat)} HT.`, action: null },
+  ].filter(a => a.cond);
+  const alerts = alertDefs.map(a => `
+    <div ${a.action ? `onclick="${a.action}" style="cursor:pointer"` : ''} class="card" style="border-left:4px solid ${a.color}">
+      <div class="card-body" style="padding:10px 12px;display:flex;align-items:center;gap:10px">
+        <div style="font-size:20px">${a.icon}</div>
+        <div style="flex:1"><div style="font-weight:700;font-size:13px;color:${a.color}">${a.titre}</div><div style="font-size:12px;color:var(--t2)">${a.sous}</div></div>
+        ${a.action ? '<div style="color:var(--t3)">›</div>' : ''}
+      </div></div>`).join('');
 
   // ─ Données graphiques ─
   const grp = (arr, keyFn, valFn) => { const m = {}; arr.forEach(o => { const k = keyFn(o) || '—'; m[k] = (m[k] || 0) + (valFn ? valFn(o) : 1); }); return m; };
@@ -6097,14 +6105,30 @@ function renderOppAnalyse() {
     { id: 'oppAnaOrig', cfg: { type: 'doughnut', data: { labels: Object.keys(byOrig), datasets: [{ data: Object.values(byOrig), backgroundColor: PAL }] }, options: { plugins: { legend: { position: 'bottom' } }, responsive: true, maintainAspectRatio: false } } },
   ];
 
+  // Résumé pour l'export PDF
+  window._oppAnaSummary = {
+    filtre: [_oppAnaYear ? 'Année ' + _oppAnaYear : '', _oppAnaResp ? 'Resp. ' + fmtCommercialName(_oppAnaResp) : '', _oppAnaPipe ? 'Portefeuille ' + _oppAnaPipe : ''].filter(Boolean).join('  |  ') || 'Tous (aucun filtre)',
+    kpis: [['Pipeline en cours (HT)', fmt(totalHT)], ['Pondéré par taux', fmt(pondere)], ['En cours', String(enCours.length)], ['Gagnées', fmt(caGagne) + ' (' + gagnees.length + ')'], ['Taux réussite (nb)', winRate != null ? winRate + ' %' : '—'], ['Taux réussite (montant)', winRateVal != null ? winRateVal + ' %' : '—']],
+    alerts: alertDefs.map(a => a.titre + ' — ' + a.sous),
+  };
+
   const kpi = (val, lbl, color) => `<div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:18px;font-weight:700;color:${color}">${val}</div><div style="font-size:11px;color:var(--t3)">${lbl}</div></div></div>`;
   const chartBox = (id, titre, h) => `<div class="card"><div class="card-header"><div class="card-title">${titre}</div></div><div class="card-body"><div style="height:${h || 240}px;position:relative"><canvas id="${id}"></canvas></div></div></div>`;
+  const fsel = (val, cur, opts, ph) => `<select onchange="${val}=this.value;renderPage('opportunite-analyse')" style="padding:5px 8px;border:1px solid ${cur ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);max-width:200px"><option value="">${ph}</option>${opts.map(o => `<option value="${cmdEsc(typeof o === 'string' ? o : o.v)}"${cur === (typeof o === 'string' ? o : o.v) ? ' selected' : ''}>${cmdEsc(typeof o === 'string' ? o : o.l)}</option>`).join('')}</select>`;
 
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-      <div style="display:flex;align-items:center;gap:10px"><button class="btn" onclick="go('opportunites')">← Retour</button><h2 style="margin:0;font-size:20px">📊 Analyse des opportunités</h2></div>
-      <button class="btn" onclick="syncOpportunites()">⬇ Synchroniser</button>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><button class="btn" onclick="go('opportunites')">← Retour</button><h2 style="margin:0;font-size:20px">📊 Analyse des opportunités</h2></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        ${fsel('_oppAnaYear', _oppAnaYear, years, '— Année —')}
+        ${fsel('_oppAnaResp', _oppAnaResp, respList.map(r => ({ v: r, l: fmtCommercialName(r) })), '— Responsable —')}
+        ${fsel('_oppAnaPipe', _oppAnaPipe, pipeList, '— Portefeuille —')}
+        ${(_oppAnaYear || _oppAnaResp || _oppAnaPipe) ? `<button class="btn" onclick="_oppAnaYear='';_oppAnaResp='';_oppAnaPipe='';renderPage('opportunite-analyse')" style="font-size:12px" title="Réinitialiser">✕</button>` : ''}
+        <button class="btn" onclick="oppAnaExportPdf()">📄 Export PDF</button>
+        <button class="btn" onclick="syncOpportunites()">⬇ Synchroniser</button>
+      </div>
     </div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:10px">${opps.length} opportunité(s) analysée(s)${(_oppAnaYear || _oppAnaResp || _oppAnaPipe) ? ' — filtre : ' + window._oppAnaSummary.filtre : ''}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px">
       ${kpi(fmt(totalHT), 'Pipeline en cours (HT)', '#4f8ff7')}
       ${kpi(fmt(pondere), 'Pondéré par taux', '#8b5cf6')}
@@ -6123,9 +6147,48 @@ function renderOppAnalyse() {
       ${chartBox('oppAnaOrig', '🌱 Répartition par origine', 240)}
     </div>`;
 }
+let _oppAnaCharts = {};
 async function _oppAnalyseCharts() {
   try { await _loadChartJs(); } catch (e) { return; }
-  (window._oppAnaCfg || []).forEach(c => { const el = document.getElementById(c.id); if (el && window.Chart) { try { new Chart(el.getContext('2d'), c.cfg); } catch (e) {} } });
+  Object.values(_oppAnaCharts).forEach(c => { try { c.destroy(); } catch (_) {} });
+  _oppAnaCharts = {};
+  (window._oppAnaCfg || []).forEach(c => { const el = document.getElementById(c.id); if (el && window.Chart) { try { _oppAnaCharts[c.id] = new Chart(el.getContext('2d'), c.cfg); } catch (e) {} } });
+}
+async function oppAnaExportPdf() {
+  try {
+    if (!window.jspdf) { toast('Export PDF indisponible (jsPDF non chargé)', 'error'); return; }
+    await _loadChartJs().catch(() => {});
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const S = window._oppAnaSummary || { filtre: '', kpis: [], alerts: [] };
+    doc.setFontSize(14); doc.text('Analyse des opportunités', 14, 15);
+    doc.setFontSize(9); doc.setTextColor(120);
+    doc.text('Filtre : ' + S.filtre + '   |   Édité le ' + new Date().toLocaleDateString('fr-FR'), 14, 21);
+    doc.setTextColor(0);
+    // KPIs
+    let x = 14; const ky = 28;
+    S.kpis.forEach(k => { doc.setFontSize(8); doc.setTextColor(120); doc.text(k[0], x, ky); doc.setFontSize(12); doc.setTextColor(0); doc.text(String(k[1]), x, ky + 6); x += 46; });
+    let y = 42;
+    // Alertes
+    if (S.alerts && S.alerts.length) {
+      doc.setFontSize(11); doc.text('Alertes & actions à anticiper', 14, y); y += 5;
+      doc.setFontSize(8);
+      S.alerts.forEach(a => { const lines = doc.splitTextToSize('• ' + a, 270); doc.text(lines, 16, y); y += lines.length * 4 + 1; });
+      y += 3;
+    }
+    // Graphiques (3 par ligne)
+    const ids = ['oppAnaMonth', 'oppAnaStage', 'oppAnaResp', 'oppAnaPipe', 'oppAnaStatut', 'oppAnaOrig'];
+    let col = 0;
+    for (const id of ids) {
+      const ch = _oppAnaCharts[id]; if (!ch) continue;
+      if (col === 0 && y > 150) { doc.addPage(); y = 16; }
+      const img = ch.toBase64Image('image/png', 1);
+      const px = 14 + col * 94;
+      doc.addImage(img, 'PNG', px, y, 88, 50);
+      col++; if (col === 3) { col = 0; y += 56; }
+    }
+    doc.save('analyse_opportunites_' + new Date().toISOString().slice(0, 10) + '.pdf');
+  } catch (e) { console.error('oppAnaExportPdf', e); toast('Erreur export PDF : ' + e.message, 'error'); }
 }
 
 // Carte Opportunités pour la fiche client
