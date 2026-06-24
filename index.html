@@ -5122,18 +5122,33 @@ async function syncOpportunites() {
   try {
     await loadAkuiteoRefs().catch(() => {});
     const empMap = {}; (akRef.employees || []).forEach(e => { empMap[String(e.id)] = e.name; });
-    // 1. Récupérer toutes les opportunités (pagination)
-    let all = [], off = 0;
-    while (true) {
-      let page;
-      try { page = await akuiteoFetch('POST', `/crm/opportunities/search?limit=500&offset=${off}`, {}); }
-      catch (e) { if (off === 0) throw e; break; }
-      const arr = Array.isArray(page) ? page : (page && page.items) || [];
-      if (!arr.length) break;
-      all = all.concat(arr);
-      setSyncText(`${all.length} opportunité(s) récupérée(s)…`);
-      if (arr.length < 500) break;
-      off += 500;
+    // 1. Récupérer toutes les opportunités (pagination). L'API exige au moins une clause :
+    // on essaie plusieurs critères "attrape-tout" jusqu'à en trouver un accepté.
+    const critCandidates = [
+      { id: { operator: 'IS_NOT_NULL', value: '' } },
+      { code: { operator: 'LIKE', value: '%' } },
+      { label: { operator: 'LIKE', value: '%' } },
+      { status: { operator: 'IN', value: 'IN_PROGRESS,WON,LOST,ARCHIVED' } },
+    ];
+    let crit = null, firstPage = null, lastErr = null;
+    for (const c of critCandidates) {
+      try { firstPage = await akuiteoFetch('POST', '/crm/opportunities/search?limit=500&offset=0', c); crit = c; break; }
+      catch (e) { lastErr = e; }
+    }
+    if (!crit) throw lastErr || new Error('Aucun critère de recherche accepté par Akuiteo');
+    let all = (Array.isArray(firstPage) ? firstPage : (firstPage && firstPage.items) || []).slice();
+    setSyncText(`${all.length} opportunité(s) récupérée(s)…`);
+    let off = all.length;
+    if (all.length >= 500) {
+      while (true) {
+        const page = await akuiteoFetch('POST', `/crm/opportunities/search?limit=500&offset=${off}`, crit);
+        const arr = Array.isArray(page) ? page : (page && page.items) || [];
+        if (!arr.length) break;
+        all = all.concat(arr);
+        setSyncText(`${all.length} opportunité(s) récupérée(s)…`);
+        if (arr.length < 500) break;
+        off += 500;
+      }
     }
     // 2. Résoudre client_id via akuiteo_id
     const custIds = [...new Set(all.map(o => _oget(o, 'customerId', 'customer.id', 'thirdPartyId')).filter(Boolean).map(String))];
