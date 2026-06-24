@@ -5123,25 +5123,115 @@ function _updateOpportunitesBadge() {
 // Lecture flexible d'un champ (plusieurs clés possibles, support "a.b")
 function _oget(o, ...keys) { for (const k of keys) { const v = String(k).split('.').reduce((a, p) => (a == null ? a : a[p]), o); if (v != null && v !== '') return v; } return null; }
 
+// Tables de référence Akuiteo (stades, portefeuilles, types d'origine) — mises en cache
+let _oppRefs = null;
+async function loadOppRefs(force) {
+  if (_oppRefs && !force) return _oppRefs;
+  const [stages, pipes, origins] = await Promise.all([
+    akuiteoFetch('GET', '/crm/stages').catch(() => []),
+    akuiteoFetch('GET', '/crm/pipes').catch(() => []),
+    akuiteoFetch('GET', '/crm/origin-types').catch(() => []),
+  ]);
+  const S = Array.isArray(stages) ? stages : [], P = Array.isArray(pipes) ? pipes : [], O = Array.isArray(origins) ? origins : [];
+  const stageMap = {}, pipeMap = {}, originMap = {};
+  S.forEach(s => { stageMap[String(s.id)] = { name: s.name, status: s.status }; });
+  P.forEach(p => { pipeMap[String(p.id)] = p.name; });
+  O.forEach(t => { originMap[String(t.id)] = t.name; });
+  _oppRefs = { stages: S, pipes: P, originTypes: O, stageMap, pipeMap, originMap };
+  return _oppRefs;
+}
+
+// Construit les lignes Supabase à partir d'objets opportunité Akuiteo (résout client/contact/réfs)
+async function _buildOppRows(all) {
+  await loadAkuiteoRefs().catch(() => {});
+  const empMap = {}; (akRef.employees || []).forEach(e => { empMap[String(e.id)] = e.name; });
+  const { stageMap, pipeMap, originMap } = await loadOppRefs();
+  // Clients (akuiteo_id → fiche CRM)
+  const custIds = [...new Set(all.map(o => _oget(o, 'customerId', 'customer.id', 'thirdPartyId')).filter(Boolean).map(String))];
+  const clientByAk = {};
+  for (let i = 0; i < custIds.length; i += 300) {
+    const { data } = await sb.from('clients').select('id,name,akuiteo_id').in('akuiteo_id', custIds.slice(i, i + 300));
+    (data || []).forEach(c => { clientByAk[String(c.akuiteo_id)] = c; });
+  }
+  // Contacts (contact principal + tableau)
+  const contIds = [...new Set(all.flatMap(o => {
+    const ids = [_oget(o, 'mainContactId', 'mainContact.id')];
+    (Array.isArray(o.contacts) ? o.contacts : []).forEach(c => ids.push(c && (c.contactId || c.id || (c.contact && c.contact.id))));
+    return ids;
+  }).filter(Boolean).map(String))];
+  const contByAk = {};
+  for (let i = 0; i < contIds.length; i += 300) {
+    const { data } = await sb.from('contacts').select('id,nom,prenom,akuiteo_id').in('akuiteo_id', contIds.slice(i, i + 300));
+    (data || []).forEach(c => { contByAk[String(c.akuiteo_id)] = { id: c.id, name: ((c.nom || '') + ' ' + (c.prenom || '')).trim() }; });
+  }
+  return all.map(o => {
+    const custAk = _oget(o, 'customerId', 'customer.id', 'thirdPartyId');
+    const cl = custAk != null ? clientByAk[String(custAk)] : null;
+    const respId = _oget(o, 'salesManagerId', 'salesPersonId', 'accountManagerId', 'projectManagerId', 'salesManager.id');
+    const sig = _oget(o, 'expectedSignatureDate', 'estimatedSignatureDate', 'actualSignatureDate', 'signatureDate');
+    const crea = _oget(o, 'changeTracking.createdTime', 'creationDate', 'openingDate', 'createdDate');
+    const stageId = (() => { const v = _oget(o, 'stageId', 'stage.id'); return v != null ? String(v) : null; })();
+    const pipeId = (() => { const v = _oget(o, 'pipeId', 'pipe.id'); return v != null ? String(v) : null; })();
+    const originId = (() => { const v = _oget(o, 'originTypeId', 'originType.id'); return v != null ? String(v) : null; })();
+    const stageRef = stageId ? stageMap[stageId] : null;
+    let statut = stageRef && stageRef.status ? stageRef.status : null;
+    if (!statut) { if (_oget(o, 'actualSignatureDate')) statut = 'WON'; else if (_oget(o, 'lossDate')) statut = 'LOST'; else statut = 'IN_PROGRESS'; }
+    const weight = _oget(o, 'weightingCoefficient');
+    const mainCt = _oget(o, 'mainContactId', 'mainContact.id');
+    const ctAkIds = [];
+    if (mainCt != null) ctAkIds.push(String(mainCt));
+    (Array.isArray(o.contacts) ? o.contacts : []).forEach(c => { const v = c && (c.contactId || c.id || (c.contact && c.contact.id)); if (v != null && !ctAkIds.includes(String(v))) ctAkIds.push(String(v)); });
+    const ctResolved = ctAkIds.map(id => contByAk[id]).filter(Boolean);
+    const ctNames = ctResolved.map(c => c.name).filter(Boolean);
+    return {
+      akuiteo_id: String(_oget(o, 'id') || ''),
+      code: _oget(o, 'code', 'reference'),
+      nom: _oget(o, 'name', 'title', 'label', 'subject', 'code') || '(Sans titre)',
+      description: _oget(o, 'description', 'comment'),
+      client_id: cl ? cl.id : null,
+      client_name: cl ? cl.name : (_oget(o, 'customerName', 'customer.name', 'thirdPartyName') || null),
+      customer_akuiteo_id: custAk != null ? String(custAk) : null,
+      contact_id: ctResolved.length ? ctResolved[0].id : null,
+      contact_name: ctNames.length ? ctNames.join(', ') : null,
+      contact_akuiteo_id: mainCt != null ? String(mainCt) : null,
+      montant: (() => { const v = _oget(o, 'amount', 'amountHT', 'totalAmountHT', 'estimatedAmount', 'totalAmount'); return v != null ? Number(v) : null; })(),
+      devise: _oget(o, 'currencyCode', 'amountCurrency', 'currency'),
+      probabilite: weight != null ? Math.round(Number(weight) * 100) : null,
+      statut: statut,
+      stage: (stageRef && stageRef.name) || _oget(o, 'stage.name', 'stageName'),
+      stage_id: stageId,
+      pipe: (pipeId && pipeMap[pipeId]) || _oget(o, 'pipe.name', 'pipeName'),
+      pipe_id: pipeId,
+      type_origine: (originId && originMap[originId]) || _oget(o, 'originType.name', 'originTypeName'),
+      origine: _oget(o, 'origin', 'originLabel'),
+      type_opp: _oget(o, 'type.name', 'typeName', 'projectCategory.name'),
+      responsable: _oget(o, 'salesManager.name', 'salesPerson.name', 'accountManager.name') || (respId != null ? empMap[String(respId)] : null) || null,
+      responsable_id: respId != null ? String(respId) : null,
+      date_signature: sig ? String(sig).slice(0, 10) : null,
+      date_creation: crea || null,
+      raw: o,
+      updated_at: new Date().toISOString(),
+    };
+  }).filter(r => r.akuiteo_id);
+}
+
+// Rafraîchit une seule opportunité depuis Akuiteo vers Supabase (après écriture)
+async function _refreshOneOpp(akId) {
+  try {
+    const o = await akuiteoFetch('GET', `/crm/opportunities/${akId}`);
+    if (o && o.id) {
+      const rows = await _buildOppRows([o]);
+      if (rows.length) await sb.from('opportunites').upsert(rows, { onConflict: 'akuiteo_id' });
+    }
+  } catch (e) { console.warn('refresh opp', e.message); }
+  await loadOpportunites();
+}
+
 async function syncOpportunites() {
   showSyncLoading(true); setSyncText('Chargement des opportunités Akuiteo…');
   try {
-    await loadAkuiteoRefs().catch(() => {});
-    const empMap = {}; (akRef.employees || []).forEach(e => { empMap[String(e.id)] = e.name; });
-    // Tables de référence pour résoudre les libellés (les recherches ne renvoient que les …Id)
-    const stageMap = {}, pipeMap = {}, originMap = {};
-    try {
-      const [stages, pipes, origins] = await Promise.all([
-        akuiteoFetch('GET', '/crm/stages').catch(() => []),
-        akuiteoFetch('GET', '/crm/pipes').catch(() => []),
-        akuiteoFetch('GET', '/crm/origin-types').catch(() => []),
-      ]);
-      (Array.isArray(stages) ? stages : []).forEach(s => { stageMap[String(s.id)] = { name: s.name, status: s.status }; });
-      (Array.isArray(pipes) ? pipes : []).forEach(p => { pipeMap[String(p.id)] = p.name; });
-      (Array.isArray(origins) ? origins : []).forEach(t => { originMap[String(t.id)] = t.name; });
-    } catch (e) { console.warn('réf opportunités', e.message); }
-    // 1. Récupérer toutes les opportunités (pagination). L'API exige au moins une clause :
-    // on essaie plusieurs critères "attrape-tout" jusqu'à en trouver un accepté.
+    await loadOppRefs(true).catch(() => {});
+    // L'API exige au moins une clause : on essaie plusieurs critères "attrape-tout".
     const critCandidates = [
       { id: { operator: 'IS_NOT_NULL', value: '' } },
       { code: { operator: 'LIKE', value: '%' } },
@@ -5168,80 +5258,10 @@ async function syncOpportunites() {
         off += 500;
       }
     }
-    // 2. Résoudre client_id via akuiteo_id
-    const custIds = [...new Set(all.map(o => _oget(o, 'customerId', 'customer.id', 'thirdPartyId')).filter(Boolean).map(String))];
-    const clientByAk = {};
-    for (let i = 0; i < custIds.length; i += 300) {
-      const { data } = await sb.from('clients').select('id,name,akuiteo_id').in('akuiteo_id', custIds.slice(i, i + 300));
-      (data || []).forEach(c => { clientByAk[String(c.akuiteo_id)] = c; });
-    }
-    // 2b. Résoudre les contacts (contact principal + tableau contacts) via akuiteo_id
-    const contIds = [...new Set(all.flatMap(o => {
-      const ids = [_oget(o, 'mainContactId', 'mainContact.id')];
-      (Array.isArray(o.contacts) ? o.contacts : []).forEach(c => ids.push(c && (c.contactId || c.id || (c.contact && c.contact.id))));
-      return ids;
-    }).filter(Boolean).map(String))];
-    const contByAk = {};
-    for (let i = 0; i < contIds.length; i += 300) {
-      const { data } = await sb.from('contacts').select('id,nom,prenom,akuiteo_id').in('akuiteo_id', contIds.slice(i, i + 300));
-      (data || []).forEach(c => { contByAk[String(c.akuiteo_id)] = { id: c.id, name: ((c.nom || '') + ' ' + (c.prenom || '')).trim() }; });
-    }
-    // 3. Mapper + upsert
-    const rows = all.map(o => {
-      const custAk = _oget(o, 'customerId', 'customer.id', 'thirdPartyId');
-      const cl = custAk != null ? clientByAk[String(custAk)] : null;
-      const respId = _oget(o, 'salesManagerId', 'salesPersonId', 'accountManagerId', 'projectManagerId', 'salesManager.id');
-      const sig = _oget(o, 'expectedSignatureDate', 'estimatedSignatureDate', 'actualSignatureDate', 'signatureDate');
-      const crea = _oget(o, 'changeTracking.createdTime', 'creationDate', 'openingDate', 'createdDate');
-      const stageId = (() => { const v = _oget(o, 'stageId', 'stage.id'); return v != null ? String(v) : null; })();
-      const pipeId = (() => { const v = _oget(o, 'pipeId', 'pipe.id'); return v != null ? String(v) : null; })();
-      const originId = (() => { const v = _oget(o, 'originTypeId', 'originType.id'); return v != null ? String(v) : null; })();
-      const stageRef = stageId ? stageMap[stageId] : null;
-      // Statut = statut du stade (IN_PROGRESS/WON/LOST/DISCARD) ; repli sur les dates si pas de stade
-      let statut = stageRef && stageRef.status ? stageRef.status : null;
-      if (!statut) { if (_oget(o, 'actualSignatureDate')) statut = 'WON'; else if (_oget(o, 'lossDate')) statut = 'LOST'; else statut = 'IN_PROGRESS'; }
-      const weight = _oget(o, 'weightingCoefficient');
-      // Contacts : principal d'abord, puis ceux du tableau (dédupliqués)
-      const mainCt = _oget(o, 'mainContactId', 'mainContact.id');
-      const ctAkIds = [];
-      if (mainCt != null) ctAkIds.push(String(mainCt));
-      (Array.isArray(o.contacts) ? o.contacts : []).forEach(c => { const v = c && (c.contactId || c.id || (c.contact && c.contact.id)); if (v != null && !ctAkIds.includes(String(v))) ctAkIds.push(String(v)); });
-      const ctResolved = ctAkIds.map(id => contByAk[id]).filter(Boolean);
-      const ctNames = ctResolved.map(c => c.name).filter(Boolean);
-      return {
-        akuiteo_id: String(_oget(o, 'id') || ''),
-        code: _oget(o, 'code', 'reference'),
-        nom: _oget(o, 'name', 'title', 'label', 'subject', 'code') || '(Sans titre)',
-        description: _oget(o, 'description', 'comment'),
-        client_id: cl ? cl.id : null,
-        client_name: cl ? cl.name : (_oget(o, 'customerName', 'customer.name', 'thirdPartyName') || null),
-        customer_akuiteo_id: custAk != null ? String(custAk) : null,
-        contact_id: ctResolved.length ? ctResolved[0].id : null,
-        contact_name: ctNames.length ? ctNames.join(', ') : null,
-        contact_akuiteo_id: mainCt != null ? String(mainCt) : null,
-        montant: (() => { const v = _oget(o, 'amount', 'amountHT', 'totalAmountHT', 'estimatedAmount', 'totalAmount'); return v != null ? Number(v) : null; })(),
-        devise: _oget(o, 'currencyCode', 'amountCurrency', 'currency'),
-        probabilite: weight != null ? Math.round(Number(weight) * 100) : null,
-        statut: statut,
-        stage: (stageRef && stageRef.name) || _oget(o, 'stage.name', 'stageName'),
-        stage_id: stageId,
-        pipe: (pipeId && pipeMap[pipeId]) || _oget(o, 'pipe.name', 'pipeName'),
-        pipe_id: pipeId,
-        type_origine: (originId && originMap[originId]) || _oget(o, 'originType.name', 'originTypeName'),
-        origine: _oget(o, 'origin', 'originLabel'),
-        type_opp: _oget(o, 'type.name', 'typeName', 'projectCategory.name'),
-        responsable: _oget(o, 'salesManager.name', 'salesPerson.name', 'accountManager.name') || (respId != null ? empMap[String(respId)] : null) || null,
-        responsable_id: respId != null ? String(respId) : null,
-        date_signature: sig ? String(sig).slice(0, 10) : null,
-        date_creation: crea || null,
-        raw: o,
-        updated_at: new Date().toISOString(),
-      };
-    }).filter(r => r.akuiteo_id);
-    let upserted = 0;
+    const rows = await _buildOppRows(all);
     for (let i = 0; i < rows.length; i += 100) {
       const { error } = await sb.from('opportunites').upsert(rows.slice(i, i + 100), { onConflict: 'akuiteo_id' });
-      if (error) { console.warn('opp upsert', error.message); } else upserted += Math.min(100, rows.length - i);
+      if (error) console.warn('opp upsert', error.message);
       setSyncText(`Enregistrement ${Math.min(i + 100, rows.length)} / ${rows.length}…`);
     }
     showSyncLoading(false);
@@ -5253,6 +5273,208 @@ async function syncOpportunites() {
     console.error('syncOpportunites', e);
     toast('Erreur sync opportunités : ' + e.message, 'error');
   }
+}
+
+// ═══ CRÉATION / ÉDITION D'OPPORTUNITÉ (écriture vers Akuiteo) ═══
+let _oppForm = null;
+async function oppModalOpen(akId) {
+  try {
+    openDynModal('oppEdit', akId ? 'Modifier l\'opportunité' : 'Nouvelle opportunité',
+      '<div style="text-align:center;padding:30px;color:var(--t3)">Chargement…</div>', '', '640px');
+    await Promise.all([loadOppRefs(), loadAkuiteoRefs().catch(() => {})]);
+    const o = akId ? _opps.find(x => x.akuiteo_id === akId) : null;
+    const raw = (o && o.raw) || {};
+    const defOrigin = (_oppRefs.originTypes.find(t => t.default) || _oppRefs.originTypes.find(t => /autre/i.test(t.name)) || _oppRefs.originTypes[0] || {}).id;
+    _oppForm = {
+      akId: akId || null,
+      name: raw.name || (o && o.nom) || '',
+      customerAkId: raw.customerId || (o && o.customer_akuiteo_id) || '',
+      clientName: (o && o.client_name) || '',
+      clientId: (o && o.client_id) || null,
+      contactAkId: raw.mainContactId || (o && o.contact_akuiteo_id) || '',
+      pipeId: raw.pipeId || (o && o.pipe_id) || '',
+      stageId: raw.stageId || (o && o.stage_id) || '',
+      originTypeId: raw.originTypeId || defOrigin || '',
+      salesManagerId: raw.salesManagerId || (o && o.responsable_id) || '',
+      montant: raw.amount != null ? raw.amount : (o && o.montant != null ? o.montant : ''),
+      devise: raw.currencyCode || (o && o.devise) || 'EUR',
+      probabilite: raw.weightingCoefficient != null ? Math.round(raw.weightingCoefficient * 100) : (o && o.probabilite != null ? o.probabilite : ''),
+      dateSignature: (raw.expectedSignatureDate || '').slice(0, 10) || (o && o.date_signature) || '',
+      description: raw.description || (o && o.description) || '',
+    };
+    _oppRenderForm();
+    if (_oppForm.clientId) _oppLoadContacts(_oppForm.clientId, _oppForm.contactAkId);
+  } catch (e) { toast('Erreur ouverture : ' + e.message, 'error'); }
+}
+
+function _oppRenderForm() {
+  const f = _oppForm; if (!f) return;
+  const inProgress = _oppRefs.stages.filter(s => s.status === 'IN_PROGRESS').sort((a, b) => (a.order || 0) - (b.order || 0));
+  // Conserver le stade courant dans la liste même s'il n'est pas "en cours" (édition d'une opp gagnée/perdue)
+  if (f.stageId && !inProgress.some(s => String(s.id) === String(f.stageId))) {
+    const cur = _oppRefs.stages.find(s => String(s.id) === String(f.stageId));
+    if (cur) inProgress.unshift(cur);
+  }
+  const esc = s => (s == null ? '' : String(s).replace(/"/g, '&quot;'));
+  const lbl = 'display:block;font-size:11px;color:var(--t3);margin-bottom:3px';
+  const fi = 'width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)';
+  const emps = (akRef.employees || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'fr'));
+  const body = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div style="grid-column:1/3"><label style="${lbl}">Nom de l'opportunité *</label>
+        <input id="of-name" style="${fi}" value="${esc(f.name)}" oninput="_oppForm.name=this.value"></div>
+      <div style="grid-column:1/3;position:relative"><label style="${lbl}">Client / Prospect *</label>
+        <input id="of-client" style="${fi}" placeholder="Rechercher une société…" value="${esc(f.clientName)}" autocomplete="off"
+          oninput="_oppClientSearch(this.value)" onfocus="_oppClientSearch(this.value)">
+        <div id="of-clientRes" style="display:none;position:absolute;z-index:30;left:0;right:0;top:100%;background:var(--card,#fff);border:1px solid var(--border);border-radius:6px;max-height:200px;overflow:auto;box-shadow:0 6px 18px rgba(0,0,0,.15)"></div></div>
+      <div style="grid-column:1/3"><label style="${lbl}">Contact</label>
+        <select id="of-contact" style="${fi}" onchange="_oppForm.contactAkId=this.value">
+          <option value="">${f.clientId ? '—' : '(choisir un client d\'abord)'}</option></select></div>
+      <div><label style="${lbl}">Portefeuille *</label>
+        <select id="of-pipe" style="${fi}" onchange="_oppForm.pipeId=this.value">
+          <option value="">—</option>${_oppRefs.pipes.map(p => `<option value="${p.id}"${String(f.pipeId) === String(p.id) ? ' selected' : ''}>${cmdEsc(p.name)}</option>`).join('')}</select></div>
+      <div><label style="${lbl}">Stade *</label>
+        <select id="of-stage" style="${fi}" onchange="_oppForm.stageId=this.value">
+          <option value="">—</option>${inProgress.map(s => `<option value="${s.id}"${String(f.stageId) === String(s.id) ? ' selected' : ''}>${cmdEsc(s.name)}</option>`).join('')}</select></div>
+      <div><label style="${lbl}">Type d'origine *</label>
+        <select id="of-origin" style="${fi}" onchange="_oppForm.originTypeId=this.value">
+          ${_oppRefs.originTypes.map(t => `<option value="${t.id}"${String(f.originTypeId) === String(t.id) ? ' selected' : ''}>${cmdEsc(t.name)}</option>`).join('')}</select></div>
+      <div><label style="${lbl}">Responsable</label>
+        <select id="of-resp" style="${fi}" onchange="_oppForm.salesManagerId=this.value">
+          <option value="">—</option>${emps.map(e => `<option value="${e.id}"${String(f.salesManagerId) === String(e.id) ? ' selected' : ''}>${cmdEsc(fmtCommercialName(e.name))}</option>`).join('')}</select></div>
+      <div><label style="${lbl}">Montant (HT)</label>
+        <input id="of-montant" type="number" step="any" style="${fi}" value="${esc(f.montant)}" oninput="_oppForm.montant=this.value"></div>
+      <div><label style="${lbl}">Probabilité (%)</label>
+        <input id="of-prob" type="number" min="0" max="100" style="${fi}" value="${esc(f.probabilite)}" oninput="_oppForm.probabilite=this.value"></div>
+      <div style="grid-column:1/3"><label style="${lbl}">Date de signature prévisionnelle</label>
+        <input id="of-date" type="date" style="${fi}" value="${esc(f.dateSignature)}" oninput="_oppForm.dateSignature=this.value"></div>
+      <div style="grid-column:1/3"><label style="${lbl}">Description</label>
+        <textarea id="of-desc" rows="3" style="${fi};resize:vertical" oninput="_oppForm.description=this.value">${cmdEsc(f.description || '')}</textarea></div>
+    </div>`;
+  const footer = `<button class="btn" onclick="closeModal('oppEdit')">Annuler</button>
+    <button class="btn btn-primary" onclick="saveOpportunite()">💾 Enregistrer et envoyer à Akuiteo</button>`;
+  openDynModal('oppEdit', f.akId ? 'Modifier l\'opportunité' : 'Nouvelle opportunité', body, footer, '640px');
+}
+
+async function _oppClientSearch(q) {
+  const box = document.getElementById('of-clientRes'); if (!box) return;
+  q = (q || '').trim();
+  if (q.length < 2) { box.style.display = 'none'; return; }
+  try {
+    const { data } = await sb.from('clients').select('id,name,akuiteo_id,city').not('akuiteo_id', 'is', null).ilike('name', '%' + q + '%').order('name').limit(20);
+    const list = data || [];
+    if (!list.length) { box.innerHTML = '<div style="padding:8px;font-size:12px;color:var(--t3)">Aucune société (avec lien Akuiteo)</div>'; box.style.display = 'block'; return; }
+    box.innerHTML = list.map(c => `<div onclick="_oppPickClient('${c.id}','${String(c.akuiteo_id)}','${cmdEsc((c.name || '').replace(/'/g, "\\'"))}')" style="padding:7px 9px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><strong>${cmdEsc(c.name || '')}</strong>${c.city ? ' <span style="color:var(--t3)">— ' + cmdEsc(c.city) + '</span>' : ''}</div>`).join('');
+    box.style.display = 'block';
+  } catch (e) { box.style.display = 'none'; }
+}
+function _oppPickClient(clientId, akId, name) {
+  _oppForm.clientId = clientId; _oppForm.customerAkId = akId; _oppForm.clientName = name; _oppForm.contactAkId = '';
+  const inp = document.getElementById('of-client'); if (inp) inp.value = name;
+  const box = document.getElementById('of-clientRes'); if (box) box.style.display = 'none';
+  _oppLoadContacts(clientId, '');
+}
+async function _oppLoadContacts(clientId, selectAkId) {
+  const sel = document.getElementById('of-contact'); if (!sel) return;
+  try {
+    const { data } = await sb.from('contacts').select('id,nom,prenom,akuiteo_id').eq('client_id', clientId).not('akuiteo_id', 'is', null).order('nom');
+    const list = data || [];
+    sel.innerHTML = '<option value="">—</option>' + list.map(c => {
+      const nm = ((c.nom || '') + ' ' + (c.prenom || '')).trim();
+      return `<option value="${String(c.akuiteo_id)}"${String(selectAkId) === String(c.akuiteo_id) ? ' selected' : ''}>${cmdEsc(nm)}</option>`;
+    }).join('');
+    if (selectAkId) _oppForm.contactAkId = String(selectAkId);
+  } catch (e) { /* ignore */ }
+}
+
+async function saveOpportunite() {
+  const f = _oppForm; if (!f) return;
+  if (!f.name || !f.name.trim()) return toast('Le nom est obligatoire', 'error');
+  if (!f.customerAkId) return toast('Le client est obligatoire', 'error');
+  if (!f.pipeId) return toast('Le portefeuille est obligatoire', 'error');
+  if (!f.stageId) return toast('Le stade est obligatoire', 'error');
+  if (!f.originTypeId) return toast('Le type d\'origine est obligatoire', 'error');
+  const payload = {
+    name: f.name.trim(),
+    customerId: String(f.customerAkId),
+    pipeId: String(f.pipeId),
+    stageId: String(f.stageId),
+    originTypeId: String(f.originTypeId),
+  };
+  if (f.contactAkId) payload.mainContactId = String(f.contactAkId);
+  if (f.salesManagerId) payload.salesManagerId = String(f.salesManagerId);
+  if (f.description != null && f.description !== '') payload.description = f.description;
+  if (f.dateSignature) payload.expectedSignatureDate = f.dateSignature;
+  if (f.montant !== '' && f.montant != null && !isNaN(Number(f.montant))) {
+    payload.amount = Number(f.montant);
+    payload.amountCurrency = Number(f.montant);
+    payload.currencyCode = f.devise || 'EUR';
+  }
+  if (f.probabilite !== '' && f.probabilite != null && !isNaN(Number(f.probabilite))) {
+    payload.weightingCoefficient = Math.max(0, Math.min(1, Number(f.probabilite) / 100));
+  }
+  showSyncLoading(true); setSyncText(f.akId ? 'Mise à jour dans Akuiteo…' : 'Création dans Akuiteo…');
+  try {
+    let akId = f.akId;
+    if (akId) {
+      await akuiteoFetch('POST', `/crm/opportunities/${akId}`, payload, { accept: 'text/plain' });
+    } else {
+      const res = await akuiteoFetch('PUT', '/crm/opportunities', payload, { accept: 'text/plain' });
+      akId = (typeof res === 'string' ? res : (res && (res.id || res.value))) || '';
+      akId = String(akId).replace(/[^0-9]/g, '');
+      if (!akId) throw new Error('Akuiteo n\'a pas renvoyé d\'identifiant');
+    }
+    setSyncText('Rafraîchissement…');
+    await _refreshOneOpp(akId);
+    showSyncLoading(false);
+    closeModal('oppEdit');
+    toast(f.akId ? 'Opportunité mise à jour' : 'Opportunité créée', 'success');
+    if (currentPage === 'opportunites') renderPage('opportunites');
+  } catch (e) {
+    showSyncLoading(false);
+    console.error('saveOpportunite', e);
+    toast('Erreur Akuiteo : ' + e.message, 'error');
+  }
+}
+
+// Changer de stade (stade IN_PROGRESS) — endpoint dédié
+async function oppChangeStage(akId, stageId) {
+  if (!stageId) return;
+  showSyncLoading(true); setSyncText('Changement de stade…');
+  try {
+    await akuiteoFetch('POST', `/crm/opportunities/${akId}/change-stage/${stageId}`, null, { accept: 'text/plain' });
+    await _refreshOneOpp(akId);
+    showSyncLoading(false); toast('Stade mis à jour', 'success');
+    closeModal('opp'); if (currentPage === 'opportunites') renderPage('opportunites');
+  } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
+}
+
+// Marquer gagnée / perdue (endpoints dédiés)
+async function oppWin(akId) {
+  if (!_oppRefs) await loadOppRefs();
+  const won = (_oppRefs.stages.find(s => s.status === 'WON'));
+  if (!won) return toast('Aucun stade « Gagnée » configuré dans Akuiteo', 'error');
+  if (!confirm('Marquer cette opportunité comme GAGNÉE ?')) return;
+  showSyncLoading(true); setSyncText('Marquage gagnée…');
+  try {
+    await akuiteoFetch('POST', `/crm/opportunities/${akId}/win`, { stageId: String(won.id), signatureDate: new Date().toISOString() }, { accept: 'text/plain' });
+    await _refreshOneOpp(akId);
+    showSyncLoading(false); toast('Opportunité gagnée 🏆', 'success');
+    closeModal('opp'); if (currentPage === 'opportunites') renderPage('opportunites');
+  } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
+}
+async function oppLose(akId) {
+  if (!_oppRefs) await loadOppRefs();
+  const lost = (_oppRefs.stages.find(s => s.status === 'LOST'));
+  if (!lost) return toast('Aucun stade « Perdue » configuré dans Akuiteo', 'error');
+  if (!confirm('Marquer cette opportunité comme PERDUE ? (elle sera archivée dans Akuiteo)')) return;
+  showSyncLoading(true); setSyncText('Marquage perdue…');
+  try {
+    await akuiteoFetch('POST', `/crm/opportunities/${akId}/lose`, { stageId: String(lost.id), lossDate: new Date().toISOString() }, { accept: 'text/plain' });
+    await _refreshOneOpp(akId);
+    showSyncLoading(false); toast('Opportunité marquée perdue', 'success');
+    closeModal('opp'); if (currentPage === 'opportunites') renderPage('opportunites');
+  } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
 }
 
 function _oppsFiltered() {
@@ -5281,7 +5503,8 @@ function renderOpportunites() {
   const header = `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-      <button class="btn btn-primary" onclick="syncOpportunites()">⬇ Synchroniser Akuiteo</button>
+      <button class="btn btn-primary" onclick="oppModalOpen()">+ Nouvelle opportunité</button>
+      <button class="btn" onclick="syncOpportunites()">⬇ Synchroniser Akuiteo</button>
       <span style="font-size:13px;color:var(--t2)">${rows.length} opportunité(s)</span>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -5371,8 +5594,15 @@ function oppDetail(akId) {
     ${row('Description', cmdEsc(o.description || ''))}
     ${row('Responsable', cmdEsc(fmtCommercialName(o.responsable || '')))}
     ${row('ID Akuiteo', cmdEsc(o.akuiteo_id))}`;
-  openDynModal('opp', o.nom || 'Opportunité', body,
-    `${o.client_id ? '<button class="btn" onclick="closeModal(\'opp\');showClient(\'' + o.client_id + '\')">Voir le client</button>' : ''}<button class="btn btn-primary" onclick="closeModal('opp')">Fermer</button>`, '560px');
+  const enCours = o.statut === 'IN_PROGRESS';
+  const actions = [
+    `<button class="btn" onclick="closeModal('opp');oppModalOpen('${o.akuiteo_id}')">✏️ Modifier</button>`,
+    enCours ? `<button class="btn" style="color:#10b981" onclick="oppWin('${o.akuiteo_id}')">🏆 Gagnée</button>` : '',
+    enCours ? `<button class="btn" style="color:#ef4444" onclick="oppLose('${o.akuiteo_id}')">Perdue</button>` : '',
+    o.client_id ? `<button class="btn" onclick="closeModal('opp');showClient('${o.client_id}')">Voir le client</button>` : '',
+    `<button class="btn btn-primary" onclick="closeModal('opp')">Fermer</button>`,
+  ].filter(Boolean).join('');
+  openDynModal('opp', o.nom || 'Opportunité', body, actions, '560px');
 }
 
 // Carte Opportunités pour la fiche client
