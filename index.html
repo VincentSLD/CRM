@@ -1778,7 +1778,7 @@ tbody tr:last-child td { border-bottom: none; }
       <div class="nav-section-title">Commerce</div>
       <div class="nav-item" data-page="opportunites" onclick="go('opportunites')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
-        Opportunités
+        Opportunités <span class="nav-badge" id="navBadgeOpportunites" style="display:none"></span>
       </div>
       <div class="nav-item" data-page="marches" onclick="go('marches')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2z"/></svg>
@@ -3600,6 +3600,9 @@ async function loadDB() {
       DB.alerts = generateAlerts();
       _deferredDataLoaded = true;
       console.log(`[loadDB] Phase 2 en ${Date.now()-t1}ms : ${rAll.length} CR, ${maAll.length} marchés, ${afAll.length} affaires`);
+      // Compteurs du menu : tâches + opportunités (non bloquant)
+      if (!_tachesLoaded) loadTaches().catch(() => {});
+      if (!_oppsLoaded) loadOpportunites().catch(() => {});
     })();
 
     return true;
@@ -5109,6 +5112,12 @@ async function loadOpportunites() {
     _opps = data || [];
   } catch (e) { _opps = []; console.warn('loadOpportunites', e.message); }
   _oppsLoaded = true;
+  _updateOpportunitesBadge();
+}
+function _updateOpportunitesBadge() {
+  const el = document.getElementById('navBadgeOpportunites'); if (!el) return;
+  const n = (_opps || []).filter(o => o.statut === 'IN_PROGRESS').length;
+  if (n > 0) { el.textContent = n; el.style.display = ''; } else { el.style.display = 'none'; }
 }
 
 // Lecture flexible d'un champ (plusieurs clés possibles, support "a.b")
