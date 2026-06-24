@@ -5035,7 +5035,7 @@ async function pushTacheToTodo(t) {
     const dueLocal = t.echeance ? (function () { const d = new Date(t.echeance); const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:00`; })() : null;
     const r = await fetch('/api/task-todo', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'create', assigneeEmail: t.assigne_email, assignerEmail: (currentCommercial && currentCommercial.email) || null, assignerName: (currentCommercial && currentCommercial.nom) || null, title: t.titre, body: ctx, dueDateTime: dueLocal })
+      body: JSON.stringify({ action: 'create', assigneeEmail: t.assigne_email, assignerEmail: (currentCommercial && currentCommercial.email) || null, assignerName: (currentCommercial && currentCommercial.nom) || null, title: t.titre, body: ctx, dueDateTime: dueLocal, importance: ({ basse: 'low', normale: 'normal', haute: 'high' }[t.priorite] || 'normal') })
     });
     const o = await r.json().catch(() => ({}));
     if (!r.ok) { toast('Tâche créée (To Do non synchronisé : ' + (o.error || r.status) + ')', 'warning'); return; }
