@@ -5030,8 +5030,8 @@ function tacheModalOpen(id, prefill) {
       <input type="text" id="t-client-search" placeholder="Rechercher une société..." autocomplete="off" oninput="tacheSearchClient(this.value)" onfocus="tacheSearchClient(this.value)" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card,#fff);color:var(--t1)">
       <div id="t-client-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.2)"></div>
     </div>
-    <div class="fg"><label class="fl">Affaire liée</label><select class="fi" id="t-affaire"></select></div>
-    <div class="fg"><label class="fl">Opportunité liée</label><select class="fi" id="t-opportunite"></select></div>`;
+    <div class="fg"><label class="fl">Affaire liée</label><select class="fi" id="t-affaire" onchange="tachePickAffaire(this.value)"></select></div>
+    <div class="fg"><label class="fl">Opportunité liée</label><select class="fi" id="t-opportunite" onchange="tachePickOpp(this.value)"></select></div>`;
   openDynModal('tache', id ? 'Modifier la tâche' : 'Nouvelle tâche commerciale', body,
     `<button class="btn" onclick="closeModal('tache')">Annuler</button><button class="btn btn-primary" onclick="saveTache()">Enregistrer</button>`, '560px');
   setTimeout(() => {
@@ -5059,9 +5059,28 @@ async function tacheSearchClient(q) {
 function tacheSelectClient(id, name) { _tacheSel.client_id = id; _tacheSel.client_name = name; _tacheSel.affaire_id = null; _tacheSel.affaire_nom = null; _tacheSel.opportunite_id = null; const dd = document.getElementById('t-client-dd'); if (dd) dd.style.display = 'none'; const inp = document.getElementById('t-client-search'); if (inp) inp.value = ''; tacheRenderClientChip(); tacheRenderAffaireOptions(); tacheRenderOppOptions(); }
 function tacheRenderOppOptions() {
   const sel = document.getElementById('t-opportunite'); if (!sel) return;
-  const list = _tacheSel.client_id ? (_opps || []).filter(o => o.client_id === _tacheSel.client_id) : [];
-  sel.innerHTML = '<option value="">— Aucune —</option>' + list.map(o => `<option value="${o.akuiteo_id}"${_tacheSel.opportunite_id === o.akuiteo_id ? ' selected' : ''}>${cmdEsc(o.nom || '')}${o.montant != null ? ' (' + fmt(o.montant) + ')' : ''}</option>`).join('');
-  sel.disabled = !_tacheSel.client_id;
+  const sansClient = !_tacheSel.client_id;
+  const list = (sansClient ? (_opps || []).slice() : (_opps || []).filter(o => o.client_id === _tacheSel.client_id)).sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
+  sel.innerHTML = '<option value="">— Aucune —</option>' + list.map(o => {
+    const lbl = (o.nom || '') + (o.montant != null ? ' (' + fmt(o.montant) + ')' : '') + (sansClient && o.client_name ? ' — ' + o.client_name : '');
+    return `<option value="${o.akuiteo_id}"${_tacheSel.opportunite_id === o.akuiteo_id ? ' selected' : ''}>${cmdEsc(lbl)}</option>`;
+  }).join('');
+  sel.disabled = false;
+}
+// Sélection opportunité/affaire : renseigne automatiquement le client si absent
+function tachePickOpp(id) {
+  _tacheSel.opportunite_id = id || null;
+  if (id && !_tacheSel.client_id) {
+    const o = (_opps || []).find(x => x.akuiteo_id === id);
+    if (o && o.client_id) { _tacheSel.client_id = o.client_id; _tacheSel.client_name = o.client_name || null; tacheRenderClientChip(); tacheRenderAffaireOptions(); tacheRenderOppOptions(); }
+  }
+}
+function tachePickAffaire(id) {
+  _tacheSel.affaire_id = id || null;
+  if (id && !_tacheSel.client_id) {
+    const a = (DB.affaires || []).find(x => x.id === id);
+    if (a && a.client_id) { _tacheSel.client_id = a.client_id; _tacheSel.client_name = a.client_name || a.client || null; tacheRenderClientChip(); tacheRenderAffaireOptions(); tacheRenderOppOptions(); }
+  }
 }
 function tacheRenderClientChip() {
   const el = document.getElementById('t-client-chip'); if (!el) return;
@@ -5070,9 +5089,13 @@ function tacheRenderClientChip() {
 function tacheClearClient() { _tacheSel.client_id = null; _tacheSel.client_name = null; _tacheSel.affaire_id = null; _tacheSel.affaire_nom = null; _tacheSel.opportunite_id = null; tacheRenderClientChip(); tacheRenderAffaireOptions(); tacheRenderOppOptions(); }
 function tacheRenderAffaireOptions() {
   const sel = document.getElementById('t-affaire'); if (!sel) return;
-  const affs = _tacheSel.client_id ? (DB.affaires || []).filter(a => a.client_id === _tacheSel.client_id) : [];
-  sel.innerHTML = '<option value="">— Aucune —</option>' + affs.map(a => { const lbl = [a.code_projet, a.nom, a.ville].filter(Boolean).join(' — ') || a.nom || a.id; return `<option value="${a.id}"${_tacheSel.affaire_id === a.id ? ' selected' : ''}>${cmdEsc(lbl)}</option>`; }).join('');
-  sel.disabled = !_tacheSel.client_id;
+  const sansClient = !_tacheSel.client_id;
+  const affs = (sansClient ? (DB.affaires || []).slice() : (DB.affaires || []).filter(a => a.client_id === _tacheSel.client_id)).sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
+  sel.innerHTML = '<option value="">— Aucune —</option>' + affs.map(a => {
+    const lbl = ([a.code_projet, a.nom, a.ville].filter(Boolean).join(' — ') || a.nom || a.id) + (sansClient && (a.client_name || a.client) ? ' — ' + (a.client_name || a.client) : '');
+    return `<option value="${a.id}"${_tacheSel.affaire_id === a.id ? ' selected' : ''}>${cmdEsc(lbl)}</option>`;
+  }).join('');
+  sel.disabled = false;
 }
 async function saveTache() {
   const titre = document.getElementById('t-titre')?.value.trim();
