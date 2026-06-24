@@ -1776,7 +1776,7 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
     <div class="nav-section">
       <div class="nav-section-title">Commerce</div>
-      <div class="nav-item" data-page="opportunites" onclick="go('opportunites')">
+      <div class="nav-item" data-page="opportunites" onclick="_oppFlag='';go('opportunites')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
         Opportunités <span class="nav-badge" id="navBadgeOpportunites" style="display:none"></span>
       </div>
@@ -5140,7 +5140,7 @@ function renderTachesCard(opts) {
 //  OPPORTUNITÉS (reprises depuis Akuiteo CRM)
 // ═══════════════════════════════════════════════════════════
 let _opps = [], _oppsLoaded = false, _oppView = 'pipeline';
-let _oppFStatut = '', _oppFResp = '', _oppFPipe = '', _oppSearch = '', _oppFSigFrom = '', _oppFSigTo = '';
+let _oppFStatut = '', _oppFResp = '', _oppFPipe = '', _oppSearch = '', _oppFSigFrom = '', _oppFSigTo = '', _oppFlag = '';
 const OPP_STATUTS = { IN_PROGRESS: ['En cours', '#4f8ff7'], WON: ['Gagnée', '#10b981'], LOST: ['Perdue', '#ef4444'], DISCARD: ['Abandonnée', '#6b7280'], ARCHIVED: ['Archivée', '#6b7280'] };
 // Niveaux de probabilité Akuiteo (le « Taux » = weightingCoefficient en découle automatiquement)
 const OPP_PROBA_LEVELS = [
@@ -5833,9 +5833,35 @@ function oppCreerTache(akId) {
   });
 }
 
+// Filtres "spéciaux" issus des alertes d'analyse
+const OPP_FLAGS = { depassees: 'Signature dépassée', sous30: 'À signer sous 30 j', sansDate: 'Sans date de signature', sansResp: 'Sans responsable', sansContact: 'Sans contact', grosEnjeu: 'Fort enjeu (≥ 100 k€)', strategiques: 'Stratégiques' };
+function _oppFlagMatch(o) {
+  if (!_oppFlag) return true;
+  if (o.statut !== 'IN_PROGRESS') return false;
+  const tISO = new Date().toISOString().slice(0, 10);
+  const in30 = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+  const m = Number(o.montant) || 0;
+  switch (_oppFlag) {
+    case 'depassees': return !!o.date_signature && o.date_signature < tISO;
+    case 'sous30': return !!o.date_signature && o.date_signature >= tISO && o.date_signature <= in30;
+    case 'sansDate': return !o.date_signature;
+    case 'sansResp': return !o.responsable;
+    case 'sansContact': return !o.contact_name;
+    case 'grosEnjeu': return m >= 100000;
+    case 'strategiques': return !!(o.raw && o.raw.strategic);
+    default: return true;
+  }
+}
+// Affiche la liste des opportunités filtrée par une alerte d'analyse
+function oppAnaShow(flag) {
+  _oppFStatut = ''; _oppFResp = ''; _oppFPipe = ''; _oppSearch = ''; _oppFSigFrom = ''; _oppFSigTo = '';
+  _oppFlag = flag; _oppView = 'liste';
+  go('opportunites');
+}
 function _oppsFiltered() {
   const q = _looseAlnum(_oppSearch);
   return (_opps || []).filter(o => {
+    if (!_oppFlagMatch(o)) return false;
     if (_oppFStatut && o.statut !== _oppFStatut) return false;
     if (_oppFPipe && (o.pipe || '') !== _oppFPipe) return false;
     if (_oppFResp && (o.responsable || '') !== _oppFResp) return false;
@@ -5863,6 +5889,7 @@ function renderOpportunites() {
       <button class="btn" onclick="go('opportunite-analyse')">📊 Analyser</button>
       <button class="btn" onclick="syncOpportunites()">⬇ Synchroniser Akuiteo</button>
       <span style="font-size:13px;color:var(--t2)">${rows.length} opportunité(s)</span>
+      ${_oppFlag ? `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;background:#f59e0b22;color:#b45309;border:1px solid #f59e0b55;border-radius:12px;padding:3px 10px">🔔 ${OPP_FLAGS[_oppFlag] || _oppFlag}<span style="cursor:pointer;font-size:14px" onclick="_oppFlag='';renderPage('opportunites')" title="Retirer ce filtre">&times;</span></span>` : ''}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <input type="text" placeholder="Rechercher..." value="${(_oppSearch || '').replace(/"/g, '&quot;')}" oninput="_oppSearch=this.value;clearTimeout(window._oppT);window._oppT=setTimeout(()=>renderPage('opportunites'),250)" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);min-width:160px">
@@ -6059,22 +6086,21 @@ function renderOppAnalyse() {
   const strat = enCours.filter(o => o.raw && o.raw.strategic);
   const grosEnjeu = enCours.filter(o => num(o.montant) >= 100000).sort((a, b) => num(b.montant) - num(a.montant));
   const mtFmt = arr => fmt(arr.reduce((s, o) => s + num(o.montant), 0));
-  const goList = `_oppView='liste';renderPage('opportunites')`;
   const alertDefs = [
-    { cond: depassees.length, color: '#ef4444', icon: '⏰', titre: `${depassees.length} opportunité(s) à requalifier`, sous: `Signature prévisionnelle dépassée — total ${mtFmt(depassees)} HT. À relancer, gagner ou clôturer.`, action: `_oppFStatut='IN_PROGRESS';_oppFSigFrom='';_oppFSigTo='${tISO}';${goList}` },
-    { cond: sous30.length, color: '#f59e0b', icon: '🎯', titre: `${sous30.length} signature(s) attendue(s) sous 30 jours`, sous: `Total ${mtFmt(sous30)} HT à closer. À prioriser cette période.`, action: `_oppFStatut='IN_PROGRESS';_oppFSigFrom='${tISO}';_oppFSigTo='${in30}';${goList}` },
-    { cond: sansDate.length, color: '#f59e0b', icon: '📅', titre: `${sansDate.length} opportunité(s) sans date de signature`, sous: `Impossible de prévoir l'atterrissage. Renseignez une date prévisionnelle.`, action: `_oppFStatut='IN_PROGRESS';${goList}` },
-    { cond: sansResp.length, color: '#6366f1', icon: '👤', titre: `${sansResp.length} opportunité(s) sans responsable`, sous: `Affectez un responsable commercial pour le suivi.`, action: `_oppFStatut='IN_PROGRESS';${goList}` },
-    { cond: sansContact.length, color: '#6366f1', icon: '📇', titre: `${sansContact.length} opportunité(s) sans contact`, sous: `Ajoutez un contact pour faciliter la relance.`, action: null },
-    { cond: grosEnjeu.length, color: '#10b981', icon: '💎', titre: `${grosEnjeu.length} opportunité(s) à fort enjeu (≥ 100 k€)`, sous: `Total ${mtFmt(grosEnjeu)} HT. Top : ${grosEnjeu.slice(0, 3).map(o => cmdEsc(o.nom)).join(', ')}.`, action: null },
-    { cond: strat.length, color: '#8b5cf6', icon: '⭐', titre: `${strat.length} opportunité(s) stratégique(s) en cours`, sous: `À suivre de près — total ${mtFmt(strat)} HT.`, action: null },
+    { cond: depassees.length, color: '#ef4444', icon: '⏰', titre: `${depassees.length} opportunité(s) à requalifier`, sous: `Signature prévisionnelle dépassée — total ${mtFmt(depassees)} HT. À relancer, gagner ou clôturer.`, flag: 'depassees' },
+    { cond: sous30.length, color: '#f59e0b', icon: '🎯', titre: `${sous30.length} signature(s) attendue(s) sous 30 jours`, sous: `Total ${mtFmt(sous30)} HT à closer. À prioriser cette période.`, flag: 'sous30' },
+    { cond: sansDate.length, color: '#f59e0b', icon: '📅', titre: `${sansDate.length} opportunité(s) sans date de signature`, sous: `Impossible de prévoir l'atterrissage. Renseignez une date prévisionnelle.`, flag: 'sansDate' },
+    { cond: sansResp.length, color: '#6366f1', icon: '👤', titre: `${sansResp.length} opportunité(s) sans responsable`, sous: `Affectez un responsable commercial pour le suivi.`, flag: 'sansResp' },
+    { cond: sansContact.length, color: '#6366f1', icon: '📇', titre: `${sansContact.length} opportunité(s) sans contact`, sous: `Ajoutez un contact pour faciliter la relance.`, flag: 'sansContact' },
+    { cond: grosEnjeu.length, color: '#10b981', icon: '💎', titre: `${grosEnjeu.length} opportunité(s) à fort enjeu (≥ 100 k€)`, sous: `Total ${mtFmt(grosEnjeu)} HT. Top : ${grosEnjeu.slice(0, 3).map(o => cmdEsc(o.nom)).join(', ')}.`, flag: 'grosEnjeu' },
+    { cond: strat.length, color: '#8b5cf6', icon: '⭐', titre: `${strat.length} opportunité(s) stratégique(s) en cours`, sous: `À suivre de près — total ${mtFmt(strat)} HT.`, flag: 'strategiques' },
   ].filter(a => a.cond);
   const alerts = alertDefs.map(a => `
-    <div ${a.action ? `onclick="${a.action}" style="cursor:pointer"` : ''} class="card" style="border-left:4px solid ${a.color}">
+    <div onclick="oppAnaShow('${a.flag}')" class="card" style="cursor:pointer;border-left:4px solid ${a.color}" title="Voir ces opportunités">
       <div class="card-body" style="padding:10px 12px;display:flex;align-items:center;gap:10px">
         <div style="font-size:20px">${a.icon}</div>
         <div style="flex:1"><div style="font-weight:700;font-size:13px;color:${a.color}">${a.titre}</div><div style="font-size:12px;color:var(--t2)">${a.sous}</div></div>
-        ${a.action ? '<div style="color:var(--t3)">›</div>' : ''}
+        <div style="color:var(--t3)">›</div>
       </div></div>`).join('');
 
   // ─ Données graphiques ─
