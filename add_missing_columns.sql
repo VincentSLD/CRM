@@ -289,19 +289,21 @@ CREATE INDEX IF NOT EXISTS idx_reports_legacy_id ON reports(legacy_id);
 --  Permet de retrouver une société malgré ponctuation/espaces/casse/fautes
 --  Ex : "6K" trouve "6.K ARCHI", "LT ARCHI" trouve l'entrée même mal saisie.
 -- ═══════════════════════════════════════════════════════════
--- NB : sur Supabase, pg_trgm est installé dans le schéma "extensions". L'opérateur
--- gin_trgm_ops et la fonction similarity() doivent donc être qualifiés "extensions.".
-CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
+-- pg_trgm peut être installé dans "public" ou "extensions" selon le projet.
+-- On installe si absent et on élargit le search_path (session + fonctions) pour que
+-- gin_trgm_ops et similarity() soient résolus quel que soit leur schéma.
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+SET search_path = public, extensions;
 
 -- Index trigram sur le nom NORMALISÉ (alphanumérique seul, minuscules) → tolérant à la ponctuation et aux espaces
 CREATE INDEX IF NOT EXISTS idx_clients_name_norm_trgm
-  ON clients USING gin (regexp_replace(lower(name), '[^a-z0-9]', '', 'g') extensions.gin_trgm_ops);
+  ON clients USING gin (regexp_replace(lower(name), '[^a-z0-9]', '', 'g') gin_trgm_ops);
 -- Index trigram sur le nom brut → similarité / tolérance aux fautes de frappe
 CREATE INDEX IF NOT EXISTS idx_clients_name_trgm
-  ON clients USING gin (lower(name) extensions.gin_trgm_ops);
+  ON clients USING gin (lower(name) gin_trgm_ops);
 -- Idem pour les contacts (recherche par nom)
 CREATE INDEX IF NOT EXISTS idx_contacts_nom_trgm
-  ON contacts USING gin (lower(nom) extensions.gin_trgm_ops);
+  ON contacts USING gin (lower(nom) gin_trgm_ops);
 
 -- Fonction de recherche tolérante de clients/prospects, classée par pertinence
 CREATE OR REPLACE FUNCTION search_clients(q text, lim int DEFAULT 20)
@@ -309,7 +311,9 @@ RETURNS TABLE (
   id text, name text, code text, city text, code_postal text,
   status text, account_manager_name text, salesman_name text, siren text, score real
 )
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE
+SET search_path = public, extensions, pg_catalog
+AS $$
   WITH qn AS (
     SELECT regexp_replace(lower(coalesce(q,'')), '[^a-z0-9]', '', 'g') AS qq,
            lower(coalesce(q,'')) AS ql
@@ -317,7 +321,7 @@ LANGUAGE sql STABLE AS $$
   SELECT c.id::text, c.name::text, c.code::text, c.city::text, c.code_postal::text,
          c.status::text, c.account_manager_name::text, c.salesman_name::text, c.siren::text,
          GREATEST(
-           extensions.similarity(lower(c.name), qn.ql),
+           similarity(lower(c.name), qn.ql),
            CASE
              WHEN qn.qq <> '' AND regexp_replace(lower(c.name), '[^a-z0-9]', '', 'g') = qn.qq THEN 1.0
              WHEN qn.qq <> '' AND regexp_replace(lower(c.name), '[^a-z0-9]', '', 'g') LIKE qn.qq || '%' THEN 0.95
@@ -327,7 +331,7 @@ LANGUAGE sql STABLE AS $$
          )::real AS score
   FROM clients c, qn
   WHERE (qn.qq <> '' AND regexp_replace(lower(c.name), '[^a-z0-9]', '', 'g') LIKE '%' || qn.qq || '%')
-     OR extensions.similarity(lower(c.name), qn.ql) > 0.25
+     OR similarity(lower(c.name), qn.ql) > 0.25
   ORDER BY score DESC, c.name
   LIMIT LEAST(COALESCE(lim, 20), 50);
 $$;
@@ -335,7 +339,7 @@ GRANT EXECUTE ON FUNCTION search_clients(text, int) TO anon, authenticated, serv
 
 -- Index trigram sur le nom complet du contact (nom + prénom) normalisé
 CREATE INDEX IF NOT EXISTS idx_contacts_fullnorm_trgm
-  ON contacts USING gin (regexp_replace(lower(coalesce(nom,'') || coalesce(prenom,'')), '[^a-z0-9]', '', 'g') extensions.gin_trgm_ops);
+  ON contacts USING gin (regexp_replace(lower(coalesce(nom,'') || coalesce(prenom,'')), '[^a-z0-9]', '', 'g') gin_trgm_ops);
 
 -- Fonction de recherche tolérante de contacts, classée par pertinence
 CREATE OR REPLACE FUNCTION search_contacts(q text, lim int DEFAULT 20)
@@ -343,7 +347,9 @@ RETURNS TABLE (
   id text, client_id text, nom text, prenom text, titre text, fonction text, service text,
   email text, email2 text, telephone text, mobile text, score real
 )
-LANGUAGE sql STABLE AS $$
+LANGUAGE sql STABLE
+SET search_path = public, extensions, pg_catalog
+AS $$
   WITH qn AS (
     SELECT regexp_replace(lower(coalesce(q,'')), '[^a-z0-9]', '', 'g') AS qq,
            lower(coalesce(q,'')) AS ql
@@ -351,8 +357,8 @@ LANGUAGE sql STABLE AS $$
   SELECT c.id::text, c.client_id::text, c.nom::text, c.prenom::text, c.titre::text, c.fonction::text, c.service::text,
          c.email::text, c.email2::text, c.telephone::text, c.mobile::text,
          GREATEST(
-           extensions.similarity(lower(coalesce(c.nom,'') || ' ' || coalesce(c.prenom,'')), qn.ql),
-           extensions.similarity(lower(coalesce(c.prenom,'') || ' ' || coalesce(c.nom,'')), qn.ql),
+           similarity(lower(coalesce(c.nom,'') || ' ' || coalesce(c.prenom,'')), qn.ql),
+           similarity(lower(coalesce(c.prenom,'') || ' ' || coalesce(c.nom,'')), qn.ql),
            CASE
              WHEN qn.qq <> '' AND regexp_replace(lower(coalesce(c.nom,'') || coalesce(c.prenom,'')), '[^a-z0-9]', '', 'g') LIKE '%' || qn.qq || '%' THEN 0.9
              WHEN qn.qq <> '' AND regexp_replace(lower(coalesce(c.prenom,'') || coalesce(c.nom,'')), '[^a-z0-9]', '', 'g') LIKE '%' || qn.qq || '%' THEN 0.9
@@ -363,7 +369,7 @@ LANGUAGE sql STABLE AS $$
   WHERE (qn.qq <> '' AND (
             regexp_replace(lower(coalesce(c.nom,'') || coalesce(c.prenom,'')), '[^a-z0-9]', '', 'g') LIKE '%' || qn.qq || '%'
          OR regexp_replace(lower(coalesce(c.prenom,'') || coalesce(c.nom,'')), '[^a-z0-9]', '', 'g') LIKE '%' || qn.qq || '%'))
-     OR extensions.similarity(lower(coalesce(c.nom,'') || ' ' || coalesce(c.prenom,'')), qn.ql) > 0.25
+     OR similarity(lower(coalesce(c.nom,'') || ' ' || coalesce(c.prenom,'')), qn.ql) > 0.25
   ORDER BY score DESC, c.nom
   LIMIT LEAST(COALESCE(lim, 20), 50);
 $$;
