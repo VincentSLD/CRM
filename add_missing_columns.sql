@@ -267,6 +267,9 @@ CREATE INDEX IF NOT EXISTS idx_opp_stage ON opportunites(stage);
 -- Lien tâche commerciale → opportunité
 ALTER TABLE taches_commerciales ADD COLUMN IF NOT EXISTS opportunite_id TEXT;
 ALTER TABLE taches_commerciales ADD COLUMN IF NOT EXISTS opportunite_nom TEXT;
+-- Rappel automatique par email à l'échéance (cron Vercel /api/taches-rappels)
+ALTER TABLE taches_commerciales ADD COLUMN IF NOT EXISTS rappel_envoye BOOLEAN DEFAULT FALSE;
+ALTER TABLE taches_commerciales ADD COLUMN IF NOT EXISTS rappel_date TIMESTAMPTZ;
 
 -- ═══ Journal de connexions au CRM ═══
 -- Une ligne par connexion réussie (qui s'est identifié et quand).

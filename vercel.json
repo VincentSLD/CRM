@@ -2,5 +2,8 @@
   "rewrites": [
     { "source": "/api/akuiteo", "destination": "/api/akuiteo" },
     { "source": "/api/lucca", "destination": "/api/lucca" }
+  ],
+  "crons": [
+    { "path": "/api/taches-rappels", "schedule": "0 6 * * *" }
   ]
 }

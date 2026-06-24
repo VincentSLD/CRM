@@ -5074,6 +5074,8 @@ async function saveTache() {
     done_at: statut === 'terminee' ? new Date().toISOString() : null,
   };
   const prev = id ? _taches.find(x => String(x.id) === String(id)) : null;
+  // Réarmer le rappel email si l'échéance change ou si la tâche est rouverte
+  if (prev && (prev.echeance !== echeance || (prev.statut === 'terminee' && statut !== 'terminee'))) row.rappel_envoye = false;
   let saved;
   if (id) {
     const { data, error } = await sb.from('taches_commerciales').update(row).eq('id', id).select().single();
