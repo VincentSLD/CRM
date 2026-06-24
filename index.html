@@ -5430,8 +5430,6 @@ function renderOppEditPage() {
       ${sec('Général')}
       <div style="grid-column:1/3"><label style="${lbl}">Nom de l'opportunité *</label>
         <input id="of-name" style="${fi}" value="${esc(f.name)}" oninput="_oppForm.name=this.value"></div>
-      <div style="grid-column:1/3"><label style="${lbl}">Titre</label>
-        <input id="of-title" style="${fi}" value="${esc(f.title)}" oninput="_oppForm.title=this.value"></div>
       <div style="grid-column:1/3;position:relative"><label style="${lbl}">Client / Prospect *</label>
         <input id="of-client" style="${fi}" placeholder="Rechercher une société…" value="${esc(f.clientName)}" autocomplete="off"
           oninput="_oppClientSearch(this.value)" onfocus="_oppClientSearch(this.value)">
@@ -5661,12 +5659,12 @@ async function saveOpportunite() {
   payload.pipeId = String(f.pipeId);
   payload.stageId = String(f.stageId);
   payload.originTypeId = String(f.originTypeId);
+  // NB : le champ "title" Akuiteo n'est pas utilisé (le nom fait office de titre) — on n'y touche pas (préservé via raw en modification).
   // Helpers pour positionner un champ (null pour effacer en modification)
   const setStr = (k, v) => { if (v != null && v !== '') payload[k] = String(v); else if (isUpdate) payload[k] = null; };
   const setNum = (k, v) => { if (v !== '' && v != null && !isNaN(Number(v))) payload[k] = Number(v); else if (isUpdate) payload[k] = null; };
   const setDate = (k, v) => { if (v) payload[k] = v; else if (isUpdate) payload[k] = null; };
   // Général
-  setStr('title', f.title);
   setStr('endCustomerId', f.endCustomerAkId);
   setStr('mainContactId', f.contactAkId);
   setStr('customerLocationId', f.customerLocationId);
@@ -5925,7 +5923,6 @@ function renderOppDetailPage() {
     ${row('Établissement', cmdEsc((raw.customerLocation && (raw.customerLocation.fullName || raw.customerLocation.name)) || ''))}
     ${row('Contact(s)', o.contact_id ? `<a href="#" onclick="showContact('${o.contact_id}');return false" style="color:var(--accent)">${cmdEsc(o.contact_name || '')}</a>` : cmdEsc(o.contact_name || ''))}
     ${row('Code', cmdEsc(o.code || ''))}
-    ${row('Titre', cmdEsc(raw.title || ''))}
     ${row('Stade', cmdEsc(o.stage || ''))}
     ${row('Portefeuille', cmdEsc(o.pipe || ''))}
     ${row('Statut', _oppStatutBadge(o.statut))}
