@@ -4939,7 +4939,7 @@ function tacheModalOpen(id, prefill) {
   const echVal = ech && !isNaN(ech.getTime()) ? `${ech.getFullYear()}-${String(ech.getMonth() + 1).padStart(2, '0')}-${String(ech.getDate()).padStart(2, '0')}T${String(ech.getHours()).padStart(2, '0')}:${String(ech.getMinutes()).padStart(2, '0')}` : '';
   const body = `
     <input type="hidden" id="t-id" value="${id || ''}">
-    <div class="fg"><label class="fl">Titre *</label><input class="fi" id="t-titre" value="${t ? (t.titre || '').replace(/"/g, '&quot;') : ''}" placeholder="Ex: Relancer pour le devis X"></div>
+    <div class="fg"><label class="fl">Titre *</label><input class="fi" id="t-titre" value="${(t ? (t.titre || '') : (prefill && prefill.titre ? prefill.titre : '')).replace(/"/g, '&quot;')}" placeholder="Ex: Relancer pour le devis X"></div>
     <div class="fg"><label class="fl">Description</label><textarea class="fi" id="t-desc" rows="3" style="resize:vertical">${t ? (t.description || '') : ''}</textarea></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <div class="fg" style="flex:1;min-width:150px"><label class="fl">Échéance</label><input type="datetime-local" class="fi" id="t-echeance" value="${echVal}"></div>
@@ -5677,6 +5677,18 @@ async function oppLose(akId) {
   } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
 }
 
+// Créer une tâche commerciale pré-remplie depuis une opportunité
+function oppCreerTache(akId) {
+  const o = _opps.find(x => x.akuiteo_id === akId); if (!o) return;
+  closeModal('opp');
+  tacheModalOpen(null, {
+    client_id: o.client_id || null,
+    client_name: o.client_name || null,
+    opportunite_id: o.akuiteo_id,
+    titre: o.nom ? ('Suivi opportunité : ' + o.nom) : '',
+  });
+}
+
 function _oppsFiltered() {
   const q = _looseAlnum(_oppSearch);
   return (_opps || []).filter(o => {
@@ -5816,6 +5828,7 @@ function oppDetail(akId) {
   const enCours = o.statut === 'IN_PROGRESS';
   const actions = [
     `<button class="btn" onclick="closeModal('opp');oppModalOpen('${o.akuiteo_id}')">✏️ Modifier</button>`,
+    `<button class="btn" onclick="oppCreerTache('${o.akuiteo_id}')">✅ Créer une tâche</button>`,
     enCours ? `<button class="btn" style="color:#10b981" onclick="oppWin('${o.akuiteo_id}')">🏆 Gagnée</button>` : '',
     enCours ? `<button class="btn" style="color:#ef4444" onclick="oppLose('${o.akuiteo_id}')">Perdue</button>` : '',
     o.client_id ? `<button class="btn" onclick="closeModal('opp');showClient('${o.client_id}')">Voir le client</button>` : '',
