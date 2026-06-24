@@ -5447,8 +5447,8 @@ async function saveOpportunite() {
       await akuiteoFetch('POST', `/crm/opportunities/${akId}`, payload, { accept: 'text/plain' });
     } else {
       const res = await akuiteoFetch('PUT', '/crm/opportunities', payload, { accept: 'text/plain' });
-      akId = (typeof res === 'string' ? res : (res && (res.id || res.value))) || '';
-      akId = String(akId).replace(/[^0-9]/g, '');
+      const rawId = (res && typeof res === 'object') ? (res.id || res.value || '') : res;
+      akId = String(rawId == null ? '' : rawId).replace(/[^0-9]/g, '');
       if (!akId) throw new Error('Akuiteo n\'a pas renvoyé d\'identifiant');
     }
     setSyncText('Rafraîchissement…');
