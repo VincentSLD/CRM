@@ -2918,7 +2918,7 @@ tbody tr:last-child td { border-bottom: none; }
 </div>
 <!-- Languette pour réafficher NOVA quand il est masqué -->
 <div id="novaShowHandle" onclick="novaSetHidden(false)" title="Afficher NOVA" style="display:none;position:fixed;bottom:80px;right:0;width:20px;height:48px;border-radius:12px 0 0 12px;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;align-items:center;justify-content:center;cursor:pointer;box-shadow:-2px 2px 12px rgba(0,0,0,.25);z-index:900;font-size:13px;opacity:.9">✦</div>
-<div id="aiChatPanel" style="display:none;position:fixed;bottom:90px;right:24px;width:520px;max-width:calc(100vw - 32px);height:680px;max-height:calc(100vh - 120px);min-width:340px;min-height:380px;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.2);z-index:900;flex-direction:column;overflow:hidden;resize:both">
+<div id="aiChatPanel" style="display:none;position:fixed;bottom:90px;right:24px;width:520px;max-width:calc(100vw - 32px);height:680px;max-height:calc(100vh - 120px);min-width:340px;min-height:380px;background:var(--card,#fff);border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.2);z-index:900;flex-direction:column;overflow:hidden;resize:both">
   <div id="aiChatHeader" onmousedown="novaDragStart(event)" style="padding:14px 16px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;display:flex;align-items:center;justify-content:space-between;cursor:move;user-select:none">
     <div><div style="font-weight:700;font-size:14px">✦ NOVA</div><div style="font-size:11px;opacity:.85">Ton assistant IA — dis "Hey Nova"</div></div>
     <div style="display:flex;align-items:center;gap:8px">
@@ -2931,7 +2931,7 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
   </div>
   <div id="aiChatMsgs" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--bg-1)"></div>
-  <div style="padding:6px 10px;border-top:1px solid var(--border);display:flex;gap:6px;overflow-x:auto;background:var(--card);align-items:center">
+  <div style="padding:6px 10px;border-top:1px solid var(--border);display:flex;gap:6px;overflow-x:auto;background:var(--card,#fff);align-items:center">
     <span style="font-size:10px;color:var(--t3);font-weight:700;white-space:nowrap">⚡ Opportunités</span>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('prioriser')">🎯 Prioriser</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('risques')">⚠️ Risques</button>
@@ -2940,7 +2940,7 @@ tbody tr:last-child td { border-bottom: none; }
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('relance')">✉️ Relance</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('action')">✅ Quoi faire ?</button>
   </div>
-  <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;background:var(--card)">
+  <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;background:var(--card,#fff)">
     <textarea id="aiChatInput" placeholder="Posez votre question..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();askAIChat()}" oninput="_autoResizeAIInput()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1);resize:none;overflow-y:auto;max-height:120px;line-height:1.4;font-family:inherit"></textarea>
     <button class="btn" id="aiDictBtn" onclick="toggleAIDictation()" title="Dictée vocale" style="font-size:12px;padding:6px 8px">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
