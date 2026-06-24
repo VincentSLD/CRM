@@ -5516,21 +5516,37 @@ function renderOppEditPage() {
     </div>`;
 }
 
+let _oppClientTimer = null;
 async function _oppClientSearch(q, isEnd) {
   const box = document.getElementById(isEnd ? 'of-endclientRes' : 'of-clientRes'); if (!box) return;
   q = (q || '').trim();
-  if (q.length < 2) { box.style.display = 'none'; return; }
-  try {
-    const { data } = await sb.from('clients').select('id,name,akuiteo_id,city').not('akuiteo_id', 'is', null).ilike('name', '%' + q + '%').order('name').limit(20);
-    const list = data || [];
-    const pick = isEnd ? '_oppPickEndClient' : '_oppPickClient';
-    const qEsc = q.replace(/'/g, "\\'");
-    const createBtn = `<div onclick="oppNewClientOpen('${cmdEsc(qEsc)}',${isEnd ? 'true' : 'false'})" style="padding:8px 9px;font-size:12px;cursor:pointer;border-top:1px solid var(--border);color:var(--accent);font-weight:600" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''">➕ Créer « ${cmdEsc(q)} » comme nouveau client</div>`;
-    box.innerHTML = (list.length
-      ? list.map(c => `<div onclick="${pick}('${c.id}','${String(c.akuiteo_id)}','${cmdEsc((c.name || '').replace(/'/g, "\\'"))}')" style="padding:7px 9px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><strong>${cmdEsc(c.name || '')}</strong>${c.city ? ' <span style="color:var(--t3)">— ' + cmdEsc(c.city) + '</span>' : ''}</div>`).join('')
-      : '<div style="padding:8px;font-size:12px;color:var(--t3)">Aucune société existante</div>') + createBtn;
-    box.style.display = 'block';
-  } catch (e) { box.style.display = 'none'; }
+  if (q.length < 1) { box.style.display = 'none'; return; }
+  clearTimeout(_oppClientTimer);
+  _oppClientTimer = setTimeout(async () => {
+    try {
+      // Même principe que la recherche CR : 1) mots entiers (précis) ; 2) repli tolérant ("6K" -> "6.K") ; tri par pertinence
+      const words = q.split(/\s+/).filter(Boolean);
+      const COLS = ['name', 'code'];
+      const build = (loose) => {
+        let query = sb.from('clients').select('id,name,code,city,akuiteo_id').not('akuiteo_id', 'is', null);
+        for (const w of words) {
+          if (loose) { query = query.or(_looseIlikeOr(COLS, w)); }
+          else { const pat = '%' + w.replace(/[%,]/g, '') + '%'; query = query.or(COLS.map(c => c + '.ilike.' + pat).join(',')); }
+        }
+        return query.order('name').limit(100);
+      };
+      let { data } = await build(false);
+      if (!data || !data.length) { ({ data } = await build(true)); }
+      const list = (data || []).slice().sort((a, b) => _searchScore(q, b.name, b.code) - _searchScore(q, a.name, a.code) || (a.name || '').localeCompare(b.name || '', 'fr'));
+      const pick = isEnd ? '_oppPickEndClient' : '_oppPickClient';
+      const qEsc = q.replace(/'/g, "\\'");
+      const createBtn = `<div onclick="oppNewClientOpen('${cmdEsc(qEsc)}',${isEnd ? 'true' : 'false'})" style="padding:9px;font-size:12px;cursor:pointer;border-top:1px solid var(--border);color:var(--accent);font-weight:600" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''">➕ Créer « ${cmdEsc(q)} » comme nouveau client</div>`;
+      box.innerHTML = (list.length
+        ? list.slice(0, 100).map(c => `<div onclick="${pick}('${c.id}','${String(c.akuiteo_id)}','${cmdEsc((c.name || '').replace(/'/g, "\\'"))}')" style="padding:7px 9px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><strong>${cmdEsc(c.name || '')}</strong> <span style="color:var(--t3)">${cmdEsc(c.code || '')}${c.city ? ' — ' + cmdEsc(c.city) : ''}</span></div>`).join('')
+        : '<div style="padding:8px;font-size:12px;color:var(--t3)">Aucune société (avec lien Akuiteo)</div>') + createBtn;
+      box.style.display = 'block';
+    } catch (e) { box.style.display = 'none'; }
+  }, 200);
 }
 function _oppPickClient(clientId, akId, name) {
   _oppForm.clientId = clientId; _oppForm.customerAkId = akId; _oppForm.clientName = name; _oppForm.contactAkId = ''; _oppForm.customerLocationId = '';
