@@ -5905,7 +5905,7 @@ function oppDetail(akId) {
 function _oppTachesCard(akId, clientId, clientName, oppNom) {
   const list = (_taches || []).filter(t => t.opportunite_id === akId);
   const apercu = d => { const s = (d || '').trim().replace(/\s+/g, ' '); return s.length > 70 ? s.slice(0, 70) + '…' : s; };
-  const rows = list.length ? '<div class="table-wrap"><table><thead><tr><th>Tâche</th><th>Description</th><th>Échéance</th><th>Priorité</th><th>Statut</th><th>Assigné</th><th></th></tr></thead><tbody>' +
+  const rows = list.length ? '<div class="table-wrap"><table><thead><tr><th>Tâche</th><th>Description</th><th>Échéance</th><th>Priorité</th><th>Statut</th><th>Assigné</th><th style="text-align:center">Terminé ?</th><th></th></tr></thead><tbody>' +
     list.map(t => `<tr style="${_tEnRetard(t) ? 'background:rgba(239,68,68,.06)' : ''}">
       <td style="padding:6px 8px;font-size:12px"><strong>${cmdEsc(t.titre)}</strong></td>
       <td style="padding:6px 8px;font-size:12px;color:var(--t2);max-width:260px" title="${cmdEsc((t.description || '').replace(/"/g, '&quot;'))}">${cmdEsc(apercu(t.description)) || '<span style="color:var(--t3)">—</span>'}</td>
@@ -5913,7 +5913,8 @@ function _oppTachesCard(akId, clientId, clientName, oppNom) {
       <td style="padding:6px 8px">${_tPrioBadge(t.priorite)}</td>
       <td style="padding:6px 8px">${_tStatutBadge(t.statut)}</td>
       <td style="padding:6px 8px;font-size:12px">${cmdEsc(fmtCommercialName(t.assigne_nom || '') || '—')}</td>
-      <td style="padding:6px 8px;white-space:nowrap">${t.statut !== 'terminee' ? `<button class="btn" style="font-size:11px;padding:2px 6px;color:var(--green)" title="Terminer" onclick="setTacheStatut(${t.id},'terminee')">✓</button>` : ''}<button class="btn" style="font-size:11px;padding:2px 6px" title="Modifier" onclick="tacheModalOpen(${t.id})">✎</button></td>
+      <td style="padding:6px 8px;text-align:center"><input type="checkbox" ${t.statut === 'terminee' ? 'checked' : ''} title="${t.statut === 'terminee' ? 'Tâche terminée — décocher pour réactiver' : 'Cocher pour marquer terminée'}" onchange="setTacheStatut(${t.id}, this.checked ? 'terminee' : 'a_faire')" style="width:17px;height:17px;cursor:pointer;accent-color:#10b981"></td>
+      <td style="padding:6px 8px;white-space:nowrap"><button class="btn" style="font-size:11px;padding:2px 6px" title="Modifier" onclick="tacheModalOpen(${t.id})">✎</button></td>
     </tr>`).join('') + '</tbody></table></div>' : '<div style="padding:14px;text-align:center;color:var(--t3);font-size:13px">Aucune tâche liée</div>';
   return `<div class="card">
     <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">✅ Tâches liées (${list.length})</div>
