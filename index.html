@@ -4918,8 +4918,8 @@ function renderTaches() {
     </div>
   </div>
   ${_tachesView === 'pipeline' ? _tachesKanban(rows) : (window.innerWidth <= 768 ? _tachesMobileCards(rows) : `<div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Tâche</th><th>Échéance</th><th>Priorité</th><th>Statut</th><th>Client / Affaire</th><th>Assigné à</th><th>Actions</th></tr></thead>
-    <tbody>${rows.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--t3)">Aucune tâche</td></tr>' : rows.map(t => `
+    <table><thead><tr><th>Tâche</th><th>Échéance</th><th>Priorité</th><th>Statut</th><th>Client / Affaire</th><th>Assigné à</th><th style="text-align:center">Terminé ?</th><th>Actions</th></tr></thead>
+    <tbody>${rows.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--t3)">Aucune tâche</td></tr>' : rows.map(t => `
       <tr style="border-bottom:1px solid var(--border)${_tEnRetard(t) ? ';background:rgba(239,68,68,.06)' : ''}">
         <td style="padding:6px 8px"><strong style="font-size:13px">${cmdEsc(t.titre || '')}</strong>${t.description ? '<div style="font-size:11px;color:var(--t3);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + cmdEsc(t.description) + '</div>' : ''}</td>
         <td style="padding:6px 8px;font-size:12px;white-space:nowrap${_tEnRetard(t) ? ';color:var(--red);font-weight:600' : ''}">${_tEcheanceTxt(t.echeance)}${_tEnRetard(t) ? ' ⚠' : ''}</td>
@@ -4927,8 +4927,8 @@ function renderTaches() {
         <td style="padding:6px 8px">${_tStatutBadge(t.statut)}</td>
         <td style="padding:6px 8px;font-size:12px">${t.client_id ? '<a href="#" onclick="showClient(\'' + t.client_id + '\');return false" style="color:var(--accent);text-decoration:none">' + cmdEsc(t.client_name || 'Client') + '</a>' : '—'}${t.affaire_id ? '<div style="font-size:11px;color:var(--t3)"><a href="#" onclick="showAffaireDetail(\'' + t.affaire_id + '\');return false" style="color:var(--t3)">' + cmdEsc(t.affaire_nom || 'Affaire') + '</a></div>' : ''}</td>
         <td style="padding:6px 8px;font-size:12px">${cmdEsc(fmtCommercialName(t.assigne_nom || '') || '—')}</td>
+        <td style="padding:6px 8px;text-align:center"><input type="checkbox" ${t.statut === 'terminee' ? 'checked' : ''} title="${t.statut === 'terminee' ? 'Terminée — décocher pour réactiver' : 'Cocher pour marquer terminée'}" onchange="setTacheStatut(${t.id}, this.checked ? 'terminee' : 'a_faire')" style="width:17px;height:17px;cursor:pointer;accent-color:#10b981"></td>
         <td style="padding:6px 8px;white-space:nowrap">
-          ${t.statut !== 'terminee' ? '<button class="btn" style="font-size:11px;padding:2px 6px;color:var(--green)" title="Terminer" onclick="setTacheStatut(' + t.id + ',\'terminee\')">✓</button>' : ''}
           <button class="btn" style="font-size:11px;padding:2px 6px" title="Modifier" onclick="tacheModalOpen(${t.id})">✎</button>
           <button class="btn" style="font-size:11px;padding:2px 6px;color:var(--red)" title="Supprimer" onclick="deleteTache(${t.id})">×</button>
         </td>
@@ -5000,16 +5000,29 @@ function _tDrop(e, statut) {
   setTacheStatut(id, statut);
 }
 
-// ── Modal création / édition ──
+// ── Création / édition d'une tâche (page pleine) ──
+let _tacheEditId = null, _tacheEditPrefill = null, _tacheEditReturn = 'taches';
 function tacheModalOpen(id, prefill) {
+  _tacheEditId = id || null;
+  _tacheEditPrefill = prefill || null;
+  _tacheEditReturn = (currentPage && currentPage !== 'tache-edit') ? currentPage : 'taches';
   const t = id ? _taches.find(x => String(x.id) === String(id)) : null;
   _tacheSel = t
     ? { client_id: t.client_id || null, client_name: t.client_name || null, affaire_id: t.affaire_id || null, affaire_nom: t.affaire_nom || null, opportunite_id: t.opportunite_id || null }
     : (prefill ? { client_id: prefill.client_id || null, client_name: prefill.client_name || null, affaire_id: prefill.affaire_id || null, affaire_nom: prefill.affaire_nom || null, opportunite_id: prefill.opportunite_id || null } : { client_id: null, client_name: null, affaire_id: null, affaire_nom: null, opportunite_id: null });
+  closeModal('tache');
+  currentPage = 'tache-edit';
+  const pt = document.getElementById('pageTitle'); if (pt) pt.textContent = id ? 'Modifier la tâche' : 'Nouvelle tâche';
+  renderPage('tache-edit');
+}
+function tacheEditCancel() { currentPage = _tacheEditReturn || 'taches'; renderPage(currentPage); }
+function renderTacheEditPage() {
+  const id = _tacheEditId;
+  const t = id ? _taches.find(x => String(x.id) === String(id)) : null;
+  const pf = _tacheEditPrefill || {};
   const comm = (DB.commerciaux || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
   const myId = currentCommercial && currentCommercial.id;
   const assigneVal = t ? t.assigne_id : myId;
-  const pf = prefill || {};
   const ech = t && t.echeance ? new Date(t.echeance) : null;
   let echVal = ech && !isNaN(ech.getTime()) ? `${ech.getFullYear()}-${String(ech.getMonth() + 1).padStart(2, '0')}-${String(ech.getDate()).padStart(2, '0')}T${String(ech.getHours()).padStart(2, '0')}:${String(ech.getMinutes()).padStart(2, '0')}` : '';
   if (!t && pf.echeance) echVal = pf.echeance.length === 10 ? pf.echeance + 'T09:00' : pf.echeance;
@@ -5028,16 +5041,20 @@ function tacheModalOpen(id, prefill) {
     <div class="fg" style="position:relative"><label class="fl">Client lié</label>
       <div id="t-client-chip" style="margin-bottom:4px"></div>
       <input type="text" id="t-client-search" placeholder="Rechercher une société..." autocomplete="off" oninput="tacheSearchClient(this.value)" onfocus="tacheSearchClient(this.value)" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card,#fff);color:var(--t1)">
-      <div id="t-client-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.2)"></div>
+      <div id="t-client-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card,#fff);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.2)"></div>
     </div>
     <div class="fg"><label class="fl">Affaire liée</label><select class="fi" id="t-affaire" onchange="tachePickAffaire(this.value)"></select></div>
     <div class="fg"><label class="fl">Opportunité liée</label><select class="fi" id="t-opportunite" onchange="tachePickOpp(this.value)"></select></div>`;
-  openDynModal('tache', id ? 'Modifier la tâche' : 'Nouvelle tâche commerciale', body,
-    `<button class="btn" onclick="closeModal('tache')">Annuler</button><button class="btn btn-primary" onclick="saveTache()">Enregistrer</button>`, '560px');
-  setTimeout(() => {
-    tacheRenderClientChip(); tacheRenderAffaireOptions(); tacheRenderOppOptions();
-    if (!_oppsLoaded) loadOpportunites().then(() => tacheRenderOppOptions());
-  }, 30);
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px"><button class="btn" onclick="tacheEditCancel()">← Annuler</button><h2 style="margin:0;font-size:20px">${id ? 'Modifier la tâche' : 'Nouvelle tâche commerciale'}</h2></div>
+      <button class="btn btn-primary" onclick="saveTache()">💾 Enregistrer</button>
+    </div>
+    <div class="card" style="max-width:680px"><div class="card-body">${body}</div></div>
+    <div style="max-width:680px;display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+      <button class="btn" onclick="tacheEditCancel()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveTache()">💾 Enregistrer</button>
+    </div>`;
 }
 async function tacheSearchClient(q) {
   const dd = document.getElementById('t-client-dd'); if (!dd) return;
@@ -5146,7 +5163,10 @@ async function saveTache() {
     pushTacheToTodo(saved);
   }
   await loadTaches();
-  renderPage(currentPage === 'taches' ? 'taches' : currentPage);
+  // Retour à la page d'origine (édition en pleine page)
+  const back = (currentPage === 'tache-edit') ? (_tacheEditReturn || 'taches') : currentPage;
+  currentPage = back;
+  renderPage(back);
 }
 async function pushTacheToTodo(t) {
   try {
@@ -6333,6 +6353,7 @@ function renderPage(page) {
     clients: renderClients,
     contacts: renderContacts,
     taches: renderTaches,
+    'tache-edit': renderTacheEditPage,
     opportunites: renderOpportunites,
     'opportunite-detail': renderOppDetailPage,
     'opportunite-edit': renderOppEditPage,
@@ -6416,6 +6437,7 @@ function renderPage(page) {
   if (page === 'cr' && crViewMode === 'send') setTimeout(loadSendGroups, 50);
   if (page === 'ged') setTimeout(() => { gedLoadStats(); gedRenderChat(); }, 50);
   if (page === 'taches' && !_tachesLoaded) { loadTaches().then(() => { if (currentPage === 'taches') renderPage('taches'); }); }
+  if (page === 'tache-edit') { setTimeout(() => { tacheRenderClientChip(); tacheRenderAffaireOptions(); tacheRenderOppOptions(); if (!_oppsLoaded) loadOpportunites().then(() => tacheRenderOppOptions()); }, 30); }
   if (page === 'opportunites' && !_oppsLoaded) { loadOpportunites().then(() => { if (currentPage === 'opportunites') renderPage('opportunites'); }); }
   if (page === 'opportunite-analyse') { if (!_oppsLoaded) { loadOpportunites().then(() => { if (currentPage === 'opportunite-analyse') renderPage('opportunite-analyse'); }); } else { setTimeout(_oppAnalyseCharts, 40); } }
 }
