@@ -4928,7 +4928,7 @@ function renderTaches() {
 
 // ── Modal création / édition ──
 function tacheModalOpen(id, prefill) {
-  const t = id ? _taches.find(x => x.id === id) : null;
+  const t = id ? _taches.find(x => String(x.id) === String(id)) : null;
   _tacheSel = t
     ? { client_id: t.client_id || null, client_name: t.client_name || null, affaire_id: t.affaire_id || null, affaire_nom: t.affaire_nom || null, opportunite_id: t.opportunite_id || null }
     : (prefill ? { client_id: prefill.client_id || null, client_name: prefill.client_name || null, affaire_id: prefill.affaire_id || null, affaire_nom: prefill.affaire_nom || null, opportunite_id: prefill.opportunite_id || null } : { client_id: null, client_name: null, affaire_id: null, affaire_nom: null, opportunite_id: null });
