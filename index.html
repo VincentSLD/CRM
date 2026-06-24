@@ -1790,6 +1790,10 @@ tbody tr:last-child td { border-bottom: none; }
         Affaires
         <span class="nav-badge" id="navBadgeAffaires" style="display:none"></span>
       </div>
+      <div class="nav-item" data-page="opportunites" onclick="go('opportunites')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
+        Opportunités
+      </div>
       <div class="nav-item" data-page="devis" onclick="go('devis')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         Devis <span class="nav-badge" id="navBadgeDevis"></span><span class="nav-badge" id="navBadgeDevisRelance" title="Devis à relancer" style="display:none;background:var(--red);color:#fff;margin-left:4px"></span>
@@ -4305,7 +4309,7 @@ function go(page) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
   const titles = {dashboard:'Tableau de bord',analyse:'Analyse / KPI',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing','marches-publics':'Veille marchés publics','procedures-coll':'Veille procédures collectives (BODACC)',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
-    cr:'Comptes-rendus',taches:'Tâches commerciales',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
+    cr:'Comptes-rendus',taches:'Tâches commerciales',opportunites:'Opportunités',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'"};
   document.getElementById('pageTitle').textContent = titles[page]||page;
   renderPage(page);
@@ -4926,8 +4930,8 @@ function renderTaches() {
 function tacheModalOpen(id, prefill) {
   const t = id ? _taches.find(x => x.id === id) : null;
   _tacheSel = t
-    ? { client_id: t.client_id || null, client_name: t.client_name || null, affaire_id: t.affaire_id || null, affaire_nom: t.affaire_nom || null }
-    : (prefill ? { client_id: prefill.client_id || null, client_name: prefill.client_name || null, affaire_id: prefill.affaire_id || null, affaire_nom: prefill.affaire_nom || null } : { client_id: null, client_name: null, affaire_id: null, affaire_nom: null });
+    ? { client_id: t.client_id || null, client_name: t.client_name || null, affaire_id: t.affaire_id || null, affaire_nom: t.affaire_nom || null, opportunite_id: t.opportunite_id || null }
+    : (prefill ? { client_id: prefill.client_id || null, client_name: prefill.client_name || null, affaire_id: prefill.affaire_id || null, affaire_nom: prefill.affaire_nom || null, opportunite_id: prefill.opportunite_id || null } : { client_id: null, client_name: null, affaire_id: null, affaire_nom: null, opportunite_id: null });
   const comm = (DB.commerciaux || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
   const myId = currentCommercial && currentCommercial.id;
   const assigneVal = t ? t.assigne_id : myId;
@@ -4949,10 +4953,14 @@ function tacheModalOpen(id, prefill) {
       <input type="text" id="t-client-search" placeholder="Rechercher une société..." autocomplete="off" oninput="tacheSearchClient(this.value)" onfocus="tacheSearchClient(this.value)" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card,#fff);color:var(--t1)">
       <div id="t-client-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.2)"></div>
     </div>
-    <div class="fg"><label class="fl">Affaire liée</label><select class="fi" id="t-affaire"></select></div>`;
+    <div class="fg"><label class="fl">Affaire liée</label><select class="fi" id="t-affaire"></select></div>
+    <div class="fg"><label class="fl">Opportunité liée</label><select class="fi" id="t-opportunite"></select></div>`;
   openDynModal('tache', id ? 'Modifier la tâche' : 'Nouvelle tâche commerciale', body,
     `<button class="btn" onclick="closeModal('tache')">Annuler</button><button class="btn btn-primary" onclick="saveTache()">Enregistrer</button>`, '560px');
-  setTimeout(() => { tacheRenderClientChip(); tacheRenderAffaireOptions(); }, 30);
+  setTimeout(() => {
+    tacheRenderClientChip(); tacheRenderAffaireOptions(); tacheRenderOppOptions();
+    if (!_oppsLoaded) loadOpportunites().then(() => tacheRenderOppOptions());
+  }, 30);
 }
 async function tacheSearchClient(q) {
   const dd = document.getElementById('t-client-dd'); if (!dd) return;
@@ -4971,12 +4979,18 @@ async function tacheSearchClient(q) {
   dd.innerHTML = data.length ? data.slice(0, 60).map(c => `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="tacheSelectClient('${c.id}','${(c.name || '').replace(/'/g, "&#39;")}')">${cmdEsc(c.name)}${c.city ? ' <span style="color:var(--t3);font-size:11px">' + cmdEsc(c.city) + '</span>' : ''}</div>`).join('') : '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucune société</div>';
   dd.style.display = 'block';
 }
-function tacheSelectClient(id, name) { _tacheSel.client_id = id; _tacheSel.client_name = name; _tacheSel.affaire_id = null; _tacheSel.affaire_nom = null; const dd = document.getElementById('t-client-dd'); if (dd) dd.style.display = 'none'; const inp = document.getElementById('t-client-search'); if (inp) inp.value = ''; tacheRenderClientChip(); tacheRenderAffaireOptions(); }
+function tacheSelectClient(id, name) { _tacheSel.client_id = id; _tacheSel.client_name = name; _tacheSel.affaire_id = null; _tacheSel.affaire_nom = null; _tacheSel.opportunite_id = null; const dd = document.getElementById('t-client-dd'); if (dd) dd.style.display = 'none'; const inp = document.getElementById('t-client-search'); if (inp) inp.value = ''; tacheRenderClientChip(); tacheRenderAffaireOptions(); tacheRenderOppOptions(); }
+function tacheRenderOppOptions() {
+  const sel = document.getElementById('t-opportunite'); if (!sel) return;
+  const list = _tacheSel.client_id ? (_opps || []).filter(o => o.client_id === _tacheSel.client_id) : [];
+  sel.innerHTML = '<option value="">— Aucune —</option>' + list.map(o => `<option value="${o.akuiteo_id}"${_tacheSel.opportunite_id === o.akuiteo_id ? ' selected' : ''}>${cmdEsc(o.nom || '')}${o.montant != null ? ' (' + fmt(o.montant) + ')' : ''}</option>`).join('');
+  sel.disabled = !_tacheSel.client_id;
+}
 function tacheRenderClientChip() {
   const el = document.getElementById('t-client-chip'); if (!el) return;
   el.innerHTML = _tacheSel.client_id ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#6366f122;color:#6366f1;border:1px solid #6366f144">${cmdEsc(_tacheSel.client_name || '')} <span style="cursor:pointer;opacity:0.6;font-size:14px" onclick="tacheClearClient()">&times;</span></span>` : '';
 }
-function tacheClearClient() { _tacheSel.client_id = null; _tacheSel.client_name = null; _tacheSel.affaire_id = null; _tacheSel.affaire_nom = null; tacheRenderClientChip(); tacheRenderAffaireOptions(); }
+function tacheClearClient() { _tacheSel.client_id = null; _tacheSel.client_name = null; _tacheSel.affaire_id = null; _tacheSel.affaire_nom = null; _tacheSel.opportunite_id = null; tacheRenderClientChip(); tacheRenderAffaireOptions(); tacheRenderOppOptions(); }
 function tacheRenderAffaireOptions() {
   const sel = document.getElementById('t-affaire'); if (!sel) return;
   const affs = _tacheSel.client_id ? (DB.affaires || []).filter(a => a.client_id === _tacheSel.client_id) : [];
@@ -4993,6 +5007,8 @@ async function saveTache() {
   const echeance = echRaw ? echRaw + (echRaw.length === 16 ? ':00' : '') : null;
   const affaireId = document.getElementById('t-affaire')?.value || null;
   const affaire = affaireId ? (DB.affaires || []).find(a => a.id === affaireId) : null;
+  const oppId = document.getElementById('t-opportunite')?.value || null;
+  const opp = oppId ? (_opps || []).find(o => o.akuiteo_id === oppId) : null;
   const statut = document.getElementById('t-statut')?.value || 'a_faire';
   const row = {
     titre, description: document.getElementById('t-desc')?.value.trim() || null,
@@ -5001,6 +5017,7 @@ async function saveTache() {
     echeance,
     client_id: _tacheSel.client_id, client_name: _tacheSel.client_name,
     affaire_id: affaireId, affaire_nom: affaire ? ([affaire.code_projet, affaire.nom].filter(Boolean).join(' — ') || affaire.nom) : (_tacheSel.affaire_nom || null),
+    opportunite_id: oppId, opportunite_nom: opp ? opp.nom : null,
     assigne_id: assigne ? assigne.id : null, assigne_nom: assigne ? assigne.nom : null, assigne_email: assigne ? assigne.email : null,
     updated_at: new Date().toISOString(),
     done_at: statut === 'terminee' ? new Date().toISOString() : null,
@@ -5080,6 +5097,213 @@ function renderTachesCard(opts) {
   </div>`;
 }
 
+// ═══════════════════════════════════════════════════════════
+//  OPPORTUNITÉS (reprises depuis Akuiteo CRM)
+// ═══════════════════════════════════════════════════════════
+let _opps = [], _oppsLoaded = false, _oppView = 'pipeline';
+let _oppFStatut = '', _oppFResp = '', _oppSearch = '';
+const OPP_STATUTS = { IN_PROGRESS: ['En cours', '#4f8ff7'], WON: ['Gagnée', '#10b981'], LOST: ['Perdue', '#ef4444'], ARCHIVED: ['Archivée', '#6b7280'] };
+function _oppStatutBadge(s) { const [l, c] = OPP_STATUTS[s] || [s || '—', '#6b7280']; return `<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;background:${c}22;color:${c}">${l}</span>`; }
+
+async function loadOpportunites() {
+  try {
+    const { data, error } = await sb.from('opportunites').select('*').order('date_signature', { ascending: true, nullsFirst: false });
+    if (error) throw error;
+    _opps = data || [];
+  } catch (e) { _opps = []; console.warn('loadOpportunites', e.message); }
+  _oppsLoaded = true;
+}
+
+// Lecture flexible d'un champ (plusieurs clés possibles, support "a.b")
+function _oget(o, ...keys) { for (const k of keys) { const v = String(k).split('.').reduce((a, p) => (a == null ? a : a[p]), o); if (v != null && v !== '') return v; } return null; }
+
+async function syncOpportunites() {
+  showSyncLoading(true); setSyncText('Chargement des opportunités Akuiteo…');
+  try {
+    await loadAkuiteoRefs().catch(() => {});
+    const empMap = {}; (akRef.employees || []).forEach(e => { empMap[String(e.id)] = e.name; });
+    // 1. Récupérer toutes les opportunités (pagination)
+    let all = [], off = 0;
+    while (true) {
+      let page;
+      try { page = await akuiteoFetch('POST', `/crm/opportunities/search?limit=500&offset=${off}`, {}); }
+      catch (e) { if (off === 0) throw e; break; }
+      const arr = Array.isArray(page) ? page : (page && page.items) || [];
+      if (!arr.length) break;
+      all = all.concat(arr);
+      setSyncText(`${all.length} opportunité(s) récupérée(s)…`);
+      if (arr.length < 500) break;
+      off += 500;
+    }
+    // 2. Résoudre client_id via akuiteo_id
+    const custIds = [...new Set(all.map(o => _oget(o, 'customerId', 'customer.id', 'thirdPartyId')).filter(Boolean).map(String))];
+    const clientByAk = {};
+    for (let i = 0; i < custIds.length; i += 300) {
+      const { data } = await sb.from('clients').select('id,name,akuiteo_id').in('akuiteo_id', custIds.slice(i, i + 300));
+      (data || []).forEach(c => { clientByAk[String(c.akuiteo_id)] = c; });
+    }
+    // 3. Mapper + upsert
+    const rows = all.map(o => {
+      const custAk = _oget(o, 'customerId', 'customer.id', 'thirdPartyId');
+      const cl = custAk != null ? clientByAk[String(custAk)] : null;
+      const respId = _oget(o, 'salesPersonId', 'accountManagerId', 'responsibleId', 'managerId', 'salesPerson.id');
+      const sig = _oget(o, 'estimatedSignatureDate', 'signatureDate', 'expectedClosingDate');
+      const crea = _oget(o, 'creationDate', 'createdDate', 'createDate');
+      const prob = _oget(o, 'probability', 'probabilityPercent', 'winProbability');
+      return {
+        akuiteo_id: String(_oget(o, 'id') || ''),
+        code: _oget(o, 'code', 'reference'),
+        nom: _oget(o, 'label', 'name', 'title', 'subject', 'code') || '(Sans titre)',
+        client_id: cl ? cl.id : null,
+        client_name: cl ? cl.name : (_oget(o, 'customerName', 'customer.name', 'thirdPartyName') || null),
+        customer_akuiteo_id: custAk != null ? String(custAk) : null,
+        montant: (() => { const v = _oget(o, 'amount', 'amountHT', 'totalAmountHT', 'estimatedAmount', 'totalAmount'); return v != null ? Number(v) : null; })(),
+        devise: _oget(o, 'currency', 'currencyCode'),
+        probabilite: prob != null ? Number(prob) : null,
+        statut: _oget(o, 'status', 'state') || 'IN_PROGRESS',
+        stage: _oget(o, 'stage.label', 'stage.name', 'stageName', 'stageLabel'),
+        stage_id: (() => { const v = _oget(o, 'stageId', 'stage.id'); return v != null ? String(v) : null; })(),
+        pipe: _oget(o, 'pipe.label', 'pipe.name', 'pipeName'),
+        pipe_id: (() => { const v = _oget(o, 'pipeId', 'pipe.id'); return v != null ? String(v) : null; })(),
+        origine: _oget(o, 'originType.label', 'originType.name', 'origin', 'originLabel'),
+        type_opp: _oget(o, 'type.label', 'type.name', 'typeName', 'typeLabel'),
+        responsable: _oget(o, 'salesPerson.name', 'accountManager.name', 'responsible.name') || (respId != null ? empMap[String(respId)] : null) || null,
+        responsable_id: respId != null ? String(respId) : null,
+        date_signature: sig ? String(sig).slice(0, 10) : null,
+        date_creation: crea || null,
+        raw: o,
+        updated_at: new Date().toISOString(),
+      };
+    }).filter(r => r.akuiteo_id);
+    let upserted = 0;
+    for (let i = 0; i < rows.length; i += 100) {
+      const { error } = await sb.from('opportunites').upsert(rows.slice(i, i + 100), { onConflict: 'akuiteo_id' });
+      if (error) { console.warn('opp upsert', error.message); } else upserted += Math.min(100, rows.length - i);
+      setSyncText(`Enregistrement ${Math.min(i + 100, rows.length)} / ${rows.length}…`);
+    }
+    showSyncLoading(false);
+    toast(`Opportunités synchronisées : ${rows.length}`, 'success');
+    await loadOpportunites();
+    if (currentPage === 'opportunites') renderPage('opportunites');
+  } catch (e) {
+    showSyncLoading(false);
+    console.error('syncOpportunites', e);
+    toast('Erreur sync opportunités : ' + e.message, 'error');
+  }
+}
+
+function _oppsFiltered() {
+  const q = _looseAlnum(_oppSearch);
+  return (_opps || []).filter(o => {
+    if (_oppFStatut && o.statut !== _oppFStatut) return false;
+    if (_oppFResp && (o.responsable || '') !== _oppFResp) return false;
+    if (q && !_looseMatch(_oppSearch, (o.nom || '') + ' ' + (o.client_name || '') + ' ' + (o.code || ''))) return false;
+    return true;
+  });
+}
+
+function renderOpportunites() {
+  if (!_oppsLoaded) return '<div style="text-align:center;padding:40px;color:var(--t3)">Chargement des opportunités…</div>';
+  const rows = _oppsFiltered();
+  const resps = [...new Set((_opps || []).map(o => o.responsable).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+  const enCours = rows.filter(o => o.statut === 'IN_PROGRESS');
+  const totalHT = enCours.reduce((s, o) => s + (Number(o.montant) || 0), 0);
+  const pondere = enCours.reduce((s, o) => s + (Number(o.montant) || 0) * ((Number(o.probabilite) || 0) / 100), 0);
+  const gagnees = rows.filter(o => o.statut === 'WON');
+  const caGagne = gagnees.reduce((s, o) => s + (Number(o.montant) || 0), 0);
+  const header = `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-primary" onclick="syncOpportunites()">⬇ Synchroniser Akuiteo</button>
+      <span style="font-size:13px;color:var(--t2)">${rows.length} opportunité(s)</span>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <input type="text" placeholder="Rechercher..." value="${(_oppSearch || '').replace(/"/g, '&quot;')}" oninput="_oppSearch=this.value;clearTimeout(window._oppT);window._oppT=setTimeout(()=>renderPage('opportunites'),250)" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);min-width:160px">
+      <select onchange="_oppFStatut=this.value;renderPage('opportunites')" style="padding:5px 8px;border:1px solid ${_oppFStatut ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+        <option value="">— Statut —</option>${Object.entries(OPP_STATUTS).map(([k, v]) => `<option value="${k}"${_oppFStatut === k ? ' selected' : ''}>${v[0]}</option>`).join('')}
+      </select>
+      <select onchange="_oppFResp=this.value;renderPage('opportunites')" style="padding:5px 8px;border:1px solid ${_oppFResp ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);max-width:200px">
+        <option value="">— Responsable —</option>${resps.map(r => `<option value="${cmdEsc(r)}"${_oppFResp === r ? ' selected' : ''}>${cmdEsc(fmtCommercialName(r))}</option>`).join('')}
+      </select>
+      <button class="btn" onclick="_oppView=(_oppView==='pipeline'?'liste':'pipeline');renderPage('opportunites')" style="font-size:12px">${_oppView === 'pipeline' ? '☰ Liste' : '▦ Pipeline'}</button>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">
+    <div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:18px;font-weight:700;color:#4f8ff7">${fmt(totalHT)}</div><div style="font-size:11px;color:var(--t3)">Pipeline en cours (HT)</div></div></div>
+    <div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:18px;font-weight:700;color:#8b5cf6">${fmt(pondere)}</div><div style="font-size:11px;color:var(--t3)">Pondéré par probabilité</div></div></div>
+    <div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:18px;font-weight:700;color:#10b981">${fmt(caGagne)}</div><div style="font-size:11px;color:var(--t3)">Gagnées (${gagnees.length})</div></div></div>
+    <div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:18px;font-weight:700;color:var(--t1)">${enCours.length}</div><div style="font-size:11px;color:var(--t3)">En cours</div></div></div>
+  </div>`;
+  if (!_opps.length) return header + '<div class="card"><div class="card-body" style="text-align:center;padding:30px;color:var(--t3)">Aucune opportunité. Cliquez « Synchroniser Akuiteo » pour les importer.</div></div>';
+  return header + (_oppView === 'pipeline' ? _oppKanban(rows) : _oppListe(rows));
+}
+
+function _oppListe(rows) {
+  return `<div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
+    <table><thead><tr><th>Opportunité</th><th>Client</th><th>Étape</th><th>Statut</th><th style="text-align:right">Montant</th><th style="text-align:right">Prob.</th><th>Signature</th><th>Responsable</th></tr></thead>
+    <tbody>${rows.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucune opportunité</td></tr>' : rows.map(o => `
+      <tr style="cursor:pointer" onclick="oppDetail('${o.akuiteo_id}')">
+        <td style="padding:6px 8px"><strong style="font-size:12px">${cmdEsc(o.nom || '')}</strong>${o.code ? '<div style="font-size:10px;color:var(--t3)">' + cmdEsc(o.code) + '</div>' : ''}</td>
+        <td style="padding:6px 8px;font-size:12px">${o.client_id ? '<a href="#" onclick="event.stopPropagation();showClient(\'' + o.client_id + '\');return false" style="color:var(--accent)">' + cmdEsc(o.client_name || '') + '</a>' : cmdEsc(o.client_name || '—')}</td>
+        <td style="padding:6px 8px;font-size:12px">${cmdEsc(o.stage || '—')}</td>
+        <td style="padding:6px 8px">${_oppStatutBadge(o.statut)}</td>
+        <td style="padding:6px 8px;text-align:right;font-family:'DM Mono',monospace">${o.montant != null ? fmt(o.montant) : '—'}</td>
+        <td style="padding:6px 8px;text-align:right">${o.probabilite != null ? o.probabilite + '%' : '—'}</td>
+        <td style="padding:6px 8px;font-size:12px">${o.date_signature ? fmtDateFR(o.date_signature) : '—'}</td>
+        <td style="padding:6px 8px;font-size:12px">${cmdEsc(fmtCommercialName(o.responsable || '') || '—')}</td>
+      </tr>`).join('')}</tbody></table>
+  </div></div></div>`;
+}
+
+function _oppKanban(rows) {
+  // Colonnes = étapes (ou statut si pas d'étape)
+  const colKey = o => o.stage || OPP_STATUTS[o.statut]?.[0] || o.statut || 'Autres';
+  const cols = {};
+  rows.forEach(o => { const k = colKey(o); (cols[k] = cols[k] || []).push(o); });
+  const keys = Object.keys(cols).sort((a, b) => a.localeCompare(b, 'fr'));
+  return `<div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px">${keys.map(k => {
+    const list = cols[k]; const tot = list.reduce((s, o) => s + (Number(o.montant) || 0), 0);
+    return `<div style="min-width:260px;max-width:300px;flex:0 0 auto;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;padding:8px">
+      <div style="font-weight:700;font-size:12px;margin-bottom:6px;display:flex;justify-content:space-between"><span>${cmdEsc(k)}</span><span style="color:var(--t3);font-weight:400">${list.length} · ${fmt(tot)}</span></div>
+      ${list.map(o => `<div onclick="oppDetail('${o.akuiteo_id}')" style="background:var(--card,#fff);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer">
+        <div style="font-weight:600;font-size:12px">${cmdEsc(o.nom || '')}</div>
+        <div style="font-size:11px;color:var(--t3)">${cmdEsc(o.client_name || '—')}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px"><span style="font-size:12px;font-weight:600">${o.montant != null ? fmt(o.montant) : '—'}</span>${o.probabilite != null ? '<span style="font-size:10px;color:var(--t3)">' + o.probabilite + '%</span>' : ''}${_oppStatutBadge(o.statut)}</div>
+      </div>`).join('') || '<div style="font-size:11px;color:var(--t3);padding:6px">—</div>'}
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function oppDetail(akId) {
+  const o = _opps.find(x => x.akuiteo_id === akId); if (!o) return;
+  const row = (l, v) => v != null && v !== '' ? `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="color:var(--t3);min-width:130px">${l}</span><span style="flex:1">${v}</span></div>` : '';
+  const body = `
+    ${row('Client', o.client_id ? `<a href="#" onclick="closeModal('opp');showClient('${o.client_id}');return false" style="color:var(--accent)">${cmdEsc(o.client_name || '')}</a>` : cmdEsc(o.client_name || '—'))}
+    ${row('Code', cmdEsc(o.code || ''))}
+    ${row('Étape', cmdEsc(o.stage || ''))}
+    ${row('Pipe', cmdEsc(o.pipe || ''))}
+    ${row('Statut', _oppStatutBadge(o.statut))}
+    ${row('Montant', o.montant != null ? fmt(o.montant) : '')}
+    ${row('Probabilité', o.probabilite != null ? o.probabilite + '%' : '')}
+    ${row('Date signature estimée', o.date_signature ? fmtDateFR(o.date_signature) : '')}
+    ${row('Type', cmdEsc(o.type_opp || ''))}
+    ${row('Origine', cmdEsc(o.origine || ''))}
+    ${row('Responsable', cmdEsc(fmtCommercialName(o.responsable || '')))}
+    ${row('ID Akuiteo', cmdEsc(o.akuiteo_id))}`;
+  openDynModal('opp', o.nom || 'Opportunité', body,
+    `${o.client_id ? '<button class="btn" onclick="closeModal(\'opp\');showClient(\'' + o.client_id + '\')">Voir le client</button>' : ''}<button class="btn btn-primary" onclick="closeModal('opp')">Fermer</button>`, '560px');
+}
+
+// Carte Opportunités pour la fiche client
+function renderOppsCard(clientId) {
+  const list = (_opps || []).filter(o => o.client_id === clientId);
+  if (!list.length) return '';
+  return `<div class="card" style="margin-bottom:16px">
+    <div class="card-header"><div class="card-title">Opportunités (${list.length})</div></div>
+    <div class="card-body" style="padding:0"><div class="table-wrap"><table><thead><tr><th>Opportunité</th><th>Étape</th><th>Statut</th><th style="text-align:right">Montant</th><th style="text-align:right">Prob.</th></tr></thead><tbody>${list.map(o => `<tr style="cursor:pointer" onclick="oppDetail('${o.akuiteo_id}')"><td style="padding:6px 8px;font-size:12px"><strong>${cmdEsc(o.nom || '')}</strong></td><td style="padding:6px 8px;font-size:12px">${cmdEsc(o.stage || '—')}</td><td style="padding:6px 8px">${_oppStatutBadge(o.statut)}</td><td style="padding:6px 8px;text-align:right">${o.montant != null ? fmt(o.montant) : '—'}</td><td style="padding:6px 8px;text-align:right">${o.probabilite != null ? o.probabilite + '%' : '—'}</td></tr>`).join('')}</tbody></table></div></div>
+  </div>`;
+}
+
 function toggleSidebar(force) {
   const s = document.getElementById('sidebar'), o = document.getElementById('sidebarOverlay');
   const open = force !== undefined ? force : !s.classList.contains('open');
@@ -5096,6 +5320,7 @@ function renderPage(page) {
     clients: renderClients,
     contacts: renderContacts,
     taches: renderTaches,
+    opportunites: renderOpportunites,
     concurrence: renderConcurrence,
     'import-xml': renderImportXml,
     'enrich-siren': renderEnrichSiren,
@@ -5175,6 +5400,7 @@ function renderPage(page) {
   if (page === 'cr' && crViewMode === 'send') setTimeout(loadSendGroups, 50);
   if (page === 'ged') setTimeout(() => { gedLoadStats(); gedRenderChat(); }, 50);
   if (page === 'taches' && !_tachesLoaded) { loadTaches().then(() => { if (currentPage === 'taches') renderPage('taches'); }); }
+  if (page === 'opportunites' && !_oppsLoaded) { loadOpportunites().then(() => { if (currentPage === 'opportunites') renderPage('opportunites'); }); }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -7163,6 +7389,7 @@ async function goToSiege(siren, currentId) {
 }
 async function showClient(id) {
   if (!_tachesLoaded) { try { await loadTaches(); } catch (e) {} }
+  if (!_oppsLoaded) { try { await loadOpportunites(); } catch (e) {} }
   currentClient = DB.clients.find(c=>c.id===id);
   // Si le client n'est pas en mémoire (pagination), le charger depuis Supabase
   if (!currentClient) {
@@ -8682,6 +8909,7 @@ function renderClientDetail() {
       <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer ce client/prospect">Supprimer</button>
     </div>
   </div>
+  ${renderOppsCard(c.id)}
   ${renderTachesCard({ client_id: c.id, client_name: c.name })}
   <div class="card" style="margin-bottom:16px">
     <div class="card-header">

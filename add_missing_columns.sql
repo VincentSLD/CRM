@@ -228,6 +228,36 @@ CREATE INDEX IF NOT EXISTS idx_taches_client ON taches_commerciales(client_id);
 CREATE INDEX IF NOT EXISTS idx_taches_affaire ON taches_commerciales(affaire_id);
 CREATE INDEX IF NOT EXISTS idx_taches_statut ON taches_commerciales(statut);
 
+-- ═══ Opportunités (reprises depuis Akuiteo CRM) ═══
+CREATE TABLE IF NOT EXISTS opportunites (
+  id BIGSERIAL PRIMARY KEY,
+  akuiteo_id TEXT UNIQUE,
+  code TEXT,
+  nom TEXT,
+  client_id TEXT, client_name TEXT, customer_akuiteo_id TEXT,
+  montant NUMERIC, devise TEXT,
+  probabilite NUMERIC,
+  statut TEXT,                 -- IN_PROGRESS / WON / LOST / ARCHIVED
+  stage TEXT, stage_id TEXT,
+  pipe TEXT, pipe_id TEXT,
+  origine TEXT, type_opp TEXT,
+  responsable TEXT, responsable_id TEXT,
+  date_signature DATE,
+  date_creation TIMESTAMPTZ,
+  raw JSONB,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE opportunites ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "opportunites_all" ON opportunites;
+CREATE POLICY "opportunites_all" ON opportunites FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE INDEX IF NOT EXISTS idx_opp_statut ON opportunites(statut);
+CREATE INDEX IF NOT EXISTS idx_opp_client ON opportunites(client_id);
+CREATE INDEX IF NOT EXISTS idx_opp_stage ON opportunites(stage);
+
+-- Lien tâche commerciale → opportunité
+ALTER TABLE taches_commerciales ADD COLUMN IF NOT EXISTS opportunite_id TEXT;
+ALTER TABLE taches_commerciales ADD COLUMN IF NOT EXISTS opportunite_nom TEXT;
+
 -- ═══ Journal de connexions au CRM ═══
 -- Une ligne par connexion réussie (qui s'est identifié et quand).
 CREATE TABLE IF NOT EXISTS connexions_log (
