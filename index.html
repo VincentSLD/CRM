@@ -4858,7 +4858,7 @@ const TACHE_STATUTS = { a_faire: ['À faire', '#f59e0b'], en_cours: ['En cours',
 const TACHE_PRIOS = { basse: ['Basse', '#6b7280'], normale: ['Normale', '#4f8ff7'], haute: ['Haute', '#ef4444'] };
 function _tStatutBadge(s) { const [l, c] = TACHE_STATUTS[s] || [s, '#6b7280']; return `<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;background:${c}22;color:${c}">${l}</span>`; }
 function _tPrioBadge(p) { const [l, c] = TACHE_PRIOS[p] || ['Normale', '#4f8ff7']; return `<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:${c}22;color:${c}">${l}</span>`; }
-function _tEcheanceTxt(e) { if (!e) return '—'; const d = new Date(e); if (isNaN(d.getTime())) return e; const p = n => String(n).padStart(2, '0'); return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); }
+function _tEcheanceTxt(e) { if (!e) return '—'; const d = new Date(e); if (isNaN(d.getTime())) return e; const p = n => String(n).padStart(2, '0'); return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear(); }
 function _tEnRetard(t) { return t.echeance && (t.statut === 'a_faire' || t.statut === 'en_cours') && new Date(t.echeance).getTime() < Date.now(); }
 
 async function loadTaches() {
