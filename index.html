@@ -5421,29 +5421,36 @@ async function saveOpportunite() {
   if (!f.pipeId) return toast('Le portefeuille est obligatoire', 'error');
   if (!f.stageId) return toast('Le stade est obligatoire', 'error');
   if (!f.originTypeId) return toast('Le type d\'origine est obligatoire', 'error');
-  const payload = {
-    name: f.name.trim(),
-    customerId: String(f.customerAkId),
-    pipeId: String(f.pipeId),
-    stageId: String(f.stageId),
-    originTypeId: String(f.originTypeId),
-  };
-  if (f.contactAkId) payload.mainContactId = String(f.contactAkId);
-  if (f.salesManagerId) payload.salesManagerId = String(f.salesManagerId);
-  if (f.description != null && f.description !== '') payload.description = f.description;
-  if (f.dateSignature) payload.expectedSignatureDate = f.dateSignature;
+  const isUpdate = !!f.akId;
+  // En modification : repartir de l'objet Akuiteo complet (conserve id, code et autres champs requis)
+  let payload = {};
+  if (isUpdate) {
+    const o = _opps.find(x => x.akuiteo_id === f.akId);
+    payload = (o && o.raw) ? JSON.parse(JSON.stringify(o.raw)) : {};
+    payload.id = String(f.akId);
+  }
+  payload.name = f.name.trim();
+  payload.customerId = String(f.customerAkId);
+  payload.pipeId = String(f.pipeId);
+  payload.stageId = String(f.stageId);
+  payload.originTypeId = String(f.originTypeId);
+  // Optionnels : on les positionne (null pour effacer en modification)
+  if (f.contactAkId) payload.mainContactId = String(f.contactAkId); else if (isUpdate) payload.mainContactId = null;
+  if (f.salesManagerId) payload.salesManagerId = String(f.salesManagerId); else if (isUpdate) payload.salesManagerId = null;
+  if (f.description != null && f.description !== '') payload.description = f.description; else if (isUpdate) payload.description = null;
+  if (f.dateSignature) payload.expectedSignatureDate = f.dateSignature; else if (isUpdate) payload.expectedSignatureDate = null;
   if (f.montant !== '' && f.montant != null && !isNaN(Number(f.montant))) {
     payload.amount = Number(f.montant);
     payload.amountCurrency = Number(f.montant);
     payload.currencyCode = f.devise || 'EUR';
-  }
+  } else if (isUpdate) { payload.amount = null; payload.amountCurrency = null; }
   if (f.probabilite !== '' && f.probabilite != null && !isNaN(Number(f.probabilite))) {
     payload.weightingCoefficient = Math.max(0, Math.min(1, Number(f.probabilite) / 100));
   }
-  showSyncLoading(true); setSyncText(f.akId ? 'Mise à jour dans Akuiteo…' : 'Création dans Akuiteo…');
+  showSyncLoading(true); setSyncText(isUpdate ? 'Mise à jour dans Akuiteo…' : 'Création dans Akuiteo…');
   try {
     let akId = f.akId;
-    if (akId) {
+    if (isUpdate) {
       await akuiteoFetch('POST', `/crm/opportunities/${akId}`, payload, { accept: 'text/plain' });
     } else {
       const res = await akuiteoFetch('PUT', '/crm/opportunities', payload, { accept: 'text/plain' });
