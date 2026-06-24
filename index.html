@@ -5701,7 +5701,7 @@ async function saveOpportunite() {
     showSyncLoading(false);
     closeModal('oppEdit');
     toast(f.akId ? 'Opportunité mise à jour' : 'Opportunité créée', 'success');
-    if (currentPage === 'opportunites') renderPage('opportunites');
+    if (currentPage === 'opportunites' || currentPage === 'opportunite-detail') renderPage(currentPage);
   } catch (e) {
     showSyncLoading(false);
     console.error('saveOpportunite', e);
@@ -5717,7 +5717,7 @@ async function oppChangeStage(akId, stageId) {
     await akuiteoFetch('POST', `/crm/opportunities/${akId}/change-stage/${stageId}`, null, { accept: 'text/plain' });
     await _refreshOneOpp(akId);
     showSyncLoading(false); toast('Stade mis à jour', 'success');
-    closeModal('opp'); if (currentPage === 'opportunites') renderPage('opportunites');
+    closeModal('opp'); if (currentPage === 'opportunites' || currentPage === 'opportunite-detail') renderPage(currentPage);
   } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
 }
 
@@ -5732,7 +5732,7 @@ async function oppWin(akId) {
     await akuiteoFetch('POST', `/crm/opportunities/${akId}/win`, { stageId: String(won.id), signatureDate: new Date().toISOString() }, { accept: 'text/plain' });
     await _refreshOneOpp(akId);
     showSyncLoading(false); toast('Opportunité gagnée 🏆', 'success');
-    closeModal('opp'); if (currentPage === 'opportunites') renderPage('opportunites');
+    closeModal('opp'); if (currentPage === 'opportunites' || currentPage === 'opportunite-detail') renderPage(currentPage);
   } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
 }
 async function oppLose(akId) {
@@ -5745,7 +5745,7 @@ async function oppLose(akId) {
     await akuiteoFetch('POST', `/crm/opportunities/${akId}/lose`, { stageId: String(lost.id), lossDate: new Date().toISOString() }, { accept: 'text/plain' });
     await _refreshOneOpp(akId);
     showSyncLoading(false); toast('Opportunité marquée perdue', 'success');
-    closeModal('opp'); if (currentPage === 'opportunites') renderPage('opportunites');
+    closeModal('opp'); if (currentPage === 'opportunites' || currentPage === 'opportunite-detail') renderPage(currentPage);
   } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
 }
 
@@ -5859,20 +5859,50 @@ function _oppKanban(rows) {
   }).join('')}</div>`;
 }
 
+let _currentOppId = null;
 function oppDetail(akId) {
-  const o = _opps.find(x => x.akuiteo_id === akId); if (!o) return;
+  _currentOppId = akId;
+  closeModal('opp'); // au cas où un ancien modal traîne
+  const o = _opps.find(x => x.akuiteo_id === akId);
+  const goPage = () => { currentPage = 'opportunite-detail'; const el = document.getElementById('pageTitle'); if (el) el.textContent = (o && o.nom) || 'Opportunité'; renderPage('opportunite-detail'); };
+  if (!_tachesLoaded) { loadTaches().then(goPage); } else { goPage(); }
+}
+
+// Carte des tâches liées à une opportunité
+function _oppTachesCard(akId, clientId, clientName, oppNom) {
+  const list = (_taches || []).filter(t => t.opportunite_id === akId);
+  const rows = list.length ? '<div class="table-wrap"><table><thead><tr><th>Tâche</th><th>Échéance</th><th>Priorité</th><th>Statut</th><th>Assigné</th><th></th></tr></thead><tbody>' +
+    list.map(t => `<tr style="${_tEnRetard(t) ? 'background:rgba(239,68,68,.06)' : ''}">
+      <td style="padding:6px 8px;font-size:12px"><strong>${cmdEsc(t.titre)}</strong></td>
+      <td style="padding:6px 8px;font-size:12px;white-space:nowrap">${_tEcheanceTxt(t.echeance)}</td>
+      <td style="padding:6px 8px">${_tPrioBadge(t.priorite)}</td>
+      <td style="padding:6px 8px">${_tStatutBadge(t.statut)}</td>
+      <td style="padding:6px 8px;font-size:12px">${cmdEsc(fmtCommercialName(t.assigne_nom || '') || '—')}</td>
+      <td style="padding:6px 8px;white-space:nowrap">${t.statut !== 'terminee' ? '<button class="btn" style="font-size:11px;padding:2px 6px;color:var(--green)" title="Terminer" onclick="setTacheStatut(' + t.id + ',\'terminee\')">✓</button>' : ''}<button class="btn" style="font-size:11px;padding:2px 6px" onclick="tacheModalOpen(' + t.id + ')">✎</button></td>
+    </tr>`).join('') + '</tbody></table></div>' : '<div style="padding:14px;text-align:center;color:var(--t3);font-size:13px">Aucune tâche liée</div>';
+  return `<div class="card">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">✅ Tâches liées (${list.length})</div>
+      <button class="btn btn-sm" onclick="oppCreerTache('${akId}')">+ Tâche</button></div>
+    <div class="card-body" style="padding:0">${rows}</div>
+  </div>`;
+}
+
+function renderOppDetailPage() {
+  const akId = _currentOppId;
+  const o = _opps.find(x => x.akuiteo_id === akId);
+  if (!o) return '<div style="padding:30px;color:var(--t3)">Opportunité introuvable. <a href="#" onclick="go(\'opportunites\');return false" style="color:var(--accent)">← Retour aux opportunités</a></div>';
   const raw = o.raw || {};
-  const row = (l, v) => v != null && v !== '' ? `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="color:var(--t3);min-width:130px">${l}</span><span style="flex:1">${v}</span></div>` : '';
+  const row = (l, v) => v != null && v !== '' ? `<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="color:var(--t3);min-width:150px">${l}</span><span style="flex:1">${v}</span></div>` : '';
   const empName = id => { if (!id) return ''; const e = (akRef.employees || []).find(x => String(x.id) === String(id)); return e ? fmtCommercialName(e.name) : ''; };
   const refName = (arr, id) => { if (!id || !arr) return ''; const x = arr.find(r => String(r.id) === String(id)); return x ? (x.name || x.code || '') : ''; };
   const dFR = v => v ? fmtDateFR(String(v).slice(0, 10)) : '';
   const deptName = refName(_oppRefs && _oppRefs.departments, raw.departmentId);
   const yearName = refName(_oppRefs && _oppRefs.years, raw.yearId);
-  const body = `
-    ${row('Client', o.client_id ? `<a href="#" onclick="closeModal('opp');showClient('${o.client_id}');return false" style="color:var(--accent)">${cmdEsc(o.client_name || '')}</a>` : cmdEsc(o.client_name || '—'))}
+  const info = `
+    ${row('Client', o.client_id ? `<a href="#" onclick="showClient('${o.client_id}');return false" style="color:var(--accent)">${cmdEsc(o.client_name || '')}</a>` : cmdEsc(o.client_name || '—'))}
     ${row('Client final', cmdEsc((raw.endCustomer && raw.endCustomer.name) || ''))}
     ${row('Établissement', cmdEsc((raw.customerLocation && (raw.customerLocation.fullName || raw.customerLocation.name)) || ''))}
-    ${row('Contact(s)', o.contact_id ? `<a href="#" onclick="closeModal('opp');showContact('${o.contact_id}');return false" style="color:var(--accent)">${cmdEsc(o.contact_name || '')}</a>` : cmdEsc(o.contact_name || ''))}
+    ${row('Contact(s)', o.contact_id ? `<a href="#" onclick="showContact('${o.contact_id}');return false" style="color:var(--accent)">${cmdEsc(o.contact_name || '')}</a>` : cmdEsc(o.contact_name || ''))}
     ${row('Code', cmdEsc(o.code || ''))}
     ${row('Titre', cmdEsc(raw.title || ''))}
     ${row('Stade', cmdEsc(o.stage || ''))}
@@ -5899,14 +5929,25 @@ function oppDetail(akId) {
     ${row('ID Akuiteo', cmdEsc(o.akuiteo_id))}`;
   const enCours = o.statut === 'IN_PROGRESS';
   const actions = [
-    `<button class="btn" onclick="closeModal('opp');oppModalOpen('${o.akuiteo_id}')">✏️ Modifier</button>`,
+    `<button class="btn" onclick="oppModalOpen('${o.akuiteo_id}')">✏️ Modifier</button>`,
     `<button class="btn" onclick="oppCreerTache('${o.akuiteo_id}')">✅ Créer une tâche</button>`,
     enCours ? `<button class="btn" style="color:#10b981" onclick="oppWin('${o.akuiteo_id}')">🏆 Gagnée</button>` : '',
     enCours ? `<button class="btn" style="color:#ef4444" onclick="oppLose('${o.akuiteo_id}')">Perdue</button>` : '',
-    o.client_id ? `<button class="btn" onclick="closeModal('opp');showClient('${o.client_id}')">Voir le client</button>` : '',
-    `<button class="btn btn-primary" onclick="closeModal('opp')">Fermer</button>`,
+    o.client_id ? `<button class="btn" onclick="showClient('${o.client_id}')">Voir le client</button>` : '',
   ].filter(Boolean).join('');
-  openDynModal('opp', o.nom || 'Opportunité', body, actions, '560px');
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button class="btn" onclick="go('opportunites')">← Retour</button>
+        <h2 style="margin:0;font-size:20px">${cmdEsc(o.nom || 'Opportunité')}</h2>
+        ${_oppStatutBadge(o.statut)}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${actions}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px;align-items:start">
+      <div class="card"><div class="card-header"><div class="card-title">Détails de l'opportunité</div></div><div class="card-body">${info}</div></div>
+      <div>${_oppTachesCard(o.akuiteo_id, o.client_id, o.client_name, o.nom)}</div>
+    </div>`;
 }
 
 // Carte Opportunités pour la fiche client
@@ -5936,6 +5977,7 @@ function renderPage(page) {
     contacts: renderContacts,
     taches: renderTaches,
     opportunites: renderOpportunites,
+    'opportunite-detail': renderOppDetailPage,
     concurrence: renderConcurrence,
     'import-xml': renderImportXml,
     'enrich-siren': renderEnrichSiren,
