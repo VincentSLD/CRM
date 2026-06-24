@@ -231,7 +231,7 @@ Tables disponibles (schéma principal) :
 - reports : id, client_id, client_name, date, titre, type_cr, statut_cr, redacteur_id, agence
 - commerciaux : id, nom, email, akuiteo_manager_id, role
 - taches_commerciales : id, titre, description, priorite (basse/normale/haute), statut (a_faire/en_cours/terminee/annulee), echeance, client_id, client_name, affaire_id, affaire_nom, createur_nom, createur_email, assigne_nom, assigne_email, created_at, done_at
-- opportunites : id, akuiteo_id, code, nom, description, client_id, client_name, contact_name, montant, devise, probabilite (%), statut (IN_PROGRESS=en cours / WON=gagnée / LOST=perdue / DISCARD=abandonnée), stage (libellé du stade), pipe (portefeuille : Marchés privés/publics), type_origine, origine, responsable, date_signature (signature prévisionnelle), date_creation
+- opportunites : id, akuiteo_id, code, nom, description, client_id, client_name, contact_name, montant, montant_travaux, devise, probabilite (%), statut (IN_PROGRESS=en cours / WON=gagnée / LOST=perdue / DISCARD=abandonnée), stage (libellé du stade), pipe (portefeuille : Marchés privés/publics), type_origine, origine, responsable, date_signature (signature prévisionnelle), date_creation
 
 Opérateurs de filtre : eq (=), neq (≠), gt (>), gte (≥), lt (<), lte (≤), like (case sensitive), ilike (case insensitive, utilise % pour wildcards), in, is (pour null : "col.is" : "null")
 
@@ -257,6 +257,14 @@ Exemples :
 - Tâches en cours assignées à quelqu'un : query_table(table="taches_commerciales", filters={"assigne_email.eq":"<email>","statut.in":"(a_faire,en_cours)"}, select="titre,priorite,statut,echeance,client_name", order="echeance")
 - Opportunités d'un client : query_table(table="opportunites", filters={"client_id.eq":"<id_client>"}, select="nom,code,stage,statut,montant,probabilite,pipe,type_origine,responsable,contact_name,date_signature", order="-date_signature")
 - Pipeline opportunités en cours : query_table(table="opportunites", filters={"statut.eq":"IN_PROGRESS"}, select="nom,client_name,stage,montant,probabilite,responsable,date_signature", order="-montant")
+
+COACHING DES OPPORTUNITÉS (quand on te demande de prioriser, analyser les risques, l'atterrissage ou la performance) :
+- "Prioriser / quoi travailler" : récupère les opportunités IN_PROGRESS, calcule pour chacune un enjeu = montant × (probabilite/100), et classe par enjeu décroissant en remontant les signatures proches/dépassées. Donne un top 5 avec une ACTION concrète par opportunité.
+- "Risques" : signale les opportunités IN_PROGRESS avec date_signature < aujourd'hui (à requalifier), sans date_signature, sans responsable, ou montant ≥ 100000 avec probabilite faible (≤ 40%). Propose une action corrective.
+- "Atterrissage / prévisionnel" : somme des montants IN_PROGRESS (pipeline), somme pondérée Σ montant×probabilite/100, et regroupe les date_signature par mois (3 prochains mois).
+- "Performance" : taux de transformation = nb WON / (nb WON + nb LOST), global et par pipe ; compare montant gagné/perdu ; pipeline en cours par responsable.
+- "Relance / prochaine action" : appuie-toi sur stage, probabilite, date_signature et les taches_commerciales liées (filtre opportunite_id = akuiteo_id de l'opportunité) ; propose une action datée et, si demandé, rédige l'email de relance (client, objet, montant) prêt à envoyer.
+- Sois TOUJOURS concret et actionnable : noms d'opportunités, chiffres exacts, et la prochaine étape.
 
 IMPORTANT pour les recherches société/contacts :
 - Quand on te demande une société, cherche d'abord dans la table clients, puis récupère ses contacts avec client_id. Cherche aussi les devis, commandes et factures si pertinent.

@@ -2931,6 +2931,15 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
   </div>
   <div id="aiChatMsgs" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--bg-1)"></div>
+  <div style="padding:6px 10px;border-top:1px solid var(--border);display:flex;gap:6px;overflow-x:auto;background:var(--card);align-items:center">
+    <span style="font-size:10px;color:var(--t3);font-weight:700;white-space:nowrap">⚡ Opportunités</span>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('prioriser')">🎯 Prioriser</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('risques')">⚠️ Risques</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('atterrissage')">📈 Atterrissage</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('perf')">🏆 Performance</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('relance')">✉️ Relance</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('action')">✅ Quoi faire ?</button>
+  </div>
   <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;background:var(--card)">
     <textarea id="aiChatInput" placeholder="Posez votre question..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();askAIChat()}" oninput="_autoResizeAIInput()" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1);resize:none;overflow-y:auto;max-height:120px;line-height:1.4;font-family:inherit"></textarea>
     <button class="btn" id="aiDictBtn" onclick="toggleAIDictation()" title="Dictée vocale" style="font-size:12px;padding:6px 8px">
@@ -20954,6 +20963,16 @@ function _aiLinkifyPhones(div) {
   }
 }
 
+// Boutons pré-configurés NOVA pour les opportunités
+const NOVA_QUICK = {
+  prioriser: "Analyse mes opportunités EN COURS (statut IN_PROGRESS) et donne-moi le TOP 5 à travailler en priorité cette semaine. Pour chacune : nom, client, montant, probabilité (%), date de signature prévisionnelle, responsable, et l'ACTION concrète à mener. Classe par enjeu décroissant (montant × probabilité) en tenant compte de l'urgence (proximité ou dépassement de la date de signature).",
+  risques: "Liste les opportunités EN COURS à risque : (1) signature prévisionnelle dépassée, (2) sans date de signature, (3) sans responsable, (4) gros montant (≥ 100 k€) avec faible probabilité. Présente-les par catégorie avec nom, client, montant, et pour chacune une action corrective recommandée.",
+  atterrissage: "Donne-moi l'atterrissage prévisionnel des opportunités en cours : montant total HT, montant pondéré par la probabilité, et le détail des signatures attendues mois par mois sur les 3 prochains mois (nombre et montant). Termine par une estimation de ce qui devrait être signé ce trimestre.",
+  perf: "Analyse la performance commerciale des opportunités : taux de transformation (gagnées vs perdues) global ET par portefeuille, montant gagné vs perdu, et le pipeline en cours par responsable commercial. Mets en avant les points forts et les axes d'amélioration.",
+  relance: "Je veux relancer un client sur une opportunité. Demande-moi de quelle opportunité il s'agit (ou propose-moi les opportunités en cours dont la signature approche), puis rédige un email de relance professionnel, personnalisé (client, objet de l'opportunité, montant), prêt à envoyer.",
+  action: "Demande-moi sur quelle opportunité tu dois m'aider (par nom ou client), puis propose la prochaine action commerciale la plus pertinente (relance, passage en négociation, demande de pièces, RDV...) avec une échéance suggérée, en t'appuyant sur son stade, sa probabilité, sa date de signature et les tâches déjà liées.",
+};
+function novaQuick(k) { const p = NOVA_QUICK[k]; if (!p) return; const panel = document.getElementById('aiChatPanel'); if (panel && panel.style.display === 'none') toggleAIChat(); askAIChat(p); }
 async function askAIChat(presetQuestion) {
   const input = document.getElementById('aiChatInput');
   const question = (presetQuestion || input?.value || '').trim();
