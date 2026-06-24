@@ -5505,9 +5505,12 @@ async function _oppClientSearch(q, isEnd) {
   try {
     const { data } = await sb.from('clients').select('id,name,akuiteo_id,city').not('akuiteo_id', 'is', null).ilike('name', '%' + q + '%').order('name').limit(20);
     const list = data || [];
-    if (!list.length) { box.innerHTML = '<div style="padding:8px;font-size:12px;color:var(--t3)">Aucune société (avec lien Akuiteo)</div>'; box.style.display = 'block'; return; }
     const pick = isEnd ? '_oppPickEndClient' : '_oppPickClient';
-    box.innerHTML = list.map(c => `<div onclick="${pick}('${c.id}','${String(c.akuiteo_id)}','${cmdEsc((c.name || '').replace(/'/g, "\\'"))}')" style="padding:7px 9px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><strong>${cmdEsc(c.name || '')}</strong>${c.city ? ' <span style="color:var(--t3)">— ' + cmdEsc(c.city) + '</span>' : ''}</div>`).join('');
+    const qEsc = q.replace(/'/g, "\\'");
+    const createBtn = `<div onclick="oppNewClientOpen('${cmdEsc(qEsc)}',${isEnd ? 'true' : 'false'})" style="padding:8px 9px;font-size:12px;cursor:pointer;border-top:1px solid var(--border);color:var(--accent);font-weight:600" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''">➕ Créer « ${cmdEsc(q)} » comme nouveau client</div>`;
+    box.innerHTML = (list.length
+      ? list.map(c => `<div onclick="${pick}('${c.id}','${String(c.akuiteo_id)}','${cmdEsc((c.name || '').replace(/'/g, "\\'"))}')" style="padding:7px 9px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><strong>${cmdEsc(c.name || '')}</strong>${c.city ? ' <span style="color:var(--t3)">— ' + cmdEsc(c.city) + '</span>' : ''}</div>`).join('')
+      : '<div style="padding:8px;font-size:12px;color:var(--t3)">Aucune société existante</div>') + createBtn;
     box.style.display = 'block';
   } catch (e) { box.style.display = 'none'; }
 }
@@ -5535,6 +5538,75 @@ function _oppPickEndClient(clientId, akId, name) {
   _oppForm.endCustomerAkId = akId; _oppForm.endCustomerName = name;
   const inp = document.getElementById('of-endclient'); if (inp) inp.value = name;
   const box = document.getElementById('of-endclientRes'); if (box) box.style.display = 'none';
+}
+
+// Création d'un nouveau client (dans Akuiteo + CRM) depuis le formulaire d'opportunité
+function oppNewClientOpen(prefillName, isEnd) {
+  const resBox = document.getElementById(isEnd ? 'of-endclientRes' : 'of-clientRes'); if (resBox) resBox.style.display = 'none';
+  const lbl = 'display:block;font-size:11px;color:var(--t3);margin-bottom:3px';
+  const fi = 'width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)';
+  const esc = s => (s == null ? '' : String(s).replace(/"/g, '&quot;'));
+  const body = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div style="grid-column:1/3"><label style="${lbl}">Nom / Raison sociale *</label>
+        <input id="nc2-name" style="${fi}" value="${esc(prefillName)}"></div>
+      <div><label style="${lbl}">Type</label>
+        <select id="nc2-type" style="${fi}"><option value="PROSPECT">Prospect</option><option value="CUSTOMER">Client</option></select></div>
+      <div><label style="${lbl}">SIRET (optionnel)</label>
+        <input id="nc2-siret" style="${fi}" placeholder="14 chiffres"></div>
+      <div style="grid-column:1/3"><label style="${lbl}">Adresse (ligne 1)</label>
+        <input id="nc2-addr" style="${fi}"></div>
+      <div><label style="${lbl}">Code postal *</label>
+        <input id="nc2-cp" style="${fi}"></div>
+      <div><label style="${lbl}">Ville *</label>
+        <input id="nc2-city" style="${fi}"></div>
+      <div><label style="${lbl}">Pays</label>
+        <input id="nc2-country" style="${fi}" value="FR"></div>
+    </div>
+    <div style="font-size:11px;color:var(--t3);margin-top:8px">Le client sera créé dans Akuiteo puis ajouté au CRM, et sélectionné pour cette opportunité.</div>`;
+  openDynModal('oppNewClient', 'Nouveau client / prospect', body,
+    `<button class="btn" onclick="closeModal('oppNewClient')">Annuler</button><button class="btn btn-primary" onclick="oppNewClientSubmit(${isEnd ? 'true' : 'false'})">Créer le client</button>`, '560px');
+}
+
+async function oppNewClientSubmit(isEnd) {
+  const v = id => (document.getElementById(id)?.value || '').trim();
+  const name = v('nc2-name'), cp = v('nc2-cp'), city = v('nc2-city');
+  const type = v('nc2-type') || 'PROSPECT', country = v('nc2-country') || 'FR';
+  const siret = v('nc2-siret').replace(/\s/g, ''), addr = v('nc2-addr');
+  if (!name) return toast('Le nom est obligatoire', 'error');
+  if (!cp || !city) return toast('Code postal et ville sont obligatoires (Akuiteo)', 'error');
+  const payload = { name, type, address: { postalCode: cp, city, country } };
+  if (addr) payload.address.line1 = addr;
+  if (siret) { payload.siret = siret; payload.siren = siret.slice(0, 9); }
+  showSyncLoading(true); setSyncText('Création du client dans Akuiteo…');
+  try {
+    const res = await akuiteoFetch('PUT', '/crm/customers', payload, { accept: 'text/plain' });
+    const akId = String((res && typeof res === 'object') ? (res.id || res.value || '') : res).replace(/[^0-9]/g, '');
+    if (!akId) throw new Error('Akuiteo n\'a pas renvoyé d\'identifiant client');
+    // Relire le client pour récupérer le code généré
+    let code = null; try { const c = await akuiteoFetch('GET', `/crm/customers/${akId}`); code = c && c.code; } catch (e) {}
+    // Enregistrer dans le CRM (Supabase)
+    const ini = name.split(/\s+/).map(w => (w || '')[0]).join('').substring(0, 2).toUpperCase();
+    const colors = ['#4f8ff7', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899'];
+    const color = colors[Math.abs(akId.split('').reduce((a, ch) => a + ch.charCodeAt(0), 0)) % colors.length];
+    const { error } = await sb.from('clients').upsert({
+      id: akId, akuiteo_id: akId, name, code: code || null,
+      city, code_postal: cp, pays: country,
+      adresse_ligne1: addr || null, siret: siret || null, siren: siret ? siret.slice(0, 9) : null,
+      status: 'nouveau', ini, color,
+    }, { onConflict: 'id' });
+    if (error) console.warn('insert client CRM', error.message);
+    showSyncLoading(false);
+    closeModal('oppNewClient');
+    // Sélectionner le nouveau client (principal ou final)
+    if (isEnd) { _oppPickEndClient(akId, akId, name); }
+    else { _oppPickClient(akId, akId, name); }
+    toast('Client créé et sélectionné', 'success');
+  } catch (e) {
+    showSyncLoading(false);
+    console.error('oppNewClientSubmit', e);
+    toast('Erreur création client : ' + e.message, 'error');
+  }
 }
 async function _oppLoadContacts(clientId, selectAkId) {
   const sel = document.getElementById('of-contact'); if (!sel) return;
