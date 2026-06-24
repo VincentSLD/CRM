@@ -235,6 +235,7 @@ CREATE TABLE IF NOT EXISTS opportunites (
   code TEXT,
   nom TEXT,
   client_id TEXT, client_name TEXT, customer_akuiteo_id TEXT,
+  contact_id TEXT, contact_name TEXT, contact_akuiteo_id TEXT,
   montant NUMERIC, devise TEXT,
   probabilite NUMERIC,
   statut TEXT,                 -- IN_PROGRESS / WON / LOST / DISCARD / ARCHIVED
@@ -252,6 +253,9 @@ CREATE TABLE IF NOT EXISTS opportunites (
 -- Colonnes ajoutées après coup (si la table existait déjà)
 ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS description TEXT;
 ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS type_origine TEXT;
+ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS contact_id TEXT;
+ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS contact_name TEXT;
+ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS contact_akuiteo_id TEXT;
 ALTER TABLE opportunites ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "opportunites_all" ON opportunites;
 CREATE POLICY "opportunites_all" ON opportunites FOR ALL TO authenticated USING (true) WITH CHECK (true);

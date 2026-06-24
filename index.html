@@ -5169,6 +5169,17 @@ async function syncOpportunites() {
       const { data } = await sb.from('clients').select('id,name,akuiteo_id').in('akuiteo_id', custIds.slice(i, i + 300));
       (data || []).forEach(c => { clientByAk[String(c.akuiteo_id)] = c; });
     }
+    // 2b. Résoudre les contacts (contact principal + tableau contacts) via akuiteo_id
+    const contIds = [...new Set(all.flatMap(o => {
+      const ids = [_oget(o, 'mainContactId', 'mainContact.id')];
+      (Array.isArray(o.contacts) ? o.contacts : []).forEach(c => ids.push(c && (c.contactId || c.id || (c.contact && c.contact.id))));
+      return ids;
+    }).filter(Boolean).map(String))];
+    const contByAk = {};
+    for (let i = 0; i < contIds.length; i += 300) {
+      const { data } = await sb.from('contacts').select('id,nom,prenom,akuiteo_id').in('akuiteo_id', contIds.slice(i, i + 300));
+      (data || []).forEach(c => { contByAk[String(c.akuiteo_id)] = { id: c.id, name: ((c.nom || '') + ' ' + (c.prenom || '')).trim() }; });
+    }
     // 3. Mapper + upsert
     const rows = all.map(o => {
       const custAk = _oget(o, 'customerId', 'customer.id', 'thirdPartyId');
@@ -5184,6 +5195,13 @@ async function syncOpportunites() {
       let statut = stageRef && stageRef.status ? stageRef.status : null;
       if (!statut) { if (_oget(o, 'actualSignatureDate')) statut = 'WON'; else if (_oget(o, 'lossDate')) statut = 'LOST'; else statut = 'IN_PROGRESS'; }
       const weight = _oget(o, 'weightingCoefficient');
+      // Contacts : principal d'abord, puis ceux du tableau (dédupliqués)
+      const mainCt = _oget(o, 'mainContactId', 'mainContact.id');
+      const ctAkIds = [];
+      if (mainCt != null) ctAkIds.push(String(mainCt));
+      (Array.isArray(o.contacts) ? o.contacts : []).forEach(c => { const v = c && (c.contactId || c.id || (c.contact && c.contact.id)); if (v != null && !ctAkIds.includes(String(v))) ctAkIds.push(String(v)); });
+      const ctResolved = ctAkIds.map(id => contByAk[id]).filter(Boolean);
+      const ctNames = ctResolved.map(c => c.name).filter(Boolean);
       return {
         akuiteo_id: String(_oget(o, 'id') || ''),
         code: _oget(o, 'code', 'reference'),
@@ -5192,6 +5210,9 @@ async function syncOpportunites() {
         client_id: cl ? cl.id : null,
         client_name: cl ? cl.name : (_oget(o, 'customerName', 'customer.name', 'thirdPartyName') || null),
         customer_akuiteo_id: custAk != null ? String(custAk) : null,
+        contact_id: ctResolved.length ? ctResolved[0].id : null,
+        contact_name: ctNames.length ? ctNames.join(', ') : null,
+        contact_akuiteo_id: mainCt != null ? String(mainCt) : null,
         montant: (() => { const v = _oget(o, 'amount', 'amountHT', 'totalAmountHT', 'estimatedAmount', 'totalAmount'); return v != null ? Number(v) : null; })(),
         devise: _oget(o, 'currencyCode', 'amountCurrency', 'currency'),
         probabilite: weight != null ? Math.round(Number(weight) * 100) : null,
@@ -5289,11 +5310,12 @@ function renderOpportunites() {
 
 function _oppListe(rows) {
   return `<div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Opportunité</th><th>Client</th><th>Stade</th><th>Statut</th><th style="text-align:right">Montant</th><th style="text-align:right">Prob.</th><th>Signature</th><th>Responsable</th></tr></thead>
-    <tbody>${rows.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucune opportunité</td></tr>' : rows.map(o => `
+    <table><thead><tr><th>Opportunité</th><th>Client</th><th>Contact(s)</th><th>Stade</th><th>Statut</th><th style="text-align:right">Montant</th><th style="text-align:right">Prob.</th><th>Signature</th><th>Responsable</th></tr></thead>
+    <tbody>${rows.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3)">Aucune opportunité</td></tr>' : rows.map(o => `
       <tr style="cursor:pointer" onclick="oppDetail('${o.akuiteo_id}')">
         <td style="padding:6px 8px"><strong style="font-size:12px">${cmdEsc(o.nom || '')}</strong>${o.code ? '<div style="font-size:10px;color:var(--t3)">' + cmdEsc(o.code) + '</div>' : ''}</td>
         <td style="padding:6px 8px;font-size:12px">${o.client_id ? '<a href="#" onclick="event.stopPropagation();showClient(\'' + o.client_id + '\');return false" style="color:var(--accent)">' + cmdEsc(o.client_name || '') + '</a>' : cmdEsc(o.client_name || '—')}</td>
+        <td style="padding:6px 8px;font-size:12px">${cmdEsc(o.contact_name || '—')}</td>
         <td style="padding:6px 8px;font-size:12px">${cmdEsc(o.stage || '—')}</td>
         <td style="padding:6px 8px">${_oppStatutBadge(o.statut)}</td>
         <td style="padding:6px 8px;text-align:right;font-family:'DM Mono',monospace">${o.montant != null ? fmt(o.montant) : '—'}</td>
@@ -5317,6 +5339,7 @@ function _oppKanban(rows) {
       ${list.map(o => `<div onclick="oppDetail('${o.akuiteo_id}')" style="background:var(--card,#fff);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer">
         <div style="font-weight:600;font-size:12px">${cmdEsc(o.nom || '')}</div>
         <div style="font-size:11px;color:var(--t3)">${cmdEsc(o.client_name || '—')}</div>
+        ${o.contact_name ? '<div style="font-size:11px;color:var(--t3)">👤 ' + cmdEsc(o.contact_name) + '</div>' : ''}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px"><span style="font-size:12px;font-weight:600">${o.montant != null ? fmt(o.montant) : '—'}</span>${o.probabilite != null ? '<span style="font-size:10px;color:var(--t3)">' + o.probabilite + '%</span>' : ''}${_oppStatutBadge(o.statut)}</div>
       </div>`).join('') || '<div style="font-size:11px;color:var(--t3);padding:6px">—</div>'}
     </div>`;
@@ -5328,6 +5351,7 @@ function oppDetail(akId) {
   const row = (l, v) => v != null && v !== '' ? `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="color:var(--t3);min-width:130px">${l}</span><span style="flex:1">${v}</span></div>` : '';
   const body = `
     ${row('Client', o.client_id ? `<a href="#" onclick="closeModal('opp');showClient('${o.client_id}');return false" style="color:var(--accent)">${cmdEsc(o.client_name || '')}</a>` : cmdEsc(o.client_name || '—'))}
+    ${row('Contact(s)', o.contact_id ? `<a href="#" onclick="closeModal('opp');showContact('${o.contact_id}');return false" style="color:var(--accent)">${cmdEsc(o.contact_name || '')}</a>` : cmdEsc(o.contact_name || ''))}
     ${row('Code', cmdEsc(o.code || ''))}
     ${row('Stade', cmdEsc(o.stage || ''))}
     ${row('Portefeuille', cmdEsc(o.pipe || ''))}
