@@ -5860,6 +5860,7 @@ function renderOpportunites() {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-primary" onclick="oppModalOpen()">+ Nouvelle opportunité</button>
+      <button class="btn" onclick="go('opportunite-analyse')">📊 Analyser</button>
       <button class="btn" onclick="syncOpportunites()">⬇ Synchroniser Akuiteo</button>
       <span style="font-size:13px;color:var(--t2)">${rows.length} opportunité(s)</span>
     </div>
@@ -6024,6 +6025,109 @@ function renderOppDetailPage() {
     </div>`;
 }
 
+// ═══ ANALYSE DES OPPORTUNITÉS ═══
+function renderOppAnalyse() {
+  if (!_oppsLoaded) return '<div style="text-align:center;padding:40px;color:var(--t3)">Chargement…</div>';
+  const opps = _opps || [];
+  const num = v => Number(v) || 0;
+  const enCours = opps.filter(o => o.statut === 'IN_PROGRESS');
+  const gagnees = opps.filter(o => o.statut === 'WON');
+  const perdues = opps.filter(o => o.statut === 'LOST');
+  const totalHT = enCours.reduce((s, o) => s + num(o.montant), 0);
+  const pondere = enCours.reduce((s, o) => s + num(o.montant) * (num(o.probabilite) / 100), 0);
+  const caGagne = gagnees.reduce((s, o) => s + num(o.montant), 0);
+  const decided = gagnees.length + perdues.length;
+  const winRate = decided ? Math.round(gagnees.length / decided * 100) : null;
+  const winRateVal = (() => { const tg = caGagne, tp = perdues.reduce((s, o) => s + num(o.montant), 0); return (tg + tp) ? Math.round(tg / (tg + tp) * 100) : null; })();
+
+  // ─ Alertes ─
+  const today = new Date(); const tISO = today.toISOString().slice(0, 10);
+  const in30 = new Date(today.getTime() + 30 * 864e5).toISOString().slice(0, 10);
+  const depassees = enCours.filter(o => o.date_signature && o.date_signature < tISO);
+  const sous30 = enCours.filter(o => o.date_signature && o.date_signature >= tISO && o.date_signature <= in30);
+  const sansDate = enCours.filter(o => !o.date_signature);
+  const sansResp = enCours.filter(o => !o.responsable);
+  const sansContact = enCours.filter(o => !o.contact_name);
+  const strat = enCours.filter(o => o.raw && o.raw.strategic);
+  const grosEnjeu = enCours.filter(o => num(o.montant) >= 100000).sort((a, b) => num(b.montant) - num(a.montant));
+  const mtFmt = arr => fmt(arr.reduce((s, o) => s + num(o.montant), 0));
+  const alert = (cond, color, icon, titre, sousTitre, action) => cond ? `
+    <div ${action ? `onclick="${action}" style="cursor:pointer;"` : 'style=""'} class="card" style="border-left:4px solid ${color};${action ? '' : ''}">
+      <div class="card-body" style="padding:10px 12px;display:flex;align-items:center;gap:10px">
+        <div style="font-size:20px">${icon}</div>
+        <div style="flex:1"><div style="font-weight:700;font-size:13px;color:${color}">${titre}</div><div style="font-size:12px;color:var(--t2)">${sousTitre}</div></div>
+        ${action ? '<div style="color:var(--t3)">›</div>' : ''}
+      </div></div>` : '';
+  const goList = `_oppView='liste';renderPage('opportunites')`;
+  const alerts = [
+    alert(depassees.length, '#ef4444', '⏰', `${depassees.length} opportunité(s) à requalifier`, `Signature prévisionnelle dépassée — total ${mtFmt(depassees)} HT. À relancer, gagner ou clôturer.`, `_oppFStatut='IN_PROGRESS';_oppFSigFrom='';_oppFSigTo='${tISO}';${goList}`),
+    alert(sous30.length, '#f59e0b', '🎯', `${sous30.length} signature(s) attendue(s) sous 30 jours`, `Total ${mtFmt(sous30)} HT à closer. À prioriser cette période.`, `_oppFStatut='IN_PROGRESS';_oppFSigFrom='${tISO}';_oppFSigTo='${in30}';${goList}`),
+    alert(sansDate.length, '#f59e0b', '📅', `${sansDate.length} opportunité(s) sans date de signature`, `Impossible de prévoir l'atterrissage. Renseignez une date prévisionnelle.`, `_oppFStatut='IN_PROGRESS';${goList}`),
+    alert(sansResp.length, '#6366f1', '👤', `${sansResp.length} opportunité(s) sans responsable`, `Affectez un responsable commercial pour le suivi.`, `_oppFStatut='IN_PROGRESS';${goList}`),
+    alert(sansContact.length, '#6366f1', '📇', `${sansContact.length} opportunité(s) sans contact`, `Ajoutez un contact pour faciliter la relance.`, null),
+    alert(grosEnjeu.length, '#10b981', '💎', `${grosEnjeu.length} opportunité(s) à fort enjeu (≥ 100 k€)`, `Total ${mtFmt(grosEnjeu)} HT. Top : ${grosEnjeu.slice(0, 3).map(o => cmdEsc(o.nom)).join(', ')}.`, null),
+    alert(strat.length, '#8b5cf6', '⭐', `${strat.length} opportunité(s) stratégique(s) en cours`, `À suivre de près — total ${mtFmt(strat)} HT.`, null),
+  ].filter(Boolean).join('');
+
+  // ─ Données graphiques ─
+  const grp = (arr, keyFn, valFn) => { const m = {}; arr.forEach(o => { const k = keyFn(o) || '—'; m[k] = (m[k] || 0) + (valFn ? valFn(o) : 1); }); return m; };
+  const PAL = ['#4f8ff7', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#f97316'];
+  // Par stade (montant en cours)
+  const byStage = grp(enCours, o => o.stage, o => num(o.montant));
+  // Par portefeuille
+  const byPipe = grp(enCours, o => o.pipe, o => num(o.montant));
+  // Par responsable
+  const byResp = grp(enCours, o => fmtCommercialName(o.responsable || '') || '—', o => num(o.montant));
+  const respSorted = Object.entries(byResp).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  // Par origine
+  const byOrig = grp(enCours, o => o.type_origine, o => num(o.montant));
+  // Signatures prévues par mois (12 prochains mois, en cours)
+  const months = []; const mLab = [];
+  for (let i = 0; i < 12; i++) { const d = new Date(today.getFullYear(), today.getMonth() + i, 1); const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); months.push(k); mLab.push(d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })); }
+  const byMonth = {}; enCours.forEach(o => { if (o.date_signature) { const k = o.date_signature.slice(0, 7); if (months.includes(k)) byMonth[k] = (byMonth[k] || 0) + num(o.montant); } });
+  // Statut global
+  const statutCounts = { 'En cours': enCours.length, 'Gagnées': gagnees.length, 'Perdues': perdues.length, 'Abandonnées': opps.filter(o => o.statut === 'DISCARD').length };
+
+  window._oppAnaCfg = [
+    { id: 'oppAnaStatut', cfg: { type: 'doughnut', data: { labels: Object.keys(statutCounts), datasets: [{ data: Object.values(statutCounts), backgroundColor: ['#4f8ff7', '#10b981', '#ef4444', '#6b7280'] }] }, options: { plugins: { legend: { position: 'bottom' } }, responsive: true, maintainAspectRatio: false } } },
+    { id: 'oppAnaPipe', cfg: { type: 'doughnut', data: { labels: Object.keys(byPipe), datasets: [{ data: Object.values(byPipe), backgroundColor: PAL }] }, options: { plugins: { legend: { position: 'bottom' } }, responsive: true, maintainAspectRatio: false } } },
+    { id: 'oppAnaStage', cfg: { type: 'bar', data: { labels: Object.keys(byStage), datasets: [{ label: 'Montant en cours (HT)', data: Object.values(byStage), backgroundColor: '#4f8ff7' }] }, options: { plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { autoSkip: false, maxRotation: 40, minRotation: 0 } } } } } },
+    { id: 'oppAnaResp', cfg: { type: 'bar', data: { labels: respSorted.map(r => r[0]), datasets: [{ label: 'Pipeline (HT)', data: respSorted.map(r => r[1]), backgroundColor: '#8b5cf6' }] }, options: { indexAxis: 'y', plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false } } },
+    { id: 'oppAnaMonth', cfg: { type: 'bar', data: { labels: mLab, datasets: [{ label: 'Signatures prévues (HT)', data: months.map(m => byMonth[m] || 0), backgroundColor: '#10b981' }] }, options: { plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false } } },
+    { id: 'oppAnaOrig', cfg: { type: 'doughnut', data: { labels: Object.keys(byOrig), datasets: [{ data: Object.values(byOrig), backgroundColor: PAL }] }, options: { plugins: { legend: { position: 'bottom' } }, responsive: true, maintainAspectRatio: false } } },
+  ];
+
+  const kpi = (val, lbl, color) => `<div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:18px;font-weight:700;color:${color}">${val}</div><div style="font-size:11px;color:var(--t3)">${lbl}</div></div></div>`;
+  const chartBox = (id, titre, h) => `<div class="card"><div class="card-header"><div class="card-title">${titre}</div></div><div class="card-body"><div style="height:${h || 240}px;position:relative"><canvas id="${id}"></canvas></div></div></div>`;
+
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px"><button class="btn" onclick="go('opportunites')">← Retour</button><h2 style="margin:0;font-size:20px">📊 Analyse des opportunités</h2></div>
+      <button class="btn" onclick="syncOpportunites()">⬇ Synchroniser</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px">
+      ${kpi(fmt(totalHT), 'Pipeline en cours (HT)', '#4f8ff7')}
+      ${kpi(fmt(pondere), 'Pondéré par taux', '#8b5cf6')}
+      ${kpi(enCours.length, 'En cours', 'var(--t1)')}
+      ${kpi(fmt(caGagne), 'Gagnées (' + gagnees.length + ')', '#10b981')}
+      ${kpi(winRate != null ? winRate + ' %' : '—', 'Taux de réussite (nb)', '#10b981')}
+      ${kpi(winRateVal != null ? winRateVal + ' %' : '—', 'Taux de réussite (montant)', '#10b981')}
+    </div>
+    ${alerts ? `<div style="margin-bottom:16px"><div style="font-size:13px;font-weight:700;color:var(--t2);margin-bottom:8px">🔔 Alertes & actions à anticiper</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px">${alerts}</div></div>` : ''}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
+      ${chartBox('oppAnaMonth', '🗓️ Atterrissage : signatures prévues par mois', 260)}
+      ${chartBox('oppAnaStage', '📈 Pipeline par stade (montant)', 260)}
+      ${chartBox('oppAnaResp', '👥 Pipeline par responsable', 280)}
+      ${chartBox('oppAnaPipe', '💼 Répartition par portefeuille', 240)}
+      ${chartBox('oppAnaStatut', '🥧 Répartition par statut', 240)}
+      ${chartBox('oppAnaOrig', '🌱 Répartition par type d\\'origine', 240)}
+    </div>`;
+}
+async function _oppAnalyseCharts() {
+  try { await _loadChartJs(); } catch (e) { return; }
+  (window._oppAnaCfg || []).forEach(c => { const el = document.getElementById(c.id); if (el && window.Chart) { try { new Chart(el.getContext('2d'), c.cfg); } catch (e) {} } });
+}
+
 // Carte Opportunités pour la fiche client
 function renderOppsCard(clientId) {
   const list = (_opps || []).filter(o => o.client_id === clientId);
@@ -6053,6 +6157,7 @@ function renderPage(page) {
     opportunites: renderOpportunites,
     'opportunite-detail': renderOppDetailPage,
     'opportunite-edit': renderOppEditPage,
+    'opportunite-analyse': renderOppAnalyse,
     concurrence: renderConcurrence,
     'import-xml': renderImportXml,
     'enrich-siren': renderEnrichSiren,
@@ -6133,6 +6238,7 @@ function renderPage(page) {
   if (page === 'ged') setTimeout(() => { gedLoadStats(); gedRenderChat(); }, 50);
   if (page === 'taches' && !_tachesLoaded) { loadTaches().then(() => { if (currentPage === 'taches') renderPage('taches'); }); }
   if (page === 'opportunites' && !_oppsLoaded) { loadOpportunites().then(() => { if (currentPage === 'opportunites') renderPage('opportunites'); }); }
+  if (page === 'opportunite-analyse') { if (!_oppsLoaded) { loadOpportunites().then(() => { if (currentPage === 'opportunite-analyse') renderPage('opportunite-analyse'); }); } else { setTimeout(_oppAnalyseCharts, 40); } }
 }
 
 // ═══════════════════════════════════════════════════════════
