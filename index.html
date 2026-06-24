@@ -5101,7 +5101,7 @@ function renderTachesCard(opts) {
 //  OPPORTUNITÉS (reprises depuis Akuiteo CRM)
 // ═══════════════════════════════════════════════════════════
 let _opps = [], _oppsLoaded = false, _oppView = 'pipeline';
-let _oppFStatut = '', _oppFResp = '', _oppSearch = '';
+let _oppFStatut = '', _oppFResp = '', _oppFPipe = '', _oppSearch = '';
 const OPP_STATUTS = { IN_PROGRESS: ['En cours', '#4f8ff7'], WON: ['Gagnée', '#10b981'], LOST: ['Perdue', '#ef4444'], DISCARD: ['Abandonnée', '#6b7280'], ARCHIVED: ['Archivée', '#6b7280'] };
 function _oppStatutBadge(s) { const [l, c] = OPP_STATUTS[s] || [s || '—', '#6b7280']; return `<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;background:${c}22;color:${c}">${l}</span>`; }
 
@@ -5232,6 +5232,7 @@ function _oppsFiltered() {
   const q = _looseAlnum(_oppSearch);
   return (_opps || []).filter(o => {
     if (_oppFStatut && o.statut !== _oppFStatut) return false;
+    if (_oppFPipe && (o.pipe || '') !== _oppFPipe) return false;
     if (_oppFResp && (o.responsable || '') !== _oppFResp) return false;
     if (q && !_looseMatch(_oppSearch, (o.nom || '') + ' ' + (o.client_name || '') + ' ' + (o.code || ''))) return false;
     return true;
@@ -5242,6 +5243,7 @@ function renderOpportunites() {
   if (!_oppsLoaded) return '<div style="text-align:center;padding:40px;color:var(--t3)">Chargement des opportunités…</div>';
   const rows = _oppsFiltered();
   const resps = [...new Set((_opps || []).map(o => o.responsable).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+  const pipes = [...new Set((_opps || []).map(o => o.pipe).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
   const enCours = rows.filter(o => o.statut === 'IN_PROGRESS');
   const totalHT = enCours.reduce((s, o) => s + (Number(o.montant) || 0), 0);
   const pondere = enCours.reduce((s, o) => s + (Number(o.montant) || 0) * ((Number(o.probabilite) || 0) / 100), 0);
@@ -5255,6 +5257,9 @@ function renderOpportunites() {
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <input type="text" placeholder="Rechercher..." value="${(_oppSearch || '').replace(/"/g, '&quot;')}" oninput="_oppSearch=this.value;clearTimeout(window._oppT);window._oppT=setTimeout(()=>renderPage('opportunites'),250)" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);min-width:160px">
+      <select onchange="_oppFPipe=this.value;renderPage('opportunites')" style="padding:5px 8px;border:1px solid ${_oppFPipe ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);max-width:200px">
+        <option value="">— Portefeuille —</option>${pipes.map(p => `<option value="${cmdEsc(p)}"${_oppFPipe === p ? ' selected' : ''}>${cmdEsc(p)}</option>`).join('')}
+      </select>
       <select onchange="_oppFStatut=this.value;renderPage('opportunites')" style="padding:5px 8px;border:1px solid ${_oppFStatut ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
         <option value="">— Statut —</option>${Object.entries(OPP_STATUTS).map(([k, v]) => `<option value="${k}"${_oppFStatut === k ? ' selected' : ''}>${v[0]}</option>`).join('')}
       </select>
