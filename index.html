@@ -5128,6 +5128,8 @@ function _updateOpportunitesBadge() {
 // Lecture flexible d'un champ (plusieurs clés possibles, support "a.b")
 function _oget(o, ...keys) { for (const k of keys) { const v = String(k).split('.').reduce((a, p) => (a == null ? a : a[p]), o); if (v != null && v !== '') return v; } return null; }
 
+// Clé de la donnée personnalisée Akuiteo "Montant de travaux"
+const OPP_CD_TRAVAUX = '1-number01';
 // Tables de référence Akuiteo (stades, portefeuilles, types d'origine) — mises en cache
 let _oppRefs = null;
 async function loadOppRefs(force) {
@@ -5191,7 +5193,7 @@ async function _buildOppRows(all) {
     (Array.isArray(o.contacts) ? o.contacts : []).forEach(c => { const v = c && (c.contactId || c.id || (c.contact && c.contact.id)); if (v != null && !ctAkIds.includes(String(v))) ctAkIds.push(String(v)); });
     const ctResolved = ctAkIds.map(id => contByAk[id]).filter(Boolean);
     const ctNames = ctResolved.map(c => c.name).filter(Boolean);
-    return {
+    const r = {
       akuiteo_id: String(_oget(o, 'id') || ''),
       code: _oget(o, 'code', 'reference'),
       nom: _oget(o, 'name', 'title', 'label', 'subject', 'code') || '(Sans titre)',
@@ -5220,13 +5222,24 @@ async function _buildOppRows(all) {
       raw: o,
       updated_at: new Date().toISOString(),
     };
+    // Donnée perso "Montant de travaux" : seulement si présente (la recherche en masse ne la renvoie pas → ne pas écraser)
+    if (o.customData && o.customData[OPP_CD_TRAVAUX]) {
+      const v = o.customData[OPP_CD_TRAVAUX].value;
+      r.montant_travaux = (v != null && v !== '') ? Number(v) : null;
+    }
+    return r;
   }).filter(r => r.akuiteo_id);
 }
 
 // Rafraîchit une seule opportunité depuis Akuiteo vers Supabase (après écriture)
+const OPP_READ_OPTIONS = ['CUSTOMER', 'END_CUSTOMER', 'CUSTOMER_LOCATION', 'ORIGIN_TYPE', 'PIPE', 'STAGE', 'SALES_MANAGER', 'PRODUCTION_MANAGER', 'FINANCIAL_MANAGER', 'PROJECT_MANAGER', 'MAIN_CONTACT', 'DEPARTMENT', 'ACTIVITY', 'YEAR', 'CUSTOM_DATA', 'CHANGE_TRACKING'];
+async function _readOpp(akId) {
+  try { return await akuiteoFetch('POST', `/crm/opportunities/${akId}/read`, { options: OPP_READ_OPTIONS }); }
+  catch (e) { try { return await akuiteoFetch('GET', `/crm/opportunities/${akId}`); } catch (e2) { return null; } }
+}
 async function _refreshOneOpp(akId) {
   try {
-    const o = await akuiteoFetch('GET', `/crm/opportunities/${akId}`);
+    const o = await _readOpp(akId);
     if (o && o.id) {
       const rows = await _buildOppRows([o]);
       if (rows.length) await sb.from('opportunites').upsert(rows, { onConflict: 'akuiteo_id' });
@@ -5291,7 +5304,10 @@ async function oppModalOpen(akId) {
       '<div style="text-align:center;padding:30px;color:var(--t3)">Chargement…</div>', '', '760px');
     await Promise.all([loadOppRefs(), loadAkuiteoRefs().catch(() => {})]);
     const o = akId ? _opps.find(x => x.akuiteo_id === akId) : null;
-    const raw = (o && o.raw) || {};
+    // En édition : relire l'opportunité avec ses données perso (la recherche en masse ne les renvoie pas)
+    let raw = (o && o.raw) || {};
+    if (akId) { const fresh = await _readOpp(akId); if (fresh && fresh.id) raw = fresh; }
+    const cdTravaux = (raw.customData && raw.customData[OPP_CD_TRAVAUX] && raw.customData[OPP_CD_TRAVAUX].value);
     const defOrigin = (_oppRefs.originTypes.find(t => t.default) || _oppRefs.originTypes.find(t => /autre/i.test(t.name)) || _oppRefs.originTypes[0] || {}).id;
     const d10 = v => (v ? String(v).slice(0, 10) : '');
     _oppForm = {
@@ -5318,6 +5334,7 @@ async function oppModalOpen(akId) {
       financialManagerId: raw.financialManagerId || '',
       projectManagerId: raw.projectManagerId || '',
       montant: raw.amount != null ? raw.amount : (o && o.montant != null ? o.montant : ''),
+      montantTravaux: (cdTravaux != null && cdTravaux !== '') ? cdTravaux : (o && o.montant_travaux != null ? o.montant_travaux : ''),
       devise: raw.currencyCode || (o && o.devise) || 'EUR',
       quantity: raw.quantity != null ? raw.quantity : '',
       exchangeRate: raw.exchangeRate != null ? raw.exchangeRate : '',
@@ -5451,6 +5468,8 @@ function _oppRenderForm() {
         <input id="of-montant" type="number" step="any" style="${fi}" value="${esc(f.montant)}" oninput="_oppForm.montant=this.value"></div>
       <div><label style="${lbl}">Devise</label>
         <input id="of-devise" style="${fi}" value="${esc(f.devise)}" oninput="_oppForm.devise=this.value"></div>
+      <div style="grid-column:1/3"><label style="${lbl}">Montant des travaux</label>
+        <input id="of-travaux" type="number" step="any" style="${fi}" value="${esc(f.montantTravaux)}" oninput="_oppForm.montantTravaux=this.value"></div>
       <div><label style="${lbl}">Quantité</label>
         <input id="of-qty" type="number" step="any" style="${fi}" value="${esc(f.quantity)}" oninput="_oppForm.quantity=this.value"></div>
       <div><label style="${lbl}">Taux de change</label>
@@ -5578,6 +5597,12 @@ async function saveOpportunite() {
   } else if (isUpdate) { payload.amount = null; payload.amountCurrency = null; }
   setNum('quantity', f.quantity);
   setNum('exchangeRate', f.exchangeRate);
+  // Donnée perso "Montant des travaux"
+  if (f.montantTravaux !== '' && f.montantTravaux != null && !isNaN(Number(f.montantTravaux))) {
+    payload.customData = Object.assign({}, payload.customData, { [OPP_CD_TRAVAUX]: { type: 'NUMBER', value: Number(f.montantTravaux) } });
+  } else if (isUpdate && payload.customData && payload.customData[OPP_CD_TRAVAUX]) {
+    payload.customData = Object.assign({}, payload.customData, { [OPP_CD_TRAVAUX]: { type: 'NUMBER', value: null } });
+  }
   // Probabilité = niveau ; le Taux (weightingCoefficient) est recalculé par Akuiteo → on ne l'envoie pas
   if (f.probabilityLevel !== '' && f.probabilityLevel != null) {
     payload.probabilityLevel = String(f.probabilityLevel);
@@ -5771,6 +5796,7 @@ function oppDetail(akId) {
     ${row('Statut', _oppStatutBadge(o.statut))}
     ${raw.strategic ? row('Stratégique', '⭐ Oui') : ''}
     ${row('Montant', o.montant != null ? fmt(o.montant) : '')}
+    ${(() => { const v = (raw.customData && raw.customData[OPP_CD_TRAVAUX] && raw.customData[OPP_CD_TRAVAUX].value) != null ? raw.customData[OPP_CD_TRAVAUX].value : o.montant_travaux; return row('Montant des travaux', v != null && v !== '' ? fmt(v) : ''); })()}
     ${row('Quantité', raw.quantity != null ? raw.quantity : '')}
     ${row('Probabilité', o.probabilite != null ? o.probabilite + '%' : '')}
     ${row('Type d\'origine', cmdEsc(o.type_origine || ''))}
