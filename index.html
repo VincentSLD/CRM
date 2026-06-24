@@ -5300,8 +5300,10 @@ async function syncOpportunites() {
 let _oppForm = null;
 async function oppModalOpen(akId) {
   try {
-    openDynModal('oppEdit', akId ? 'Modifier l\'opportunité' : 'Nouvelle opportunité',
-      '<div style="text-align:center;padding:30px;color:var(--t3)">Chargement…</div>', '', '760px');
+    closeModal('opp');
+    currentPage = 'opportunite-edit';
+    const pt = document.getElementById('pageTitle'); if (pt) pt.textContent = akId ? "Modifier l'opportunité" : 'Nouvelle opportunité';
+    const C = document.getElementById('contentArea'); if (C) C.innerHTML = '<div class="page active"><div style="text-align:center;padding:40px;color:var(--t3)">Chargement…</div></div>';
     await Promise.all([loadOppRefs(), loadAkuiteoRefs().catch(() => {})]);
     const o = akId ? _opps.find(x => x.akuiteo_id === akId) : null;
     // En édition : relire l'opportunité avec ses données perso (la recherche en masse ne les renvoie pas)
@@ -5348,7 +5350,7 @@ async function oppModalOpen(akId) {
       country: raw.country || '',
       description: raw.description || (o && o.description) || '',
     };
-    _oppRenderForm();
+    renderPage('opportunite-edit');
     if (_oppForm.clientId) _oppLoadContacts(_oppForm.clientId, _oppForm.contactAkId);
     if (_oppForm.customerAkId) _oppLoadSites(_oppForm.customerAkId, _oppForm.customerLocationId);
   } catch (e) { toast('Erreur ouverture : ' + e.message, 'error'); }
@@ -5405,8 +5407,9 @@ function _oppPipeChanged(pipeId) {
   if (sel) sel.innerHTML = _oppStageOptionsHtml(list, _oppForm.stageId);
 }
 
-function _oppRenderForm() {
-  const f = _oppForm; if (!f) return;
+function renderOppEditPage() {
+  const f = _oppForm;
+  if (!f) return '<div style="padding:30px;color:var(--t3)">Aucune opportunité en édition. <a href="#" onclick="go(\'opportunites\');return false" style="color:var(--accent)">← Retour</a></div>';
   const stageList = _oppStagesForPipe(f.pipeId, f.stageId);
   const esc = s => (s == null ? '' : String(s).replace(/"/g, '&quot;'));
   const lbl = 'display:block;font-size:11px;color:var(--t3);margin-bottom:3px';
@@ -5493,9 +5496,18 @@ function _oppRenderForm() {
       <div style="grid-column:1/3"><label style="${lbl}">Description</label>
         <textarea id="of-desc" rows="3" style="${fi};resize:vertical" oninput="_oppForm.description=this.value">${cmdEsc(f.description || '')}</textarea></div>
     </div>`;
-  const footer = `<button class="btn" onclick="closeModal('oppEdit')">Annuler</button>
-    <button class="btn btn-primary" onclick="saveOpportunite()">💾 Enregistrer et envoyer à Akuiteo</button>`;
-  openDynModal('oppEdit', f.akId ? 'Modifier l\'opportunité' : 'Nouvelle opportunité', body, footer, '760px');
+  const cancel = f.akId ? `oppDetail('${f.akId}')` : `go('opportunites')`;
+  const titre = f.akId ? "Modifier l'opportunité" : 'Nouvelle opportunité';
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px"><button class="btn" onclick="${cancel}">← Annuler</button><h2 style="margin:0;font-size:20px">${titre}</h2></div>
+      <button class="btn btn-primary" onclick="saveOpportunite()">💾 Enregistrer et envoyer à Akuiteo</button>
+    </div>
+    <div class="card" style="max-width:880px"><div class="card-body">${body}</div></div>
+    <div style="max-width:880px;display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+      <button class="btn" onclick="${cancel}">Annuler</button>
+      <button class="btn btn-primary" onclick="saveOpportunite()">💾 Enregistrer et envoyer à Akuiteo</button>
+    </div>`;
 }
 
 async function _oppClientSearch(q, isEnd) {
@@ -5699,9 +5711,8 @@ async function saveOpportunite() {
     setSyncText('Rafraîchissement…');
     await _refreshOneOpp(akId);
     showSyncLoading(false);
-    closeModal('oppEdit');
     toast(f.akId ? 'Opportunité mise à jour' : 'Opportunité créée', 'success');
-    if (currentPage === 'opportunites' || currentPage === 'opportunite-detail') renderPage(currentPage);
+    oppDetail(akId); // ouvrir la fiche en pleine page
   } catch (e) {
     showSyncLoading(false);
     console.error('saveOpportunite', e);
@@ -5978,6 +5989,7 @@ function renderPage(page) {
     taches: renderTaches,
     opportunites: renderOpportunites,
     'opportunite-detail': renderOppDetailPage,
+    'opportunite-edit': renderOppEditPage,
     concurrence: renderConcurrence,
     'import-xml': renderImportXml,
     'enrich-siren': renderEnrichSiren,
