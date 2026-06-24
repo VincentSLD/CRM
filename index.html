@@ -5132,17 +5132,20 @@ function _oget(o, ...keys) { for (const k of keys) { const v = String(k).split('
 let _oppRefs = null;
 async function loadOppRefs(force) {
   if (_oppRefs && !force) return _oppRefs;
-  const [stages, pipes, origins] = await Promise.all([
+  const [stages, pipes, origins, departments, years] = await Promise.all([
     akuiteoFetch('GET', '/crm/stages').catch(() => []),
     akuiteoFetch('GET', '/crm/pipes').catch(() => []),
     akuiteoFetch('GET', '/crm/origin-types').catch(() => []),
+    akuiteoFetch('GET', '/crm/departments').catch(() => []),
+    akuiteoFetch('GET', '/crm/years').catch(() => []),
   ]);
   const S = Array.isArray(stages) ? stages : [], P = Array.isArray(pipes) ? pipes : [], O = Array.isArray(origins) ? origins : [];
+  const D = Array.isArray(departments) ? departments : [], Y = Array.isArray(years) ? years : [];
   const stageMap = {}, pipeMap = {}, originMap = {};
   S.forEach(s => { stageMap[String(s.id)] = { name: s.name, status: s.status }; });
   P.forEach(p => { pipeMap[String(p.id)] = p.name; });
   O.forEach(t => { originMap[String(t.id)] = t.name; });
-  _oppRefs = { stages: S, pipes: P, originTypes: O, stageMap, pipeMap, originMap };
+  _oppRefs = { stages: S, pipes: P, originTypes: O, departments: D, years: Y, stageMap, pipeMap, originMap };
   return _oppRefs;
 }
 
@@ -5285,26 +5288,45 @@ let _oppForm = null;
 async function oppModalOpen(akId) {
   try {
     openDynModal('oppEdit', akId ? 'Modifier l\'opportunité' : 'Nouvelle opportunité',
-      '<div style="text-align:center;padding:30px;color:var(--t3)">Chargement…</div>', '', '640px');
+      '<div style="text-align:center;padding:30px;color:var(--t3)">Chargement…</div>', '', '760px');
     await Promise.all([loadOppRefs(), loadAkuiteoRefs().catch(() => {})]);
     const o = akId ? _opps.find(x => x.akuiteo_id === akId) : null;
     const raw = (o && o.raw) || {};
     const defOrigin = (_oppRefs.originTypes.find(t => t.default) || _oppRefs.originTypes.find(t => /autre/i.test(t.name)) || _oppRefs.originTypes[0] || {}).id;
+    const d10 = v => (v ? String(v).slice(0, 10) : '');
     _oppForm = {
       akId: akId || null,
       name: raw.name || (o && o.nom) || '',
+      title: raw.title || '',
       customerAkId: raw.customerId || (o && o.customer_akuiteo_id) || '',
-      clientName: (o && o.client_name) || '',
+      clientName: (o && o.client_name) || (raw.customer && raw.customer.name) || '',
       clientId: (o && o.client_id) || null,
+      endCustomerAkId: raw.endCustomerId || '',
+      endCustomerName: (raw.endCustomer && raw.endCustomer.name) || '',
       contactAkId: raw.mainContactId || (o && o.contact_akuiteo_id) || '',
       pipeId: raw.pipeId || (o && o.pipe_id) || '',
       stageId: raw.stageId || (o && o.stage_id) || '',
       originTypeId: raw.originTypeId || defOrigin || '',
+      origin: raw.origin || '',
+      strategic: !!raw.strategic,
+      departmentId: raw.departmentId || '',
+      yearId: raw.yearId || '',
       salesManagerId: raw.salesManagerId || (o && o.responsable_id) || '',
+      productionManagerId: raw.productionManagerId || '',
+      financialManagerId: raw.financialManagerId || '',
+      projectManagerId: raw.projectManagerId || '',
       montant: raw.amount != null ? raw.amount : (o && o.montant != null ? o.montant : ''),
       devise: raw.currencyCode || (o && o.devise) || 'EUR',
+      quantity: raw.quantity != null ? raw.quantity : '',
+      exchangeRate: raw.exchangeRate != null ? raw.exchangeRate : '',
       probabilityLevel: (raw.probabilityLevel != null && raw.probabilityLevel !== '') ? String(raw.probabilityLevel) : '',
-      dateSignature: (raw.expectedSignatureDate || '').slice(0, 10) || (o && o.date_signature) || '',
+      dateSignature: d10(raw.expectedSignatureDate) || (o && o.date_signature) || '',
+      openingDate: d10(raw.openingDate),
+      productionStartDate: d10(raw.productionStartDate),
+      productionEndDate: d10(raw.productionEndDate),
+      postalCode: raw.postalCode || '',
+      city: raw.city || '',
+      country: raw.country || '',
       description: raw.description || (o && o.description) || '',
     };
     _oppRenderForm();
@@ -5350,17 +5372,31 @@ function _oppRenderForm() {
   const lbl = 'display:block;font-size:11px;color:var(--t3);margin-bottom:3px';
   const fi = 'width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)';
   const emps = (akRef.employees || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'fr'));
+  const empOpts = sel => '<option value="">—</option>' + emps.map(e => `<option value="${e.id}"${String(sel) === String(e.id) ? ' selected' : ''}>${cmdEsc(fmtCommercialName(e.name))}</option>`).join('');
+  const sec = t => `<div style="grid-column:1/3;font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-top:6px;border-bottom:1px solid var(--border);padding-bottom:3px">${t}</div>`;
   const body = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      ${sec('Général')}
       <div style="grid-column:1/3"><label style="${lbl}">Nom de l'opportunité *</label>
         <input id="of-name" style="${fi}" value="${esc(f.name)}" oninput="_oppForm.name=this.value"></div>
+      <div style="grid-column:1/3"><label style="${lbl}">Titre</label>
+        <input id="of-title" style="${fi}" value="${esc(f.title)}" oninput="_oppForm.title=this.value"></div>
       <div style="grid-column:1/3;position:relative"><label style="${lbl}">Client / Prospect *</label>
         <input id="of-client" style="${fi}" placeholder="Rechercher une société…" value="${esc(f.clientName)}" autocomplete="off"
           oninput="_oppClientSearch(this.value)" onfocus="_oppClientSearch(this.value)">
         <div id="of-clientRes" style="display:none;position:absolute;z-index:30;left:0;right:0;top:100%;background:var(--card,#fff);border:1px solid var(--border);border-radius:6px;max-height:200px;overflow:auto;box-shadow:0 6px 18px rgba(0,0,0,.15)"></div></div>
+      <div style="grid-column:1/3;position:relative"><label style="${lbl}">Client final</label>
+        <input id="of-endclient" style="${fi}" placeholder="Rechercher une société…" value="${esc(f.endCustomerName)}" autocomplete="off"
+          oninput="_oppClientSearch(this.value,true)" onfocus="_oppClientSearch(this.value,true)">
+        <div id="of-endclientRes" style="display:none;position:absolute;z-index:30;left:0;right:0;top:100%;background:var(--card,#fff);border:1px solid var(--border);border-radius:6px;max-height:200px;overflow:auto;box-shadow:0 6px 18px rgba(0,0,0,.15)"></div></div>
       <div style="grid-column:1/3"><label style="${lbl}">Contact</label>
         <select id="of-contact" style="${fi}" onchange="_oppForm.contactAkId=this.value">
           <option value="">${f.clientId ? '—' : '(choisir un client d\'abord)'}</option></select></div>
+      <div style="grid-column:1/3;display:flex;align-items:center;gap:8px;margin-top:2px">
+        <input type="checkbox" id="of-strategic" ${f.strategic ? 'checked' : ''} onchange="_oppForm.strategic=this.checked" style="width:16px;height:16px">
+        <label for="of-strategic" style="font-size:13px;color:var(--t1)">Opportunité stratégique</label></div>
+
+      ${sec('Classement')}
       <div><label style="${lbl}">Portefeuille *</label>
         <select id="of-pipe" style="${fi}" onchange="_oppPipeChanged(this.value)">
           <option value="">—</option>${_oppRefs.pipes.map(p => `<option value="${p.id}"${String(f.pipeId) === String(p.id) ? ' selected' : ''}>${cmdEsc(p.name)}</option>`).join('')}</select></div>
@@ -5371,34 +5407,68 @@ function _oppRenderForm() {
       <div><label style="${lbl}">Type d'origine *</label>
         <select id="of-origin" style="${fi}" onchange="_oppForm.originTypeId=this.value">
           ${_oppRefs.originTypes.map(t => `<option value="${t.id}"${String(f.originTypeId) === String(t.id) ? ' selected' : ''}>${cmdEsc(t.name)}</option>`).join('')}</select></div>
-      <div><label style="${lbl}">Responsable</label>
-        <select id="of-resp" style="${fi}" onchange="_oppForm.salesManagerId=this.value">
-          <option value="">—</option>${emps.map(e => `<option value="${e.id}"${String(f.salesManagerId) === String(e.id) ? ' selected' : ''}>${cmdEsc(fmtCommercialName(e.name))}</option>`).join('')}</select></div>
+      <div><label style="${lbl}">Origine (précision)</label>
+        <input id="of-originText" style="${fi}" value="${esc(f.origin)}" oninput="_oppForm.origin=this.value"></div>
+      <div><label style="${lbl}">Département</label>
+        <select id="of-dept" style="${fi}" onchange="_oppForm.departmentId=this.value">
+          <option value="">—</option>${(_oppRefs.departments || []).map(d => `<option value="${d.id}"${String(f.departmentId) === String(d.id) ? ' selected' : ''}>${cmdEsc(d.name)}</option>`).join('')}</select></div>
+      <div><label style="${lbl}">Exercice</label>
+        <select id="of-year" style="${fi}" onchange="_oppForm.yearId=this.value">
+          <option value="">—</option>${(_oppRefs.years || []).map(y => `<option value="${y.id}"${String(f.yearId) === String(y.id) ? ' selected' : ''}>${cmdEsc(y.name || y.code || y.id)}</option>`).join('')}</select></div>
+
+      ${sec('Équipe')}
+      <div><label style="${lbl}">Responsable commercial</label>
+        <select id="of-resp" style="${fi}" onchange="_oppForm.salesManagerId=this.value">${empOpts(f.salesManagerId)}</select></div>
+      <div><label style="${lbl}">Responsable production</label>
+        <select id="of-prod" style="${fi}" onchange="_oppForm.productionManagerId=this.value">${empOpts(f.productionManagerId)}</select></div>
+      <div><label style="${lbl}">Responsable financier</label>
+        <select id="of-fin" style="${fi}" onchange="_oppForm.financialManagerId=this.value">${empOpts(f.financialManagerId)}</select></div>
+      <div><label style="${lbl}">Chef de projet</label>
+        <select id="of-pm" style="${fi}" onchange="_oppForm.projectManagerId=this.value">${empOpts(f.projectManagerId)}</select></div>
+
+      ${sec('Montant & probabilité')}
       <div><label style="${lbl}">Montant (HT)</label>
         <input id="of-montant" type="number" step="any" style="${fi}" value="${esc(f.montant)}" oninput="_oppForm.montant=this.value"></div>
-      <div><label style="${lbl}">Probabilité (niveau)</label>
+      <div><label style="${lbl}">Devise</label>
+        <input id="of-devise" style="${fi}" value="${esc(f.devise)}" oninput="_oppForm.devise=this.value"></div>
+      <div><label style="${lbl}">Quantité</label>
+        <input id="of-qty" type="number" step="any" style="${fi}" value="${esc(f.quantity)}" oninput="_oppForm.quantity=this.value"></div>
+      <div><label style="${lbl}">Taux de change</label>
+        <input id="of-fx" type="number" step="any" style="${fi}" value="${esc(f.exchangeRate)}" oninput="_oppForm.exchangeRate=this.value"></div>
+      <div style="grid-column:1/3"><label style="${lbl}">Probabilité (niveau)</label>
         <select id="of-prob" style="${fi}" onchange="_oppForm.probabilityLevel=this.value">
           <option value="">—</option>${OPP_PROBA_LEVELS.map(l => `<option value="${l.v}"${String(f.probabilityLevel) === l.v ? ' selected' : ''}>${l.label}</option>`).join('')}</select>
         <div style="font-size:10px;color:var(--t3);margin-top:2px">Le « Taux » est calculé par Akuiteo</div></div>
-      <div style="grid-column:1/3"><label style="${lbl}">Date de signature prévisionnelle</label>
+
+      ${sec('Dates')}
+      <div><label style="${lbl}">Signature prévisionnelle</label>
         <input id="of-date" type="date" style="${fi}" value="${esc(f.dateSignature)}" oninput="_oppForm.dateSignature=this.value"></div>
+      <div><label style="${lbl}">Date d'ouverture</label>
+        <input id="of-open" type="date" style="${fi}" value="${esc(f.openingDate)}" oninput="_oppForm.openingDate=this.value"></div>
+      <div><label style="${lbl}">Début de production</label>
+        <input id="of-prodstart" type="date" style="${fi}" value="${esc(f.productionStartDate)}" oninput="_oppForm.productionStartDate=this.value"></div>
+      <div><label style="${lbl}">Fin de production</label>
+        <input id="of-prodend" type="date" style="${fi}" value="${esc(f.productionEndDate)}" oninput="_oppForm.productionEndDate=this.value"></div>
+
+      ${sec('Description')}
       <div style="grid-column:1/3"><label style="${lbl}">Description</label>
         <textarea id="of-desc" rows="3" style="${fi};resize:vertical" oninput="_oppForm.description=this.value">${cmdEsc(f.description || '')}</textarea></div>
     </div>`;
   const footer = `<button class="btn" onclick="closeModal('oppEdit')">Annuler</button>
     <button class="btn btn-primary" onclick="saveOpportunite()">💾 Enregistrer et envoyer à Akuiteo</button>`;
-  openDynModal('oppEdit', f.akId ? 'Modifier l\'opportunité' : 'Nouvelle opportunité', body, footer, '640px');
+  openDynModal('oppEdit', f.akId ? 'Modifier l\'opportunité' : 'Nouvelle opportunité', body, footer, '760px');
 }
 
-async function _oppClientSearch(q) {
-  const box = document.getElementById('of-clientRes'); if (!box) return;
+async function _oppClientSearch(q, isEnd) {
+  const box = document.getElementById(isEnd ? 'of-endclientRes' : 'of-clientRes'); if (!box) return;
   q = (q || '').trim();
   if (q.length < 2) { box.style.display = 'none'; return; }
   try {
     const { data } = await sb.from('clients').select('id,name,akuiteo_id,city').not('akuiteo_id', 'is', null).ilike('name', '%' + q + '%').order('name').limit(20);
     const list = data || [];
     if (!list.length) { box.innerHTML = '<div style="padding:8px;font-size:12px;color:var(--t3)">Aucune société (avec lien Akuiteo)</div>'; box.style.display = 'block'; return; }
-    box.innerHTML = list.map(c => `<div onclick="_oppPickClient('${c.id}','${String(c.akuiteo_id)}','${cmdEsc((c.name || '').replace(/'/g, "\\'"))}')" style="padding:7px 9px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><strong>${cmdEsc(c.name || '')}</strong>${c.city ? ' <span style="color:var(--t3)">— ' + cmdEsc(c.city) + '</span>' : ''}</div>`).join('');
+    const pick = isEnd ? '_oppPickEndClient' : '_oppPickClient';
+    box.innerHTML = list.map(c => `<div onclick="${pick}('${c.id}','${String(c.akuiteo_id)}','${cmdEsc((c.name || '').replace(/'/g, "\\'"))}')" style="padding:7px 9px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><strong>${cmdEsc(c.name || '')}</strong>${c.city ? ' <span style="color:var(--t3)">— ' + cmdEsc(c.city) + '</span>' : ''}</div>`).join('');
     box.style.display = 'block';
   } catch (e) { box.style.display = 'none'; }
 }
@@ -5407,6 +5477,11 @@ function _oppPickClient(clientId, akId, name) {
   const inp = document.getElementById('of-client'); if (inp) inp.value = name;
   const box = document.getElementById('of-clientRes'); if (box) box.style.display = 'none';
   _oppLoadContacts(clientId, '');
+}
+function _oppPickEndClient(clientId, akId, name) {
+  _oppForm.endCustomerAkId = akId; _oppForm.endCustomerName = name;
+  const inp = document.getElementById('of-endclient'); if (inp) inp.value = name;
+  const box = document.getElementById('of-endclientRes'); if (box) box.style.display = 'none';
 }
 async function _oppLoadContacts(clientId, selectAkId) {
   const sel = document.getElementById('of-contact'); if (!sel) return;
@@ -5441,21 +5516,43 @@ async function saveOpportunite() {
   payload.pipeId = String(f.pipeId);
   payload.stageId = String(f.stageId);
   payload.originTypeId = String(f.originTypeId);
-  // Optionnels : on les positionne (null pour effacer en modification)
-  if (f.contactAkId) payload.mainContactId = String(f.contactAkId); else if (isUpdate) payload.mainContactId = null;
-  if (f.salesManagerId) payload.salesManagerId = String(f.salesManagerId); else if (isUpdate) payload.salesManagerId = null;
-  if (f.description != null && f.description !== '') payload.description = f.description; else if (isUpdate) payload.description = null;
-  if (f.dateSignature) payload.expectedSignatureDate = f.dateSignature; else if (isUpdate) payload.expectedSignatureDate = null;
+  // Helpers pour positionner un champ (null pour effacer en modification)
+  const setStr = (k, v) => { if (v != null && v !== '') payload[k] = String(v); else if (isUpdate) payload[k] = null; };
+  const setNum = (k, v) => { if (v !== '' && v != null && !isNaN(Number(v))) payload[k] = Number(v); else if (isUpdate) payload[k] = null; };
+  const setDate = (k, v) => { if (v) payload[k] = v; else if (isUpdate) payload[k] = null; };
+  // Général
+  setStr('title', f.title);
+  setStr('endCustomerId', f.endCustomerAkId);
+  setStr('mainContactId', f.contactAkId);
+  setStr('origin', f.origin);
+  payload.strategic = !!f.strategic;
+  setStr('description', f.description);
+  // Classement
+  setStr('departmentId', f.departmentId);
+  setStr('yearId', f.yearId);
+  // Équipe
+  setStr('salesManagerId', f.salesManagerId);
+  setStr('productionManagerId', f.productionManagerId);
+  setStr('financialManagerId', f.financialManagerId);
+  setStr('projectManagerId', f.projectManagerId);
+  // Montant
   if (f.montant !== '' && f.montant != null && !isNaN(Number(f.montant))) {
     payload.amount = Number(f.montant);
     payload.amountCurrency = Number(f.montant);
     payload.currencyCode = f.devise || 'EUR';
   } else if (isUpdate) { payload.amount = null; payload.amountCurrency = null; }
+  setNum('quantity', f.quantity);
+  setNum('exchangeRate', f.exchangeRate);
   // Probabilité = niveau ; le Taux (weightingCoefficient) est recalculé par Akuiteo → on ne l'envoie pas
   if (f.probabilityLevel !== '' && f.probabilityLevel != null) {
     payload.probabilityLevel = String(f.probabilityLevel);
     delete payload.weightingCoefficient;
   } else if (isUpdate) { delete payload.weightingCoefficient; }
+  // Dates
+  setDate('expectedSignatureDate', f.dateSignature);
+  setDate('openingDate', f.openingDate);
+  setDate('productionStartDate', f.productionStartDate);
+  setDate('productionEndDate', f.productionEndDate);
   showSyncLoading(true); setSyncText(isUpdate ? 'Mise à jour dans Akuiteo…' : 'Création dans Akuiteo…');
   try {
     let akId = f.akId;
@@ -5620,22 +5717,39 @@ function _oppKanban(rows) {
 
 function oppDetail(akId) {
   const o = _opps.find(x => x.akuiteo_id === akId); if (!o) return;
+  const raw = o.raw || {};
   const row = (l, v) => v != null && v !== '' ? `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="color:var(--t3);min-width:130px">${l}</span><span style="flex:1">${v}</span></div>` : '';
+  const empName = id => { if (!id) return ''; const e = (akRef.employees || []).find(x => String(x.id) === String(id)); return e ? fmtCommercialName(e.name) : ''; };
+  const refName = (arr, id) => { if (!id || !arr) return ''; const x = arr.find(r => String(r.id) === String(id)); return x ? (x.name || x.code || '') : ''; };
+  const dFR = v => v ? fmtDateFR(String(v).slice(0, 10)) : '';
+  const deptName = refName(_oppRefs && _oppRefs.departments, raw.departmentId);
+  const yearName = refName(_oppRefs && _oppRefs.years, raw.yearId);
   const body = `
     ${row('Client', o.client_id ? `<a href="#" onclick="closeModal('opp');showClient('${o.client_id}');return false" style="color:var(--accent)">${cmdEsc(o.client_name || '')}</a>` : cmdEsc(o.client_name || '—'))}
+    ${row('Client final', cmdEsc((raw.endCustomer && raw.endCustomer.name) || ''))}
     ${row('Contact(s)', o.contact_id ? `<a href="#" onclick="closeModal('opp');showContact('${o.contact_id}');return false" style="color:var(--accent)">${cmdEsc(o.contact_name || '')}</a>` : cmdEsc(o.contact_name || ''))}
     ${row('Code', cmdEsc(o.code || ''))}
+    ${row('Titre', cmdEsc(raw.title || ''))}
     ${row('Stade', cmdEsc(o.stage || ''))}
     ${row('Portefeuille', cmdEsc(o.pipe || ''))}
     ${row('Statut', _oppStatutBadge(o.statut))}
+    ${raw.strategic ? row('Stratégique', '⭐ Oui') : ''}
     ${row('Montant', o.montant != null ? fmt(o.montant) : '')}
+    ${row('Quantité', raw.quantity != null ? raw.quantity : '')}
     ${row('Probabilité', o.probabilite != null ? o.probabilite + '%' : '')}
-    ${row('Date signature estimée', o.date_signature ? fmtDateFR(o.date_signature) : '')}
     ${row('Type d\'origine', cmdEsc(o.type_origine || ''))}
     ${row('Origine', cmdEsc(o.origine || ''))}
-    ${row('Type', cmdEsc(o.type_opp || ''))}
+    ${row('Département', cmdEsc(deptName))}
+    ${row('Exercice', cmdEsc(yearName))}
+    ${row('Date signature estimée', o.date_signature ? fmtDateFR(o.date_signature) : '')}
+    ${row('Date d\'ouverture', dFR(raw.openingDate))}
+    ${row('Début production', dFR(raw.productionStartDate))}
+    ${row('Fin production', dFR(raw.productionEndDate))}
+    ${row('Responsable comm.', cmdEsc(fmtCommercialName(o.responsable || '') || empName(raw.salesManagerId)))}
+    ${row('Resp. production', cmdEsc(empName(raw.productionManagerId)))}
+    ${row('Resp. financier', cmdEsc(empName(raw.financialManagerId)))}
+    ${row('Chef de projet', cmdEsc(empName(raw.projectManagerId)))}
     ${row('Description', cmdEsc(o.description || ''))}
-    ${row('Responsable', cmdEsc(fmtCommercialName(o.responsable || '')))}
     ${row('ID Akuiteo', cmdEsc(o.akuiteo_id))}`;
   const enCours = o.statut === 'IN_PROGRESS';
   const actions = [
