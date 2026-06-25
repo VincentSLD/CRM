@@ -44,6 +44,18 @@ const TOOLS = [
     }
   },
   {
+    name: 'search_boamp',
+    description: "Veille marchés publics : interroge le BOAMP (avis d'appels d'offres EN COURS) filtré sur le TYPE DE MARCHÉ = Travaux. À utiliser quand l'utilisateur demande une veille marché / appels d'offres travaux sur un département (ou un mot-clé). Retourne les avis avec objet, acheteur, dates, procédure et le LIEN vers l'avis.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        departement: { type: 'string', description: 'Code département à filtrer, ex. "85", "44", "44,85". Optionnel.' },
+        q: { type: 'string', description: 'Mots-clés à rechercher dans l\'objet/acheteur (ex. "structure", "gros oeuvre", "réhabilitation"). Optionnel.' },
+        limit: { type: 'integer', default: 20, maximum: 50 }
+      }
+    }
+  },
+  {
     name: 'aggregate_table',
     description: 'Calcule une agrégation (somme, moyenne, nombre) sur une table avec filtres et groupement. Utile pour CA, montants totaux, etc.',
     input_schema: {
@@ -93,6 +105,34 @@ function buildQueryParams(filters, select, order, limit) {
 
 async function executeTool(name, input) {
   try {
+    if (name === 'search_boamp') {
+      const { departement, q, limit = 20 } = input || {};
+      const esc = s => String(s || '').replace(/"/g, '');
+      const wheres = ['type_marche="TRAVAUX"'];
+      if (departement) {
+        const deps = String(departement).split(/[,\s]+/).filter(Boolean);
+        if (deps.length) wheres.push('(' + deps.map(d => `startswith(code_departement,"${esc(d)}")`).join(' or ') + ')');
+      }
+      if (q) wheres.push(`(search(objet,"${esc(q)}") or search(nomacheteur,"${esc(q)}") or search(descripteur_libelle,"${esc(q)}"))`);
+      // Avis EN COURS : date limite de réponse non dépassée
+      const today = new Date().toISOString().slice(0, 10);
+      wheres.push(`datelimitereponse >= "${today}"`);
+      const params = new URLSearchParams();
+      params.set('where', wheres.join(' and '));
+      params.set('order_by', 'datelimitereponse asc');
+      params.set('limit', String(Math.min(limit || 20, 50)));
+      const url = 'https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?' + params.toString();
+      const r = await fetch(url);
+      if (!r.ok) return { ok: false, error: 'BOAMP API ' + r.status };
+      const d = await r.json();
+      const rows = (d.results || []).map(a => ({
+        objet: a.objet, acheteur: a.nomacheteur, departement: a.code_departement,
+        dateparution: a.dateparution, date_limite_reponse: a.datelimitereponse,
+        procedure: a.procedure_libelle, nature: a.nature_libelle,
+        lien: a.url_avis || (a.idweb ? 'https://www.boamp.fr/avis/detail/' + a.idweb : null)
+      }));
+      return { ok: true, total: d.total_count || rows.length, count: rows.length, rows };
+    }
     if (name === 'search_clients' || name === 'search_contacts') {
       const { q, limit = 20 } = input || {};
       if (!q || !String(q).trim()) return { ok: false, error: 'q (texte recherché) requis' };
@@ -156,6 +196,7 @@ async function callClaude(ANTHROPIC_KEY, body) {
 
 function toolLabel(tu) {
   const tbl = TABLE_LABELS[tu.input?.table] || tu.input?.table || 'données';
+  if (tu.name === 'search_boamp') return 'Veille BOAMP Travaux' + (tu.input?.departement ? ' (dép. ' + tu.input.departement + ')' : '');
   if (tu.name === 'search_clients') return 'Recherche société « ' + (tu.input?.q || '') + ' »';
   if (tu.name === 'search_contacts') return 'Recherche contact « ' + (tu.input?.q || '') + ' »';
   if (tu.name === 'query_table') return 'Consultation ' + tbl;
@@ -285,6 +326,10 @@ Exemples :
 - Tâches en cours assignées à quelqu'un : query_table(table="taches_commerciales", filters={"assigne_email.eq":"<email>","statut.in":"(a_faire,en_cours)"}, select="titre,priorite,statut,echeance,client_name", order="echeance")
 - Opportunités d'un client : query_table(table="opportunites", filters={"client_id.eq":"<id_client>"}, select="nom,code,stage,statut,montant,probabilite,pipe,type_origine,responsable,contact_name,date_signature", order="-date_signature")
 - Pipeline opportunités en cours : query_table(table="opportunites", filters={"statut.eq":"IN_PROGRESS"}, select="nom,client_name,stage,montant,probabilite,responsable,date_signature", order="-montant")
+
+VEILLE MARCHÉS PUBLICS (BOAMP) :
+Quand l'utilisateur demande une « veille marché », des « appels d'offres » ou des « marchés publics » (de travaux) sur un département (ex. le 85) ou un mot-clé, utilise l'outil search_boamp (déjà filtré sur Type de marché = TRAVAUX). Tu n'as pas besoin de demander d'autorisation : c'est une source intégrée.
+Présente chaque avis ainsi (un par bloc, lignes courtes) : objet du marché, acheteur, département, date limite de réponse (mets en avant celles qui approchent), procédure, et un LIEN cliquable vers l'avis sous la forme <a href="URL" target="_blank">Voir l'avis</a>. Termine par le nombre total d'avis trouvés et propose, si pertinent, de filtrer (mot-clé métier comme "structure", "gros œuvre", "réhabilitation") ou de créer une opportunité/tâche de veille.
 
 COACHING DES OPPORTUNITÉS (quand on te demande de prioriser, analyser les risques, l'atterrissage ou la performance) :
 - "Prioriser / quoi travailler" : récupère les opportunités IN_PROGRESS, calcule pour chacune un enjeu = montant × (probabilite/100), et classe par enjeu décroissant en remontant les signatures proches/dépassées. Donne un top 5 avec une ACTION concrète par opportunité.

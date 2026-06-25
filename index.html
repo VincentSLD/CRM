@@ -2956,6 +2956,7 @@ tbody tr:last-child td { border-bottom: none; }
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliProspects')">🌱 Prospects</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliRecherche')">🔍 Rechercher</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('crNouveau')">📝 Nouveau CR</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('veilleMarche')">📢 Veille marché</button>
   </div>
   </div>
   <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;background:var(--card,#fff)">
@@ -21178,6 +21179,7 @@ const NOVA_QUICK = {
   cliProspects: "Liste les prospects (clients au statut 'nouveau' ou 'prospect') ayant au moins une opportunité en cours, à transformer en priorité. Indique pour chacun le montant des opportunités en cours et l'action à mener.",
   cliRecherche: "Demande-moi un nom de société (même approximatif ou abrégé) puis retrouve-la dans la base avec la recherche tolérante, et affiche ses coordonnées et ses contacts (NOM Prénom, fonction, emails cliquables, téléphones).",
   crNouveau: "Aide-moi à créer un compte-rendu de visite. Demande-moi la société concernée, le type de RDV et les points abordés (ou mes notes), puis rédige un contenu de compte-rendu clair et structuré et propose-moi de le créer.",
+  veilleMarche: "Fais-moi une veille des marchés publics de TRAVAUX (BOAMP). Demande-moi le département (ex. 85) et un éventuel mot-clé métier, puis liste les avis en cours avec objet, acheteur, date limite de réponse, procédure et le lien vers l'avis.",
 };
 function novaQuick(k) { const p = NOVA_QUICK[k]; if (!p) return; const panel = document.getElementById('aiChatPanel'); if (panel && panel.style.display === 'none') toggleAIChat(); askAIChat(p); }
 // Nettoie le texte de NOVA : supprime le Markdown et les symboles (lisible à l'écran ET à voix haute)
@@ -21190,12 +21192,13 @@ function _novaCleanText(s) {
     if (/^\s*([-*_=]\s*){3,}$/.test(l)) return '';                 // lignes de séparation ---
     if (/^\s*\|?[\s:|-]+\|?\s*$/.test(l) && /\|/.test(l)) return ''; // ligne séparatrice de tableau
     l = l.replace(/^\s*#{1,6}\s+(.*)$/, '<b>$1</b>');               // titres ## -> gras
+    l = l.replace(/^\s*>\s?/, '');                                  // citation > en début de ligne
     l = l.replace(/^\s*[-*•·▪◦‣]\s+/, '');                          // puces -> rien (vocalisable)
     l = l.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');                 // **gras**
     l = l.replace(/__([^_]+)__/g, '<b>$1</b>');                     // __gras__
     l = l.replace(/`([^`]+)`/g, '$1');                              // `code`
     if (/\|/.test(l)) l = l.replace(/\s*\|\s*/g, '  ').trim();      // cellules de tableau -> espaces
-    l = l.replace(/[*_#`>]/g, '');                                  // résidus de symboles
+    l = l.replace(/[*_#~`]/g, '');                                  // résidus de symboles (on préserve < et > pour le HTML, ex. liens <a>)
     return l;
   });
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
