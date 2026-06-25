@@ -1848,6 +1848,10 @@ tbody tr:last-child td { border-bottom: none; }
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="14" y1="4" x2="10" y2="20"/></svg>
           En Dev'
         </div>
+        <div class="nav-item" data-page="mode-emploi" onclick="go('mode-emploi')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          Mode d'emploi
+        </div>
       </details>
     </div>
   </nav>
@@ -4341,7 +4345,7 @@ function go(page) {
   const titles = {dashboard:'Tableau de bord',analyse:'Analyse / KPI',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing','marches-publics':'Veille marchés publics','procedures-coll':'Veille procédures collectives (BODACC)',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
     cr:'Comptes-rendus',taches:'Tâches commerciales',opportunites:'Opportunités',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
-    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'"};
+    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'",'mode-emploi':"Mode d'emploi"};
   document.getElementById('pageTitle').textContent = titles[page]||page;
   renderPage(page);
   if(window.innerWidth<=768) toggleSidebar(false);
@@ -4386,6 +4390,94 @@ function renderEnDev() {
         </div>
       </div>
     </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MODE D'EMPLOI — guide des fonctionnalités du CRM
+// ═══════════════════════════════════════════════════════════
+function _modeEmploiContenu() {
+  const sec = (titre, items) => `<h2 style="font-size:16px;margin:18px 0 6px;color:#4f46e5;border-bottom:2px solid #e0ddd5;padding-bottom:4px">${titre}</h2><ul style="margin:0 0 4px 18px;padding:0;font-size:13px;line-height:1.6">${items.map(i => '<li>' + i + '</li>').join('')}</ul>`;
+  return `
+    ${sec('🏠 Tableau de bord', [
+      "Vue d'ensemble : indicateurs clés (CA, objectifs par agence, listes de clients), alertes et raccourcis.",
+      "Les compteurs du menu (Clients, Contacts, Devis, Commandes, Factures, CR, Tâches, Opportunités…) indiquent le volume en temps réel.",
+    ])}
+    ${sec('👥 Clients / Prospects', [
+      "Liste filtrable et recherche tolérante (insensible à la ponctuation/accents, ex. « 6K » trouve « 6.K ARCHI »).",
+      "Case pour masquer les sociétés radiées (cochée par défaut).",
+      "Fiche société : coordonnées, catégorie ABC (par agence), commercial Novam/GPH, statut (actif/nouveau/dormant), établissements secondaires (même SIREN), CA, contacts, opportunités, comptes-rendus.",
+      "Outil d'analyse du compte (CA par devis/commandes/factures, par rôle client/architecte/apporteur/gros-œuvre, par établissement) avec graphiques et export PDF paysage.",
+      "Création d'un nouveau client/prospect (avec recherche SIRENE et catégorisation).",
+    ])}
+    ${sec('📇 Contacts', [
+      "Liste avec colonnes Commercial Novam / GPH, filtres, et affichage « NOM Prénom » partout.",
+      "Création/édition d'un contact (civilité, fonction, téléphones, emails) rattaché à une société.",
+    ])}
+    ${sec('🎯 Opportunités', [
+      "Synchronisation depuis Akuiteo (bouton « Synchroniser ») et création/modification renvoyées vers Akuiteo.",
+      "Vues Pipeline (Kanban par stade) et Liste ; filtres Portefeuille, Statut, Responsable, et plage de dates de signature.",
+      "Fiche en pleine page : tous les champs (client, contact, établissement, portefeuille, stade, type d'origine, responsables, montant, montant des travaux, probabilité, dates…), tâches liées et comptes-rendus liés.",
+      "Actions : Modifier, Marquer Gagnée / Perdue, Créer une tâche, Créer un CR (pré-remplis).",
+      "Création possible d'un nouveau client directement depuis le formulaire si la société n'existe pas.",
+      "📊 Bouton « Analyser » : KPIs (pipeline, pondéré, taux de réussite), alertes actionnables (signatures dépassées, à signer < 30 j, sans date/responsable/contact, fort enjeu, stratégiques) et graphiques ; filtres Année/Responsable/Portefeuille et export PDF.",
+    ])}
+    ${sec('✅ Tâches commerciales', [
+      "Vues Liste et Pipeline (glisser-déposer entre statuts À faire / En cours / Terminée / Annulée).",
+      "Case « Terminé ? » pour clôturer/réactiver rapidement ; échéance affichée en date.",
+      "Lien vers client, affaire ET opportunité (possible même sans client : la sélection renseigne le client).",
+      "Création/édition en pleine page. À l'enregistrement : tâche Microsoft To Do + email de notification chez l'assigné.",
+      "Rappel email automatique chaque matin pour les tâches arrivées à échéance et non terminées.",
+    ])}
+    ${sec('📝 Comptes-rendus (CR)', [
+      "Éditeur riche (gras, couleurs, surlignage, listes), pièces jointes (compressées), dictée vocale.",
+      "Liaison à une ou plusieurs sociétés, contacts, une affaire et une opportunité.",
+      "Outils IA : Préparer RDV, Reformuler, Synthèse, Compléter.",
+      "Diffusion par email depuis votre boîte Microsoft (objet préfixé « Compte-Rendu CRM : », message complémentaire pré-rempli).",
+    ])}
+    ${sec('📂 Marchés / Affaires / Devis / Commandes / Factures', [
+      "Données reprises d'Akuiteo : marchés, affaires (avec liste des CR liés), devis, commandes (planification/DLR), factures (impayés, retards).",
+      "Filtres par société, date, commercial ; badges de relance des devis.",
+    ])}
+    ${sec('📊 Analyse / KPI & Carte', [
+      "Analyse : indicateurs financiers et commerciaux, cartographie « qui travaille avec qui », carte par département.",
+      "Cartes des sociétés et des affaires (géolocalisation).",
+    ])}
+    ${sec('🔎 Veille & Outils (menu Paramétrage / En Dev\\')', [
+      "Veille Marchés Publics (BOAMP / DECP / MEF) avec filtres (type marché, procédure, département…).",
+      "Veille Procédures collectives (BODACC).",
+      "SIRETAGE : enrichissement SIREN/SIRET, détection de doublons, import XML, BatiScop' (observatoire construction & démographie).",
+      "Assistant documentaire (GED) : indexation de PDF et recherche sémantique, études de sol autour d'un point GPS.",
+      "Journal de connexions, objectifs par agence, mapping métiers, admin.",
+    ])}
+    ${sec('✦ NOVA — Assistant IA', [
+      "Chat connecté aux données du CRM (clients, contacts, devis, commandes, factures, opportunités, tâches, CR).",
+      "Recherche tolérante de sociétés et contacts ; point complet (360°) d'un client.",
+      "Boutons rapides Opportunités : Prioriser, Risques, Atterrissage, Performance, Relance, Quoi faire ?",
+      "Boutons rapides Clients : Fiche société, Dormants, Top clients, Impayés, Prospects, Rechercher, Nouveau CR, Veille marché, Fiche entreprise, Recherche web, Veille construction, Prospects (activité).",
+      "Actions exécutables (avec confirmation) : créer une tâche, créer une opportunité, préparer un email de relance, créer un CR — l'ordre opportunité → CR → tâche est respecté.",
+      "Sources externes intégrées : recherche web (Tavily), fiche & santé financière d'entreprise, prospection par code NAF, veille marchés publics BOAMP (travaux), veille construction de logements (Sitadel), taux directeur BCE.",
+      "Connaît le groupe NOVAM (entités, codes agences, métiers, secteurs) pour des propositions et ventes croisées pertinentes.",
+      "Fenêtre déplaçable et redimensionnable, dictée et lecture vocales, bouton « Nouvelle conversation ».",
+    ])}
+    <p style="font-size:11px;color:#888;margin-top:18px">Document généré automatiquement depuis le CRM — ${new Date().toLocaleDateString('fr-FR')}.</p>`;
+}
+function renderModeEmploi() {
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <h2 style="margin:0;font-size:20px">📖 Mode d'emploi du CRM</h2>
+      <button class="btn btn-primary" onclick="modeEmploiPrint()">🖨️ Imprimer / Exporter en PDF</button>
+    </div>
+    <div class="card" style="max-width:900px"><div class="card-body" id="modeEmploiContent">${_modeEmploiContenu()}</div></div>`;
+}
+function modeEmploiPrint() {
+  const w = window.open('', '_blank');
+  if (!w) { toast('Autorisez les fenêtres pop-up pour l\\'export', 'warning'); return; }
+  w.document.write('<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Mode d\\'emploi CRM</title>'
+    + '<style>body{font-family:Arial,Helvetica,sans-serif;color:#222;max-width:820px;margin:24px auto;padding:0 16px}h1{font-size:22px;color:#4338ca}h2{font-size:16px;color:#4f46e5;border-bottom:2px solid #ddd;padding-bottom:4px;margin:18px 0 6px}ul{margin:0 0 4px 18px;line-height:1.6;font-size:13px}li{margin:2px 0}</style>'
+    + '</head><body><h1>📖 Mode d\\'emploi du CRM — Groupe NOVAM Ingénierie</h1>'
+    + _modeEmploiContenu()
+    + '<script>window.onload=function(){window.print();}<\/script></body></html>');
+  w.document.close();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -6435,6 +6527,7 @@ function renderPage(page) {
     annuaire: renderAnnuaire,
     admin: renderAdmin,
     endev: renderEnDev,
+    'mode-emploi': renderModeEmploi,
     ged: renderGed,
   };
   // Attendre les données différées si la page en a besoin
