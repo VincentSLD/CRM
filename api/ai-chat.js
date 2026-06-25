@@ -194,8 +194,8 @@ async function executeTool(name, input) {
         return { ok: true, count: rows.length, rows };
       }
       if (TAVILY) {
-        const r = await fetch('https://api.tavily.com/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ api_key: TAVILY, query: q, max_results: n, include_answer: true }) });
-        if (!r.ok) return { ok: false, error: 'Tavily ' + r.status };
+        const r = await fetch('https://api.tavily.com/search', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TAVILY }, body: JSON.stringify({ api_key: TAVILY, query: q, max_results: n, include_answer: true, search_depth: 'basic' }) });
+        if (!r.ok) return { ok: false, error: 'Tavily ' + r.status + ': ' + (await r.text()).slice(0, 150) };
         const d = await r.json();
         const rows = (d.results || []).map(x => ({ titre: x.title, url: x.url, extrait: x.content }));
         return { ok: true, count: rows.length, rows, answer: d.answer || null };
