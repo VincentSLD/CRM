@@ -2959,6 +2959,7 @@ tbody tr:last-child td { border-bottom: none; }
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('veilleMarche')">📢 Veille marché</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('ficheEntreprise')">🏢 Fiche entreprise</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('webRecherche')">🌐 Recherche web</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('veilleConstruction')">🏗️ Veille construction</button>
   </div>
   </div>
   <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;background:var(--card,#fff)">
@@ -21184,6 +21185,7 @@ const NOVA_QUICK = {
   veilleMarche: "Fais-moi une veille des marchés publics de TRAVAUX (BOAMP). Demande-moi le département (ex. 85) et un éventuel mot-clé métier, puis liste les avis en cours avec objet, acheteur, date limite de réponse, procédure et le lien vers l'avis.",
   ficheEntreprise: "Donne-moi la fiche entreprise et la santé financière d'une société : demande-moi son nom ou son SIREN, puis affiche forme juridique, état, effectif, dirigeants, chiffre d'affaires et résultat net par année, et une appréciation du risque (source officielle).",
   webRecherche: "Fais une recherche web. Demande-moi ce que je veux rechercher (prospect, entreprise, actualité, marché), puis donne une synthèse claire en citant les sources avec leurs liens.",
+  veilleConstruction: "Fais-moi une veille des constructions de logements (permis de construire Sitadel). Demande-moi le département (ex. 85) et un éventuel mot-clé (promoteur, commune), puis liste les permis récents avec le demandeur, la commune, le nombre de logements et la date, le volume total et la tendance annuelle. Propose de qualifier les promoteurs intéressants.",
 };
 function novaQuick(k) { const p = NOVA_QUICK[k]; if (!p) return; const panel = document.getElementById('aiChatPanel'); if (panel && panel.style.display === 'none') toggleAIChat(); askAIChat(p); }
 // Nettoie le texte de NOVA : supprime le Markdown et les symboles (lisible à l'écran ET à voix haute)

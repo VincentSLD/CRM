@@ -81,6 +81,25 @@ const TOOLS = [
     }
   },
   {
+    name: 'search_permis',
+    description: "Veille CONSTRUCTION : permis de construire de LOGEMENTS autorisés (données Sitadel/SDES). Liste les permis récents par département / commune / mot-clé (demandeur, promoteur) avec le nombre de logements créés, et le volume total. Idéal pour repérer les promoteurs et projets de logements à prospecter. Le SIREN du demandeur peut être croisé avec search_entreprise.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        departement: { type: 'string', description: 'Code département (préfixe du code commune), ex. "85", "44".' },
+        commune: { type: 'string', description: 'Code commune INSEE précis (optionnel, ex. "85191").' },
+        q: { type: 'string', description: 'Mot-clé (demandeur, promoteur, localité). Optionnel.' },
+        minLogements: { type: 'integer', description: 'Nombre minimum de logements créés (défaut 1).', default: 1 },
+        limit: { type: 'integer', default: 20, maximum: 50 }
+      }
+    }
+  },
+  {
+    name: 'get_taux_bce',
+    description: "Donne le taux directeur actuel de la BCE (taux de refinancement principal), indicateur de référence pour le coût de l'emprunt. À utiliser quand on parle de taux d'emprunt, conjoncture, contexte de financement.",
+    input_schema: { type: 'object', properties: {} }
+  },
+  {
     name: 'aggregate_table',
     description: 'Calcule une agrégation (somme, moyenne, nombre) sur une table avec filtres et groupement. Utile pour CA, montants totaux, etc.',
     input_schema: {
@@ -202,6 +221,51 @@ async function executeTool(name, input) {
       }
       return { ok: false, error: 'Recherche web non configurée : définir BRAVE_API_KEY (ou TAVILY_API_KEY) dans Vercel.' };
     }
+    if (name === 'search_permis') {
+      const { departement, commune, q, minLogements = 1, limit = 20 } = input || {};
+      const clauses = [`NB_LGT_TOT_CREES:>=${Math.max(1, parseInt(minLogements) || 1)}`];
+      if (commune) clauses.push(`COMM:${String(commune).replace(/[^0-9AB]/gi, '')}`);
+      else if (departement) clauses.push(`COMM:${String(departement).replace(/[^0-9AB]/gi, '')}*`);
+      const base = 'https://opendata.koumoul.com/data-fair/api/v1/datasets/sitadel-logements';
+      const p = new URLSearchParams();
+      p.set('qs', clauses.join(' AND '));
+      if (q) p.set('q', String(q));
+      p.set('sort', '-DATE_REELLE_AUTORISATION');
+      p.set('size', String(Math.min(limit || 20, 50)));
+      p.set('select', 'COMM,DATE_REELLE_AUTORISATION,DENOM_DEM,SIREN_DEM,ADR_LOCALITE_TER,ADR_CODPOST_TER,NB_LGT_TOT_CREES,NATURE_PROJET_DECLAREE,RESIDENCE');
+      const r = await fetch(base + '/lines?' + p.toString());
+      if (!r.ok) return { ok: false, error: 'Sitadel ' + r.status };
+      const d = await r.json();
+      const rows = (d.results || []).map(x => ({
+        date_autorisation: x.DATE_REELLE_AUTORISATION,
+        commune: [x.ADR_CODPOST_TER, x.ADR_LOCALITE_TER].filter(Boolean).join(' '),
+        code_commune: x.COMM,
+        demandeur: x.DENOM_DEM || '(particulier / non dénommé)',
+        siren_demandeur: x.SIREN_DEM || null,
+        nb_logements: x.NB_LGT_TOT_CREES,
+      }));
+      // Tendance : logements autorisés par année
+      let tendance = null;
+      try {
+        const pa = new URLSearchParams({ field: 'AN_DEPOT', metric: 'sum', metric_field: 'NB_LGT_TOT_CREES', qs: clauses.filter(c => c.startsWith('COMM')).join(' AND ') || 'NB_LGT_TOT_CREES:>=1', size: '6', sort: '-AN_DEPOT' });
+        const ra = await fetch(base + '/values_agg?' + pa.toString());
+        if (ra.ok) { const da = await ra.json(); tendance = (da.aggs || []).map(a => ({ annee: a.value, logements: Math.round(a.metric) })).sort((x, y) => x.annee - y.annee); }
+      } catch (e) { /* ignore */ }
+      return { ok: true, total: d.total || rows.length, count: rows.length, rows, tendance };
+    }
+    if (name === 'get_taux_bce') {
+      const r = await fetch('https://data-api.ecb.europa.eu/service/data/FM/D.U2.EUR.4F.KR.MRR_FR.LEV?lastNObservations=1&format=jsondata', { headers: { 'Accept': 'application/json' } });
+      if (!r.ok) return { ok: false, error: 'BCE ' + r.status };
+      const d = await r.json();
+      try {
+        const series = d.dataSets[0].series;
+        const sk = Object.keys(series)[0];
+        const obs = series[sk].observations;
+        const periods = d.structure.dimensions.observation[0].values;
+        const idx = Object.keys(obs).map(Number).sort((a, b) => a - b).pop();
+        return { ok: true, taux_directeur_bce: obs[String(idx)][0], date: periods[idx].id, libelle: 'Taux de refinancement principal de la BCE (%)' };
+      } catch (e) { return { ok: false, error: 'parse BCE' }; }
+    }
     if (name === 'search_clients' || name === 'search_contacts') {
       const { q, limit = 20 } = input || {};
       if (!q || !String(q).trim()) return { ok: false, error: 'q (texte recherché) requis' };
@@ -268,6 +332,8 @@ function toolLabel(tu) {
   if (tu.name === 'search_boamp') return 'Veille BOAMP Travaux' + (tu.input?.departement ? ' (dép. ' + tu.input.departement + ')' : '');
   if (tu.name === 'search_entreprise') return 'Fiche entreprise « ' + (tu.input?.q || '') + ' »';
   if (tu.name === 'search_web') return 'Recherche web « ' + (tu.input?.q || '') + ' »';
+  if (tu.name === 'search_permis') return 'Veille construction logements' + (tu.input?.departement ? ' (dép. ' + tu.input.departement + ')' : '');
+  if (tu.name === 'get_taux_bce') return 'Taux directeur BCE';
   if (tu.name === 'search_clients') return 'Recherche société « ' + (tu.input?.q || '') + ' »';
   if (tu.name === 'search_contacts') return 'Recherche contact « ' + (tu.input?.q || '') + ' »';
   if (tu.name === 'query_table') return 'Consultation ' + tbl;
@@ -403,6 +469,12 @@ Quand on te demande des informations légales ou financières sur une société 
 
 RECHERCHE WEB :
 Quand l'information utile n'est pas dans le CRM (actualité d'un prospect, son site, contexte d'un marché…), utilise search_web et synthétise en citant les sources sous forme de liens <a href="URL" target="_blank">titre</a>.
+
+VEILLE CONSTRUCTION DE LOGEMENTS (Sitadel) :
+Quand on demande une veille sur les constructions/permis de logements (promoteurs, projets résidentiels) sur un secteur, utilise search_permis (par département, commune ou mot-clé). Présente les permis récents (demandeur/promoteur, commune, nombre de logements, date d'autorisation), le volume total et la tendance annuelle (logements autorisés par an) si disponible. Conseil : pour un demandeur ayant un SIREN, propose de le qualifier via search_entreprise (santé financière) — c'est un prospect potentiel pour les métiers structure/géotechnique/fluides du groupe.
+
+INDICATEURS DE CONJONCTURE :
+Pour parler du coût de l'emprunt / financement, utilise get_taux_bce (taux directeur BCE). Précise que c'est le taux de référence de la BCE (le taux des crédits immobiliers est généralement supérieur).
 
 VEILLE MARCHÉS PUBLICS (BOAMP) :
 Quand l'utilisateur demande une « veille marché », des « appels d'offres » ou des « marchés publics » (de travaux) sur un département (ex. le 85) ou un mot-clé, utilise l'outil search_boamp (déjà filtré sur Type de marché = TRAVAUX). Tu n'as pas besoin de demander d'autorisation : c'est une source intégrée.
