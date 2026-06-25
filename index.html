@@ -21309,13 +21309,14 @@ async function askAIChat(presetQuestion) {
     // Affichage progressif ligne par ligne
     _aiChatHistory.push({ role: 'user', content: question });
     _aiChatHistory.push({ role: 'assistant', content: fullResult });
-    const lines = fullResult.split('\n').filter(l => l.trim());
-    if (lines.length > 1) {
+    // Conserver les lignes vides (séparation des thèmes) ; on anime sur les lignes non vides
+    const lines = fullResult.split('\n');
+    if (lines.filter(l => l.trim()).length > 1) {
       loadingDiv.innerHTML = '';
       for (let i = 0; i < lines.length; i++) {
         loadingDiv.innerHTML += (i > 0 ? '<br>' : '') + lines[i];
         if (box) box.scrollTop = box.scrollHeight;
-        await new Promise(r => setTimeout(r, 35));
+        if (lines[i].trim()) await new Promise(r => setTimeout(r, 35));
       }
     } else {
       loadingDiv.innerHTML = fullResult.replace(/\n/g, '<br>');
