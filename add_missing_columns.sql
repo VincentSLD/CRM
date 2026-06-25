@@ -271,6 +271,11 @@ ALTER TABLE taches_commerciales ADD COLUMN IF NOT EXISTS opportunite_nom TEXT;
 ALTER TABLE taches_commerciales ADD COLUMN IF NOT EXISTS rappel_envoye BOOLEAN DEFAULT FALSE;
 ALTER TABLE taches_commerciales ADD COLUMN IF NOT EXISTS rappel_date TIMESTAMPTZ;
 
+-- Lien compte-rendu → opportunité
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS opportunite_id TEXT;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS opportunite_nom TEXT;
+CREATE INDEX IF NOT EXISTS idx_reports_opportunite ON reports(opportunite_id);
+
 -- ═══ Journal de connexions au CRM ═══
 -- Une ligne par connexion réussie (qui s'est identifié et quand).
 CREATE TABLE IF NOT EXISTS connexions_log (

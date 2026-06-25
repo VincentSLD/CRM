@@ -6118,6 +6118,18 @@ function _oppTachesCard(akId, clientId, clientName, oppNom) {
   </div>`;
 }
 
+const _CR_TYPE_LBL = { rdv_ext: 'RDV EXT.', rdv_int: 'RDV INT.', salon_foire: 'SALON-FOIRE', tel: 'TÉL.', visio: 'VISIO.', autre: 'AUTRE' };
+function _oppCRCard(akId) {
+  const list = (DB.reports || []).filter(r => r.opportunite_id === akId).sort((a, b) => String(b.date_raw || '').localeCompare(String(a.date_raw || '')));
+  const rows = list.length ? '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Titre</th><th>Type</th><th>Client</th></tr></thead><tbody>' +
+    list.map(r => `<tr style="cursor:pointer" onclick="openCRDetail('${r.id}')">
+      <td style="padding:6px 8px;font-size:12px;white-space:nowrap">${r.date_raw ? fmtDateFR(String(r.date_raw).slice(0, 10)) : ''}</td>
+      <td style="padding:6px 8px;font-size:12px"><strong>${cmdEsc(r.titre || '')}</strong></td>
+      <td style="padding:6px 8px;font-size:12px">${cmdEsc(_CR_TYPE_LBL[r.type_cr] || r.type_cr || '')}</td>
+      <td style="padding:6px 8px;font-size:12px">${cmdEsc(r.client_name || '')}</td>
+    </tr>`).join('') + '</tbody></table></div>' : '<div style="padding:14px;text-align:center;color:var(--t3);font-size:13px">Aucun compte-rendu lié</div>';
+  return `<div class="card" style="margin-top:16px"><div class="card-header"><div class="card-title">📝 Comptes-rendus liés (${list.length})</div></div><div class="card-body" style="padding:0">${rows}</div></div>`;
+}
 function renderOppDetailPage() {
   const akId = _currentOppId;
   const o = _opps.find(x => x.akuiteo_id === akId);
@@ -6176,7 +6188,7 @@ function renderOppDetailPage() {
     </div>
     <div style="display:grid;grid-template-columns:${window.innerWidth <= 768 ? '1fr' : 'minmax(0,1fr) minmax(0,1.7fr)'};gap:16px;align-items:start">
       <div class="card"><div class="card-header"><div class="card-title">Détails de l'opportunité</div></div><div class="card-body">${info}</div></div>
-      <div>${_oppTachesCard(o.akuiteo_id, o.client_id, o.client_name, o.nom)}</div>
+      <div>${_oppTachesCard(o.akuiteo_id, o.client_id, o.client_name, o.nom)}${_oppCRCard(o.akuiteo_id)}</div>
     </div>`;
 }
 
@@ -16188,6 +16200,34 @@ function _crAffaireFromId(id) {
   return a ? { id: a.id, label: _crAffaireLabel(a) } : { id, label: 'Affaire ' + id };
 }
 
+// ── Lien CR → Opportunité ──
+let _crSelectedOpp = null; // {id (akuiteo_id), label}
+function searchCROpp(q) {
+  const dd = document.getElementById('crOppDropdown'); if (!dd) return;
+  const ql = (q || '').trim().toLowerCase();
+  // Priorité aux opportunités des sociétés sélectionnées, sinon toutes
+  const selIds = new Set(_crSelectedClients.map(c => c.id));
+  let list = (_opps || []).slice();
+  if (selIds.size) list.sort((a, b) => (selIds.has(b.client_id) ? 1 : 0) - (selIds.has(a.client_id) ? 1 : 0));
+  if (ql) list = list.filter(o => ((o.nom || '') + ' ' + (o.client_name || '') + ' ' + (o.code || '')).toLowerCase().includes(ql));
+  list = list.slice(0, 50);
+  const clear = _crSelectedOpp ? `<div style="padding:8px 12px;cursor:pointer;font-size:12px;color:var(--red);border-top:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="removeCROpp()">✕ Retirer l'opportunité liée</div>` : '';
+  if (!list.length) dd.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucune opportunité</div>' + clear;
+  else dd.innerHTML = list.map(o => { const lbl = (o.nom || '') + (o.client_name ? ' — ' + o.client_name : ''); return `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="selectCROpp('${o.akuiteo_id}','${lbl.replace(/'/g, "&#39;")}')">${cmdEsc(lbl)}${o.montant != null ? ' <span style="color:var(--t3);font-size:11px">(' + fmt(o.montant) + ')</span>' : ''}</div>`; }).join('') + clear;
+  dd.style.display = 'block';
+}
+function selectCROpp(id, label) { _crSelectedOpp = { id, label }; const dd = document.getElementById('crOppDropdown'); if (dd) dd.style.display = 'none'; const inp = document.getElementById('crOppSearch'); if (inp) inp.value = ''; renderCROppChip(); }
+function removeCROpp() { _crSelectedOpp = null; const dd = document.getElementById('crOppDropdown'); if (dd) dd.style.display = 'none'; renderCROppChip(); }
+function renderCROppChip() {
+  const el = document.getElementById('crOppChip'); if (!el) return;
+  el.innerHTML = _crSelectedOpp ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#8b5cf622;color:#7c3aed;border:1px solid #8b5cf644">🎯 ${cmdEsc(_crSelectedOpp.label)} <span style="cursor:pointer;opacity:0.6;font-size:14px" onclick="removeCROpp()">&times;</span></span>` : '';
+}
+function _crOppFromId(akId) {
+  if (!akId) return null;
+  const o = (_opps || []).find(x => x.akuiteo_id === akId);
+  return o ? { id: o.akuiteo_id, label: (o.nom || '') + (o.client_name ? ' — ' + o.client_name : '') } : { id: akId, label: 'Opportunité' };
+}
+
 function renderCR() {
   if (crViewMode === 'send') return renderCRSend();
   if (crViewMode === 'detail') return renderCRDetail();
@@ -16478,6 +16518,7 @@ function backToCRList() {
   _crSelectedClients = [];
   _crSelectedContacts = [];
   _crSelectedAffaire = null;
+  _crSelectedOpp = null;
   renderPage('cr');
 }
 
@@ -16541,10 +16582,13 @@ function backFromSend() {
     _crSelectedClients = [...(currentReport.clients_list || [])];
     _crSelectedContacts = [...(currentReport.contacts_list || [])];
     _crSelectedAffaire = _crAffaireFromId(currentReport.affaire_id);
+    _crSelectedOpp = _crOppFromId(currentReport.opportunite_id);
     setTimeout(() => {
       renderCRClientChips();
       renderCRContactChips();
       renderCRAffaireChip();
+    renderCROppChip();
+      renderCROppChip();
       const co = document.getElementById('crContactSearch');
       if (co) { co.disabled = !_crSelectedClients.length; co.style.opacity = _crSelectedClients.length ? '1' : '0.5'; }
     }, 50);
@@ -16623,6 +16667,16 @@ function getCREditorHTML(r) {
           ${_crSelectedClients.length ? '' : 'disabled'}
           oninput="searchCRAffaire(this.value)" onfocus="searchCRAffaire(this.value)">
         <div id="crAffaireDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.2)"></div>
+      </div>
+    </div>
+    <div class="cr-fields-row" style="padding:0 16px 12px 16px;border-bottom:1px solid var(--border)">
+      <div style="position:relative">
+        <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Opportunité liée</label>
+        <div id="crOppChip" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px"></div>
+        <input type="text" id="crOppSearch" placeholder="Rechercher une opportunité (nom, client)..." autocomplete="off"
+          style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)"
+          oninput="searchCROpp(this.value)" onfocus="searchCROpp(this.value)">
+        <div id="crOppDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card,#fff);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.2)"></div>
       </div>
     </div>
     <div style="padding:0">
@@ -16721,6 +16775,7 @@ async function openCRDetail(reportId) {
     renderCRClientChips();
     renderCRContactChips();
     renderCRAffaireChip();
+    renderCROppChip();
     // Activer champ contacts si clients sélectionnés
     const co = document.getElementById('crContactSearch');
     if (co) { co.disabled = !_crSelectedClients.length; co.style.opacity = _crSelectedClients.length ? '1' : '0.5'; }
@@ -16734,6 +16789,7 @@ function openCRModal() {
   _crSelectedClients = [];
   _crSelectedContacts = [];
   _crSelectedAffaire = null;
+  _crSelectedOpp = null;
   crViewMode = 'detail';
   renderPage('cr');
 }
@@ -16743,6 +16799,7 @@ function clearEditor() {
   _crSelectedClients = [];
   _crSelectedContacts = [];
   _crSelectedAffaire = null;
+  _crSelectedOpp = null;
   _crPrefill = null;
   crViewMode = 'list';
   closeCRModal();
@@ -16762,6 +16819,7 @@ function goToCR(clientId, clientName, contactId, contactName) {
   _crSelectedClients = [];
   _crSelectedContacts = [];
   _crSelectedAffaire = null;
+  _crSelectedOpp = null;
   _crPrefill = { clientId, clientName, contactId: contactId || null, contactName: contactName || null };
   crViewMode = 'detail';
   currentPage = 'cr';
@@ -16922,7 +16980,9 @@ function removeCRClient(idx) {
     const af = document.getElementById('crAffaireSearch');
     if (af) { af.disabled = true; af.style.opacity = '0.5'; }
     _crSelectedAffaire = null;
+  _crSelectedOpp = null;
     renderCRAffaireChip();
+    renderCROppChip();
   }
 }
 
@@ -17116,6 +17176,9 @@ document.addEventListener('click', e => {
   if (!e.target.closest('#crAffaireSearch') && !e.target.closest('#crAffaireDropdown')) {
     const d = document.getElementById('crAffaireDropdown'); if(d) d.style.display='none';
   }
+  if (!e.target.closest('#crOppSearch') && !e.target.closest('#crOppDropdown')) {
+    const d = document.getElementById('crOppDropdown'); if(d) d.style.display='none';
+  }
   if (!e.target.closest('#t-client-search') && !e.target.closest('#t-client-dd')) {
     const d = document.getElementById('t-client-dd'); if(d) d.style.display='none';
   }
@@ -17265,6 +17328,8 @@ async function saveReport(silent) {
     clients_list: clientsList,
     contacts_list: contactsList,
     affaire_id: _crSelectedAffaire ? _crSelectedAffaire.id : null,
+    opportunite_id: _crSelectedOpp ? _crSelectedOpp.id : null,
+    opportunite_nom: _crSelectedOpp ? _crSelectedOpp.label : null,
     titre: titre,
     contenu: body.innerHTML,
     type_cr: typeCr,
@@ -21311,6 +21376,7 @@ async function _novaCreateCR(p) {
     setv('crType', p.type_cr);
     setv('crDate', p.date);
     if (p.contenu) { const eb = document.getElementById('editorBody'); if (eb) eb.innerHTML = String(p.contenu).replace(/\n/g, '<br>'); }
+    if (p.opportunite_id) { const o = (_opps || []).find(x => x.akuiteo_id === String(p.opportunite_id)); if (o) selectCROpp(o.akuiteo_id, (o.nom || '') + (o.client_name ? ' — ' + o.client_name : '')); }
   }, 400);
 }
 function _novaRelanceCard(p) {
