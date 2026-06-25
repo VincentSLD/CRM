@@ -4396,60 +4396,59 @@ function renderEnDev() {
 //  MODE D'EMPLOI — guide des fonctionnalités du CRM
 // ═══════════════════════════════════════════════════════════
 function _modeEmploiContenu() {
-  const sec = (titre, items) => `<h2 style="font-size:16px;margin:18px 0 6px;color:#4f46e5;border-bottom:2px solid #e0ddd5;padding-bottom:4px">${titre}</h2><ul style="margin:0 0 4px 18px;padding:0;font-size:13px;line-height:1.6">${items.map(i => '<li>' + i + '</li>').join('')}</ul>`;
-  return `
-    ${sec('🏠 Tableau de bord', [
+  const secs = [
+    ['🏠 Tableau de bord', [
       "Vue d'ensemble : indicateurs clés (CA, objectifs par agence, listes de clients), alertes et raccourcis.",
       "Les compteurs du menu (Clients, Contacts, Devis, Commandes, Factures, CR, Tâches, Opportunités…) indiquent le volume en temps réel.",
-    ])}
-    ${sec('👥 Clients / Prospects', [
+    ]],
+    ['👥 Clients / Prospects', [
       "Liste filtrable et recherche tolérante (insensible à la ponctuation/accents, ex. « 6K » trouve « 6.K ARCHI »).",
       "Case pour masquer les sociétés radiées (cochée par défaut).",
       "Fiche société : coordonnées, catégorie ABC (par agence), commercial Novam/GPH, statut (actif/nouveau/dormant), établissements secondaires (même SIREN), CA, contacts, opportunités, comptes-rendus.",
       "Outil d'analyse du compte (CA par devis/commandes/factures, par rôle client/architecte/apporteur/gros-œuvre, par établissement) avec graphiques et export PDF paysage.",
       "Création d'un nouveau client/prospect (avec recherche SIRENE et catégorisation).",
-    ])}
-    ${sec('📇 Contacts', [
+    ]],
+    ['📇 Contacts', [
       "Liste avec colonnes Commercial Novam / GPH, filtres, et affichage « NOM Prénom » partout.",
       "Création/édition d'un contact (civilité, fonction, téléphones, emails) rattaché à une société.",
-    ])}
-    ${sec('🎯 Opportunités', [
+    ]],
+    ['🎯 Opportunités', [
       "Synchronisation depuis Akuiteo (bouton « Synchroniser ») et création/modification renvoyées vers Akuiteo.",
       "Vues Pipeline (Kanban par stade) et Liste ; filtres Portefeuille, Statut, Responsable, et plage de dates de signature.",
       "Fiche en pleine page : tous les champs (client, contact, établissement, portefeuille, stade, type d'origine, responsables, montant, montant des travaux, probabilité, dates…), tâches liées et comptes-rendus liés.",
       "Actions : Modifier, Marquer Gagnée / Perdue, Créer une tâche, Créer un CR (pré-remplis).",
       "Création possible d'un nouveau client directement depuis le formulaire si la société n'existe pas.",
       "📊 Bouton « Analyser » : KPIs (pipeline, pondéré, taux de réussite), alertes actionnables (signatures dépassées, à signer < 30 j, sans date/responsable/contact, fort enjeu, stratégiques) et graphiques ; filtres Année/Responsable/Portefeuille et export PDF.",
-    ])}
-    ${sec('✅ Tâches commerciales', [
+    ]],
+    ['✅ Tâches commerciales', [
       "Vues Liste et Pipeline (glisser-déposer entre statuts À faire / En cours / Terminée / Annulée).",
       "Case « Terminé ? » pour clôturer/réactiver rapidement ; échéance affichée en date.",
       "Lien vers client, affaire ET opportunité (possible même sans client : la sélection renseigne le client).",
       "Création/édition en pleine page. À l'enregistrement : tâche Microsoft To Do + email de notification chez l'assigné.",
       "Rappel email automatique chaque matin pour les tâches arrivées à échéance et non terminées.",
-    ])}
-    ${sec('📝 Comptes-rendus (CR)', [
+    ]],
+    ['📝 Comptes-rendus (CR)', [
       "Éditeur riche (gras, couleurs, surlignage, listes), pièces jointes (compressées), dictée vocale.",
       "Liaison à une ou plusieurs sociétés, contacts, une affaire et une opportunité.",
       "Outils IA : Préparer RDV, Reformuler, Synthèse, Compléter.",
       "Diffusion par email depuis votre boîte Microsoft (objet préfixé « Compte-Rendu CRM : », message complémentaire pré-rempli).",
-    ])}
-    ${sec('📂 Marchés / Affaires / Devis / Commandes / Factures', [
+    ]],
+    ['📂 Marchés / Affaires / Devis / Commandes / Factures', [
       "Données reprises d'Akuiteo : marchés, affaires (avec liste des CR liés), devis, commandes (planification/DLR), factures (impayés, retards).",
       "Filtres par société, date, commercial ; badges de relance des devis.",
-    ])}
-    ${sec('📊 Analyse / KPI & Carte', [
+    ]],
+    ['📊 Analyse / KPI & Carte', [
       "Analyse : indicateurs financiers et commerciaux, cartographie « qui travaille avec qui », carte par département.",
       "Cartes des sociétés et des affaires (géolocalisation).",
-    ])}
-    ${sec('🔎 Veille & Outils (menu Paramétrage / En Dev)', [
+    ]],
+    ['🔎 Veille & Outils (menu Paramétrage / En Dev)', [
       "Veille Marchés Publics (BOAMP / DECP / MEF) avec filtres (type marché, procédure, département…).",
       "Veille Procédures collectives (BODACC).",
       "SIRETAGE : enrichissement SIREN/SIRET, détection de doublons, import XML, BatiScop' (observatoire construction & démographie).",
       "Assistant documentaire (GED) : indexation de PDF et recherche sémantique, études de sol autour d'un point GPS.",
       "Journal de connexions, objectifs par agence, mapping métiers, admin.",
-    ])}
-    ${sec('✦ NOVA — Assistant IA', [
+    ]],
+    ['✦ NOVA — Assistant IA', [
       "Chat connecté aux données du CRM (clients, contacts, devis, commandes, factures, opportunités, tâches, CR).",
       "Recherche tolérante de sociétés et contacts ; point complet (360°) d'un client.",
       "Boutons rapides Opportunités : Prioriser, Risques, Atterrissage, Performance, Relance, Quoi faire ?",
@@ -4458,8 +4457,60 @@ function _modeEmploiContenu() {
       "Sources externes intégrées : recherche web (Tavily), fiche & santé financière d'entreprise, prospection par code NAF, veille marchés publics BOAMP (travaux), veille construction de logements (Sitadel), taux directeur BCE.",
       "Connaît le groupe NOVAM (entités, codes agences, métiers, secteurs) pour des propositions et ventes croisées pertinentes.",
       "Fenêtre déplaçable et redimensionnable, dictée et lecture vocales, bouton « Nouvelle conversation ».",
-    ])}
-    <p style="font-size:11px;color:#888;margin-top:18px">Document généré automatiquement depuis le CRM — ${new Date().toLocaleDateString('fr-FR')}.</p>`;
+    ]],
+  ];
+  const procs = [
+    ['Créer une société (client / prospect)', [
+      "Menu « Clients/Prospects » → bouton « + Nouveau client/prospect ».",
+      "Recherchez l'entreprise par nom ou SIRET (SIRENE) pour pré-remplir automatiquement, ou saisissez manuellement.",
+      "Vérifiez/complétez les coordonnées, le commercial et la catégorie ABC si besoin.",
+      "Cliquez « Créer le client/prospect » : la fiche s'ouvre.",
+    ]],
+    ['Créer un contact', [
+      "Depuis la fiche société (recommandé) : section Contacts → « + Contact » ; ou via le menu « Contacts ».",
+      "Saisissez civilité, NOM, prénom, fonction, service, téléphones et emails.",
+      "Enregistrez : le contact est rattaché à la société (affiché « NOM Prénom »).",
+    ]],
+    ['Créer un concurrent', [
+      "Menu « Concurrence » → bouton « + Nouveau concurrent » (possibilité d'import depuis SIRENE).",
+      "Renseignez le nom et les informations connues.",
+      "Enregistrez : le concurrent apparaît dans la liste (fiche d'analyse disponible).",
+    ]],
+    ['Créer une opportunité', [
+      "Menu « Opportunités » → « + Nouvelle opportunité » (ou depuis une fiche client).",
+      "Choisissez le client (créez-le directement s'il n'existe pas), puis le Portefeuille, puis le Stade (filtré selon le portefeuille) et le Type d'origine.",
+      "Complétez contact, établissement, responsables, montant / montant des travaux / probabilité, dates et description.",
+      "Cliquez « Enregistrer et envoyer à Akuiteo » : l'opportunité est créée dans Akuiteo et sa fiche s'ouvre.",
+    ]],
+    ['Créer un compte-rendu (CR)', [
+      "Menu « Comptes-rendus » → nouveau CR (ou depuis une opportunité : bouton « Créer un CR »).",
+      "Renseignez titre, type, date, rédacteur, société(s) et contacts ; liez l'affaire et/ou l'opportunité si besoin.",
+      "Rédigez le contenu (outils IA : Préparer RDV, Reformuler, Synthèse, Compléter) et ajoutez des pièces jointes.",
+      "Enregistrez, puis diffusez par email aux destinataires si nécessaire.",
+    ]],
+    ['Créer une tâche', [
+      "Menu « Tâches » → « + Nouvelle tâche » (ou depuis une opportunité : bouton « Créer une tâche »).",
+      "Saisissez titre, description, échéance et priorité ; assignez à un collaborateur.",
+      "Liez à un client / affaire / opportunité (sélectionner une opportunité renseigne automatiquement le client).",
+      "Enregistrez : une tâche Microsoft To Do + un email de notification sont créés chez l'assigné. Un rappel email part à l'échéance si non terminée.",
+    ]],
+    ['Créer une campagne', [
+      "Menu « Campagnes » → « + Nouvelle campagne ».",
+      "Nommez la campagne et sélectionnez les cibles (clients / contacts) à l'aide des filtres.",
+      "Enregistrez, puis suivez les envois et retombées.",
+    ]],
+  ];
+  const id = i => 'me-sec-' + i;
+  const pid = i => 'me-proc-' + i;
+  const toc = `<div style="background:#f7f6f2;border:1px solid #e0ddd5;border-radius:8px;padding:10px 14px;margin-bottom:16px">
+    <div style="font-weight:700;font-size:13px;margin-bottom:6px">📑 Sommaire</div>
+    <ol style="margin:0 0 6px 18px;padding:0;font-size:13px;line-height:1.7">${secs.map((s, i) => `<li><a href="#${id(i)}" style="color:#4f46e5;text-decoration:none">${s[0]}</a></li>`).join('')}</ol>
+    <div style="font-weight:700;font-size:13px;margin:8px 0 4px">📝 Procédures pas à pas</div>
+    <ol style="margin:0 0 0 18px;padding:0;font-size:13px;line-height:1.7">${procs.map((p, i) => `<li><a href="#${pid(i)}" style="color:#0e9f6e;text-decoration:none">${p[0]}</a></li>`).join('')}</ol></div>`;
+  const body = secs.map((s, i) => `<h2 id="${id(i)}" style="font-size:16px;margin:18px 0 6px;color:#4f46e5;border-bottom:2px solid #e0ddd5;padding-bottom:4px">${s[0]}</h2><ul style="margin:0 0 4px 18px;padding:0;font-size:13px;line-height:1.6">${s[1].map(x => '<li>' + x + '</li>').join('')}</ul>`).join('');
+  const procsBody = `<h2 style="font-size:18px;margin:24px 0 8px;color:#0e9f6e;border-bottom:2px solid #bbf7d0;padding-bottom:4px">📝 Procédures pas à pas</h2>`
+    + procs.map((p, i) => `<h3 id="${pid(i)}" style="font-size:14px;margin:14px 0 4px;color:#0e9f6e">${p[0]}</h3><ol style="margin:0 0 4px 20px;padding:0;font-size:13px;line-height:1.6">${p[1].map(x => '<li style="margin:2px 0">' + x + '</li>').join('')}</ol>`).join('');
+  return toc + body + procsBody + `<p style="font-size:11px;color:#888;margin-top:18px">Document généré automatiquement depuis le CRM — ${new Date().toLocaleDateString('fr-FR')}.</p>`;
 }
 function renderModeEmploi() {
   return `
