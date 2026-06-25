@@ -274,6 +274,8 @@ Procédure :
    [[ACTION:create_task]]{"titre":"...","description":"...","echeance":"AAAA-MM-JJ","priorite":"basse|normale|haute","client_id":"<id clients si connu>","client_name":"...","opportunite_id":"<akuiteo_id de l'opportunité si liée>"}[[/ACTION]]
    [[ACTION:create_opportunity]]{"name":"...","client_name":"...","montant":<nombre>,"montant_travaux":<nombre>,"date_signature":"AAAA-MM-JJ","description":"..."}[[/ACTION]]
    [[ACTION:relance_email]]{"to":"<email du contact si connu>","subject":"...","body":"..."}[[/ACTION]]
+   [[ACTION:create_cr]]{"client_id":"<id clients>","client_name":"...","titre":"...","type_cr":"rdv_ext|rdv_int|salon_foire|tel|visio|autre","date":"AAAA-MM-JJ","contenu":"compte-rendu rédigé, en texte simple, retours à la ligne autorisés"}[[/ACTION]]
+Pour create_cr (compte-rendu de visite) : aide d'abord l'utilisateur à rédiger le CONTENU (structuré et clair : contexte, points abordés, décisions, prochaines étapes), récupère le client_id réel via query_table/search_clients, puis propose le bloc. Le type_cr par défaut est "rdv_ext".
 Règles :
 - N'émets un bloc QUE si l'utilisateur veut réellement créer/préparer (pas pour une simple analyse).
 - Si une information indispensable manque (ex. quelle opportunité, quel client), NE mets PAS de bloc : pose la question d'abord.

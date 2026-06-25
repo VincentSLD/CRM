@@ -2952,6 +2952,7 @@ tbody tr:last-child td { border-bottom: none; }
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliImpayes')">⚠️ Impayés</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliProspects')">🌱 Prospects</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliRecherche')">🔍 Rechercher</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('crNouveau')">📝 Nouveau CR</button>
   </div>
   </div>
   <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;background:var(--card,#fff)">
@@ -21095,6 +21096,7 @@ const NOVA_QUICK = {
   cliImpayes: "Liste les clients ayant des factures impayées ou en retard : nom du client, montant total dû, nombre de factures concernées et jours de retard maximum. Classe par montant dû décroissant.",
   cliProspects: "Liste les prospects (clients au statut 'nouveau' ou 'prospect') ayant au moins une opportunité en cours, à transformer en priorité. Indique pour chacun le montant des opportunités en cours et l'action à mener.",
   cliRecherche: "Demande-moi un nom de société (même approximatif ou abrégé) puis retrouve-la dans la base avec la recherche tolérante, et affiche ses coordonnées et ses contacts (NOM Prénom, fonction, emails cliquables, téléphones).",
+  crNouveau: "Aide-moi à créer un compte-rendu de visite. Demande-moi la société concernée, le type de RDV et les points abordés (ou mes notes), puis rédige un contenu de compte-rendu clair et structuré et propose-moi de le créer.",
 };
 function novaQuick(k) { const p = NOVA_QUICK[k]; if (!p) return; const panel = document.getElementById('aiChatPanel'); if (panel && panel.style.display === 'none') toggleAIChat(); askAIChat(p); }
 // Nettoie le texte de NOVA : supprime le Markdown et les symboles (lisible à l'écran ET à voix haute)
@@ -21252,6 +21254,7 @@ const _NOVA_ACTION_META = {
   create_task: { icon: '✅', label: 'Créer la tâche', desc: p => 'Tâche : ' + (p.titre || '') },
   create_opportunity: { icon: '🎯', label: 'Créer l\'opportunité', desc: p => 'Opportunité : ' + (p.name || '') + (p.client_name ? ' — ' + p.client_name : '') },
   relance_email: { icon: '✉️', label: 'Préparer l\'email', desc: p => 'Relance : ' + (p.subject || '') },
+  create_cr: { icon: '📝', label: 'Créer le compte-rendu', desc: p => 'CR : ' + (p.titre || '') + (p.client_name ? ' — ' + p.client_name : '') },
 };
 function _novaActionCard(action) {
   const meta = _NOVA_ACTION_META[action.type]; if (!meta) return null;
@@ -21277,6 +21280,17 @@ function _novaExecAction(action) {
     oppModalOpen(null, { name: p.name || '', description: p.description || '', montant: p.montant, montantTravaux: p.montant_travaux, dateSignature: p.date_signature || '', clientHint: p.client_name || '' });
   } else if (action.type === 'relance_email') {
     _novaRelanceCard(p);
+  } else if (action.type === 'create_cr') {
+    const panel = document.getElementById('aiChatPanel'); if (panel && panel.style.display !== 'none') toggleAIChat();
+    if (p.client_id) { goToCR(p.client_id, p.client_name || ''); }
+    else { openCRModal(); }
+    setTimeout(() => {
+      const setv = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; };
+      setv('crTitre', p.titre);
+      setv('crType', p.type_cr);
+      setv('crDate', p.date);
+      if (p.contenu) { const eb = document.getElementById('editorBody'); if (eb) eb.innerHTML = String(p.contenu).replace(/\n/g, '<br>'); }
+    }, 350);
   }
 }
 function _novaRelanceCard(p) {
