@@ -21293,17 +21293,25 @@ function _novaExecAction(action) {
   } else if (action.type === 'relance_email') {
     _novaRelanceCard(p);
   } else if (action.type === 'create_cr') {
-    const panel = document.getElementById('aiChatPanel'); if (panel && panel.style.display !== 'none') toggleAIChat();
-    if (p.client_id) { goToCR(p.client_id, p.client_name || ''); }
-    else { openCRModal(); }
-    setTimeout(() => {
-      const setv = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; };
-      setv('crTitre', p.titre);
-      setv('crType', p.type_cr);
-      setv('crDate', p.date);
-      if (p.contenu) { const eb = document.getElementById('editorBody'); if (eb) eb.innerHTML = String(p.contenu).replace(/\n/g, '<br>'); }
-    }, 350);
+    _novaCreateCR(p);
   }
+}
+async function _novaCreateCR(p) {
+  const panel = document.getElementById('aiChatPanel'); if (panel && panel.style.display !== 'none') toggleAIChat();
+  // Résoudre un client_id valide (clients.id) pour éviter une violation de clé étrangère à l'enregistrement
+  let cid = p.client_id || null, cname = p.client_name || '';
+  try {
+    if (cid) { const { data } = await sb.from('clients').select('id,name').eq('id', cid).maybeSingle(); if (data) { cid = data.id; cname = data.name; } else cid = null; }
+    if (!cid && cname) { const { data } = await sb.from('clients').select('id,name').ilike('name', '%' + cname.replace(/[%,]/g, '') + '%').order('name').limit(1); if (data && data[0]) { cid = data[0].id; cname = data[0].name; } }
+  } catch (e) { /* ignore */ }
+  if (cid) goToCR(cid, cname); else openCRModal();
+  setTimeout(() => {
+    const setv = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; };
+    setv('crTitre', p.titre);
+    setv('crType', p.type_cr);
+    setv('crDate', p.date);
+    if (p.contenu) { const eb = document.getElementById('editorBody'); if (eb) eb.innerHTML = String(p.contenu).replace(/\n/g, '<br>'); }
+  }, 400);
 }
 function _novaRelanceCard(p) {
   const subject = p.subject || 'Relance';
