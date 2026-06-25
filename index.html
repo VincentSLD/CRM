@@ -21097,6 +21097,26 @@ const NOVA_QUICK = {
   cliRecherche: "Demande-moi un nom de société (même approximatif ou abrégé) puis retrouve-la dans la base avec la recherche tolérante, et affiche ses coordonnées et ses contacts (NOM Prénom, fonction, emails cliquables, téléphones).",
 };
 function novaQuick(k) { const p = NOVA_QUICK[k]; if (!p) return; const panel = document.getElementById('aiChatPanel'); if (panel && panel.style.display === 'none') toggleAIChat(); askAIChat(p); }
+// Nettoie le texte de NOVA : supprime le Markdown et les symboles (lisible à l'écran ET à voix haute)
+function _novaCleanText(s) {
+  if (!s) return '';
+  let t = String(s).replace(/\r/g, '');
+  t = t.replace(/```[a-z]*\n?/gi, '').replace(/```/g, ''); // blocs de code
+  const out = t.split('\n').map(line => {
+    let l = line;
+    if (/^\s*([-*_=]\s*){3,}$/.test(l)) return '';                 // lignes de séparation ---
+    if (/^\s*\|?[\s:|-]+\|?\s*$/.test(l) && /\|/.test(l)) return ''; // ligne séparatrice de tableau
+    l = l.replace(/^\s*#{1,6}\s+(.*)$/, '<b>$1</b>');               // titres ## -> gras
+    l = l.replace(/^\s*[-*•·▪◦‣]\s+/, '');                          // puces -> rien (vocalisable)
+    l = l.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');                 // **gras**
+    l = l.replace(/__([^_]+)__/g, '<b>$1</b>');                     // __gras__
+    l = l.replace(/`([^`]+)`/g, '$1');                              // `code`
+    if (/\|/.test(l)) l = l.replace(/\s*\|\s*/g, '  ').trim();      // cellules de tableau -> espaces
+    l = l.replace(/[*_#`>]/g, '');                                  // résidus de symboles
+    return l;
+  });
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
 function novaToggleQuick() {
   const rows = document.getElementById('novaQuickRows'), chev = document.getElementById('novaQuickChev');
   if (!rows) return;
@@ -21189,6 +21209,8 @@ async function askAIChat(presetQuestion) {
     let _novaAction = null;
     const _am = fullResult.match(/\[\[ACTION:(\w+)\]\]([\s\S]*?)\[\[\/ACTION\]\]/);
     if (_am) { try { _novaAction = { type: _am[1], payload: JSON.parse(_am[2].trim()) }; } catch (e) { console.warn('action parse', e); } fullResult = fullResult.replace(_am[0], '').trim(); }
+    // Nettoyer le Markdown/symboles (affichage propre + vocalisation agréable)
+    fullResult = _novaCleanText(fullResult);
     // Affichage progressif ligne par ligne
     _aiChatHistory.push({ role: 'user', content: question });
     _aiChatHistory.push({ role: 'assistant', content: fullResult });
