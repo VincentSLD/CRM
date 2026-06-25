@@ -1852,6 +1852,10 @@ tbody tr:last-child td { border-bottom: none; }
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
           Mode d'emploi
         </div>
+        <div class="nav-item" data-page="cahier-charges" onclick="go('cahier-charges')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+          Cahier des charges
+        </div>
       </details>
     </div>
   </nav>
@@ -4345,7 +4349,7 @@ function go(page) {
   const titles = {dashboard:'Tableau de bord',analyse:'Analyse / KPI',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing','marches-publics':'Veille marchés publics','procedures-coll':'Veille procédures collectives (BODACC)',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
     cr:'Comptes-rendus',taches:'Tâches commerciales',opportunites:'Opportunités',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
-    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'",'mode-emploi':"Mode d'emploi"};
+    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'",'mode-emploi':"Mode d'emploi",'cahier-charges':'Cahier des charges'};
   document.getElementById('pageTitle').textContent = titles[page]||page;
   renderPage(page);
   if(window.innerWidth<=768) toggleSidebar(false);
@@ -4568,15 +4572,122 @@ function renderModeEmploi() {
     </div>
     <div class="card" style="max-width:900px"><div class="card-body" id="modeEmploiContent">${_modeEmploiContenu()}</div></div>`;
 }
-function modeEmploiPrint() {
+function _printDoc(titre, contenuHtml) {
   const w = window.open('', '_blank');
   if (!w) { toast("Autorisez les fenêtres pop-up pour l'export", 'warning'); return; }
-  w.document.write('<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Mode emploi CRM</title>'
-    + '<style>body{font-family:Arial,Helvetica,sans-serif;color:#222;max-width:820px;margin:24px auto;padding:0 16px}h1{font-size:22px;color:#4338ca}h2{font-size:16px;color:#4f46e5;border-bottom:2px solid #ddd;padding-bottom:4px;margin:18px 0 6px}ul{margin:0 0 4px 18px;line-height:1.6;font-size:13px}li{margin:2px 0}</style>'
-    + "</head><body><h1>📖 Mode d'emploi du CRM — Groupe NOVAM Ingénierie</h1>"
-    + _modeEmploiContenu()
+  w.document.write('<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>' + titre + '</title>'
+    + '<style>body{font-family:Arial,Helvetica,sans-serif;color:#222;max-width:820px;margin:24px auto;padding:0 16px}h1{font-size:22px;color:#4338ca}h2{font-size:16px;color:#4f46e5;border-bottom:2px solid #ddd;padding-bottom:4px;margin:18px 0 6px}h3{font-size:14px;margin:12px 0 4px}ul,ol{margin:0 0 4px 18px;line-height:1.6;font-size:13px}li{margin:2px 0}</style>'
+    + '</head><body><h1>' + titre + '</h1>'
+    + contenuHtml
     + '<scr' + 'ipt>window.onload=function(){window.print();}<\/scr' + 'ipt></body></html>');
   w.document.close();
+}
+function modeEmploiPrint() { _printDoc("📖 Mode d'emploi du CRM — Groupe NOVAM Ingénierie", _modeEmploiContenu()); }
+function cahierChargesPrint() { _printDoc("📋 Cahier des charges — CRM Groupe NOVAM Ingénierie", _cahierChargesContenu()); }
+
+// ═══════════════════════════════════════════════════════════
+//  CAHIER DES CHARGES — spécifications du CRM (base d'échange)
+// ═══════════════════════════════════════════════════════════
+function _cahierChargesContenu() {
+  const secs = [
+    ['1. Vue d\'ensemble & stack', [
+      "Application web <b>mono-page</b> (un fichier index.html : HTML + CSS + JavaScript vanilla, sans framework, fonctions globales hoistées, rendu par template strings via un routeur renderPage/go).",
+      "Backend = <b>fonctions serverless Vercel</b> (dossier /api, Node ESM, export default handler) servant de proxys et d'endpoints métier.",
+      "Base de données <b>Supabase (PostgreSQL)</b> accédée côté client via supabase-js (clé anon) et côté serveur via clé service_role.",
+      "Libs front chargées : supabase-js, Leaflet (cartes), Chart.js (à la demande via _loadChartJs), jsPDF + autotable (exports), reconnaissance/synthèse vocale Web Speech.",
+      "Déploiement : GitHub → Vercel (auto-deploy sur push). vercel.json : rewrites /api/akuiteo et /api/lucca + crons.",
+    ]],
+    ['2. Frontend (SPA index.html)', [
+      "Routeur : go(page) met à jour currentPage, le titre et appelle renderPage(page) ; map renderers { page: renderFn }. Pages de détail (client-detail, opportunite-detail/edit/analyse, tache-edit, mode-emploi, cahier-charges…) rendues en pleine page.",
+      "État global en variables JS (DB.*, _opps, _taches, _crSelected*, filtres _oppF*, etc.). Données chargées en 2 phases (loadDB phase 1 clients/devis…, phase 2 différée CR/marchés/affaires/collaborateurs).",
+      "Conventions : échappement via cmdEsc ; CSS var --card NON définie → toujours var(--card,#fff) pour fonds opaques ; vérif syntaxe par extraction des blocs <script> + new Function.",
+      "Responsive : window.innerWidth<=768 → vues cartes (listes opportunités/tâches/contacts) et grilles en 1 colonne.",
+    ]],
+    ['3. Modèle de données (Supabase / PostgreSQL)', [
+      "Tables principales : clients, contacts, devis, commandes, factures, affaires, marches, reports (CR), commerciaux, opportunites, taches_commerciales, concurrents, campagnes, connexions_log, ged_documents, ged_chunks, collaborateurs, collaborateurs_lucca, relances_devis, notifications.",
+      "RLS activée : policies <code>FOR ALL TO authenticated USING(true) WITH CHECK(true)</code>. Lecture anon limitée.",
+      "Colonnes clés : opportunites(akuiteo_id unique, montant_travaux, contact/customer/responsable_id, stage_id, pipe_id, raw jsonb…) ; reports(opportunite_id, opportunite_nom, affaire_id, clients_list/contacts_list jsonb, pieces_jointes) ; taches_commerciales(opportunite_id, assigne_email, rappel_envoye, rappel_date, todo_task_id).",
+      "Migrations dans add_missing_columns.sql, exécutées MANUELLEMENT dans l'éditeur SQL Supabase (idempotent : CREATE TABLE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS).",
+      "RPC : search_clients(q,lim) et search_contacts(q,lim) — recherche tolérante via pg_trgm (index GIN trigram sur nom normalisé). PIÈGE : pg_trgm dans le schéma public → noms NON qualifiés + SET search_path=public,extensions dans les fonctions.",
+    ]],
+    ['4. Endpoints serverless (/api)', [
+      "akuiteo.js : proxy générique vers Akuiteo (?path=/crm/…), auth Basic (env AKUITEO_URL/USER/PASS), maxDuration 60s.",
+      "ai-chat.js : assistant NOVA — Claude (messages API, tool-use) + streaming SSE ; outils + system prompt (contexte groupe).",
+      "embed.js / ged-ask.js / ged-summary.js : RAG documentaire (OpenAI text-embedding-3-small 1536 + pgvector ; Claude pour la réponse/synthèse).",
+      "graph-send.js : envoi email via Microsoft Graph délégué (refresh token utilisateur, /me/sendMail). graph-config-check.js : diagnostic.",
+      "task-todo.js : Graph app-only (client_credentials) — création tâche To Do + email chez l'assigné. taches-rappels.js : CRON quotidien (rappels d'échéance).",
+      "insee.js, lucca.js, ocr.js, parse.js, send-email.js, admin-users.js, approve-user.js, notify-admin.js.",
+    ]],
+    ['5. Intégration Akuiteo (ERP)', [
+      "Accès via akuiteoFetch(method, path, body, {accept}) → proxy /api/akuiteo?path=… (ou localhost:8888 en local).",
+      "Opportunités : recherche POST /crm/opportunities/search (exige ≥1 clause de critère) ; création PUT /crm/opportunities ; maj POST /crm/opportunities/{id} (requiert id+code dans le corps) ; PUT/POST renvoient l'id en text/plain.",
+      "Statuts : win POST …/win, lose POST …/lose, change-stage POST …/change-stage/{stage_id}. Le statut dérive du status du STADE (IN_PROGRESS/WON/LOST/DISCARD).",
+      "Référentiels : /crm/stages (cohérence pipe↔stade NON exposée → déduite des opps), /crm/pipes (dédoublonner par code), /crm/origin-types, /crm/departments, /crm/customers/{id}/sites (établissements).",
+      "Champs spécifiques : montant nécessite amount+amountCurrency+currencyCode ; probabilité = probabilityLevel (0-9, le 'Taux'=weightingCoefficient en découle) ; donnée perso 'Montant de travaux' = customData['1-number01'] {type:NUMBER,value} lue via POST /read?options=[CUSTOM_DATA]. Contrainte : société de connexion (ne pas forcer companyCode).",
+      "Création client : PUT /crm/customers (name+type+address obligatoires).",
+    ]],
+    ['6. Intégration Microsoft Graph', [
+      "SSO : Supabase Auth provider azure (Entra ID mono-locataire) ; refresh token capté au login (scope offline_access) pour l'envoi délégué.",
+      "App-only (client_credentials, scope .default) pour To Do + emails : permissions d'APPLICATION Tasks.ReadWrite.All + Mail.Send avec consentement admin.",
+      "Env : AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID.",
+    ]],
+    ['7. Assistant IA NOVA (api/ai-chat.js)', [
+      "Modèle Claude via /v1/messages, boucle tool-use (MAX_ITER), streaming SSE (events status/done/error).",
+      "Outils READ : query_table, aggregate_table (tables whitelistées), search_clients, search_contacts (RPC pg_trgm).",
+      "Outils EXTERNES : search_web (Tavily/Brave), search_entreprise & search_entreprises_naf (recherche-entreprises.api.gouv.fr), search_boamp (BOAMP), search_permis (Sitadel/Koumoul), get_taux_bce (ECB).",
+      "Actions WRITE (confirmation côté client) : le modèle émet en fin de réponse un bloc <code>[[ACTION:create_task|create_opportunity|create_cr|relance_email]]{json}[[/ACTION]]</code> ; le front le parse, le masque et affiche un bouton « Exécuter » qui ouvre le formulaire pré-rempli (aucune écriture sans validation).",
+      "System prompt : contexte métier NOVAM (entités, codes agences, secteurs, profils métier), règles de format (texte simple sans Markdown, thèmes séparés, vocalisable), glossaire clients.",
+      "Nettoyage front _novaCleanText (supprime Markdown, préserve <a>/<b>) ; affichage progressif ; TTS lit le texte affiché.",
+    ]],
+    ['8. Sources de données externes (URLs)', [
+      "Entreprises : https://recherche-entreprises.api.gouv.fr/search (SIRENE+RNE/INPI : dirigeants, effectif, finances).",
+      "Marchés publics : BOAMP https://boamp-datadila.opendatasoft.com/api/explore/v2.1/… ; DECP data.economie.gouv.fr ; BODACC bodacc-datadila.opendatasoft.com.",
+      "Construction : Sitadel https://opendata.koumoul.com/data-fair/api/v1/datasets/sitadel-logements (lines + values_agg).",
+      "Conjoncture : BCE https://data-api.ecb.europa.eu/service/data/FM/… ; DPE ADEME data.ademe.fr.",
+      "Géo : geo.api.gouv.fr (communes/départements). Recherche web : api.tavily.com (ou Brave).",
+    ]],
+    ['9. Sécurité & conformité', [
+      "Auth SSO Microsoft single-tenant + table crm_access (comptes approuvés). Connexion email/mdp en parallèle.",
+      "RLS sur toutes les tables ; clé service_role uniquement côté serverless (jamais exposée au client).",
+      "Mot de passe requis pour les suppressions sensibles (askPasswordModal) ; journal des connexions (purge > 6 mois).",
+      "Endpoints cron protégeables par CRON_SECRET (header Authorization Bearer envoyé par Vercel Cron).",
+      "RGPD : données professionnelles, hébergement UE (Supabase/Vercel EU), accès restreint, traçabilité.",
+    ]],
+    ['10. Variables d\'environnement (Vercel)', [
+      "Supabase : SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (ou SUPABASE_ANON_KEY).",
+      "Akuiteo : AKUITEO_URL, AKUITEO_USER, AKUITEO_PASS.",
+      "Microsoft : AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID.",
+      "IA : ANTHROPIC_API_KEY ; OPENAI_API_KEY (embeddings RAG) ; TAVILY_API_KEY (ou BRAVE_API_KEY).",
+      "Divers : CRON_SECRET (cron rappels). Lucca : token dédié si activé.",
+    ]],
+    ['11. Build, déploiement & exploitation', [
+      "Git push sur master → déploiement Vercel automatique. Pas d'étape de build (statique + serverless).",
+      "vercel.json : rewrites (/api/akuiteo, /api/lucca) + crons [{ path:'/api/taches-rappels', schedule:'0 6 * * *' }].",
+      "Migrations SQL appliquées manuellement (add_missing_columns.sql). Vérif syntaxe JS avant commit (extraction <script> + new Function).",
+    ]],
+    ['12. Dette technique & axes d\'amélioration', [
+      "index.html mono-fichier volumineux : envisager une modularisation / build.",
+      "Synchronisation Akuiteo : opportunités OK ; étendre éventuellement (clients/contacts retour).",
+      "Données perso BOAMP/Sitadel : sources avec décalage (Sitadel ~mensuel) à signaler dans l'UI.",
+      "Externaliser le contexte NOVA (prompt) dans un fichier de config ; tests automatisés.",
+      "Backlog : Graph Calendar/SharePoint, TED (marchés EU), signature électronique, scoring risque, isochrones.",
+    ]],
+  ];
+  const id = i => 'cdc-' + i;
+  const toc = `<div style="background:#f7f6f2;border:1px solid #e0ddd5;border-radius:8px;padding:10px 14px;margin-bottom:16px">
+    <div style="font-weight:700;font-size:13px;margin-bottom:6px">📑 Sommaire</div>
+    <ol style="margin:0 0 0 18px;padding:0;font-size:13px;line-height:1.7;list-style:none">${secs.map((s, i) => `<li><a href="#${id(i)}" style="color:#4f46e5;text-decoration:none">${s[0]}</a></li>`).join('')}</ol></div>`;
+  const intro = `<p style="font-size:13px;color:#444;margin:0 0 12px"><b>Cahier des charges technique (cible développeur)</b> rétro-documentant l'architecture et l'implémentation du CRM du groupe NOVAM Ingénierie : stack, modèle de données, endpoints serverless, intégrations/API, sécurité, environnement et dette technique. Base de travail à compléter en équipe.</p>`;
+  const body = secs.map((s, i) => `<h2 id="${id(i)}" style="font-size:16px;margin:18px 0 6px;color:#4f46e5;border-bottom:2px solid #e0ddd5;padding-bottom:4px">${s[0]}</h2><ul style="margin:0 0 4px 18px;padding:0;font-size:13px;line-height:1.6">${s[1].map(x => '<li>' + x + '</li>').join('')}</ul>`).join('');
+  return intro + toc + body + `<p style="font-size:11px;color:#888;margin-top:18px">Base générée automatiquement depuis le CRM — ${new Date().toLocaleDateString('fr-FR')}. Document de travail, à compléter.</p>`;
+}
+function renderCahierCharges() {
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <h2 style="margin:0;font-size:20px">📋 Cahier des charges du CRM</h2>
+      <button class="btn btn-primary" onclick="cahierChargesPrint()">🖨️ Imprimer / Exporter en PDF</button>
+    </div>
+    <div class="card" style="max-width:900px"><div class="card-body" id="cahierChargesContent">${_cahierChargesContenu()}</div></div>`;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -6627,6 +6738,7 @@ function renderPage(page) {
     admin: renderAdmin,
     endev: renderEnDev,
     'mode-emploi': renderModeEmploi,
+    'cahier-charges': renderCahierCharges,
     ged: renderGed,
   };
   // Attendre les données différées si la page en a besoin
