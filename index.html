@@ -6119,6 +6119,16 @@ function _oppTachesCard(akId, clientId, clientName, oppNom) {
 }
 
 const _CR_TYPE_LBL = { rdv_ext: 'RDV EXT.', rdv_int: 'RDV INT.', salon_foire: 'SALON-FOIRE', tel: 'TÉL.', visio: 'VISIO.', autre: 'AUTRE' };
+// Créer un compte-rendu depuis la fiche opportunité (pré-rempli client + opportunité)
+function oppCreerCR(akId) {
+  const o = _opps.find(x => x.akuiteo_id === akId); if (!o) return;
+  if (o.client_id) goToCR(o.client_id, o.client_name || '');
+  else openCRModal();
+  setTimeout(() => {
+    selectCROpp(o.akuiteo_id, (o.nom || '') + (o.client_name ? ' — ' + o.client_name : ''));
+    const tt = document.getElementById('crTitre'); if (tt && !tt.value) tt.value = o.nom ? ('Visite — ' + o.nom) : '';
+  }, 400);
+}
 function _oppCRCard(akId) {
   const list = (DB.reports || []).filter(r => r.opportunite_id === akId).sort((a, b) => String(b.date_raw || '').localeCompare(String(a.date_raw || '')));
   const rows = list.length ? '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Titre</th><th>Type</th><th>Client</th></tr></thead><tbody>' +
@@ -6128,7 +6138,9 @@ function _oppCRCard(akId) {
       <td style="padding:6px 8px;font-size:12px">${cmdEsc(_CR_TYPE_LBL[r.type_cr] || r.type_cr || '')}</td>
       <td style="padding:6px 8px;font-size:12px">${cmdEsc(r.client_name || '')}</td>
     </tr>`).join('') + '</tbody></table></div>' : '<div style="padding:14px;text-align:center;color:var(--t3);font-size:13px">Aucun compte-rendu lié</div>';
-  return `<div class="card" style="margin-top:16px"><div class="card-header"><div class="card-title">📝 Comptes-rendus liés (${list.length})</div></div><div class="card-body" style="padding:0">${rows}</div></div>`;
+  return `<div class="card" style="margin-top:16px"><div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">📝 Comptes-rendus liés (${list.length})</div>
+    <button class="btn btn-sm" onclick="oppCreerCR('${akId}')">+ CR</button></div>
+    <div class="card-body" style="padding:0">${rows}</div></div>`;
 }
 function renderOppDetailPage() {
   const akId = _currentOppId;
@@ -6173,6 +6185,7 @@ function renderOppDetailPage() {
   const actions = [
     `<button class="btn" onclick="oppModalOpen('${o.akuiteo_id}')">✏️ Modifier</button>`,
     `<button class="btn" onclick="oppCreerTache('${o.akuiteo_id}')">✅ Créer une tâche</button>`,
+    `<button class="btn" onclick="oppCreerCR('${o.akuiteo_id}')">📝 Créer un CR</button>`,
     enCours ? `<button class="btn" style="color:#10b981" onclick="oppWin('${o.akuiteo_id}')">🏆 Gagnée</button>` : '',
     enCours ? `<button class="btn" style="color:#ef4444" onclick="oppLose('${o.akuiteo_id}')">Perdue</button>` : '',
     o.client_id ? `<button class="btn" onclick="showClient('${o.client_id}')">Voir le client</button>` : '',
