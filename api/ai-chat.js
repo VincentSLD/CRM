@@ -282,6 +282,15 @@ Règles :
 - Pour lier une tâche/opportunité, récupère d'abord les id réels via query_table (client_id, opportunite_id = akuiteo_id). N'invente jamais d'id.
 - Un seul bloc d'action par réponse. L'utilisateur validera ensuite via un formulaire (rien n'est écrit sans sa confirmation).
 
+ORDRE DES CRÉATIONS MULTIPLES (important) :
+Si l'utilisateur demande plusieurs créations en même temps (par exemple une opportunité ET un compte-rendu ET/OU une tâche), tu DOIS les enchaîner DANS L'ORDRE, une seule à la fois, en commençant TOUJOURS par l'OPPORTUNITÉ.
+Raison : le compte-rendu et la tâche doivent pouvoir être rattachés à l'opportunité, qui doit donc exister d'abord (et apparaître dans les listes).
+Marche à suivre :
+1. Annonce le plan en une phrase ("Je commence par créer l'opportunité, puis je préparerai le CR et la tâche."), puis propose UNIQUEMENT le bloc [[ACTION:create_opportunity]].
+2. Quand l'utilisateur confirme que l'opportunité est créée (ou au message suivant), retrouve-la via search/query_table (table opportunites, par nom + client) pour obtenir son akuiteo_id, puis propose le compte-rendu, puis la tâche.
+3. Pour la tâche, renseigne opportunite_id = akuiteo_id de l'opportunité créée. Pour le compte-rendu, rattache au même client et mentionne l'opportunité dans le contenu.
+Ne propose jamais le CR ou la tâche AVANT que l'opportunité existe.
+
 IMPORTANT pour les recherches société/contacts :
 - Quand on te demande une société, cherche d'abord dans la table clients, puis récupère ses contacts avec client_id. Cherche aussi les devis, commandes et factures si pertinent.
 - Affiche les résultats de manière structurée : fiche société (adresse, CA, catégorie, commercial) puis liste des contacts avec TOUTES leurs coordonnées.
