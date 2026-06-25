@@ -4600,8 +4600,8 @@ function _cahierChargesContenu() {
     ['2. Frontend (SPA index.html)', [
       "Routeur : go(page) met à jour currentPage, le titre et appelle renderPage(page) ; map renderers { page: renderFn }. Pages de détail (client-detail, opportunite-detail/edit/analyse, tache-edit, mode-emploi, cahier-charges…) rendues en pleine page.",
       "État global en variables JS (DB.*, _opps, _taches, _crSelected*, filtres _oppF*, etc.). Données chargées en 2 phases (loadDB phase 1 clients/devis…, phase 2 différée CR/marchés/affaires/collaborateurs).",
-      "Conventions : échappement via cmdEsc ; CSS var --card NON définie → toujours var(--card,#fff) pour fonds opaques ; vérif syntaxe par extraction des blocs <script> + new Function.",
-      "Responsive : window.innerWidth<=768 → vues cartes (listes opportunités/tâches/contacts) et grilles en 1 colonne.",
+      "Conventions : échappement via cmdEsc ; CSS var --card NON définie → toujours var(--card,#fff) pour fonds opaques ; vérif syntaxe par extraction des blocs &lt;script&gt; + new Function.",
+      "Responsive : window.innerWidth ≤ 768 → vues cartes (listes opportunités/tâches/contacts) et grilles en 1 colonne.",
     ]],
     ['3. Modèle de données (Supabase / PostgreSQL)', [
       "Tables principales : clients, contacts, devis, commandes, factures, affaires, marches, reports (CR), commerciaux, opportunites, taches_commerciales, concurrents, campagnes, connexions_log, ged_documents, ged_chunks, collaborateurs, collaborateurs_lucca, relances_devis, notifications.",
@@ -4663,7 +4663,7 @@ function _cahierChargesContenu() {
     ['11. Build, déploiement & exploitation', [
       "Git push sur master → déploiement Vercel automatique. Pas d'étape de build (statique + serverless).",
       "vercel.json : rewrites (/api/akuiteo, /api/lucca) + crons [{ path:'/api/taches-rappels', schedule:'0 6 * * *' }].",
-      "Migrations SQL appliquées manuellement (add_missing_columns.sql). Vérif syntaxe JS avant commit (extraction <script> + new Function).",
+      "Migrations SQL appliquées manuellement (add_missing_columns.sql). Vérif syntaxe JS avant commit (extraction &lt;script&gt; + new Function).",
     ]],
     ['12. Dette technique & axes d\'amélioration', [
       "index.html mono-fichier volumineux : envisager une modularisation / build.",
@@ -4673,12 +4673,68 @@ function _cahierChargesContenu() {
       "Backlog : Graph Calendar/SharePoint, TED (marchés EU), signature électronique, scoring risque, isochrones.",
     ]],
   ];
-  const id = i => 'cdc-' + i;
+  const secsFonc = [
+    ['1. Accès, navigation & tableau de bord', [
+      "Connexion sécurisée avec le compte Microsoft du groupe (SSO). Menu latéral regroupant les modules : Pilotage, Clients/Prospects, Opportunités, Tâches, Comptes rendus, Devis/Commandes/Factures, Affaires, Marchés, Cartographie, Assistant IA NOVA, En Dev', Paramétrage.",
+      "Tableau de bord avec indicateurs clés (CA, opportunités en cours, tâches à faire, relances) et accès rapides ; compteurs affichés dans le menu (ex. nombre d'opportunités).",
+      "Recherche tolérante aux fautes de frappe et aux accents pour retrouver rapidement un client ou un contact.",
+    ]],
+    ['2. Clients & prospects', [
+      "Fiche société complète : coordonnées, SIRET, établissements, contacts, opportunités, tâches, comptes rendus, devis et affaires liés, localisation sur carte.",
+      "Création et modification de clients/prospects ; possibilité de créer un client directement depuis une opportunité s'il n'existe pas encore.",
+      "Enrichissement automatique à partir des données entreprise officielles et liste des contacts associés.",
+    ]],
+    ['3. Opportunités commerciales', [
+      "Vue liste filtrable (portefeuille, statut, responsable, échéance…) et vue pipeline ; création et modification en pleine page.",
+      "Champs complets : montant, montant de travaux, probabilité, stade, portefeuille, type d'origine, date de signature prévisionnelle, contacts, établissement, site client, description.",
+      "Synchronisation bidirectionnelle avec l'ERP Akuiteo (récupération puis création/mise à jour) ; actions gagner / perdre / changer de stade.",
+      "Depuis une opportunité : créer une tâche, créer un compte rendu, et visualiser les tâches et CR déjà liés.",
+      "Page d'analyse : graphiques (répartition par stade et portefeuille, montants), alertes (à relancer, sans tâche, échéance proche) et export PDF.",
+    ]],
+    ['4. Tâches commerciales', [
+      "Vue Kanban avec glisser-déposer entre statuts (à faire, en cours, terminé) et vue cartes adaptée au mobile.",
+      "Échéance, priorité, assigné, lien vers client / affaire / opportunité ; colonne « Terminé ? » et aperçu de la description.",
+      "Rappel automatique par email le jour de l'échéance si la tâche n'est pas encore terminée.",
+    ]],
+    ['5. Comptes rendus (CR)', [
+      "Rédaction de comptes rendus de visite ou de réunion, avec pièces jointes, clients et contacts associés.",
+      "Liaison d'un CR à une opportunité, visualisation des CR dans la fiche opportunité, création et modification de CR depuis l'opportunité.",
+    ]],
+    ['6. Suivi commercial & ERP', [
+      "Consultation des devis, commandes, factures, affaires et marchés issus d'Akuiteo.",
+      "Relances de devis et suivi de l'avancement commercial.",
+    ]],
+    ['7. Assistant IA NOVA', [
+      "Assistant conversationnel intégré (fenêtre déplaçable et agrandie) répondant aux questions sur les clients, prospects, opportunités et tâches en croisant les données du CRM.",
+      "Boutons rapides pré-configurés (Clients/Prospects et Opportunités) repliables, et bouton « nouvelle conversation ».",
+      "Actions assistées : NOVA peut proposer de créer une opportunité, un CR ou une tâche via un formulaire pré-rempli à valider.",
+      "Recherche web et veille marché : entreprises (SIRENE), appels d'offres (BOAMP), permis de construire (Sitadel), taux d'emprunt (BCE), recherche par activité/NAF.",
+      "Connaissance du groupe NOVAM (entités, métiers, zones géographiques) pour des réponses contextualisées, claires et vocalisables.",
+    ]],
+    ['8. Assistant documentaire (GED)', [
+      "Indexation de dossiers de documents (PDF, DOCX, TXT, CSV, EML) puis interrogation en langage naturel (recherche sémantique) avec citation des sources.",
+    ]],
+    ['9. Cartographie & exports', [
+      "Visualisation des clients/prospects et des documents géolocalisés sur une carte.",
+      "Exports PDF : analyse d'opportunités, mode d'emploi et cahier des charges.",
+    ]],
+    ['10. Documentation & paramétrage', [
+      "Mode d'emploi intégré (procédures pas à pas, exportable en PDF) et présent cahier des charges.",
+      "Paramétrage de l'application et suppression sécurisée des données sensibles (protégée par mot de passe).",
+    ]],
+  ];
+  const idT = i => 'cdct-' + i;
+  const idF = i => 'cdcf-' + i;
+  const tocList = (arr, idfn) => `<ol style="margin:0 0 0 18px;padding:0;font-size:13px;line-height:1.7;list-style:none">${arr.map((s, i) => `<li><a href="#${idfn(i)}" style="color:#4f46e5;text-decoration:none">${s[0]}</a></li>`).join('')}</ol>`;
   const toc = `<div style="background:#f7f6f2;border:1px solid #e0ddd5;border-radius:8px;padding:10px 14px;margin-bottom:16px">
     <div style="font-weight:700;font-size:13px;margin-bottom:6px">📑 Sommaire</div>
-    <ol style="margin:0 0 0 18px;padding:0;font-size:13px;line-height:1.7;list-style:none">${secs.map((s, i) => `<li><a href="#${id(i)}" style="color:#4f46e5;text-decoration:none">${s[0]}</a></li>`).join('')}</ol></div>`;
-  const intro = `<p style="font-size:13px;color:#444;margin:0 0 12px"><b>Cahier des charges technique (cible développeur)</b> rétro-documentant l'architecture et l'implémentation du CRM du groupe NOVAM Ingénierie : stack, modèle de données, endpoints serverless, intégrations/API, sécurité, environnement et dette technique. Base de travail à compléter en équipe.</p>`;
-  const body = secs.map((s, i) => `<h2 id="${id(i)}" style="font-size:16px;margin:18px 0 6px;color:#4f46e5;border-bottom:2px solid #e0ddd5;padding-bottom:4px">${s[0]}</h2><ul style="margin:0 0 4px 18px;padding:0;font-size:13px;line-height:1.6">${s[1].map(x => '<li>' + x + '</li>').join('')}</ul>`).join('');
+    <div style="font-weight:700;font-size:12px;color:#4f46e5;margin:4px 0 2px">Partie I — Fonctionnalités (utilisateurs)</div>${tocList(secsFonc, idF)}
+    <div style="font-weight:700;font-size:12px;color:#4f46e5;margin:8px 0 2px">Partie II — Technique (développeurs)</div>${tocList(secs, idT)}</div>`;
+  const intro = `<p style="font-size:13px;color:#444;margin:0 0 12px">Ce cahier des charges du CRM du groupe NOVAM Ingénierie comporte <b>deux parties</b> : une <b>partie fonctionnelle</b> décrivant les usages et fonctionnalités (cible utilisateurs) et une <b>partie technique</b> rétro-documentant l'architecture et l'implémentation (cible développeurs). Base de travail à compléter en équipe.</p>`;
+  const partTitle = t => `<h2 style="font-size:18px;margin:22px 0 6px;color:#222;border-bottom:3px solid #4f46e5;padding-bottom:5px">${t}</h2>`;
+  const renderSecs = (arr, idfn) => arr.map((s, i) => `<h3 id="${idfn(i)}" style="font-size:15px;margin:16px 0 6px;color:#4f46e5;border-bottom:1px solid #e0ddd5;padding-bottom:4px">${s[0]}</h3><ul style="margin:0 0 4px 18px;padding:0;font-size:13px;line-height:1.6">${s[1].map(x => '<li>' + x + '</li>').join('')}</ul>`).join('');
+  const body = partTitle('Partie I — Fonctionnalités (cible utilisateurs)') + renderSecs(secsFonc, idF)
+    + partTitle('Partie II — Spécifications techniques (cible développeurs)') + renderSecs(secs, idT);
   return intro + toc + body + `<p style="font-size:11px;color:#888;margin-top:18px">Base générée automatiquement depuis le CRM — ${new Date().toLocaleDateString('fr-FR')}. Document de travail, à compléter.</p>`;
 }
 function renderCahierCharges() {
