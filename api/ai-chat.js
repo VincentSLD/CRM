@@ -56,6 +56,31 @@ const TOOLS = [
     }
   },
   {
+    name: 'search_entreprise',
+    description: "Fiche légale & santé FINANCIÈRE d'une société française (source officielle annuaire-entreprises) : dirigeants, effectif, chiffre d'affaires et résultat net par année, état administratif, forme juridique, code NAF, siège. À utiliser pour qualifier un prospect, évaluer un risque ou enrichir une fiche. Recherche par raison sociale ou SIREN.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        q: { type: 'string', description: 'Raison sociale ou numéro SIREN/SIRET' },
+        departement: { type: 'string', description: 'Code département pour affiner (optionnel)' },
+        limit: { type: 'integer', default: 5, maximum: 10 }
+      },
+      required: ['q']
+    }
+  },
+  {
+    name: 'search_web',
+    description: "Recherche d'informations EN LIGNE (actualité, site web d'un prospect, contexte d'un projet ou d'un marché, dirigeants, etc.). Retourne des résultats web avec titre, lien et extrait. À utiliser quand l'information n'est pas dans le CRM et qu'une recherche internet est utile.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        q: { type: 'string', description: 'Requête de recherche' },
+        limit: { type: 'integer', default: 5, maximum: 10 }
+      },
+      required: ['q']
+    }
+  },
+  {
     name: 'aggregate_table',
     description: 'Calcule une agrégation (somme, moyenne, nombre) sur une table avec filtres et groupement. Utile pour CA, montants totaux, etc.',
     input_schema: {
@@ -133,6 +158,50 @@ async function executeTool(name, input) {
       }));
       return { ok: true, total: d.total_count || rows.length, count: rows.length, rows };
     }
+    if (name === 'search_entreprise') {
+      const { q, departement, limit = 5 } = input || {};
+      if (!q || !String(q).trim()) return { ok: false, error: 'q (nom ou SIREN) requis' };
+      const EFF = { '00': '0 sal.', '01': '1-2', '02': '3-5', '03': '6-9', '11': '10-19', '12': '20-49', '21': '50-99', '22': '100-199', '31': '200-249', '32': '250-499', '41': '500-999', '42': '1000-1999', '51': '2000-4999', '52': '5000-9999', '53': '10000+', 'NN': 'n.c.' };
+      const p = new URLSearchParams({ q: String(q), page: '1', per_page: String(Math.min(limit || 5, 10)) });
+      if (departement) p.set('departement', String(departement));
+      const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + p.toString());
+      if (!r.ok) return { ok: false, error: 'API entreprises ' + r.status };
+      const d = await r.json();
+      const rows = (d.results || []).map(e => ({
+        nom: e.nom_complet, siren: e.siren,
+        naf: e.activite_principale, forme_juridique: e.nature_juridique,
+        effectif: EFF[e.tranche_effectif_salarie] || e.tranche_effectif_salarie || 'n.c.',
+        etat: e.etat_administratif === 'A' ? 'Active' : 'Cessée',
+        date_creation: e.date_creation,
+        siege: e.siege ? [e.siege.code_postal, e.siege.libelle_commune].filter(Boolean).join(' ') : null,
+        nombre_etablissements: e.nombre_etablissements,
+        dirigeants: (e.dirigeants || []).slice(0, 5).map(x => x.type_dirigeant === 'personne morale' ? (x.denomination + ' (' + (x.qualite || '') + ')') : ([x.prenoms, x.nom].filter(Boolean).join(' ') + ' — ' + (x.qualite || ''))),
+        finances: e.finances || null, // { "2023": {ca, resultat_net}, ... }
+      }));
+      return { ok: true, total: d.total_results || rows.length, count: rows.length, rows };
+    }
+    if (name === 'search_web') {
+      const { q, limit = 5 } = input || {};
+      if (!q || !String(q).trim()) return { ok: false, error: 'q (requête) requis' };
+      const n = Math.min(limit || 5, 10);
+      const BRAVE = process.env.BRAVE_API_KEY, TAVILY = process.env.TAVILY_API_KEY;
+      if (BRAVE) {
+        const u = 'https://api.search.brave.com/res/v1/web/search?q=' + encodeURIComponent(q) + '&country=fr&search_lang=fr&count=' + n;
+        const r = await fetch(u, { headers: { 'Accept': 'application/json', 'X-Subscription-Token': BRAVE } });
+        if (!r.ok) return { ok: false, error: 'Brave ' + r.status };
+        const d = await r.json();
+        const rows = (((d.web || {}).results) || []).slice(0, n).map(x => ({ titre: x.title, url: x.url, extrait: x.description }));
+        return { ok: true, count: rows.length, rows };
+      }
+      if (TAVILY) {
+        const r = await fetch('https://api.tavily.com/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ api_key: TAVILY, query: q, max_results: n, include_answer: true }) });
+        if (!r.ok) return { ok: false, error: 'Tavily ' + r.status };
+        const d = await r.json();
+        const rows = (d.results || []).map(x => ({ titre: x.title, url: x.url, extrait: x.content }));
+        return { ok: true, count: rows.length, rows, answer: d.answer || null };
+      }
+      return { ok: false, error: 'Recherche web non configurée : définir BRAVE_API_KEY (ou TAVILY_API_KEY) dans Vercel.' };
+    }
     if (name === 'search_clients' || name === 'search_contacts') {
       const { q, limit = 20 } = input || {};
       if (!q || !String(q).trim()) return { ok: false, error: 'q (texte recherché) requis' };
@@ -197,6 +266,8 @@ async function callClaude(ANTHROPIC_KEY, body) {
 function toolLabel(tu) {
   const tbl = TABLE_LABELS[tu.input?.table] || tu.input?.table || 'données';
   if (tu.name === 'search_boamp') return 'Veille BOAMP Travaux' + (tu.input?.departement ? ' (dép. ' + tu.input.departement + ')' : '');
+  if (tu.name === 'search_entreprise') return 'Fiche entreprise « ' + (tu.input?.q || '') + ' »';
+  if (tu.name === 'search_web') return 'Recherche web « ' + (tu.input?.q || '') + ' »';
   if (tu.name === 'search_clients') return 'Recherche société « ' + (tu.input?.q || '') + ' »';
   if (tu.name === 'search_contacts') return 'Recherche contact « ' + (tu.input?.q || '') + ' »';
   if (tu.name === 'query_table') return 'Consultation ' + tbl;
@@ -273,7 +344,7 @@ ${glossary ? `\nGLOSSAIRE CLIENTS (noms à reconnaître en priorité) :\n${gloss
 RÈGLES STRICTES :
 1. Tu DOIS utiliser les outils query_table et aggregate_table pour consulter les données Supabase avant de répondre à toute question factuelle. Ne JAMAIS inventer de chiffres ou d'informations.
 2. Toutes tes réponses doivent s'appuyer EXCLUSIVEMENT sur les données du CRM issues des outils. Si tu n'as pas la donnée, dis-le clairement.
-3. Si tu estimes qu'une recherche externe (web, marché, concurrence) serait utile, DEMANDE d'abord l'autorisation à l'utilisateur avant de répondre. N'invente jamais de données externes.
+3. Pour une recherche EXTERNE, tu disposes d'outils intégrés que tu peux utiliser directement (sans demander d'autorisation) : search_web (recherche internet), search_entreprise (fiche légale & finances officielles), search_boamp (marchés publics). N'invente JAMAIS de données externes : appuie-toi uniquement sur ce que renvoient ces outils et CITE tes sources (liens <a href> pour le web).
 4. Enchaîne plusieurs appels d'outils si nécessaire pour répondre précisément.
 5. Sois TOUJOURS force de proposition : après avoir répondu à une question, propose des analyses complémentaires, des pistes d'action concrètes ou des alertes pertinentes.
 6. Quand on te demande des infos sur une société ou un contact, cherche TOUJOURS dans le CRM d'abord. Pour retrouver une société par son nom, utilise EN PRIORITÉ l'outil search_clients (recherche tolérante) PLUTÔT qu'un query_table avec ilike : il retrouve la société même si le nom est abrégé, mal orthographié ou ponctué différemment (ex. "6K" → "6.K ARCHI"). Ne conclus JAMAIS qu'un client est absent de la base sans avoir essayé search_clients. De même, pour retrouver une personne par son nom, utilise EN PRIORITÉ search_contacts (tolérant). Récupère ensuite ses contacts avec client_id et affiche TOUTES les coordonnées disponibles.
@@ -326,6 +397,12 @@ Exemples :
 - Tâches en cours assignées à quelqu'un : query_table(table="taches_commerciales", filters={"assigne_email.eq":"<email>","statut.in":"(a_faire,en_cours)"}, select="titre,priorite,statut,echeance,client_name", order="echeance")
 - Opportunités d'un client : query_table(table="opportunites", filters={"client_id.eq":"<id_client>"}, select="nom,code,stage,statut,montant,probabilite,pipe,type_origine,responsable,contact_name,date_signature", order="-date_signature")
 - Pipeline opportunités en cours : query_table(table="opportunites", filters={"statut.eq":"IN_PROGRESS"}, select="nom,client_name,stage,montant,probabilite,responsable,date_signature", order="-montant")
+
+FICHE & SANTÉ FINANCIÈRE D'UNE ENTREPRISE :
+Quand on te demande des informations légales ou financières sur une société (qualifier un prospect, évaluer un risque, dirigeants, CA…), utilise search_entreprise. Présente : forme juridique, état (active/cessée), effectif, dirigeants, et le CA + résultat net par année (les plus récents). Donne une appréciation de la santé (croissance/baisse du CA, résultat négatif, entreprise cessée = signal d'alerte). Précise que la source est l'annuaire officiel des entreprises.
+
+RECHERCHE WEB :
+Quand l'information utile n'est pas dans le CRM (actualité d'un prospect, son site, contexte d'un marché…), utilise search_web et synthétise en citant les sources sous forme de liens <a href="URL" target="_blank">titre</a>.
 
 VEILLE MARCHÉS PUBLICS (BOAMP) :
 Quand l'utilisateur demande une « veille marché », des « appels d'offres » ou des « marchés publics » (de travaux) sur un département (ex. le 85) ou un mot-clé, utilise l'outil search_boamp (déjà filtré sur Type de marché = TRAVAUX). Tu n'as pas besoin de demander d'autorisation : c'est une source intégrée.

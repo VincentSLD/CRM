@@ -2957,6 +2957,8 @@ tbody tr:last-child td { border-bottom: none; }
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('cliRecherche')">🔍 Rechercher</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('crNouveau')">📝 Nouveau CR</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('veilleMarche')">📢 Veille marché</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('ficheEntreprise')">🏢 Fiche entreprise</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('webRecherche')">🌐 Recherche web</button>
   </div>
   </div>
   <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;background:var(--card,#fff)">
@@ -21180,6 +21182,8 @@ const NOVA_QUICK = {
   cliRecherche: "Demande-moi un nom de société (même approximatif ou abrégé) puis retrouve-la dans la base avec la recherche tolérante, et affiche ses coordonnées et ses contacts (NOM Prénom, fonction, emails cliquables, téléphones).",
   crNouveau: "Aide-moi à créer un compte-rendu de visite. Demande-moi la société concernée, le type de RDV et les points abordés (ou mes notes), puis rédige un contenu de compte-rendu clair et structuré et propose-moi de le créer.",
   veilleMarche: "Fais-moi une veille des marchés publics de TRAVAUX (BOAMP). Demande-moi le département (ex. 85) et un éventuel mot-clé métier, puis liste les avis en cours avec objet, acheteur, date limite de réponse, procédure et le lien vers l'avis.",
+  ficheEntreprise: "Donne-moi la fiche entreprise et la santé financière d'une société : demande-moi son nom ou son SIREN, puis affiche forme juridique, état, effectif, dirigeants, chiffre d'affaires et résultat net par année, et une appréciation du risque (source officielle).",
+  webRecherche: "Fais une recherche web. Demande-moi ce que je veux rechercher (prospect, entreprise, actualité, marché), puis donne une synthèse claire en citant les sources avec leurs liens.",
 };
 function novaQuick(k) { const p = NOVA_QUICK[k]; if (!p) return; const panel = document.getElementById('aiChatPanel'); if (panel && panel.style.display === 'none') toggleAIChat(); askAIChat(p); }
 // Nettoie le texte de NOVA : supprime le Markdown et les symboles (lisible à l'écran ET à voix haute)
