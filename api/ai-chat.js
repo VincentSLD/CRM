@@ -95,6 +95,20 @@ const TOOLS = [
     }
   },
   {
+    name: 'search_entreprises_naf',
+    description: "Prospection ciblée : trouve des entreprises par CODE NAF (activité) et département, éventuellement créées récemment (nouvelles immatriculations). Ex. promoteurs 41.10A, constructeurs de maisons 41.20A, autres bâtiments 41.20B, architectes 71.11Z, marchands de biens 68.10Z. Renvoie nom, SIREN, ville, date de création, dirigeants, effectif — pour repérer des prospects. Source officielle annuaire-entreprises.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        naf: { type: 'string', description: 'Code(s) NAF, ex. "41.10A" ou "41.20A,41.20B"' },
+        departement: { type: 'string', description: 'Code département (optionnel mais recommandé)' },
+        crees_depuis: { type: 'string', description: 'Date AAAA-MM-JJ : ne garder que les entreprises créées après cette date (optionnel, pour les nouvelles immatriculations)' },
+        limit: { type: 'integer', default: 20, maximum: 25 }
+      },
+      required: ['naf']
+    }
+  },
+  {
     name: 'get_taux_bce',
     description: "Donne le taux directeur actuel de la BCE (taux de refinancement principal), indicateur de référence pour le coût de l'emprunt. À utiliser quand on parle de taux d'emprunt, conjoncture, contexte de financement.",
     input_schema: { type: 'object', properties: {} }
@@ -117,6 +131,8 @@ const TOOLS = [
 ];
 
 const TABLE_LABELS = { clients:'clients', contacts:'contacts', devis:'devis', commandes:'commandes', factures:'factures', affaires:'affaires', marches:'marchés', reports:'comptes-rendus', commerciaux:'commerciaux', taches_commerciales:'tâches commerciales', opportunites:'opportunités' };
+// Libellés des tranches d'effectif INSEE
+const EFF_TRANCHE = { '00': '0 sal.', '01': '1-2', '02': '3-5', '03': '6-9', '11': '10-19', '12': '20-49', '21': '50-99', '22': '100-199', '31': '200-249', '32': '250-499', '41': '500-999', '42': '1000-1999', '51': '2000-4999', '52': '5000-9999', '53': '10000+', 'NN': 'n.c.' };
 
 async function sbRequest(path, options = {}) {
   const url = SUPABASE_URL + '/rest/v1/' + path;
@@ -180,7 +196,7 @@ async function executeTool(name, input) {
     if (name === 'search_entreprise') {
       const { q, departement, limit = 5 } = input || {};
       if (!q || !String(q).trim()) return { ok: false, error: 'q (nom ou SIREN) requis' };
-      const EFF = { '00': '0 sal.', '01': '1-2', '02': '3-5', '03': '6-9', '11': '10-19', '12': '20-49', '21': '50-99', '22': '100-199', '31': '200-249', '32': '250-499', '41': '500-999', '42': '1000-1999', '51': '2000-4999', '52': '5000-9999', '53': '10000+', 'NN': 'n.c.' };
+      const EFF = EFF_TRANCHE;
       const p = new URLSearchParams({ q: String(q), page: '1', per_page: String(Math.min(limit || 5, 10)) });
       if (departement) p.set('departement', String(departement));
       const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + p.toString());
@@ -252,6 +268,24 @@ async function executeTool(name, input) {
         if (ra.ok) { const da = await ra.json(); tendance = (da.aggs || []).map(a => ({ annee: a.value, logements: Math.round(a.metric) })).sort((x, y) => x.annee - y.annee); }
       } catch (e) { /* ignore */ }
       return { ok: true, total: d.total || rows.length, count: rows.length, rows, tendance };
+    }
+    if (name === 'search_entreprises_naf') {
+      const { naf, departement, crees_depuis, limit = 20 } = input || {};
+      if (!naf) return { ok: false, error: 'naf requis' };
+      const p = new URLSearchParams({ activite_principale: String(naf), etat_administratif: 'A', page: '1', per_page: String(Math.min(limit || 20, 25)) });
+      if (departement) p.set('departement', String(departement));
+      if (crees_depuis) p.set('date_creation_min', String(crees_depuis));
+      const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?' + p.toString());
+      if (!r.ok) return { ok: false, error: 'API entreprises ' + r.status };
+      const d = await r.json();
+      const rows = (d.results || []).map(e => ({
+        nom: e.nom_complet, siren: e.siren, naf: e.activite_principale,
+        ville: e.siege ? [e.siege.code_postal, e.siege.libelle_commune].filter(Boolean).join(' ') : null,
+        date_creation: e.date_creation,
+        effectif: EFF_TRANCHE[e.tranche_effectif_salarie] || e.tranche_effectif_salarie || 'n.c.',
+        dirigeants: (e.dirigeants || []).slice(0, 3).map(x => x.type_dirigeant === 'personne morale' ? x.denomination : [x.prenoms, x.nom].filter(Boolean).join(' ')),
+      })).sort((a, b) => String(b.date_creation || '').localeCompare(String(a.date_creation || '')));
+      return { ok: true, total: d.total_results || rows.length, count: rows.length, rows };
     }
     if (name === 'get_taux_bce') {
       const r = await fetch('https://data-api.ecb.europa.eu/service/data/FM/D.U2.EUR.4F.KR.MRR_FR.LEV?lastNObservations=1&format=jsondata', { headers: { 'Accept': 'application/json' } });
@@ -334,6 +368,7 @@ function toolLabel(tu) {
   if (tu.name === 'search_web') return 'Recherche web « ' + (tu.input?.q || '') + ' »';
   if (tu.name === 'search_permis') return 'Veille construction logements' + (tu.input?.departement ? ' (dép. ' + tu.input.departement + ')' : '');
   if (tu.name === 'get_taux_bce') return 'Taux directeur BCE';
+  if (tu.name === 'search_entreprises_naf') return 'Prospects NAF ' + (tu.input?.naf || '') + (tu.input?.departement ? ' (dép. ' + tu.input.departement + ')' : '');
   if (tu.name === 'search_clients') return 'Recherche société « ' + (tu.input?.q || '') + ' »';
   if (tu.name === 'search_contacts') return 'Recherche contact « ' + (tu.input?.q || '') + ' »';
   if (tu.name === 'query_table') return 'Consultation ' + tbl;
@@ -472,6 +507,9 @@ Quand l'information utile n'est pas dans le CRM (actualité d'un prospect, son s
 
 VEILLE CONSTRUCTION DE LOGEMENTS (Sitadel) :
 Quand on demande une veille sur les constructions/permis de logements (promoteurs, projets résidentiels) sur un secteur, utilise search_permis (par département, commune ou mot-clé). Présente les permis récents (demandeur/promoteur, commune, nombre de logements, date d'autorisation), le volume total et la tendance annuelle (logements autorisés par an) si disponible. Conseil : pour un demandeur ayant un SIREN, propose de le qualifier via search_entreprise (santé financière) — c'est un prospect potentiel pour les métiers structure/géotechnique/fluides du groupe.
+
+PROSPECTION PAR ACTIVITÉ (NAF) :
+Pour trouver des prospects par secteur d'activité (et repérer les nouvelles immatriculations), utilise search_entreprises_naf avec le code NAF et le département. Codes utiles pour NOVAM : 41.10A (promotion immobilière), 41.20A (construction de maisons individuelles), 41.20B (construction d'autres bâtiments), 71.11Z (architecture), 68.10Z/68.20A (immobilier), 43.xx (travaux spécialisés). Pour les "nouveaux" prospects, passe crees_depuis (ex. 12 derniers mois). Présente nom, ville, date de création, dirigeants ; propose de qualifier les plus pertinents via search_entreprise et de créer une opportunité.
 
 INDICATEURS DE CONJONCTURE :
 Pour parler du coût de l'emprunt / financement, utilise get_taux_bce (taux directeur BCE). Précise que c'est le taux de référence de la BCE (le taux des crédits immobiliers est généralement supérieur).
