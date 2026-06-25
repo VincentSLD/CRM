@@ -4442,7 +4442,7 @@ function _modeEmploiContenu() {
       "Analyse : indicateurs financiers et commerciaux, cartographie « qui travaille avec qui », carte par département.",
       "Cartes des sociétés et des affaires (géolocalisation).",
     ])}
-    ${sec('🔎 Veille & Outils (menu Paramétrage / En Dev\\')', [
+    ${sec('🔎 Veille & Outils (menu Paramétrage / En Dev)', [
       "Veille Marchés Publics (BOAMP / DECP / MEF) avec filtres (type marché, procédure, département…).",
       "Veille Procédures collectives (BODACC).",
       "SIRETAGE : enrichissement SIREN/SIRET, détection de doublons, import XML, BatiScop' (observatoire construction & démographie).",
@@ -4471,12 +4471,12 @@ function renderModeEmploi() {
 }
 function modeEmploiPrint() {
   const w = window.open('', '_blank');
-  if (!w) { toast('Autorisez les fenêtres pop-up pour l\\'export', 'warning'); return; }
-  w.document.write('<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Mode d\\'emploi CRM</title>'
+  if (!w) { toast("Autorisez les fenêtres pop-up pour l'export", 'warning'); return; }
+  w.document.write('<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Mode emploi CRM</title>'
     + '<style>body{font-family:Arial,Helvetica,sans-serif;color:#222;max-width:820px;margin:24px auto;padding:0 16px}h1{font-size:22px;color:#4338ca}h2{font-size:16px;color:#4f46e5;border-bottom:2px solid #ddd;padding-bottom:4px;margin:18px 0 6px}ul{margin:0 0 4px 18px;line-height:1.6;font-size:13px}li{margin:2px 0}</style>'
-    + '</head><body><h1>📖 Mode d\\'emploi du CRM — Groupe NOVAM Ingénierie</h1>'
+    + "</head><body><h1>📖 Mode d'emploi du CRM — Groupe NOVAM Ingénierie</h1>"
     + _modeEmploiContenu()
-    + '<script>window.onload=function(){window.print();}<\/script></body></html>');
+    + '<scr' + 'ipt>window.onload=function(){window.print();}<\/scr' + 'ipt></body></html>');
   w.document.close();
 }
 
