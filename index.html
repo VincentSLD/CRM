@@ -4500,17 +4500,65 @@ function _modeEmploiContenu() {
       "Enregistrez, puis suivez les envois et retombées.",
     ]],
   ];
+  const usages = [
+    ['Préparer un rendez-vous client (avec NOVA)', [
+      "Ouvrez NOVA (bouton ✦ en bas à droite) et demandez « point complet sur [société] » (ou bouton « 📇 Fiche société »).",
+      "NOVA affiche coordonnées, contacts, CA, devis/commandes/factures, opportunités, tâches et derniers CR, par thème.",
+      "Demandez « que dois-je proposer ? » : NOVA suggère des ventes croisées (métiers du groupe) adaptées au client et à sa zone.",
+      "Au besoin, lancez une recherche web sur l'actualité du client, puis créez une tâche ou un CR de préparation.",
+    ]],
+    ['Faire une veille marché (appels d\'offres travaux)', [
+      "Dans NOVA, bouton « 📢 Veille marché » (ou « veille marché travaux 85 »).",
+      "Indiquez le département et un mot-clé métier éventuel (structure, réhabilitation…).",
+      "NOVA liste les avis BOAMP en cours (objet, acheteur, date limite, lien vers l'avis).",
+      "Pour un avis intéressant, demandez à créer une opportunité et une tâche de suivi.",
+    ]],
+    ['Prospecter de nouveaux clients (Sitadel + activité)', [
+      "Dans NOVA : « 🏗️ Veille construction » pour les permis de logements récents d'un département, ou « 🎯 Prospects (activité) » pour des entreprises par code NAF.",
+      "Repérez les promoteurs / demandeurs et leur SIREN.",
+      "Demandez à NOVA de qualifier un prospect (« fiche entreprise [nom] ») : dirigeants, effectif, CA, santé financière.",
+      "Créez la société dans le CRM puis une opportunité, depuis NOVA ou manuellement.",
+    ]],
+    ['Analyser un client à 360°', [
+      "Ouvrez la fiche société (menu Clients → cliquez la société).",
+      "Consultez les blocs : catégorie ABC, CA, contacts, opportunités et comptes-rendus liés.",
+      "Utilisez l'outil d'analyse du compte (CA par devis/commandes/factures, par rôle, par établissement) avec graphiques.",
+      "Exportez en PDF paysage si besoin (sélection des lignes possible).",
+    ]],
+    ['Analyser le pipeline et exporter en PDF', [
+      "Menu Opportunités → bouton « 📊 Analyser ».",
+      "Filtrez par Année / Responsable / Portefeuille ; consultez KPIs, alertes et graphiques.",
+      "Cliquez une alerte pour ouvrir la liste ciblée (ex. signatures dépassées).",
+      "Bouton « 📄 Export PDF » pour générer le rapport (KPIs + alertes + graphiques).",
+    ]],
+    ['Chaîner Opportunité → Compte-rendu → Tâche', [
+      "Créez d'abord l'opportunité (elle doit exister pour y rattacher le reste).",
+      "Depuis sa fiche : « Créer un CR » (pré-rempli client + opportunité) puis enregistrez.",
+      "Toujours depuis la fiche : « Créer une tâche » de suivi (liée à l'opportunité).",
+      "Astuce : demandez à NOVA de tout enchaîner — elle respecte cet ordre automatiquement.",
+    ]],
+    ['Diffuser un compte-rendu par email', [
+      "Ouvrez le CR, vérifiez contenu, sociétés, contacts et pièces jointes.",
+      "Lancez la diffusion : l'objet est préfixé « Compte-Rendu CRM : » et un message complémentaire est pré-rempli (date, type, rédacteur, sociétés/contacts).",
+      "L'email part depuis votre boîte Microsoft connectée ; il apparaît dans vos Éléments envoyés.",
+    ]],
+  ];
   const id = i => 'me-sec-' + i;
   const pid = i => 'me-proc-' + i;
+  const uid = i => 'me-use-' + i;
   const toc = `<div style="background:#f7f6f2;border:1px solid #e0ddd5;border-radius:8px;padding:10px 14px;margin-bottom:16px">
     <div style="font-weight:700;font-size:13px;margin-bottom:6px">📑 Sommaire</div>
     <ol style="margin:0 0 6px 18px;padding:0;font-size:13px;line-height:1.7">${secs.map((s, i) => `<li><a href="#${id(i)}" style="color:#4f46e5;text-decoration:none">${s[0]}</a></li>`).join('')}</ol>
     <div style="font-weight:700;font-size:13px;margin:8px 0 4px">📝 Procédures pas à pas</div>
-    <ol style="margin:0 0 0 18px;padding:0;font-size:13px;line-height:1.7">${procs.map((p, i) => `<li><a href="#${pid(i)}" style="color:#0e9f6e;text-decoration:none">${p[0]}</a></li>`).join('')}</ol></div>`;
+    <ol style="margin:0 0 6px 18px;padding:0;font-size:13px;line-height:1.7">${procs.map((p, i) => `<li><a href="#${pid(i)}" style="color:#0e9f6e;text-decoration:none">${p[0]}</a></li>`).join('')}</ol>
+    <div style="font-weight:700;font-size:13px;margin:8px 0 4px">💡 Cas d'usage transverses</div>
+    <ol style="margin:0 0 0 18px;padding:0;font-size:13px;line-height:1.7">${usages.map((u, i) => `<li><a href="#${uid(i)}" style="color:#b45309;text-decoration:none">${u[0]}</a></li>`).join('')}</ol></div>`;
   const body = secs.map((s, i) => `<h2 id="${id(i)}" style="font-size:16px;margin:18px 0 6px;color:#4f46e5;border-bottom:2px solid #e0ddd5;padding-bottom:4px">${s[0]}</h2><ul style="margin:0 0 4px 18px;padding:0;font-size:13px;line-height:1.6">${s[1].map(x => '<li>' + x + '</li>').join('')}</ul>`).join('');
   const procsBody = `<h2 style="font-size:18px;margin:24px 0 8px;color:#0e9f6e;border-bottom:2px solid #bbf7d0;padding-bottom:4px">📝 Procédures pas à pas</h2>`
     + procs.map((p, i) => `<h3 id="${pid(i)}" style="font-size:14px;margin:14px 0 4px;color:#0e9f6e">${p[0]}</h3><ol style="margin:0 0 4px 20px;padding:0;font-size:13px;line-height:1.6">${p[1].map(x => '<li style="margin:2px 0">' + x + '</li>').join('')}</ol>`).join('');
-  return toc + body + procsBody + `<p style="font-size:11px;color:#888;margin-top:18px">Document généré automatiquement depuis le CRM — ${new Date().toLocaleDateString('fr-FR')}.</p>`;
+  const usagesBody = `<h2 style="font-size:18px;margin:24px 0 8px;color:#b45309;border-bottom:2px solid #fed7aa;padding-bottom:4px">💡 Cas d'usage transverses</h2>`
+    + usages.map((u, i) => `<h3 id="${uid(i)}" style="font-size:14px;margin:14px 0 4px;color:#b45309">${u[0]}</h3><ol style="margin:0 0 4px 20px;padding:0;font-size:13px;line-height:1.6">${u[1].map(x => '<li style="margin:2px 0">' + x + '</li>').join('')}</ol>`).join('');
+  return toc + body + procsBody + usagesBody + `<p style="font-size:11px;color:#888;margin-top:18px">Document généré automatiquement depuis le CRM — ${new Date().toLocaleDateString('fr-FR')}.</p>`;
 }
 function renderModeEmploi() {
   return `
