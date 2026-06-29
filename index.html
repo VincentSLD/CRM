@@ -4760,6 +4760,7 @@ let _vrPA = [];          // permis d'aménager (Sitadel) géolocalisés
 let _vrShowMap = false;
 let _vrMap = null;
 let _vrPALoading = false;
+let _vrPaFrom = '', _vrPaTo = '';   // filtre sur la date d'autorisation
 const VR_NAF = { notaire: { naf: '6910Z', label: 'Notaire' }, agence: { naf: '6831Z', label: 'Agence immobilière' }, geometre: { naf: '7112B', label: 'Géomètre-expert' } };
 
 function renderVeilleRegar() {
@@ -4779,8 +4780,14 @@ function renderVeilleRegar() {
           <input id="vr-dept" value="${cmdEsc(_vrDept)}" placeholder="Département (ex. 85)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:160px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrSearch()">
           ${chk('mairie', '🏛️ Mairies')} ${chk('notaire', '⚖️ Notaires')} ${chk('agence', '🏠 Agences immo')} ${chk('geometre', '📐 Géomètres')}
           <button class="btn btn-primary" onclick="vrSearch()">🔍 Rechercher prescripteurs</button>
-          <button class="btn" onclick="vrLoadPA()">🗺️ Permis d'aménager (Sitadel)</button>
           ${_vrResults.length ? `<button class="btn" onclick="vrExportCsv()">⬇ Export CSV</button>` : ''}
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px dashed var(--border);padding-top:10px">
+          <span style="font-size:11px;color:var(--t3);font-weight:600">Permis d'aménager autorisés du</span>
+          <input type="date" id="vr-pa-from" value="${cmdEsc(_vrPaFrom)}" title="À partir du" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+          <span style="font-size:11px;color:var(--t3)">au</span>
+          <input type="date" id="vr-pa-to" value="${cmdEsc(_vrPaTo)}" title="Jusqu'au" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+          <button class="btn" onclick="vrLoadPA()">🗺️ Afficher la carte (Sitadel)</button>
         </div>
         <div style="font-size:11px;color:var(--t3)">⚠️ Prospection B2B : objet en lien avec le métier du destinataire, lien de désinscription + identité de l'expéditeur obligatoires (RGPD/CNIL). Conserver les emails ≤ 3 ans après le dernier contact. Cibler en priorité les communes en aléa argile moyen/fort.</div>
       </div>
@@ -4790,7 +4797,7 @@ function renderVeilleRegar() {
       <div class="card-body" style="padding:0">
         ${_vrPALoading ? '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">⏳ Chargement des permis d\'aménager…</div>' : (_vrPA.length ? '<div id="vr-map" style="height:460px;border-radius:0 0 8px 8px"></div>' : '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Aucun permis d\'aménager géolocalisé pour ce département.</div>')}
       </div>
-      <div style="padding:8px 12px;font-size:11px;color:var(--t3)">Source : Sitadel (permis d'aménager depuis 2013) — un lotissement = des lots de terrain à venir. Croiser avec les zones d'aléa argile moyen/fort.</div>
+      <div style="padding:8px 12px;font-size:11px;color:var(--t3)">Légende : <span style="color:#10b981">●</span> autorisé · <span style="color:#f59e0b">●</span> chantier ouvert · <span style="color:#6b7280">●</span> travaux achevés. Source : Sitadel (permis d'aménager depuis 2013) — un lotissement = des lots de terrain à venir. Croiser avec les zones d'aléa argile moyen/fort.</div>
     </div>` : ''}
     <div id="vr-status" style="font-size:13px;color:var(--t2);margin-bottom:10px">${_vrLoading ? '⏳ Recherche en cours…' : (_vrMsg || (_vrResults.length ? `${_vrResults.length} prescripteur(s) — ${withEmail} avec email` : ''))}</div>
     <div id="vr-results">${_vrRenderTable()}</div>
@@ -4919,13 +4926,17 @@ function vrCreateProspect(i) {
 async function vrLoadPA() {
   const dept = (document.getElementById('vr-dept')?.value || '').trim().toUpperCase();
   if (!/^(\d{2,3}|2A|2B)$/.test(dept)) { toast('Saisissez un n° de département valide (ex. 85)', 'error'); return; }
+  _vrPaFrom = (document.getElementById('vr-pa-from')?.value || '').trim();
+  _vrPaTo = (document.getElementById('vr-pa-to')?.value || '').trim();
   _vrDept = dept; _vrShowMap = true; _vrPALoading = true; _vrPA = []; renderPage('veille-regar');
   try {
-    const sel = 'COMM,DEP_CODE,DR_DEPOT,DATE_REELLE_AUTORISATION,DENOM_DEM,SIREN_DEM,ADR_LIBVOIE_TER,ADR_LIEUDIT_TER,ADR_LOCALITE_TER,ADR_CODPOST_TER,SUPERFICIE_TERRAIN,NUM_PA,latitude,longitude';
+    const sel = 'COMM,DEP_CODE,DEP_LIBELLE,DR_DEPOT,DATE_REELLE_AUTORISATION,DATE_REELLE_DOC,DATE_REELLE_DAACT,ETAT_PA,DENOM_DEM,SIREN_DEM,APE_DEM,CJ_DEM,LOCALITE_DEM,CODPOST_DEM,ADR_NUM_TER,ADR_LIBVOIE_TER,ADR_LIEUDIT_TER,ADR_LOCALITE_TER,ADR_CODPOST_TER,SUPERFICIE_TERRAIN,NUM_PA,parcelle,latitude,longitude';
+    const clauses = [`DEP_CODE:"${dept}"`];
+    if (_vrPaFrom || _vrPaTo) clauses.push(`DATE_REELLE_AUTORISATION:[${_vrPaFrom || '1970-01-01'} TO ${_vrPaTo || '2100-12-31'}]`);
     const p = new URLSearchParams();
-    p.set('qs', `DEP_CODE:"${dept}"`);
+    p.set('qs', clauses.join(' AND '));
     p.set('sort', '-DATE_REELLE_AUTORISATION');
-    p.set('size', '500');
+    p.set('size', '1000');
     p.set('select', sel);
     const r = await fetch('https://opendata.koumoul.com/data-fair/api/v1/datasets/sitadel-pa/lines?' + p.toString());
     if (!r.ok) throw new Error('Sitadel ' + r.status);
@@ -4933,10 +4944,14 @@ async function vrLoadPA() {
     _vrPA = (j.results || []).filter(x => x.latitude && x.longitude).map(x => ({
       lat: Number(x.latitude), lon: Number(x.longitude),
       demandeur: x.DENOM_DEM || '(non dénommé)', siren: x.SIREN_DEM || '',
+      apeDem: x.APE_DEM || '', cjDem: x.CJ_DEM || '',
+      demLocalite: x.LOCALITE_DEM || '', demCp: x.CODPOST_DEM || '',
       commune: x.ADR_LOCALITE_TER || '', cp: x.ADR_CODPOST_TER || '',
-      voie: x.ADR_LIBVOIE_TER || x.ADR_LIEUDIT_TER || '',
+      voie: [x.ADR_NUM_TER, x.ADR_LIBVOIE_TER].filter(Boolean).join(' ') || x.ADR_LIEUDIT_TER || '',
       date: x.DATE_REELLE_AUTORISATION || x.DR_DEPOT || '',
-      superficie: x.SUPERFICIE_TERRAIN || null, numPa: x.NUM_PA || '',
+      dateDoc: x.DATE_REELLE_DOC || '', dateDaact: x.DATE_REELLE_DAACT || '',
+      etat: x.ETAT_PA || '',
+      superficie: x.SUPERFICIE_TERRAIN || null, numPa: x.NUM_PA || '', parcelle: x.parcelle || '',
     }));
   } catch (e) { toast('Erreur Sitadel : ' + e.message, 'error'); }
   _vrPALoading = false; renderPage('veille-regar');
@@ -4950,15 +4965,28 @@ function _vrInitMap() {
   const bounds = [];
   _vrPA.forEach((d, idx) => {
     if (!(d.lat && d.lon)) return;
-    const m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#0891b2', fillColor: '#06b6d4', fillOpacity: 0.7, weight: 2 }).addTo(_vrMap);
+    // Statut déduit des dates de chantier (plus fiable que le code ETAT_PA brut)
+    const statut = d.dateDaact ? '✅ Travaux achevés' : (d.dateDoc ? '🚧 Chantier ouvert' : '📋 Autorisé');
+    const statutColor = d.dateDaact ? '#6b7280' : (d.dateDoc ? '#f59e0b' : '#10b981');
+    const m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#0891b2', fillColor: statutColor, fillOpacity: 0.75, weight: 2 }).addTo(_vrMap);
     const dt = d.date ? fmtDateFR(d.date) : '';
     const sup = d.superficie ? Number(d.superficie).toLocaleString('fr-FR') + ' m²' : '';
-    m.bindPopup(`<div style="font-size:12px;min-width:200px">
+    const ape = (d.apeDem && typeof apeLabel === 'function' && apeLabel(d.apeDem)) ? apeLabel(d.apeDem) : '';
+    const rows = [
+      d.voie || d.commune ? `<div style="color:#555">${cmdEsc([d.voie, d.cp, d.commune].filter(Boolean).join(', '))}</div>` : '',
+      `<div style="margin-top:3px"><span style="color:${statutColor};font-weight:600">${statut}</span>${dt ? ' · autorisé le ' + dt : ''}</div>`,
+      sup ? `<div style="color:#555">Superficie terrain : <strong>${sup}</strong></div>` : '',
+      d.dateDoc ? `<div style="color:#555;font-size:11px">Ouverture chantier : ${fmtDateFR(d.dateDoc)}</div>` : '',
+      d.dateDaact ? `<div style="color:#555;font-size:11px">Achèvement : ${fmtDateFR(d.dateDaact)}</div>` : '',
+      ape ? `<div style="color:#555;font-size:11px">Demandeur : ${cmdEsc(ape)}</div>` : '',
+      (d.demLocalite || d.demCp) ? `<div style="color:#555;font-size:11px">Adresse demandeur : ${cmdEsc([d.demCp, d.demLocalite].filter(Boolean).join(' '))}</div>` : '',
+      d.parcelle ? `<div style="color:#888;font-size:11px">Parcelle : ${cmdEsc(d.parcelle)}</div>` : '',
+      d.numPa ? `<div style="color:#888;font-size:11px">N° PA : ${cmdEsc(d.numPa)}</div>` : '',
+    ].filter(Boolean).join('');
+    m.bindPopup(`<div style="font-size:12px;min-width:220px;max-width:300px">
       <div style="font-weight:700;margin-bottom:3px">${cmdEsc(d.demandeur)}</div>
-      <div style="color:#555">${cmdEsc([d.voie, d.cp, d.commune].filter(Boolean).join(', '))}</div>
-      <div style="color:#555;margin-top:3px">${dt ? 'Autorisé le ' + dt : ''}${sup ? ' · ' + sup : ''}</div>
-      ${d.numPa ? '<div style="color:#888;font-size:11px">PA ' + cmdEsc(d.numPa) + '</div>' : ''}
-      <div style="margin-top:6px;display:flex;gap:6px">
+      ${rows}
+      <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
         <button onclick="vrPAProspect(${idx})" style="font-size:11px;padding:2px 6px;cursor:pointer">+ Prospect</button>
         ${d.siren ? `<a href="https://annuaire-entreprises.data.gouv.fr/entreprise/${cmdEsc(d.siren)}" target="_blank" rel="noopener" style="font-size:11px">Fiche SIRENE ↗</a>` : ''}
       </div></div>`);
