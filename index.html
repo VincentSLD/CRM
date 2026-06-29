@@ -4773,6 +4773,7 @@ let _vrMap = null;
 let _vrPALoading = false;
 let _vrPaFrom = '', _vrPaTo = '';   // filtre sur la date d'autorisation
 let _vrPermisType = 'pa';           // 'pa' = permis d'aménager ; 'pc' = permis de construire (logements)
+let _vrNbLgt = '';                  // filtre logements (permis de construire) : '' tous, '1' individuelle, 'collectif' 2+
 let _vrReturn = 'endev';            // page de retour du bouton « ← Retour » (En Dev' ou Opportunités)
 let _vrArgileOn = true, _vrArgileOpacity = 0.55, _vrArgileLayer = null;   // calque aléa argile (BRGM)
 let _vrRoadsOn = true, _vrBaseLayer = null, _vrFsBound = false;           // fond de carte (routes) + plein écran
@@ -4793,6 +4794,11 @@ function renderVeilleRegar() {
           <select id="vr-permis-type" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
             <option value="pa"${_vrPermisType === 'pa' ? ' selected' : ''}>Permis d'aménager (lotissements)</option>
             <option value="pc"${_vrPermisType === 'pc' ? ' selected' : ''}>Permis de construire (logements)</option>
+          </select>
+          <select id="vr-nblgt" title="Filtre logements (s'applique aux permis de construire)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+            <option value=""${_vrNbLgt === '' ? ' selected' : ''}>Tous logements</option>
+            <option value="1"${_vrNbLgt === '1' ? ' selected' : ''}>Maison individuelle (1) → GPH</option>
+            <option value="collectif"${_vrNbLgt === 'collectif' ? ' selected' : ''}>Collectif (2+) → SERBA/ECTS/NERGIK…</option>
           </select>
           <span style="font-size:11px;color:var(--t3)">autorisés du</span>
           <input type="date" id="vr-pa-from" value="${cmdEsc(_vrPaFrom)}" title="À partir du" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
@@ -4946,6 +4952,7 @@ async function vrLoadPA() {
   _vrPaFrom = (document.getElementById('vr-pa-from')?.value || '').trim();
   _vrPaTo = (document.getElementById('vr-pa-to')?.value || '').trim();
   _vrPermisType = document.getElementById('vr-permis-type')?.value || 'pa';
+  _vrNbLgt = document.getElementById('vr-nblgt')?.value || '';
   _vrDept = dept; _vrShowMap = true; _vrPALoading = true; _vrPA = []; renderPage('veille-regar');
   try {
     const isPC = _vrPermisType === 'pc';
@@ -4955,6 +4962,8 @@ async function vrLoadPA() {
       : 'COMM,DEP_CODE,DEP_LIBELLE,DR_DEPOT,DATE_REELLE_AUTORISATION,DATE_REELLE_DOC,DATE_REELLE_DAACT,ETAT_PA,DENOM_DEM,SIREN_DEM,APE_DEM,CJ_DEM,LOCALITE_DEM,CODPOST_DEM,ADR_NUM_TER,ADR_LIBVOIE_TER,ADR_LIEUDIT_TER,ADR_LOCALITE_TER,ADR_CODPOST_TER,SUPERFICIE_TERRAIN,NUM_PA,parcelle,latitude,longitude';
     const clauses = [isPC ? `COMM:${dept}*` : `DEP_CODE:"${dept}"`];
     if (_vrPaFrom || _vrPaTo) clauses.push(`DATE_REELLE_AUTORISATION:[${_vrPaFrom || '1970-01-01'} TO ${_vrPaTo || '2100-12-31'}]`);
+    if (isPC && _vrNbLgt === '1') clauses.push('NB_LGT_TOT_CREES:1');
+    else if (isPC && _vrNbLgt === 'collectif') clauses.push('NB_LGT_TOT_CREES:>=2');
     const p = new URLSearchParams();
     p.set('qs', clauses.join(' AND '));
     p.set('sort', '-DATE_REELLE_AUTORISATION');
