@@ -257,6 +257,7 @@ ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS contact_id TEXT;
 ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS contact_name TEXT;
 ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS contact_akuiteo_id TEXT;
 ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS montant_travaux NUMERIC;  -- donnée perso Akuiteo "Montant de travaux" (1-number01)
+ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS honoraires_agences JSONB; -- CRM-only : décomposition du Montant Prestations (HT) par agence [{agence,montant}] (non synchronisé Akuiteo)
 ALTER TABLE opportunites ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "opportunites_all" ON opportunites;
 CREATE POLICY "opportunites_all" ON opportunites FOR ALL TO authenticated USING (true) WITH CHECK (true);

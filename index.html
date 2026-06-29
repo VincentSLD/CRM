@@ -5848,6 +5848,8 @@ async function oppModalOpen(akId, prefill) {
       city: raw.city || '',
       country: raw.country || '',
       description: raw.description || (o && o.description) || '',
+      // CRM-only : décomposition des honoraires par agence (non synchronisé Akuiteo)
+      honorairesAgences: (o && Array.isArray(o.honoraires_agences)) ? o.honoraires_agences.map(h => ({ agence: h.agence || '', montant: (h.montant != null ? h.montant : '') })) : [],
     };
     // Pré-remplissage proposé par NOVA (nouvelle opportunité)
     if (!akId && prefill) {
@@ -5859,6 +5861,7 @@ async function oppModalOpen(akId, prefill) {
       _oppForm._novaOrigin = !!prefill.novaOrigin;
     }
     renderPage('opportunite-edit');
+    _oppHonoOpen = (_oppForm.honorairesAgences || []).length > 0; _oppHonoRender();
     if (_oppForm.clientId) _oppLoadContacts(_oppForm.clientId, _oppForm.contactAkId);
     if (_oppForm.customerAkId) _oppLoadSites(_oppForm.customerAkId, _oppForm.customerLocationId);
     // NOVA : si un client_id réel est fourni (enchaînement), le sélectionner directement ; sinon pré-remplir la recherche avec le nom
@@ -5978,7 +5981,8 @@ function renderOppEditPage() {
       ${sec('Montant & probabilité')}
       <div><label style="${lbl}">Montant Prestations (HT)</label>
         <input id="of-montant" type="number" step="any" style="${fi}" value="${esc(f.montant)}" oninput="_oppForm.montant=this.value">
-        <div style="font-size:10px;color:var(--t3);margin-top:2px">À saisir manuellement (≠ montant des travaux)</div></div>
+        <div id="of-montant-hint" style="font-size:10px;color:var(--t3);margin-top:2px">À saisir manuellement (≠ montant des travaux)</div></div>
+      <div style="grid-column:1/3" id="of-hono-block"></div>
       <div><label style="${lbl}">Devise</label>
         <input id="of-devise" style="${fi}" value="${esc(f.devise)}" oninput="_oppForm.devise=this.value"></div>
       <div style="grid-column:1/3"><label style="${lbl}">Montant des travaux</label>
@@ -6111,6 +6115,55 @@ function _oppPickEndClient(clientId, akId, name) {
   const box = document.getElementById('of-endclientRes'); if (box) box.style.display = 'none';
 }
 
+// ═══ Décomposition des honoraires par agence (CRM-only) ═══
+let _oppHonoOpen = false;
+function _oppGetAgenceOptions(selected) {
+  const set = new Set((typeof getAllSocietes === 'function') ? getAllSocietes() : []);
+  (_oppForm.honorairesAgences || []).forEach(h => { if (h.agence) set.add(h.agence); });
+  if (selected) set.add(selected);
+  const list = [...set].filter(Boolean).sort();
+  return '<option value="">— Agence —</option>' + list.map(s => `<option value="${cmdEsc(s)}"${s === selected ? ' selected' : ''}>${cmdEsc(s)}</option>`).join('');
+}
+function _oppHonoTotal() { return (_oppForm.honorairesAgences || []).reduce((a, h) => a + (Number(h.montant) || 0), 0); }
+function _oppHonoHasData() { return (_oppForm.honorairesAgences || []).some(h => h.agence || (h.montant !== '' && h.montant != null)); }
+function _oppHonoSyncMontant() {
+  const inp = document.getElementById('of-montant'); const hint = document.getElementById('of-montant-hint');
+  if (_oppHonoHasData()) {
+    const t = _oppHonoTotal();
+    _oppForm.montant = t;
+    if (inp) { inp.value = t; inp.readOnly = true; inp.style.opacity = '.7'; }
+    if (hint) hint.textContent = '= somme de la décomposition par agence (calcul automatique)';
+  } else {
+    if (inp) { inp.readOnly = false; inp.style.opacity = ''; }
+    if (hint) hint.textContent = 'À saisir manuellement (≠ montant des travaux)';
+  }
+}
+function _oppHonoUpdateTotals() { const t = document.getElementById('of-hono-total'); if (t) t.textContent = 'Total réparti : ' + fmt(_oppHonoTotal()); _oppHonoSyncMontant(); }
+function _oppHonoRender() {
+  const box = document.getElementById('of-hono-block'); if (!box) return;
+  const rows = _oppForm.honorairesAgences || [];
+  const fi = 'padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)';
+  const header = `<div onclick="_oppHonoToggle()" style="cursor:pointer;user-select:none;font-size:12px;font-weight:700;color:var(--accent);padding:4px 0">${_oppHonoOpen ? '▾' : '▸'} Décomposition des honoraires par agence (CRM)${rows.length ? ' · ' + rows.length + ' agence(s)' : ''}</div>`;
+  if (!_oppHonoOpen) { box.innerHTML = header; return; }
+  const lines = rows.map((h, i) => `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+    <select style="${fi};flex:1" onchange="_oppHonoSetAg(${i},this.value)">${_oppGetAgenceOptions(h.agence)}</select>
+    <input type="number" step="any" placeholder="Montant €" style="${fi};width:130px;flex:none" value="${h.montant != null ? h.montant : ''}" oninput="_oppHonoSetMt(${i},this.value)">
+    <button class="btn" style="font-size:14px;padding:3px 9px;color:var(--red);flex:none" title="Supprimer" onclick="_oppHonoDel(${i})">×</button>
+  </div>`).join('');
+  box.innerHTML = header + `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--bg-2)">
+    ${lines || '<div style="font-size:12px;color:var(--t3);margin-bottom:6px">Aucune ligne. Ajoutez une agence pour répartir le montant des prestations.</div>'}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+      <button class="btn" style="font-size:12px;padding:4px 8px" onclick="_oppHonoAdd()">+ Ajouter une agence</button>
+      <div id="of-hono-total" style="font-size:12px;font-weight:700">Total réparti : ${fmt(_oppHonoTotal())}</div>
+    </div></div>`;
+  _oppHonoSyncMontant();
+}
+function _oppHonoToggle() { _oppHonoOpen = !_oppHonoOpen; _oppHonoRender(); }
+function _oppHonoAdd() { (_oppForm.honorairesAgences = _oppForm.honorairesAgences || []).push({ agence: '', montant: '' }); _oppHonoOpen = true; _oppHonoRender(); }
+function _oppHonoDel(i) { if (_oppForm.honorairesAgences) { _oppForm.honorairesAgences.splice(i, 1); } _oppHonoRender(); }
+function _oppHonoSetAg(i, v) { if (_oppForm.honorairesAgences[i]) _oppForm.honorairesAgences[i].agence = v; _oppHonoUpdateTotals(); }
+function _oppHonoSetMt(i, v) { if (_oppForm.honorairesAgences[i]) _oppForm.honorairesAgences[i].montant = v; _oppHonoUpdateTotals(); }
+
 // Création d'un nouveau client (dans Akuiteo + CRM) depuis le formulaire d'opportunité
 function oppNewClientOpen(prefillName, isEnd) {
   const resBox = document.getElementById(isEnd ? 'of-endclientRes' : 'of-clientRes'); if (resBox) resBox.style.display = 'none';
@@ -6200,6 +6253,9 @@ async function saveOpportunite() {
   if (!f.stageId) return toast('Le stade est obligatoire', 'error');
   if (!f.originTypeId) return toast('Le type d\'origine est obligatoire', 'error');
   const isUpdate = !!f.akId;
+  // Décomposition honoraires (CRM-only) : si présente, le Montant Prestations = somme des lignes par agence
+  const honoArr = (f.honorairesAgences || []).filter(h => h.agence).map(h => ({ agence: h.agence, montant: (h.montant !== '' && h.montant != null && !isNaN(Number(h.montant))) ? Number(h.montant) : 0 }));
+  if (honoArr.length) f.montant = honoArr.reduce((a, h) => a + h.montant, 0);
   // En modification : repartir de l'objet Akuiteo complet (conserve id, code et autres champs requis)
   let payload = {};
   if (isUpdate) {
@@ -6269,6 +6325,11 @@ async function saveOpportunite() {
     }
     setSyncText('Rafraîchissement…');
     await _refreshOneOpp(akId);
+    // Champ CRM-only : décomposition par agence (non synchronisé Akuiteo) — écrit après l'upsert de synchro
+    try {
+      await sb.from('opportunites').update({ honoraires_agences: honoArr.length ? honoArr : null }).eq('akuiteo_id', String(akId));
+      const mo = (_opps || []).find(x => String(x.akuiteo_id) === String(akId)); if (mo) mo.honoraires_agences = honoArr.length ? honoArr : null;
+    } catch (e) { console.warn('honoraires_agences', e.message); }
     showSyncLoading(false);
     toast(f.akId ? 'Opportunité mise à jour' : 'Opportunité créée', 'success');
     oppDetail(akId); // ouvrir la fiche en pleine page
@@ -6552,7 +6613,8 @@ function renderOppDetailPage() {
     ${row('Portefeuille', cmdEsc(o.pipe || ''))}
     ${row('Statut', _oppStatutBadge(o.statut))}
     ${raw.strategic ? row('Stratégique', '⭐ Oui') : ''}
-    ${row('Montant', o.montant != null ? fmt(o.montant) : '')}
+    ${row('Montant Prestations (HT)', o.montant != null ? fmt(o.montant) : '')}
+    ${(Array.isArray(o.honoraires_agences) && o.honoraires_agences.length) ? row('Décomposition par agence', o.honoraires_agences.map(h => `<div style="display:flex;justify-content:space-between;gap:12px"><span style="color:var(--t3)">${cmdEsc(h.agence || '')}</span><strong>${fmt(Number(h.montant) || 0)}</strong></div>`).join('')) : ''}
     ${(() => { const v = (raw.customData && raw.customData[OPP_CD_TRAVAUX] && raw.customData[OPP_CD_TRAVAUX].value) != null ? raw.customData[OPP_CD_TRAVAUX].value : o.montant_travaux; return row('Montant des travaux', v != null && v !== '' ? fmt(v) : ''); })()}
     ${row('Quantité', raw.quantity != null ? raw.quantity : '')}
     ${row('Probabilité', o.probabilite != null ? o.probabilite + '%' : '')}
