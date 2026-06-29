@@ -2021,6 +2021,22 @@ tbody tr:last-child td { border-bottom: none; }
         </div>
         <div id="nc-sirene-results" style="display:none;margin-top:10px;max-height:50vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
       </div>
+      <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:16px">
+        <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:8px">Rechercher une collectivité — Annuaire de l'administration (mairies & communautés de communes)</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-bottom:8px">
+          <div class="fg" style="margin:0"><label class="fl" style="font-size:10px">Type</label>
+            <select class="fi" id="nc-annuaire-type" style="font-size:12px">
+              <option value="mairie">Mairie</option>
+              <option value="epci">Communauté de communes (EPCI)</option>
+            </select></div>
+          <div class="fg" style="margin:0"><label class="fl" style="font-size:10px">Nom / commune</label>
+            <input class="fi" id="nc-annuaire-search" placeholder="ex. La Roche-sur-Yon" style="font-size:12px" onkeydown="if(event.key==='Enter'){event.preventDefault();searchAnnuaire()}"></div>
+          <div class="fg" style="margin:0"><label class="fl" style="font-size:10px">Département (option.)</label>
+            <input class="fi" id="nc-annuaire-dept" placeholder="ex. 85" style="font-size:12px"></div>
+        </div>
+        <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" onclick="searchAnnuaire()" style="font-size:12px;white-space:nowrap">🏛️ Rechercher la collectivité</button></div>
+        <div id="nc-annuaire-results" style="display:none;margin-top:10px;max-height:40vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
+      </div>
       <!-- Identité -->
       <div class="card" style="margin-bottom:16px">
         <div class="card-header"><div class="card-title">Identité</div></div>
@@ -23212,6 +23228,62 @@ function fillFromSirene(index) {
   // Fermer les résultats
   document.getElementById('nc-sirene-results').style.display = 'none';
   toast('Données de l\'entreprise importées', 'success');
+}
+
+// ═══ ENRICHISSEMENT VIA L'ANNUAIRE DE L'ADMINISTRATION (mairies & EPCI) ═══
+async function searchAnnuaire() {
+  const type = document.getElementById('nc-annuaire-type')?.value || 'mairie';
+  const q = (document.getElementById('nc-annuaire-search')?.value || '').trim();
+  const dept = (document.getElementById('nc-annuaire-dept')?.value || '').trim().toUpperCase();
+  const box = document.getElementById('nc-annuaire-results'); if (!box) return;
+  box.style.display = 'block';
+  box.innerHTML = '<div style="padding:12px;text-align:center;color:var(--t3);font-size:12px">Recherche…</div>';
+  try {
+    let wh = `pivot like "${type}"`;
+    if (q) wh += ` and nom like "${q.replace(/["\\]/g, ' ')}"`;
+    if (dept) wh += ` and startswith(code_insee_commune, "${dept}")`;
+    const sel = 'nom,adresse_courriel,telephone,telecopie,site_internet,code_insee_commune,adresse,siren,siret';
+    const url = `https://api-lannuaire.service-public.gouv.fr/api/explore/v2.1/catalog/datasets/api-lannuaire-administration/records?where=${encodeURIComponent(wh)}&select=${encodeURIComponent(sel)}&limit=20`;
+    const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const recs = j.results || [];
+    window._annuaireResults = recs;
+    if (!recs.length) { box.innerHTML = '<div style="padding:12px;text-align:center;color:var(--t3);font-size:12px">Aucun résultat</div>'; return; }
+    box.innerHTML = recs.map((rec, i) => {
+      const adr = _vrParseJson(rec.adresse); const a0 = Array.isArray(adr) ? (adr.find(a => a.type_adresse === 'Adresse') || adr[0] || {}) : {};
+      const email = typeof rec.adresse_courriel === 'string' ? rec.adresse_courriel : '';
+      return `<div onclick="fillFromAnnuaire(${i})" style="padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''">
+        <div style="font-weight:600;color:var(--t1)">${cmdEsc(rec.nom || '')}</div>
+        <div style="color:var(--t3);font-size:11px">${cmdEsc((a0.code_postal || '') + ' ' + (a0.nom_commune || ''))}${email ? ' · ' + cmdEsc(email) : ' · (pas d\'email référencé)'}</div>
+      </div>`;
+    }).join('');
+  } catch (e) { box.innerHTML = '<div style="padding:12px;text-align:center;color:var(--red);font-size:12px">Erreur : ' + cmdEsc(e.message) + '</div>'; }
+}
+
+function fillFromAnnuaire(i) {
+  const rec = (window._annuaireResults || [])[i]; if (!rec) return;
+  const type = document.getElementById('nc-annuaire-type')?.value || 'mairie';
+  const adr = _vrParseJson(rec.adresse); const a0 = Array.isArray(adr) ? (adr.find(a => a.type_adresse === 'Adresse') || adr[0] || {}) : {};
+  const tel = _vrParseJson(rec.telephone); const site = _vrParseJson(rec.site_internet);
+  const commune = a0.nom_commune || '';
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+  const nom = type === 'mairie' ? ('Mairie de ' + commune) : (rec.nom || '').replace(/^Communauté de communes\s*-\s*/i, '').trim();
+  set('nc-name', nom);
+  set('nc-raison', rec.nom || nom);
+  set('nc-forme', type === 'mairie' ? 'Commune' : 'EPCI');
+  set('nc-email', typeof rec.adresse_courriel === 'string' ? rec.adresse_courriel : '');
+  set('nc-phone', (Array.isArray(tel) && tel[0] && tel[0].valeur) ? tel[0].valeur : '');
+  if (rec.telecopie && typeof rec.telecopie === 'string') set('nc-fax', rec.telecopie);
+  set('nc-web', (Array.isArray(site) && site[0] && site[0].valeur) ? site[0].valeur : '');
+  set('nc-addr1', a0.numero_voie || [a0.type_voie, a0.libelle_voie].filter(Boolean).join(' '));
+  set('nc-cp', a0.code_postal || '');
+  set('nc-city', commune);
+  if (typeof deptName === 'function') set('nc-dept', deptName((rec.code_insee_commune || '').slice(0, 2)));
+  set('nc-siren', rec.siren || '');
+  set('nc-siret', rec.siret || '');
+  set('nc-sector', 'Administration publique');
+  const box = document.getElementById('nc-annuaire-results'); if (box) box.style.display = 'none';
+  toast('Données de la collectivité importées', 'success');
 }
 
 // ═══ CHARGEMENT DES ÉTABLISSEMENTS SECONDAIRES ═══
