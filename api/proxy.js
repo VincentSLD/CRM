@@ -22,7 +22,12 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'hôte non autorisé' });
   }
   try {
-    const r = await fetch(target, { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; CRM-NOVAM/1.0; +https://novam-ingenierie.com)' } });
+    const r = await fetch(target, { headers: {
+      'Accept': 'application/json, text/plain, */*',
+      'Accept-Language': 'fr-FR,fr;q=0.9',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'Referer': u.origin + '/',
+    } });
     const txt = await r.text();
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Content-Type', r.headers.get('content-type') || 'application/json; charset=utf-8');
