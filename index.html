@@ -4780,8 +4780,9 @@ let _vrRoadsOn = true, _vrBaseLayer = null, _vrFsBound = false;           // fon
 const VR_NAF = { notaire: { naf: '6910Z', label: 'Notaire' }, agence: { naf: '6831Z', label: 'Agence immobilière' }, geometre: { naf: '7112B', label: 'Géomètre-expert' } };
 
 function renderVeilleRegar() {
-  const _vrTypeLabel = { pa: "Permis d'aménager", pc: 'Permis de construire (logements)', pc_existant: 'Permis sur bâti existant', dpe_ter: 'DPE tertiaire F/G', dpe_log: 'DPE logements F/G' }[_vrPermisType] || 'Permis';
+  const _vrTypeLabel = { pa: "Permis d'aménager", pc: 'Permis de construire (logements)', pc_existant: 'Permis sur bâti existant', dpe_ter: 'DPE tertiaire F/G', dpe_log: 'DPE logements F/G', copro: 'Copropriétés (BDNB)' }[_vrPermisType] || 'Permis';
   const _vrIsDpe = (_vrPermisType === 'dpe_ter' || _vrPermisType === 'dpe_log');
+  const _vrIsCopro = (_vrPermisType === 'copro');
   return `
   <div style="max-width:1100px;margin:0 auto">
     <div style="margin-bottom:14px"><button class="btn btn-sm" onclick="go(_vrReturn)">← Retour</button></div>
@@ -4799,6 +4800,7 @@ function renderVeilleRegar() {
             <option value="pc_existant"${_vrPermisType === 'pc_existant' ? ' selected' : ''}>Permis sur bâti existant (réhab/extension)</option>
             <option value="dpe_ter"${_vrPermisType === 'dpe_ter' ? ' selected' : ''}>DPE tertiaire F/G (à rénover)</option>
             <option value="dpe_log"${_vrPermisType === 'dpe_log' ? ' selected' : ''}>DPE logements F/G (passoires)</option>
+            <option value="copro"${_vrPermisType === 'copro' ? ' selected' : ''}>Copropriétés (BDNB)</option>
           </select>
           <select id="vr-nblgt" title="Filtre logements (s'applique aux permis de construire)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
             <option value=""${_vrNbLgt === '' ? ' selected' : ''}>Tous logements</option>
@@ -4814,7 +4816,7 @@ function renderVeilleRegar() {
       </div>
     </div>
     ${(_vrShowMap || _vrPALoading) ? `<div class="card" style="margin-bottom:14px">
-      <div class="card-header"><div class="card-title">🗺️ ${_vrTypeLabel}${_vrIsDpe ? '' : ' récents'} — dép. ${cmdEsc(_vrDept)}${_vrPA.length ? ' (' + _vrPA.length + ')' : ''}</div></div>
+      <div class="card-header"><div class="card-title">🗺️ ${_vrTypeLabel}${(_vrIsDpe || _vrIsCopro) ? '' : ' récents'} — dép. ${cmdEsc(_vrDept)}${_vrPA.length ? ' (' + _vrPA.length + ')' : ''}</div></div>
       <div class="card-body" style="padding:0">
         ${_vrPALoading ? '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">⏳ Chargement des permis…</div>' : (_vrPA.length ? `<div id="vr-map-wrap" style="position:relative">
           <div style="padding:8px 12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--border);background:var(--card,#fff)">
@@ -4827,7 +4829,9 @@ function renderVeilleRegar() {
           <div id="vr-map" style="height:460px"></div>
         </div>` : '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Aucun permis géolocalisé pour ce département (sur la période choisie).</div>')}
       </div>
-      <div style="padding:8px 12px;font-size:11px;color:var(--t3)">${_vrIsDpe
+      <div style="padding:8px 12px;font-size:11px;color:var(--t3)">${_vrIsCopro
+        ? 'Marqueurs : <span style="color:#8b5cf6">●</span> copropriété (source BDNB / registre national, position approximative). Cible syndics/bailleurs pour rénovation globale.'
+        : _vrIsDpe
         ? 'Marqueurs : <span style="color:#f59e0b">●</span> classe F · <span style="color:#ef4444">●</span> classe G (passoires thermiques à rénover). Source : observatoire DPE ADEME.'
         : 'Marqueurs : <span style="color:#10b981">●</span> autorisé · <span style="color:#f59e0b">●</span> chantier ouvert · <span style="color:#6b7280">●</span> travaux achevés. Source : Sitadel.'} Calque argile (BRGM) : du jaune (faible) au rouge/violet (fort).</div>
     </div>` : ''}
@@ -4963,6 +4967,7 @@ async function vrLoadPA() {
   _vrDept = dept; _vrShowMap = true; _vrPALoading = true; _vrPA = []; renderPage('veille-regar');
   try {
     const t = _vrPermisType;
+    if (t === 'copro') { await _vrLoadCopros(dept); _vrPALoading = false; renderPage('veille-regar'); return; }
     const isDpe = (t === 'dpe_ter' || t === 'dpe_log');
     const isSitPc = (t === 'pc' || t === 'pc_existant');
     let base, sel = null, sort = null;
@@ -5005,6 +5010,68 @@ function _vrGeo(x) {
   if (x.latitude && x.longitude) return [Number(x.latitude), Number(x.longitude)];
   if (typeof x._geopoint === 'string') { const a = x._geopoint.split(','); const la = Number(a[0]), lo = Number(a[1]); if (la && lo) return [la, lo]; }
   return [null, null];
+}
+// Reprojection Lambert-93 (EPSG:2154) → WGS84 (lat,lon) — algorithme IGN
+function _l93ToWgs84(x, y) {
+  const n = 0.7256077650532670, C = 11754255.426096, Xs = 700000.0, Ys = 12655612.049876, e = 0.08181919106;
+  const dx = x - Xs, dy = y - Ys;
+  const R = Math.sqrt(dx * dx + dy * dy);
+  if (!R) return null;
+  const g = Math.atan2(dx, -dy);
+  const lon = (3 * Math.PI / 180) + g / n;
+  const liso = -1 / n * Math.log(R / C);
+  let phi = 2 * Math.atan(Math.exp(liso)) - Math.PI / 2;
+  for (let i = 0; i < 8; i++) { const s = e * Math.sin(phi); phi = 2 * Math.atan(Math.pow((1 + s) / (1 - s), e / 2) * Math.exp(liso)) - Math.PI / 2; }
+  return [phi * 180 / Math.PI, lon * 180 / Math.PI];
+}
+function _geomCentroidL93(geom) {
+  try {
+    let ring = null;
+    if (geom.type === 'MultiPolygon') ring = geom.coordinates[0][0];
+    else if (geom.type === 'Polygon') ring = geom.coordinates[0];
+    else if (geom.type === 'Point') return geom.coordinates;
+    if (!ring || !ring.length) return null;
+    let sx = 0, sy = 0; ring.forEach(p => { sx += p[0]; sy += p[1]; });
+    return [sx / ring.length, sy / ring.length];
+  } catch (e) { return null; }
+}
+// Copropriétés via BDNB (2 requêtes : registre RNC → géométrie du bâtiment)
+async function _vrLoadCopros(dept) {
+  const base = 'https://api.bdnb.io/v1/bdnb/donnees';
+  // 1) Copropriétés du département (registre national)
+  const r1 = await fetch(`${base}/batiment_groupe_rnc?code_departement_insee=eq.${dept}&select=batiment_groupe_id,nb_lot_tot,periode_construction_max&limit=300`);
+  if (!r1.ok) throw new Error('BDNB ' + r1.status);
+  const copros = await r1.json();
+  if (!Array.isArray(copros) || !copros.length) { _vrPA = []; return; }
+  const byId = {};
+  copros.forEach(c => { if (c.batiment_groupe_id) byId[c.batiment_groupe_id] = c; });
+  // 2) Géométrie + adresse + DPE des bâtiments correspondants
+  const ids = Object.keys(byId);
+  const geoById = {};
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    const r2 = await fetch(`${base}/batiment_groupe_complet?batiment_groupe_id=in.(${chunk.join(',')})&select=batiment_groupe_id,libelle_adr_principale_ban,classe_bilan_dpe,geom_groupe&limit=100`);
+    if (!r2.ok) continue;
+    const rows = await r2.json();
+    (rows || []).forEach(b => { geoById[b.batiment_groupe_id] = b; });
+  }
+  const out = [];
+  for (const id of ids) {
+    const b = geoById[id]; if (!b || !b.geom_groupe) continue;
+    const c93 = _geomCentroidL93(b.geom_groupe); if (!c93) continue;
+    const ll = _l93ToWgs84(c93[0], c93[1]); if (!ll) continue;
+    const rnc = byId[id];
+    const adr = b.libelle_adr_principale_ban || '';
+    out.push({
+      kind: 'copro', lat: ll[0], lon: ll[1], siren: '',
+      demandeur: 'Copropriété' + (adr ? ' — ' + adr : ''),
+      adresse: adr, commune: '', cp: '',
+      nbLot: (rnc.nb_lot_tot != null ? rnc.nb_lot_tot : null),
+      periode: rnc.periode_construction_max || '',
+      dpeClass: b.classe_bilan_dpe || '',
+    });
+  }
+  _vrPA = out.filter(d => d.lat && d.lon);
 }
 function _vrMapRow(x, t) {
   const [lat, lon] = _vrGeo(x);
@@ -5056,7 +5123,18 @@ function _vrInitMap() {
     if (!(d.lat && d.lon)) return;
     const isDpe = (d.kind === 'dpe_ter' || d.kind === 'dpe_log');
     let color, rows, buttons;
-    if (isDpe) {
+    if (d.kind === 'copro') {
+      color = '#8b5cf6';
+      rows = [
+        `<div style="color:#0891b2;font-size:11px;font-weight:600">Copropriété (BDNB)</div>`,
+        d.adresse ? `<div style="color:#555">${cmdEsc(d.adresse)}</div>` : '',
+        d.nbLot != null ? `<div style="color:#555">Nombre de lots : <strong>${cmdEsc(String(d.nbLot))}</strong></div>` : '',
+        d.periode ? `<div style="color:#555;font-size:11px">Construction : ${cmdEsc(d.periode)}</div>` : '',
+        d.dpeClass ? `<div style="color:#555;font-size:11px">Classe DPE (estimée) : <strong>${cmdEsc(d.dpeClass)}</strong></div>` : '',
+        `<div style="color:#888;font-size:11px">Position approximative (BDNB)</div>`,
+      ].filter(Boolean).join('');
+      buttons = `<button onclick="vrPAOpportunity(${idx})" style="font-size:11px;padding:2px 6px;cursor:pointer">🎯 + Opportunité (rénovation)</button>`;
+    } else if (isDpe) {
       const kindLbl = (d.kind === 'dpe_ter' ? 'DPE tertiaire' : 'DPE logement') + ' — à rénover';
       color = d.dpeClass === 'G' ? '#ef4444' : '#f59e0b';
       rows = [
@@ -5149,6 +5227,18 @@ function vrPAProspect(idx) {
 }
 function vrPAOpportunity(idx) {
   const d = _vrPA[idx]; if (!d) return;
+  if (d.kind === 'copro') {
+    const desc = [
+      'Copropriété repérée via la BDNB (registre national des copropriétés).',
+      d.adresse ? 'Adresse : ' + d.adresse : '',
+      d.nbLot != null ? 'Nombre de lots : ' + d.nbLot : '',
+      d.periode ? 'Construction : ' + d.periode : '',
+      d.dpeClass ? 'Classe DPE estimée : ' + d.dpeClass : '',
+      'Cible : syndic / bailleur (rénovation globale).',
+    ].filter(Boolean).join('\n');
+    oppModalOpen(null, { name: 'Rénovation copropriété — ' + (d.adresse || ''), description: desc, clientHint: '' });
+    return;
+  }
   if (d.kind === 'dpe_ter' || d.kind === 'dpe_log') {
     const desc = [
       'Bâtiment à rénover (DPE ' + (d.dpeClass || '') + ') repéré via l\'observatoire DPE (ADEME).',
