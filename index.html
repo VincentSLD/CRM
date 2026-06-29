@@ -5436,7 +5436,8 @@ async function tacheSearchClient(q) {
     const r2 = await q2.order('name').limit(60); data = r2.data || [];
   }
   data = (data || []).slice().sort((a, b) => _searchScore(ql, b.name) - _searchScore(ql, a.name));
-  dd.innerHTML = data.length ? data.slice(0, 60).map(c => `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="tacheSelectClient('${c.id}','${(c.name || '').replace(/'/g, "&#39;")}')">${cmdEsc(c.name)}${c.city ? ' <span style="color:var(--t3);font-size:11px">' + cmdEsc(c.city) + '</span>' : ''}</div>`).join('') : '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucune société</div>';
+  const createBtn = `<div onclick="openNewClientFromTask()" style="padding:9px 12px;font-size:12px;cursor:pointer;border-top:1px solid var(--border);color:var(--accent);font-weight:600" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''">➕ Créer « ${cmdEsc(ql)} » comme nouvelle société</div>`;
+  dd.innerHTML = (data.length ? data.slice(0, 60).map(c => `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="tacheSelectClient('${c.id}','${(c.name || '').replace(/'/g, "&#39;")}')">${cmdEsc(c.name)}${c.city ? ' <span style="color:var(--t3);font-size:11px">' + cmdEsc(c.city) + '</span>' : ''}</div>`).join('') : '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucune société</div>') + createBtn;
   dd.style.display = 'block';
 }
 function tacheSelectClient(id, name) { _tacheSel.client_id = id; _tacheSel.client_name = name; _tacheSel.affaire_id = null; _tacheSel.affaire_nom = null; _tacheSel.opportunite_id = null; const dd = document.getElementById('t-client-dd'); if (dd) dd.style.display = 'none'; const inp = document.getElementById('t-client-search'); if (inp) inp.value = ''; tacheRenderClientChip(); tacheRenderAffaireOptions(); tacheRenderOppOptions(); }
@@ -6025,7 +6026,7 @@ async function _oppClientSearch(q, isEnd) {
       const words = q.split(/\s+/).filter(Boolean);
       const COLS = ['name', 'code'];
       const build = (loose) => {
-        let query = sb.from('clients').select('id,name,code,city,akuiteo_id').not('akuiteo_id', 'is', null);
+        let query = sb.from('clients').select('id,name,code,city,akuiteo_id');
         for (const w of words) {
           if (loose) { query = query.or(_looseIlikeOr(COLS, w)); }
           else { const pat = '%' + w.replace(/[%,]/g, '') + '%'; query = query.or(COLS.map(c => c + '.ilike.' + pat).join(',')); }
@@ -6034,16 +6035,49 @@ async function _oppClientSearch(q, isEnd) {
       };
       let { data } = await build(false);
       if (!data || !data.length) { ({ data } = await build(true)); }
-      const list = (data || []).slice().sort((a, b) => _searchScore(q, b.name, b.code) - _searchScore(q, a.name, a.code) || (a.name || '').localeCompare(b.name || '', 'fr'));
-      const pick = isEnd ? '_oppPickEndClient' : '_oppPickClient';
+      // Clients liés à Akuiteo en premier, puis tri par pertinence
+      const list = (data || []).slice().sort((a, b) =>
+        (a.akuiteo_id ? 0 : 1) - (b.akuiteo_id ? 0 : 1)
+        || _searchScore(q, b.name, b.code) - _searchScore(q, a.name, a.code)
+        || (a.name || '').localeCompare(b.name || '', 'fr'));
       const qEsc = q.replace(/'/g, "\\'");
       const createBtn = `<div onclick="oppNewClientOpen('${cmdEsc(qEsc)}',${isEnd ? 'true' : 'false'})" style="padding:9px;font-size:12px;cursor:pointer;border-top:1px solid var(--border);color:var(--accent);font-weight:600" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''">➕ Créer « ${cmdEsc(q)} » comme nouveau client</div>`;
       box.innerHTML = (list.length
-        ? list.slice(0, 100).map(c => `<div onclick="${pick}('${c.id}','${String(c.akuiteo_id)}','${cmdEsc((c.name || '').replace(/'/g, "\\'"))}')" style="padding:7px 9px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><strong>${cmdEsc(c.name || '')}</strong> <span style="color:var(--t3)">${cmdEsc(c.code || '')}${c.city ? ' — ' + cmdEsc(c.city) : ''}</span></div>`).join('')
-        : '<div style="padding:8px;font-size:12px;color:var(--t3)">Aucune société (avec lien Akuiteo)</div>') + createBtn;
+        ? list.slice(0, 100).map(c => {
+            const badge = c.akuiteo_id ? '' : '<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(245,158,11,.18);color:#d97706" title="Pas encore dans Akuiteo — sera créé à la sélection">⟳ à lier</span>';
+            return `<div onclick="_oppPickClientById('${c.id}',${isEnd ? 'true' : 'false'})" style="padding:7px 9px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><strong>${cmdEsc(c.name || '')}</strong> <span style="color:var(--t3)">${cmdEsc(c.code || '')}${c.city ? ' — ' + cmdEsc(c.city) : ''}</span>${badge}</div>`;
+          }).join('')
+        : '<div style="padding:8px;font-size:12px;color:var(--t3)">Aucune société</div>') + createBtn;
       box.style.display = 'block';
     } catch (e) { box.style.display = 'none'; }
   }, 200);
+}
+// Sélection d'un client dans l'opportunité à partir de son id CRM.
+// Si le client n'existe pas encore dans Akuiteo (akuiteo_id null), on le crée à la volée (avec confirmation).
+async function _oppPickClientById(clientId, isEnd) {
+  const box = document.getElementById(isEnd ? 'of-endclientRes' : 'of-clientRes'); if (box) box.style.display = 'none';
+  const { data: c } = await sb.from('clients').select('id,name,code,akuiteo_id,code_postal,city,adresse_ligne1,siret,siren,pays,status').eq('id', clientId).maybeSingle();
+  if (!c) { toast('Client introuvable', 'error'); return; }
+  let akId = c.akuiteo_id;
+  if (!akId) {
+    if (!confirm('« ' + c.name + ' » n\'existe pas encore dans Akuiteo.\n\nLe créer maintenant dans Akuiteo pour pouvoir l\'utiliser dans cette opportunité ?')) return;
+    if (!c.code_postal || !c.city) { toast('Code postal et ville manquants sur la fiche client — complétez-la avant de la lier à Akuiteo', 'error'); return; }
+    showSyncLoading(true); setSyncText('Création du client dans Akuiteo…');
+    try {
+      const payload = { name: c.name, type: (c.status === 'client' ? 'CUSTOMER' : 'PROSPECT'), address: { postalCode: c.code_postal, city: c.city, country: c.pays || 'FR' } };
+      if (c.adresse_ligne1) payload.address.line1 = c.adresse_ligne1;
+      if (c.siret) { payload.siret = c.siret; payload.siren = c.siren || c.siret.slice(0, 9); }
+      const res = await akuiteoFetch('PUT', '/crm/customers', payload, { accept: 'text/plain' });
+      akId = String((res && typeof res === 'object') ? (res.id || res.value || '') : res).replace(/[^0-9]/g, '');
+      if (!akId) throw new Error('Akuiteo n\'a pas renvoyé d\'identifiant');
+      let code = c.code; try { const cc = await akuiteoFetch('GET', `/crm/customers/${akId}`); if (cc && cc.code) code = cc.code; } catch (e) {}
+      await sb.from('clients').update({ akuiteo_id: akId, code: code || c.code }).eq('id', clientId);
+      showSyncLoading(false);
+      toast('Client créé dans Akuiteo et sélectionné', 'success');
+    } catch (e) { showSyncLoading(false); toast('Erreur création Akuiteo : ' + e.message, 'error'); return; }
+  }
+  if (isEnd) _oppPickEndClient(clientId, akId, c.name);
+  else _oppPickClient(clientId, akId, c.name);
 }
 function _oppPickClient(clientId, akId, name) {
   _oppForm.clientId = clientId; _oppForm.customerAkId = akId; _oppForm.clientName = name; _oppForm.contactAkId = ''; _oppForm.customerLocationId = '';
@@ -8724,7 +8758,7 @@ function renderClients(filter='all') {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <span style="font-size:13px;color:var(--t2)">${clientsTotalCount} clients/prospects</span>
-      <button class="btn btn-primary" onclick="openModal('new-client')">+ Nouveau client/prospect</button>
+      <button class="btn btn-primary" onclick="_ncReturnCtx=null;openModal('new-client')">+ Nouveau client/prospect</button>
       <button class="btn" onclick="openModal('prospect-target')" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;border:none">🎯 Cibler prospects</button>
       <button class="btn" onclick="exportCSV('clients')">⤓ Export CSV</button>
     </div>
@@ -17343,15 +17377,35 @@ async function searchCRClient(q) {
   }, 200);
 }
 
+// Contexte de retour après création via le formulaire complet « new-client »
+// (null = page clients ; 'cr' = éditeur CR ; 'task' = édition d'une tâche)
+let _ncReturnCtx = null;
+
+// Pré-remplit le nom et lance automatiquement une recherche SIRENE pour enrichir la fiche
+function _ncPrefillAndSearch(name) {
+  const nm = (name || '').trim();
+  const nameInput = document.getElementById('nc-name');
+  if (nameInput && nm) nameInput.value = nm;
+  const sir = document.getElementById('nc-sirene-search');
+  if (sir && nm) { sir.value = nm; try { searchSirene(); } catch (e) {} }
+}
+
 function openNewClientFromCR() {
+  _ncReturnCtx = 'cr';
   document.getElementById('crClientDropdown').style.display = 'none';
-  // Pré-remplir le nom avec ce qui a été tapé dans la recherche
+  // Pré-remplir le nom avec ce qui a été tapé dans la recherche + enrichissement SIRENE
   const q = document.getElementById('crClientSearch')?.value || '';
   openModal('new-client');
-  setTimeout(() => {
-    const nameInput = document.getElementById('nc-name');
-    if (nameInput && q) nameInput.value = q;
-  }, 50);
+  setTimeout(() => _ncPrefillAndSearch(q), 60);
+}
+
+// Création d'une nouvelle société depuis l'édition d'une tâche (formulaire complet enrichi)
+function openNewClientFromTask() {
+  _ncReturnCtx = 'task';
+  const dd = document.getElementById('t-client-dd'); if (dd) dd.style.display = 'none';
+  const q = document.getElementById('t-client-search')?.value || '';
+  openModal('new-client');
+  setTimeout(() => _ncPrefillAndSearch(q), 60);
 }
 
 function selectCRClient(id, name) {
@@ -23215,7 +23269,20 @@ async function submitNewClient() {
     window._ncSecondaryEstablishments = [];
     closeModal('new-client');
 
-    if (crViewMode === 'detail') {
+    if (_ncReturnCtx === 'task') {
+      // Retour vers l'édition de tâche : sélectionner la société sans recharger la page (préserve les champs saisis)
+      _ncReturnCtx = null;
+      setStep('Finalisation…', 95);
+      overlay.style.display = 'none';
+      _tacheSel.client_id = id; _tacheSel.client_name = name;
+      _tacheSel.affaire_id = null; _tacheSel.affaire_nom = null; _tacheSel.opportunite_id = null;
+      if (typeof tacheRenderClientChip === 'function') tacheRenderClientChip();
+      if (typeof tacheRenderAffaireOptions === 'function') tacheRenderAffaireOptions();
+      if (typeof tacheRenderOppOptions === 'function') tacheRenderOppOptions();
+      toast('Société créée et sélectionnée', 'success');
+      loadDB(); // rechargement en arrière-plan
+    } else if (crViewMode === 'detail') {
+      _ncReturnCtx = null;
       await loadDB();
       setStep('Finalisation…', 95);
       overlay.style.display = 'none';
@@ -23231,6 +23298,7 @@ async function submitNewClient() {
         if (co) { co.disabled = !_crSelectedClients.length; co.style.opacity = _crSelectedClients.length ? '1' : '0.5'; }
       }, 100);
     } else {
+      _ncReturnCtx = null;
       await loadDB();
       setStep('Ouverture de la fiche…', 95);
       overlay.style.display = 'none';
