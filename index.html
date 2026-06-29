@@ -4370,6 +4370,7 @@ async function goEnDev() {
 }
 
 function renderEnDev() {
+  _vrReturn = 'endev'; // depuis En Dev', le retour de la carte revient ici
   const pages = [
     { page: 'pipeline', label: 'Pipeline', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>' },
     { page: 'batiscope', label: "BatiScop'", icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>' },
@@ -4772,6 +4773,7 @@ let _vrMap = null;
 let _vrPALoading = false;
 let _vrPaFrom = '', _vrPaTo = '';   // filtre sur la date d'autorisation
 let _vrPermisType = 'pa';           // 'pa' = permis d'aménager ; 'pc' = permis de construire (logements)
+let _vrReturn = 'endev';            // page de retour du bouton « ← Retour » (En Dev' ou Opportunités)
 let _vrArgileOn = true, _vrArgileOpacity = 0.55, _vrArgileLayer = null;   // calque aléa argile (BRGM)
 let _vrRoadsOn = true, _vrBaseLayer = null, _vrFsBound = false;           // fond de carte (routes) + plein écran
 const VR_NAF = { notaire: { naf: '6910Z', label: 'Notaire' }, agence: { naf: '6831Z', label: 'Agence immobilière' }, geometre: { naf: '7112B', label: 'Géomètre-expert' } };
@@ -4781,7 +4783,7 @@ function renderVeilleRegar() {
   const withEmail = _vrResults.filter(r => r.email).length;
   return `
   <div style="max-width:1100px;margin:0 auto">
-    <div style="margin-bottom:14px"><button class="btn btn-sm" onclick="go('endev')">← Retour En Dev'</button></div>
+    <div style="margin-bottom:14px"><button class="btn btn-sm" onclick="go(_vrReturn)">← Retour</button></div>
     <div class="card" style="margin-bottom:14px">
       <div class="card-header"><div class="card-title">🏞️ Veille REGAR — prescripteurs (études de sol G1)</div></div>
       <div class="card-body">
@@ -6828,6 +6830,7 @@ function renderOpportunites() {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-primary" onclick="oppModalOpen()">+ Nouvelle opportunité</button>
+      <button class="btn" onclick="_vrReturn='opportunites';go('veille-regar')">🗺️ Carte des Opportunités</button>
       <button class="btn" onclick="go('opportunite-analyse')">📊 Analyser</button>
       <button class="btn" onclick="syncOpportunites()">⬇ Synchroniser Akuiteo</button>
       <span style="font-size:13px;color:var(--t2)">${rows.length} opportunité(s)</span>
