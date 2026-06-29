@@ -4780,6 +4780,8 @@ let _vrRoadsOn = true, _vrBaseLayer = null, _vrFsBound = false;           // fon
 const VR_NAF = { notaire: { naf: '6910Z', label: 'Notaire' }, agence: { naf: '6831Z', label: 'Agence immobilière' }, geometre: { naf: '7112B', label: 'Géomètre-expert' } };
 
 function renderVeilleRegar() {
+  const _vrTypeLabel = { pa: "Permis d'aménager", pc: 'Permis de construire (logements)', pc_existant: 'Permis sur bâti existant', dpe_ter: 'DPE tertiaire F/G', dpe_log: 'DPE logements F/G' }[_vrPermisType] || 'Permis';
+  const _vrIsDpe = (_vrPermisType === 'dpe_ter' || _vrPermisType === 'dpe_log');
   return `
   <div style="max-width:1100px;margin:0 auto">
     <div style="margin-bottom:14px"><button class="btn btn-sm" onclick="go(_vrReturn)">← Retour</button></div>
@@ -4794,6 +4796,9 @@ function renderVeilleRegar() {
           <select id="vr-permis-type" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
             <option value="pa"${_vrPermisType === 'pa' ? ' selected' : ''}>Permis d'aménager (lotissements)</option>
             <option value="pc"${_vrPermisType === 'pc' ? ' selected' : ''}>Permis de construire (logements)</option>
+            <option value="pc_existant"${_vrPermisType === 'pc_existant' ? ' selected' : ''}>Permis sur bâti existant (réhab/extension)</option>
+            <option value="dpe_ter"${_vrPermisType === 'dpe_ter' ? ' selected' : ''}>DPE tertiaire F/G (à rénover)</option>
+            <option value="dpe_log"${_vrPermisType === 'dpe_log' ? ' selected' : ''}>DPE logements F/G (passoires)</option>
           </select>
           <select id="vr-nblgt" title="Filtre logements (s'applique aux permis de construire)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
             <option value=""${_vrNbLgt === '' ? ' selected' : ''}>Tous logements</option>
@@ -4809,7 +4814,7 @@ function renderVeilleRegar() {
       </div>
     </div>
     ${(_vrShowMap || _vrPALoading) ? `<div class="card" style="margin-bottom:14px">
-      <div class="card-header"><div class="card-title">🗺️ ${_vrPermisType === 'pc' ? 'Permis de construire (logements)' : 'Permis d\'aménager'} récents — dép. ${cmdEsc(_vrDept)}${_vrPA.length ? ' (' + _vrPA.length + ')' : ''}</div></div>
+      <div class="card-header"><div class="card-title">🗺️ ${_vrTypeLabel}${_vrIsDpe ? '' : ' récents'} — dép. ${cmdEsc(_vrDept)}${_vrPA.length ? ' (' + _vrPA.length + ')' : ''}</div></div>
       <div class="card-body" style="padding:0">
         ${_vrPALoading ? '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">⏳ Chargement des permis…</div>' : (_vrPA.length ? `<div id="vr-map-wrap" style="position:relative">
           <div style="padding:8px 12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--border);background:var(--card,#fff)">
@@ -4822,7 +4827,9 @@ function renderVeilleRegar() {
           <div id="vr-map" style="height:460px"></div>
         </div>` : '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Aucun permis géolocalisé pour ce département (sur la période choisie).</div>')}
       </div>
-      <div style="padding:8px 12px;font-size:11px;color:var(--t3)">Marqueurs : <span style="color:#10b981">●</span> autorisé · <span style="color:#f59e0b">●</span> chantier ouvert · <span style="color:#6b7280">●</span> travaux achevés. Calque argile (BRGM) : du jaune (faible) au rouge/violet (fort) — l'obligation G1 concerne les zones <strong>moyen et fort</strong>. Sources : Sitadel (${_vrPermisType === 'pc' ? 'permis de construire de logements' : 'permis d\'aménager'}) + exposition RGA BRGM/Géorisques.</div>
+      <div style="padding:8px 12px;font-size:11px;color:var(--t3)">${_vrIsDpe
+        ? 'Marqueurs : <span style="color:#f59e0b">●</span> classe F · <span style="color:#ef4444">●</span> classe G (passoires thermiques à rénover). Source : observatoire DPE ADEME.'
+        : 'Marqueurs : <span style="color:#10b981">●</span> autorisé · <span style="color:#f59e0b">●</span> chantier ouvert · <span style="color:#6b7280">●</span> travaux achevés. Source : Sitadel.'} Calque argile (BRGM) : du jaune (faible) au rouge/violet (fort).</div>
     </div>` : ''}
   </div>`;
 }
@@ -4955,39 +4962,78 @@ async function vrLoadPA() {
   _vrNbLgt = document.getElementById('vr-nblgt')?.value || '';
   _vrDept = dept; _vrShowMap = true; _vrPALoading = true; _vrPA = []; renderPage('veille-regar');
   try {
-    const isPC = _vrPermisType === 'pc';
-    const dataset = isPC ? 'sitadel-logements' : 'sitadel-pa';
-    const sel = isPC
-      ? 'COMM,DATE_REELLE_AUTORISATION,DATE_REELLE_DOC,DATE_REELLE_DAACT,DENOM_DEM,SIREN_DEM,APE_DEM,ADR_LIBVOIE_TER,ADR_LOCALITE_TER,ADR_CODPOST_TER,NB_LGT_TOT_CREES,NATURE_PROJET_DECLAREE,latitude,longitude'
-      : 'COMM,DEP_CODE,DEP_LIBELLE,DR_DEPOT,DATE_REELLE_AUTORISATION,DATE_REELLE_DOC,DATE_REELLE_DAACT,ETAT_PA,DENOM_DEM,SIREN_DEM,APE_DEM,CJ_DEM,LOCALITE_DEM,CODPOST_DEM,ADR_NUM_TER,ADR_LIBVOIE_TER,ADR_LIEUDIT_TER,ADR_LOCALITE_TER,ADR_CODPOST_TER,SUPERFICIE_TERRAIN,NUM_PA,parcelle,latitude,longitude';
-    const clauses = [isPC ? `COMM:${dept}*` : `DEP_CODE:"${dept}"`];
-    if (_vrPaFrom || _vrPaTo) clauses.push(`DATE_REELLE_AUTORISATION:[${_vrPaFrom || '1970-01-01'} TO ${_vrPaTo || '2100-12-31'}]`);
-    if (isPC && _vrNbLgt === '1') clauses.push('NB_LGT_TOT_CREES:1');
-    else if (isPC && _vrNbLgt === 'collectif') clauses.push('NB_LGT_TOT_CREES:>=2');
+    const t = _vrPermisType;
+    const isDpe = (t === 'dpe_ter' || t === 'dpe_log');
+    const isSitPc = (t === 'pc' || t === 'pc_existant');
+    let base, sel = null, sort = null;
+    const clauses = [];
+    if (t === 'pa') {
+      base = 'https://opendata.koumoul.com/data-fair/api/v1/datasets/sitadel-pa';
+      sel = 'COMM,DEP_CODE,DR_DEPOT,DATE_REELLE_AUTORISATION,DATE_REELLE_DOC,DATE_REELLE_DAACT,DENOM_DEM,SIREN_DEM,APE_DEM,LOCALITE_DEM,CODPOST_DEM,ADR_NUM_TER,ADR_LIBVOIE_TER,ADR_LIEUDIT_TER,ADR_LOCALITE_TER,ADR_CODPOST_TER,SUPERFICIE_TERRAIN,NUM_PA,parcelle,latitude,longitude';
+      sort = '-DATE_REELLE_AUTORISATION';
+      clauses.push(`DEP_CODE:"${dept}"`);
+    } else if (isSitPc) {
+      base = 'https://opendata.koumoul.com/data-fair/api/v1/datasets/sitadel-logements';
+      sel = 'COMM,DATE_REELLE_AUTORISATION,DATE_REELLE_DOC,DATE_REELLE_DAACT,DENOM_DEM,SIREN_DEM,APE_DEM,ADR_LIBVOIE_TER,ADR_LOCALITE_TER,ADR_CODPOST_TER,NB_LGT_TOT_CREES,NATURE_PROJET_DECLAREE,latitude,longitude';
+      sort = '-DATE_REELLE_AUTORISATION';
+      clauses.push(`COMM:${dept}*`);
+      if (t === 'pc_existant') clauses.push('NATURE_PROJET_DECLAREE:2');
+      if (_vrNbLgt === '1') clauses.push('NB_LGT_TOT_CREES:1');
+      else if (_vrNbLgt === 'collectif') clauses.push('NB_LGT_TOT_CREES:>=2');
+    } else { // DPE (ademe) — pas de select/sort (champs variables) pour rester robuste
+      base = t === 'dpe_ter'
+        ? 'https://data.ademe.fr/data-fair/api/v1/datasets/j9ol0fwjqckyf49vr29nknbu'
+        : 'https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant';
+      clauses.push(`code_postal_ban:${dept}*`);
+      clauses.push('etiquette_dpe:(F OR G)');
+    }
+    if ((t === 'pa' || isSitPc) && (_vrPaFrom || _vrPaTo)) clauses.push(`DATE_REELLE_AUTORISATION:[${_vrPaFrom || '1970-01-01'} TO ${_vrPaTo || '2100-12-31'}]`);
     const p = new URLSearchParams();
     p.set('qs', clauses.join(' AND '));
-    p.set('sort', '-DATE_REELLE_AUTORISATION');
-    p.set('size', '1000');
-    p.set('select', sel);
-    const r = await fetch('https://opendata.koumoul.com/data-fair/api/v1/datasets/' + dataset + '/lines?' + p.toString());
-    if (!r.ok) throw new Error('Sitadel ' + r.status);
+    if (sort) p.set('sort', sort);
+    p.set('size', isDpe ? '600' : '1000');
+    if (sel) p.set('select', sel);
+    const r = await fetch(base + '/lines?' + p.toString());
+    if (!r.ok) throw new Error('Source ' + r.status);
     const j = await r.json();
-    _vrPA = (j.results || []).filter(x => x.latitude && x.longitude).map(x => ({
-      kind: isPC ? 'pc' : 'pa',
-      lat: Number(x.latitude), lon: Number(x.longitude),
-      demandeur: x.DENOM_DEM || '(non dénommé)', siren: x.SIREN_DEM || '',
-      apeDem: x.APE_DEM || '', cjDem: x.CJ_DEM || '',
-      demLocalite: x.LOCALITE_DEM || '', demCp: x.CODPOST_DEM || '',
-      commune: x.ADR_LOCALITE_TER || '', cp: x.ADR_CODPOST_TER || '',
-      voie: [x.ADR_NUM_TER, x.ADR_LIBVOIE_TER].filter(Boolean).join(' ') || x.ADR_LIEUDIT_TER || '',
-      date: x.DATE_REELLE_AUTORISATION || x.DR_DEPOT || '',
-      dateDoc: x.DATE_REELLE_DOC || '', dateDaact: x.DATE_REELLE_DAACT || '',
-      etat: x.ETAT_PA || '',
-      superficie: x.SUPERFICIE_TERRAIN || null, numPa: x.NUM_PA || '', parcelle: x.parcelle || '',
-      nbLgt: (x.NB_LGT_TOT_CREES != null ? x.NB_LGT_TOT_CREES : null), nature: x.NATURE_PROJET_DECLAREE || '',
-    }));
-  } catch (e) { toast('Erreur Sitadel : ' + e.message, 'error'); }
+    _vrPA = (j.results || []).map(x => _vrMapRow(x, t)).filter(d => d.lat && d.lon);
+  } catch (e) { toast('Erreur source : ' + e.message, 'error'); }
   _vrPALoading = false; renderPage('veille-regar');
+}
+
+function _vrGeo(x) {
+  if (x.latitude && x.longitude) return [Number(x.latitude), Number(x.longitude)];
+  if (typeof x._geopoint === 'string') { const a = x._geopoint.split(','); const la = Number(a[0]), lo = Number(a[1]); if (la && lo) return [la, lo]; }
+  return [null, null];
+}
+function _vrMapRow(x, t) {
+  const [lat, lon] = _vrGeo(x);
+  if (t === 'dpe_ter' || t === 'dpe_log') {
+    const surface = x.surface_utile || x.surface_shon || x.surface_habitable_immeuble || x.surface_habitable_logement || null;
+    const typeBat = x.type_batiment || x.type_batiment_gen || (t === 'dpe_ter' ? 'tertiaire' : 'logement');
+    return {
+      kind: t, lat, lon,
+      demandeur: 'DPE ' + (x.etiquette_dpe || '?') + ' — ' + typeBat,
+      siren: '', commune: x.nom_commune_ban || '', cp: x.code_postal_ban || '',
+      voie: x.adresse_ban || '', adresse: x.adresse_ban || '',
+      dpeClass: x.etiquette_dpe || '', gesClass: x.etiquette_ges || '',
+      surface: surface, periode: x.periode_construction || '',
+      categorie: x.categorie_erp || x.type_usage_principal || '', secteur: x.secteur_activite || '',
+      numero: x.numero_dpe || '', date: x.date_etablissement_dpe || x.date_reception_dpe || '',
+    };
+  }
+  // Sitadel (pa / pc / pc_existant)
+  return {
+    kind: t, lat, lon,
+    demandeur: x.DENOM_DEM || '(particulier / non dénommé)', siren: x.SIREN_DEM || '',
+    apeDem: x.APE_DEM || '', demLocalite: x.LOCALITE_DEM || '', demCp: x.CODPOST_DEM || '',
+    commune: x.ADR_LOCALITE_TER || '', cp: x.ADR_CODPOST_TER || '',
+    voie: [x.ADR_NUM_TER, x.ADR_LIBVOIE_TER].filter(Boolean).join(' ') || x.ADR_LIEUDIT_TER || '',
+    date: x.DATE_REELLE_AUTORISATION || x.DR_DEPOT || '',
+    dateDoc: x.DATE_REELLE_DOC || '', dateDaact: x.DATE_REELLE_DAACT || '',
+    superficie: x.SUPERFICIE_TERRAIN || null, numPa: x.NUM_PA || '', parcelle: x.parcelle || '',
+    nbLgt: (x.NB_LGT_TOT_CREES != null ? x.NB_LGT_TOT_CREES : null), nature: x.NATURE_PROJET_DECLAREE || '',
+  };
 }
 
 function _vrInitMap() {
@@ -5008,36 +5054,52 @@ function _vrInitMap() {
   const bounds = [];
   _vrPA.forEach((d, idx) => {
     if (!(d.lat && d.lon)) return;
-    // Statut déduit des dates de chantier (plus fiable que le code ETAT_PA brut)
-    const statut = d.dateDaact ? '✅ Travaux achevés' : (d.dateDoc ? '🚧 Chantier ouvert' : '📋 Autorisé');
-    const statutColor = d.dateDaact ? '#6b7280' : (d.dateDoc ? '#f59e0b' : '#10b981');
-    const m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#0891b2', fillColor: statutColor, fillOpacity: 0.75, weight: 2 }).addTo(_vrMap);
-    const dt = d.date ? fmtDateFR(d.date) : '';
-    const sup = d.superficie ? Number(d.superficie).toLocaleString('fr-FR') + ' m²' : '';
-    const ape = (d.apeDem && typeof apeLabel === 'function' && apeLabel(d.apeDem)) ? apeLabel(d.apeDem) : '';
-    const kindLbl = d.kind === 'pc' ? 'Permis de construire (logements)' : 'Permis d\'aménager';
-    const rows = [
-      `<div style="color:#0891b2;font-size:11px;font-weight:600">${kindLbl}</div>`,
-      d.voie || d.commune ? `<div style="color:#555">${cmdEsc([d.voie, d.cp, d.commune].filter(Boolean).join(', '))}</div>` : '',
-      `<div style="margin-top:3px"><span style="color:${statutColor};font-weight:600">${statut}</span>${dt ? ' · autorisé le ' + dt : ''}</div>`,
-      (d.kind === 'pc' && d.nbLgt != null) ? `<div style="color:#555">Logements créés : <strong>${cmdEsc(String(d.nbLgt))}</strong></div>` : '',
-      (d.kind === 'pc' && d.nature) ? `<div style="color:#555;font-size:11px">Nature : ${cmdEsc(d.nature)}</div>` : '',
-      sup ? `<div style="color:#555">Superficie terrain : <strong>${sup}</strong></div>` : '',
-      d.dateDoc ? `<div style="color:#555;font-size:11px">Ouverture chantier : ${fmtDateFR(d.dateDoc)}</div>` : '',
-      d.dateDaact ? `<div style="color:#555;font-size:11px">Achèvement : ${fmtDateFR(d.dateDaact)}</div>` : '',
-      ape ? `<div style="color:#555;font-size:11px">Demandeur : ${cmdEsc(ape)}</div>` : '',
-      (d.demLocalite || d.demCp) ? `<div style="color:#555;font-size:11px">Adresse demandeur : ${cmdEsc([d.demCp, d.demLocalite].filter(Boolean).join(' '))}</div>` : '',
-      d.parcelle ? `<div style="color:#888;font-size:11px">Parcelle : ${cmdEsc(d.parcelle)}</div>` : '',
-      d.numPa ? `<div style="color:#888;font-size:11px">N° PA : ${cmdEsc(d.numPa)}</div>` : '',
-    ].filter(Boolean).join('');
+    const isDpe = (d.kind === 'dpe_ter' || d.kind === 'dpe_log');
+    let color, rows, buttons;
+    if (isDpe) {
+      const kindLbl = (d.kind === 'dpe_ter' ? 'DPE tertiaire' : 'DPE logement') + ' — à rénover';
+      color = d.dpeClass === 'G' ? '#ef4444' : '#f59e0b';
+      rows = [
+        `<div style="color:#0891b2;font-size:11px;font-weight:600">${kindLbl}</div>`,
+        d.adresse ? `<div style="color:#555">${cmdEsc(d.adresse)}</div>` : '',
+        `<div style="margin-top:3px">Étiquette énergie : <strong style="color:${color}">${cmdEsc(d.dpeClass || '?')}</strong>${d.gesClass ? ' · GES ' + cmdEsc(d.gesClass) : ''}</div>`,
+        d.surface ? `<div style="color:#555">Surface : <strong>${Number(d.surface).toLocaleString('fr-FR')} m²</strong></div>` : '',
+        d.periode ? `<div style="color:#555;font-size:11px">Construction : ${cmdEsc(d.periode)}</div>` : '',
+        (d.categorie || d.secteur) ? `<div style="color:#555;font-size:11px">${cmdEsc([d.categorie, d.secteur].filter(Boolean).join(' · '))}</div>` : '',
+        d.date ? `<div style="color:#888;font-size:11px">DPE du ${fmtDateFR(d.date)}</div>` : '',
+        d.numero ? `<div style="color:#888;font-size:11px">N° ${cmdEsc(d.numero)}</div>` : '',
+      ].filter(Boolean).join('');
+      buttons = `<button onclick="vrPAOpportunity(${idx})" style="font-size:11px;padding:2px 6px;cursor:pointer">🎯 + Opportunité (rénovation)</button>`;
+    } else {
+      const statut = d.dateDaact ? '✅ Travaux achevés' : (d.dateDoc ? '🚧 Chantier ouvert' : '📋 Autorisé');
+      color = d.dateDaact ? '#6b7280' : (d.dateDoc ? '#f59e0b' : '#10b981');
+      const dt = d.date ? fmtDateFR(d.date) : '';
+      const sup = d.superficie ? Number(d.superficie).toLocaleString('fr-FR') + ' m²' : '';
+      const ape = (d.apeDem && typeof apeLabel === 'function' && apeLabel(d.apeDem)) ? apeLabel(d.apeDem) : '';
+      const hasLgt = (d.kind === 'pc' || d.kind === 'pc_existant');
+      const kindLbl = d.kind === 'pa' ? 'Permis d\'aménager' : (d.kind === 'pc_existant' ? 'Permis sur bâti existant (réhab/extension)' : 'Permis de construire (logements)');
+      rows = [
+        `<div style="color:#0891b2;font-size:11px;font-weight:600">${kindLbl}</div>`,
+        d.voie || d.commune ? `<div style="color:#555">${cmdEsc([d.voie, d.cp, d.commune].filter(Boolean).join(', '))}</div>` : '',
+        `<div style="margin-top:3px"><span style="color:${color};font-weight:600">${statut}</span>${dt ? ' · autorisé le ' + dt : ''}</div>`,
+        (hasLgt && d.nbLgt != null) ? `<div style="color:#555">Logements créés : <strong>${cmdEsc(String(d.nbLgt))}</strong></div>` : '',
+        sup ? `<div style="color:#555">Superficie terrain : <strong>${sup}</strong></div>` : '',
+        d.dateDoc ? `<div style="color:#555;font-size:11px">Ouverture chantier : ${fmtDateFR(d.dateDoc)}</div>` : '',
+        d.dateDaact ? `<div style="color:#555;font-size:11px">Achèvement : ${fmtDateFR(d.dateDaact)}</div>` : '',
+        ape ? `<div style="color:#555;font-size:11px">Demandeur : ${cmdEsc(ape)}</div>` : '',
+        (d.demLocalite || d.demCp) ? `<div style="color:#555;font-size:11px">Adresse demandeur : ${cmdEsc([d.demCp, d.demLocalite].filter(Boolean).join(' '))}</div>` : '',
+        d.parcelle ? `<div style="color:#888;font-size:11px">Parcelle : ${cmdEsc(d.parcelle)}</div>` : '',
+        d.numPa ? `<div style="color:#888;font-size:11px">N° PA : ${cmdEsc(d.numPa)}</div>` : '',
+      ].filter(Boolean).join('');
+      buttons = `<button onclick="vrPAProspect(${idx})" style="font-size:11px;padding:2px 6px;cursor:pointer">+ Prospect</button>
+        <button onclick="vrPAOpportunity(${idx})" style="font-size:11px;padding:2px 6px;cursor:pointer">🎯 + Opportunité</button>
+        ${d.siren ? `<a href="https://annuaire-entreprises.data.gouv.fr/entreprise/${cmdEsc(d.siren)}" target="_blank" rel="noopener" style="font-size:11px">Fiche SIRENE ↗</a>` : ''}`;
+    }
+    const m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#0891b2', fillColor: color, fillOpacity: 0.75, weight: 2 }).addTo(_vrMap);
     m.bindPopup(`<div style="font-size:12px;min-width:220px;max-width:300px">
       <div style="font-weight:700;margin-bottom:3px">${cmdEsc(d.demandeur)}</div>
       ${rows}
-      <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <button onclick="vrPAProspect(${idx})" style="font-size:11px;padding:2px 6px;cursor:pointer">+ Prospect</button>
-        <button onclick="vrPAOpportunity(${idx})" style="font-size:11px;padding:2px 6px;cursor:pointer">🎯 + Opportunité</button>
-        ${d.siren ? `<a href="https://annuaire-entreprises.data.gouv.fr/entreprise/${cmdEsc(d.siren)}" target="_blank" rel="noopener" style="font-size:11px">Fiche SIRENE ↗</a>` : ''}
-      </div></div>`);
+      <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${buttons}</div></div>`);
     bounds.push([d.lat, d.lon]);
   });
   if (bounds.length) { try { _vrMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 }); } catch (e) {} }
@@ -5087,19 +5149,30 @@ function vrPAProspect(idx) {
 }
 function vrPAOpportunity(idx) {
   const d = _vrPA[idx]; if (!d) return;
-  const isPC = d.kind === 'pc';
+  if (d.kind === 'dpe_ter' || d.kind === 'dpe_log') {
+    const desc = [
+      'Bâtiment à rénover (DPE ' + (d.dpeClass || '') + ') repéré via l\'observatoire DPE (ADEME).',
+      d.adresse ? 'Adresse : ' + d.adresse : '',
+      d.surface ? 'Surface : ' + Number(d.surface).toLocaleString('fr-FR') + ' m²' : '',
+      d.periode ? 'Construction : ' + d.periode : '',
+      (d.categorie || d.secteur) ? 'Usage : ' + [d.categorie, d.secteur].filter(Boolean).join(' · ') : '',
+      d.numero ? 'N° DPE : ' + d.numero : '',
+    ].filter(Boolean).join('\n');
+    oppModalOpen(null, { name: 'Rénovation énergétique — ' + (d.commune || d.adresse || ''), description: desc, clientHint: '' });
+    return;
+  }
+  const isPC = (d.kind === 'pc' || d.kind === 'pc_existant');
   const desc = [
-    (isPC ? 'Permis de construire (logements)' : 'Permis d\'aménager (lotissement)') + ' détecté via Sitadel.',
+    (d.kind === 'pa' ? 'Permis d\'aménager (lotissement)' : d.kind === 'pc_existant' ? 'Permis de construire sur bâti existant' : 'Permis de construire (logements)') + ' détecté via Sitadel.',
     d.demandeur ? 'Demandeur : ' + d.demandeur : '',
     [d.voie, d.cp, d.commune].filter(Boolean).join(', '),
     (isPC && d.nbLgt != null) ? 'Logements créés : ' + d.nbLgt : '',
-    (isPC && d.nature) ? 'Nature : ' + d.nature : '',
     d.superficie ? 'Superficie terrain : ' + Number(d.superficie).toLocaleString('fr-FR') + ' m²' : '',
     d.date ? 'Autorisé le ' + fmtDateFR(d.date) : '',
     d.parcelle ? 'Parcelle : ' + d.parcelle : '',
     d.numPa ? 'N° PA : ' + d.numPa : '',
   ].filter(Boolean).join('\n');
-  const nom = (isPC ? 'Construction ' : 'Lotissement ') + (d.commune || '') + (d.demandeur ? ' — ' + d.demandeur : '');
+  const nom = (d.kind === 'pa' ? 'Lotissement ' : d.kind === 'pc_existant' ? 'Réhabilitation ' : 'Construction ') + (d.commune || '') + (d.demandeur ? ' — ' + d.demandeur : '');
   oppModalOpen(null, { name: nom, description: desc, clientHint: d.demandeur || d.commune || '' });
 }
 
