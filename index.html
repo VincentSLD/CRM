@@ -5085,19 +5085,23 @@ async function _vrLoadBoamp(dept) {
   _vrPA = out;
 }
 function _boampCP(a) {
+  // "donnees" est souvent une CHAÎNE JSON ; le CP est dans une clé "CP" (ancien format) ou "cbc:PostalZone" (eForms), très imbriquée.
+  let root = a.donnees;
+  if (typeof root === 'string') { try { root = JSON.parse(root); } catch (e) { root = null; } }
   let found = null;
   const visit = (o, depth) => {
-    if (found || o == null || depth > 6) return;
+    if (found || o == null || depth > 40) return;
+    if (Array.isArray(o)) { for (const it of o) { if (found) return; visit(it, depth + 1); } return; }
     if (typeof o === 'object') {
       for (const k in o) {
         if (found) return;
         const v = o[k];
-        if (typeof v === 'string' && /^\d{5}$/.test(v) && /cp|postal/i.test(k)) { found = v; return; }
+        if (typeof v === 'string' && /^\d{5}$/.test(v.trim()) && /cp|postal/i.test(k)) { found = v.trim(); return; }
         if (v && typeof v === 'object') visit(v, depth + 1);
       }
     }
   };
-  visit(a.donnees || a, 0);
+  visit(root || a, 0);
   return found;
 }
 // Copropriétés via BDNB (2 requêtes : registre RNC → géométrie du bâtiment)
