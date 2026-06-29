@@ -4771,6 +4771,7 @@ let _vrShowMap = false;
 let _vrMap = null;
 let _vrPALoading = false;
 let _vrPaFrom = '', _vrPaTo = '';   // filtre sur la date d'autorisation
+let _vrPermisType = 'pa';           // 'pa' = permis d'aménager ; 'pc' = permis de construire (logements)
 let _vrArgileOn = true, _vrArgileOpacity = 0.55, _vrArgileLayer = null;   // calque aléa argile (BRGM)
 let _vrRoadsOn = true, _vrBaseLayer = null, _vrFsBound = false;           // fond de carte (routes) + plein écran
 const VR_NAF = { notaire: { naf: '6910Z', label: 'Notaire' }, agence: { naf: '6831Z', label: 'Agence immobilière' }, geometre: { naf: '7112B', label: 'Géomètre-expert' } };
@@ -4795,7 +4796,11 @@ function renderVeilleRegar() {
           ${_vrResults.length ? `<button class="btn" onclick="vrExportCsv()">⬇ Export CSV</button>` : ''}
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px dashed var(--border);padding-top:10px">
-          <span style="font-size:11px;color:var(--t3);font-weight:600">Permis d'aménager autorisés du</span>
+          <select id="vr-permis-type" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+            <option value="pa"${_vrPermisType === 'pa' ? ' selected' : ''}>Permis d'aménager (lotissements)</option>
+            <option value="pc"${_vrPermisType === 'pc' ? ' selected' : ''}>Permis de construire (logements)</option>
+          </select>
+          <span style="font-size:11px;color:var(--t3)">autorisés du</span>
           <input type="date" id="vr-pa-from" value="${cmdEsc(_vrPaFrom)}" title="À partir du" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
           <span style="font-size:11px;color:var(--t3)">au</span>
           <input type="date" id="vr-pa-to" value="${cmdEsc(_vrPaTo)}" title="Jusqu'au" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
@@ -4805,9 +4810,9 @@ function renderVeilleRegar() {
       </div>
     </div>
     ${(_vrShowMap || _vrPALoading) ? `<div class="card" style="margin-bottom:14px">
-      <div class="card-header"><div class="card-title">🗺️ Permis d'aménager récents — dép. ${cmdEsc(_vrDept)}${_vrPA.length ? ' (' + _vrPA.length + ')' : ''}</div></div>
+      <div class="card-header"><div class="card-title">🗺️ ${_vrPermisType === 'pc' ? 'Permis de construire (logements)' : 'Permis d\'aménager'} récents — dép. ${cmdEsc(_vrDept)}${_vrPA.length ? ' (' + _vrPA.length + ')' : ''}</div></div>
       <div class="card-body" style="padding:0">
-        ${_vrPALoading ? '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">⏳ Chargement des permis d\'aménager…</div>' : (_vrPA.length ? `<div id="vr-map-wrap" style="position:relative">
+        ${_vrPALoading ? '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">⏳ Chargement des permis…</div>' : (_vrPA.length ? `<div id="vr-map-wrap" style="position:relative">
           <div style="padding:8px 12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--border);background:var(--card,#fff)">
             <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" ${_vrArgileOn ? 'checked' : ''} onchange="vrToggleArgile(this.checked)"> 🟫 Aléa argile (RGA)</label>
             <span style="font-size:11px;color:var(--t3)">Opacité</span>
@@ -4816,9 +4821,9 @@ function renderVeilleRegar() {
             <button class="btn" style="font-size:11px;padding:3px 8px;margin-left:auto" onclick="vrMapFullscreen()" title="Afficher la carte en plein écran">⛶ Plein écran</button>
           </div>
           <div id="vr-map" style="height:460px"></div>
-        </div>` : '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Aucun permis d\'aménager géolocalisé pour ce département.</div>')}
+        </div>` : '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Aucun permis géolocalisé pour ce département (sur la période choisie).</div>')}
       </div>
-      <div style="padding:8px 12px;font-size:11px;color:var(--t3)">Marqueurs : <span style="color:#10b981">●</span> autorisé · <span style="color:#f59e0b">●</span> chantier ouvert · <span style="color:#6b7280">●</span> travaux achevés. Calque argile (BRGM) : du jaune (faible) au rouge/violet (fort) — l'obligation G1 concerne les zones <strong>moyen et fort</strong>. Sources : Sitadel (permis d'aménager) + exposition RGA BRGM/Géorisques.</div>
+      <div style="padding:8px 12px;font-size:11px;color:var(--t3)">Marqueurs : <span style="color:#10b981">●</span> autorisé · <span style="color:#f59e0b">●</span> chantier ouvert · <span style="color:#6b7280">●</span> travaux achevés. Calque argile (BRGM) : du jaune (faible) au rouge/violet (fort) — l'obligation G1 concerne les zones <strong>moyen et fort</strong>. Sources : Sitadel (${_vrPermisType === 'pc' ? 'permis de construire de logements' : 'permis d\'aménager'}) + exposition RGA BRGM/Géorisques.</div>
     </div>` : ''}
     <div id="vr-status" style="font-size:13px;color:var(--t2);margin-bottom:10px">${_vrLoading ? '⏳ Recherche en cours…' : (_vrMsg || (_vrResults.length ? `${_vrResults.length} prescripteur(s) — ${withEmail} avec email` : ''))}</div>
     <div id="vr-results">${_vrRenderTable()}</div>
@@ -4943,26 +4948,32 @@ function vrCreateProspect(i) {
   }, 80);
 }
 
-// ─ Carte des permis d'aménager récents (Sitadel) ─
+// ─ Carte des permis (aménager / construire) récents (Sitadel) ─
 async function vrLoadPA() {
   const dept = (document.getElementById('vr-dept')?.value || '').trim().toUpperCase();
   if (!/^(\d{2,3}|2A|2B)$/.test(dept)) { toast('Saisissez un n° de département valide (ex. 85)', 'error'); return; }
   _vrPaFrom = (document.getElementById('vr-pa-from')?.value || '').trim();
   _vrPaTo = (document.getElementById('vr-pa-to')?.value || '').trim();
+  _vrPermisType = document.getElementById('vr-permis-type')?.value || 'pa';
   _vrDept = dept; _vrShowMap = true; _vrPALoading = true; _vrPA = []; renderPage('veille-regar');
   try {
-    const sel = 'COMM,DEP_CODE,DEP_LIBELLE,DR_DEPOT,DATE_REELLE_AUTORISATION,DATE_REELLE_DOC,DATE_REELLE_DAACT,ETAT_PA,DENOM_DEM,SIREN_DEM,APE_DEM,CJ_DEM,LOCALITE_DEM,CODPOST_DEM,ADR_NUM_TER,ADR_LIBVOIE_TER,ADR_LIEUDIT_TER,ADR_LOCALITE_TER,ADR_CODPOST_TER,SUPERFICIE_TERRAIN,NUM_PA,parcelle,latitude,longitude';
-    const clauses = [`DEP_CODE:"${dept}"`];
+    const isPC = _vrPermisType === 'pc';
+    const dataset = isPC ? 'sitadel-logements' : 'sitadel-pa';
+    const sel = isPC
+      ? 'COMM,DATE_REELLE_AUTORISATION,DATE_REELLE_DOC,DATE_REELLE_DAACT,DENOM_DEM,SIREN_DEM,APE_DEM,ADR_LIBVOIE_TER,ADR_LOCALITE_TER,ADR_CODPOST_TER,NB_LGT_TOT_CREES,NATURE_PROJET_DECLAREE,latitude,longitude'
+      : 'COMM,DEP_CODE,DEP_LIBELLE,DR_DEPOT,DATE_REELLE_AUTORISATION,DATE_REELLE_DOC,DATE_REELLE_DAACT,ETAT_PA,DENOM_DEM,SIREN_DEM,APE_DEM,CJ_DEM,LOCALITE_DEM,CODPOST_DEM,ADR_NUM_TER,ADR_LIBVOIE_TER,ADR_LIEUDIT_TER,ADR_LOCALITE_TER,ADR_CODPOST_TER,SUPERFICIE_TERRAIN,NUM_PA,parcelle,latitude,longitude';
+    const clauses = [isPC ? `COMM:${dept}*` : `DEP_CODE:"${dept}"`];
     if (_vrPaFrom || _vrPaTo) clauses.push(`DATE_REELLE_AUTORISATION:[${_vrPaFrom || '1970-01-01'} TO ${_vrPaTo || '2100-12-31'}]`);
     const p = new URLSearchParams();
     p.set('qs', clauses.join(' AND '));
     p.set('sort', '-DATE_REELLE_AUTORISATION');
     p.set('size', '1000');
     p.set('select', sel);
-    const r = await fetch('https://opendata.koumoul.com/data-fair/api/v1/datasets/sitadel-pa/lines?' + p.toString());
+    const r = await fetch('https://opendata.koumoul.com/data-fair/api/v1/datasets/' + dataset + '/lines?' + p.toString());
     if (!r.ok) throw new Error('Sitadel ' + r.status);
     const j = await r.json();
     _vrPA = (j.results || []).filter(x => x.latitude && x.longitude).map(x => ({
+      kind: isPC ? 'pc' : 'pa',
       lat: Number(x.latitude), lon: Number(x.longitude),
       demandeur: x.DENOM_DEM || '(non dénommé)', siren: x.SIREN_DEM || '',
       apeDem: x.APE_DEM || '', cjDem: x.CJ_DEM || '',
@@ -4973,6 +4984,7 @@ async function vrLoadPA() {
       dateDoc: x.DATE_REELLE_DOC || '', dateDaact: x.DATE_REELLE_DAACT || '',
       etat: x.ETAT_PA || '',
       superficie: x.SUPERFICIE_TERRAIN || null, numPa: x.NUM_PA || '', parcelle: x.parcelle || '',
+      nbLgt: (x.NB_LGT_TOT_CREES != null ? x.NB_LGT_TOT_CREES : null), nature: x.NATURE_PROJET_DECLAREE || '',
     }));
   } catch (e) { toast('Erreur Sitadel : ' + e.message, 'error'); }
   _vrPALoading = false; renderPage('veille-regar');
@@ -5003,9 +5015,13 @@ function _vrInitMap() {
     const dt = d.date ? fmtDateFR(d.date) : '';
     const sup = d.superficie ? Number(d.superficie).toLocaleString('fr-FR') + ' m²' : '';
     const ape = (d.apeDem && typeof apeLabel === 'function' && apeLabel(d.apeDem)) ? apeLabel(d.apeDem) : '';
+    const kindLbl = d.kind === 'pc' ? 'Permis de construire (logements)' : 'Permis d\'aménager';
     const rows = [
+      `<div style="color:#0891b2;font-size:11px;font-weight:600">${kindLbl}</div>`,
       d.voie || d.commune ? `<div style="color:#555">${cmdEsc([d.voie, d.cp, d.commune].filter(Boolean).join(', '))}</div>` : '',
       `<div style="margin-top:3px"><span style="color:${statutColor};font-weight:600">${statut}</span>${dt ? ' · autorisé le ' + dt : ''}</div>`,
+      (d.kind === 'pc' && d.nbLgt != null) ? `<div style="color:#555">Logements créés : <strong>${cmdEsc(String(d.nbLgt))}</strong></div>` : '',
+      (d.kind === 'pc' && d.nature) ? `<div style="color:#555;font-size:11px">Nature : ${cmdEsc(d.nature)}</div>` : '',
       sup ? `<div style="color:#555">Superficie terrain : <strong>${sup}</strong></div>` : '',
       d.dateDoc ? `<div style="color:#555;font-size:11px">Ouverture chantier : ${fmtDateFR(d.dateDoc)}</div>` : '',
       d.dateDaact ? `<div style="color:#555;font-size:11px">Achèvement : ${fmtDateFR(d.dateDaact)}</div>` : '',
@@ -5071,16 +5087,20 @@ function vrPAProspect(idx) {
 }
 function vrPAOpportunity(idx) {
   const d = _vrPA[idx]; if (!d) return;
+  const isPC = d.kind === 'pc';
   const desc = [
-    'Permis d\'aménager (lotissement) détecté via Sitadel.',
+    (isPC ? 'Permis de construire (logements)' : 'Permis d\'aménager (lotissement)') + ' détecté via Sitadel.',
     d.demandeur ? 'Demandeur : ' + d.demandeur : '',
     [d.voie, d.cp, d.commune].filter(Boolean).join(', '),
+    (isPC && d.nbLgt != null) ? 'Logements créés : ' + d.nbLgt : '',
+    (isPC && d.nature) ? 'Nature : ' + d.nature : '',
     d.superficie ? 'Superficie terrain : ' + Number(d.superficie).toLocaleString('fr-FR') + ' m²' : '',
     d.date ? 'Autorisé le ' + fmtDateFR(d.date) : '',
     d.parcelle ? 'Parcelle : ' + d.parcelle : '',
     d.numPa ? 'N° PA : ' + d.numPa : '',
   ].filter(Boolean).join('\n');
-  oppModalOpen(null, { name: 'Lotissement ' + (d.commune || '') + (d.demandeur ? ' — ' + d.demandeur : ''), description: desc, clientHint: d.demandeur || d.commune || '' });
+  const nom = (isPC ? 'Construction ' : 'Lotissement ') + (d.commune || '') + (d.demandeur ? ' — ' + d.demandeur : '');
+  oppModalOpen(null, { name: nom, description: desc, clientHint: d.demandeur || d.commune || '' });
 }
 
 // ═══════════════════════════════════════════════════════════
