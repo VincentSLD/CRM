@@ -95,6 +95,20 @@ const TOOLS = [
     }
   },
   {
+    name: 'search_permis_amenager',
+    description: "Veille FONCIÈRE REGAR : permis d'AMÉNAGER (lotissements) récents par département/commune/date (Sitadel). Pour chaque permis, indique le niveau d'ALÉA retrait-gonflement des ARGILES (Géorisques). L'obligation d'étude de sol G1 (métier de REGAR) ne concerne que les terrains constructibles en zone d'aléa argile MOYEN ou FORT. Renvoie demandeur, commune, superficie du terrain, date d'autorisation, SIREN et exposition argile. Idéal pour repérer les lotissements à cibler pour REGAR.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        departement: { type: 'string', description: 'Code département, ex. "85".' },
+        commune: { type: 'string', description: 'Code commune INSEE précis (optionnel, ex. "85191").' },
+        date_min: { type: 'string', description: "Date d'autorisation minimale au format AAAA-MM-JJ (optionnel)." },
+        argile_min: { type: 'string', enum: ['faible', 'moyen', 'fort'], description: "Ne garder que les permis dont l'aléa argile est au moins ce niveau. Mettre \"moyen\" pour la cible G1 de REGAR (zones moyen + fort)." },
+        limit: { type: 'integer', default: 15, maximum: 30 }
+      }
+    }
+  },
+  {
     name: 'search_entreprises_naf',
     description: "Prospection ciblée : trouve des entreprises par CODE NAF (activité) et département, éventuellement créées récemment (nouvelles immatriculations). Ex. promoteurs 41.10A, constructeurs de maisons 41.20A, autres bâtiments 41.20B, architectes 71.11Z, marchands de biens 68.10Z. Renvoie nom, SIREN, ville, date de création, dirigeants, effectif — pour repérer des prospects. Source officielle annuaire-entreprises.",
     input_schema: {
@@ -269,6 +283,54 @@ async function executeTool(name, input) {
       } catch (e) { /* ignore */ }
       return { ok: true, total: d.total || rows.length, count: rows.length, rows, tendance };
     }
+    if (name === 'search_permis_amenager') {
+      const { departement, commune, date_min, argile_min, limit = 15 } = input || {};
+      if (!departement && !commune) return { ok: false, error: 'departement ou commune requis' };
+      const clauses = [];
+      if (commune) clauses.push(`COMM:${String(commune).replace(/[^0-9AB]/gi, '')}`);
+      else clauses.push(`DEP_CODE:"${String(departement).replace(/[^0-9AB]/gi, '')}"`);
+      if (date_min) clauses.push(`DATE_REELLE_AUTORISATION:[${date_min} TO 2100-12-31]`);
+      const p = new URLSearchParams();
+      p.set('qs', clauses.join(' AND '));
+      p.set('sort', '-DATE_REELLE_AUTORISATION');
+      p.set('size', String(Math.min((parseInt(limit) || 15) * 2, 40)));
+      p.set('select', 'COMM,DATE_REELLE_AUTORISATION,DENOM_DEM,SIREN_DEM,APE_DEM,ADR_LIBVOIE_TER,ADR_LOCALITE_TER,ADR_CODPOST_TER,SUPERFICIE_TERRAIN,NUM_PA,latitude,longitude');
+      const r = await fetch('https://opendata.koumoul.com/data-fair/api/v1/datasets/sitadel-pa/lines?' + p.toString());
+      if (!r.ok) return { ok: false, error: 'Sitadel ' + r.status };
+      const d = await r.json();
+      const cand = (d.results || []);
+      // Enrichissement aléa argile (Géorisques) en parallèle
+      const enriched = await Promise.all(cand.map(async x => {
+        let exposition = null, code = null;
+        if (x.latitude && x.longitude) {
+          try {
+            const rr = await fetch(`https://georisques.gouv.fr/api/v1/rga?latlon=${x.longitude},${x.latitude}`);
+            if (rr.ok) { const jj = await rr.json(); exposition = jj.exposition || null; code = jj.codeExposition || null; }
+          } catch (e) { /* ignore */ }
+        }
+        return { x, exposition, code };
+      }));
+      const rank = { faible: 1, moyen: 2, fort: 3 };
+      const niveauFromCode = c => (c === '3' ? 'fort' : c === '2' ? 'moyen' : c === '1' ? 'faible' : null);
+      const rows = [];
+      for (const { x, exposition, code } of enriched) {
+        if (rows.length >= (parseInt(limit) || 15)) break;
+        const niveau = niveauFromCode(code);
+        if (argile_min && (!niveau || rank[niveau] < rank[argile_min])) continue;
+        rows.push({
+          date_autorisation: x.DATE_REELLE_AUTORISATION,
+          commune: [x.ADR_CODPOST_TER, x.ADR_LOCALITE_TER].filter(Boolean).join(' '),
+          code_commune: x.COMM,
+          demandeur: x.DENOM_DEM || '(particulier / non dénommé)',
+          siren_demandeur: x.SIREN_DEM || null,
+          superficie_terrain_m2: x.SUPERFICIE_TERRAIN || null,
+          num_pa: x.NUM_PA || null,
+          alea_argile: exposition || 'inconnu',
+          alea_argile_niveau: niveau,
+        });
+      }
+      return { ok: true, total: d.total || rows.length, count: rows.length, rows, note: "L'étude de sol G1 (REGAR) est obligatoire pour la vente d'un terrain constructible en aléa argile MOYEN ou FORT." };
+    }
     if (name === 'search_entreprises_naf') {
       const { naf, departement, crees_depuis, limit = 20 } = input || {};
       if (!naf) return { ok: false, error: 'naf requis' };
@@ -367,6 +429,7 @@ function toolLabel(tu) {
   if (tu.name === 'search_entreprise') return 'Fiche entreprise « ' + (tu.input?.q || '') + ' »';
   if (tu.name === 'search_web') return 'Recherche web « ' + (tu.input?.q || '') + ' »';
   if (tu.name === 'search_permis') return 'Veille construction logements' + (tu.input?.departement ? ' (dép. ' + tu.input.departement + ')' : '');
+  if (tu.name === 'search_permis_amenager') return 'Veille foncière REGAR — permis d\'aménager + aléa argile' + (tu.input?.departement ? ' (dép. ' + tu.input.departement + ')' : '');
   if (tu.name === 'get_taux_bce') return 'Taux directeur BCE';
   if (tu.name === 'search_entreprises_naf') return 'Prospects NAF ' + (tu.input?.naf || '') + (tu.input?.departement ? ' (dép. ' + tu.input.departement + ')' : '');
   if (tu.name === 'search_clients') return 'Recherche société « ' + (tu.input?.q || '') + ' »';
@@ -508,6 +571,9 @@ Quand l'information utile n'est pas dans le CRM (actualité d'un prospect, son s
 
 VEILLE CONSTRUCTION DE LOGEMENTS (Sitadel) :
 Quand on demande une veille sur les constructions/permis de logements (promoteurs, projets résidentiels) sur un secteur, utilise search_permis (par département, commune ou mot-clé). Présente les permis récents (demandeur/promoteur, commune, nombre de logements, date d'autorisation), le volume total et la tendance annuelle (logements autorisés par an) si disponible. Conseil : pour un demandeur ayant un SIREN, propose de le qualifier via search_entreprise (santé financière) — c'est un prospect potentiel pour les métiers structure/géotechnique/fluides du groupe.
+
+VEILLE FONCIÈRE REGAR (permis d'aménager + aléa argile) :
+Quand on demande les NOUVEAUX PERMIS D'AMÉNAGER / lotissements (notamment pour REGAR et les études de sol G1), utilise search_permis_amenager (par département, commune, et date_min pour « récents »). Chaque permis est enrichi du niveau d'ALÉA ARGILE (faible/moyen/fort). Mets en avant ceux en aléa MOYEN ou FORT : ce sont les terrains où l'étude de sol G1 est obligatoire à la vente → cible directe de REGAR. Pour ne garder que ces cas, passe argile_min="moyen". Présente : demandeur (+ propose de le qualifier via search_entreprise s'il a un SIREN), commune, superficie du terrain, date d'autorisation et niveau d'aléa argile. Rappelle que REGAR travaille via des prescripteurs (notaires, agences immobilières, géomètres, mairies) à animer sur ces communes.
 
 PROSPECTION PAR ACTIVITÉ (NAF) :
 Pour trouver des prospects par secteur d'activité (et repérer les nouvelles immatriculations), utilise search_entreprises_naf avec le code NAF et le département. Codes utiles pour NOVAM : 41.10A (promotion immobilière), 41.20A (construction de maisons individuelles), 41.20B (construction d'autres bâtiments), 71.11Z (architecture), 68.10Z/68.20A (immobilier), 43.xx (travaux spécialisés). Pour les "nouveaux" prospects, passe crees_depuis (ex. 12 derniers mois). Présente nom, ville, date de création, dirigeants ; propose de qualifier les plus pertinents via search_entreprise et de créer une opportunité.
