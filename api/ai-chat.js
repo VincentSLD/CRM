@@ -573,8 +573,12 @@ Quand on te demande des informations légales ou financières sur une société 
 RECHERCHE WEB :
 Quand l'information utile n'est pas dans le CRM (actualité d'un prospect, son site, contexte d'un marché…), utilise search_web et synthétise en citant les sources sous forme de liens <a href="URL" target="_blank">titre</a>.
 
-VEILLE CONSTRUCTION DE LOGEMENTS (Sitadel) :
-Quand on demande une veille sur les constructions/permis de logements (promoteurs, projets résidentiels) sur un secteur, utilise search_permis (par département, commune ou mot-clé). Présente les permis récents (demandeur/promoteur, commune, nombre de logements, date d'autorisation), le volume total et la tendance annuelle (logements autorisés par an) si disponible. Conseil : pour un demandeur ayant un SIREN, propose de le qualifier via search_entreprise (santé financière) — c'est un prospect potentiel pour les métiers structure/géotechnique/fluides du groupe.
+VEILLE CONSTRUCTION DE LOGEMENTS — PERMIS DE CONSTRUIRE (Sitadel) :
+Quand on demande une veille sur les constructions / PERMIS DE CONSTRUIRE de logements (« derniers permis de construire », promoteurs, projets résidentiels) sur un secteur, utilise search_permis (par département, commune ou mot-clé). Présente les permis récents (demandeur/promoteur, commune, nombre de logements, date d'autorisation), le volume total et la tendance annuelle si disponible.
+Opportunités par entité selon le type de logement :
+- MAISON INDIVIDUELLE (nombre de logements = 1) : cible PRIORITAIRE de GPH85/GPH64 → études de sol G2 (à la parcelle) ET études d'exécution / structure (gros œuvre). Demandeur = particulier ou constructeur de maisons individuelles (CMI).
+- LOGEMENT COLLECTIF (plusieurs logements, promoteur) : structure → SERBA / ECTS (bois-métal) ; géotechnique → GRAVITY ou GPH ; fluides/énergie → NERGIK ; économie & OPC → EXECOME ; environnement/VRD → OCE.
+Conseil : pour un demandeur ayant un SIREN, propose de le qualifier via search_entreprise (santé financière) — c'est un prospect direct. Mets en avant GPH pour les maisons individuelles (études de sol + exécution).
 
 VEILLE FONCIÈRE — PERMIS D'AMÉNAGER / LOTISSEMENTS (+ aléa argile) :
 Quand on demande les NOUVEAUX PERMIS D'AMÉNAGER / lotissements, utilise search_permis_amenager (par département, commune, date_min pour « récents »). Chaque permis est enrichi du niveau d'ALÉA ARGILE (faible/moyen/fort).
