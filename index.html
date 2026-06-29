@@ -4791,9 +4791,6 @@ function renderVeilleRegar() {
     <div class="card" style="margin-bottom:14px">
       <div class="card-header"><div class="card-title">🗺️ Carte des opportunités</div></div>
       <div class="card-body">
-        <p style="font-size:13px;color:var(--t3);margin:0 0 12px;line-height:1.5">
-          Visualise les <strong>permis d'aménager (lotissements)</strong> et <strong>permis de construire (logements)</strong> récents par département (source Sitadel), géolocalisés, avec le <strong>calque d'aléa retrait-gonflement des argiles</strong> (BRGM). Repère les projets à prospecter et crée un prospect ou une opportunité d'un clic.
-        </p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <input id="vr-dept" value="${cmdEsc(_vrDept)}" placeholder="Département (ex. 85)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:150px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrLoadPA()">
           <select id="vr-permis-type" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
