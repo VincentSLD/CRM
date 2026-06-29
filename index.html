@@ -10718,10 +10718,13 @@ function renderClientDetail() {
     <div class="card" style="margin-bottom:16px">
       <div class="card-header" style="flex-wrap:wrap;gap:8px">
         <div class="card-title">Informations légales</div>
-        <button class="btn" onclick="refreshLegalFromSiret()" style="font-size:11px;padding:3px 10px">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:3px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-          Mettre à jour (SIRET)
-        </button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn" onclick="refreshLegalFromSiret()" style="font-size:11px;padding:3px 10px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:3px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            Mettre à jour (SIRET)
+          </button>
+          ${_clientLooksCollectivite(c) ? `<button class="btn" onclick="completeFromAnnuaire()" style="font-size:11px;padding:3px 10px" title="Compléter email / téléphone / adresse via l'Annuaire de l'administration (mairies &amp; EPCI)">🏛️ Compléter via Annuaire</button>` : ''}
+        </div>
       </div>
       <div class="card-body">
         ${[
@@ -23284,6 +23287,68 @@ function fillFromAnnuaire(i) {
   set('nc-sector', 'Administration publique');
   const box = document.getElementById('nc-annuaire-results'); if (box) box.style.display = 'none';
   toast('Données de la collectivité importées', 'success');
+}
+
+// Une fiche ressemble-t-elle à une collectivité (mairie / EPCI) ?
+function _clientLooksCollectivite(c) {
+  if (!c) return false;
+  const n = (c.name || '').toLowerCase(); const f = (c.forme_juridique || '').toLowerCase(); const s = (c.sector || '').toLowerCase();
+  return /mairie|commune|communaut|agglom|m[ée]tropole|epci|syndicat/.test(n) || /commune|epci|collectivit/.test(f) || /administration publique/.test(s);
+}
+
+// Compléter une fiche collectivité existante via l'Annuaire de l'administration (email, téléphone, fax, site, adresse)
+async function completeFromAnnuaire() {
+  const c = currentClient; if (!c) return;
+  const base = 'https://api-lannuaire.service-public.gouv.fr/api/explore/v2.1/catalog/datasets/api-lannuaire-administration/records';
+  const sel = 'nom,adresse_courriel,telephone,telecopie,site_internet,code_insee_commune,adresse,siren,siret';
+  showSyncLoading(true); setSyncText('Annuaire de l\'administration…');
+  try {
+    let rec = null;
+    // 1) Par SIREN si disponible (le plus fiable)
+    if (c.siren) {
+      const url = `${base}?where=${encodeURIComponent('siren = "' + c.siren + '"')}&select=${encodeURIComponent(sel)}&limit=1`;
+      const r = await fetch(url); if (r.ok) { const j = await r.json(); rec = (j.results || [])[0] || null; }
+    }
+    // 2) Sinon par nom + département
+    if (!rec) {
+      const q = (c.city || c.name || '').replace(/["\\]/g, ' ').trim();
+      let wh = '(pivot like "mairie" or pivot like "epci")';
+      if (q) wh += ` and nom like "${q}"`;
+      if (c.code_postal) wh += ` and startswith(code_insee_commune, "${String(c.code_postal).slice(0, 2)}")`;
+      const url = `${base}?where=${encodeURIComponent(wh)}&select=${encodeURIComponent(sel)}&limit=10`;
+      const r = await fetch(url);
+      if (r.ok) {
+        const j = await r.json(); const recs = j.results || [];
+        rec = recs.find(x => { const a = _vrParseJson(x.adresse); const a0 = Array.isArray(a) ? (a.find(z => z.type_adresse === 'Adresse') || a[0] || {}) : {}; return (a0.nom_commune || '').toLowerCase() === (c.city || '').toLowerCase(); }) || recs[0] || null;
+      }
+    }
+    showSyncLoading(false);
+    if (!rec) { toast('Aucune collectivité trouvée dans l\'Annuaire (vérifiez le nom / SIREN / commune)', 'error'); return; }
+    const adr = _vrParseJson(rec.adresse); const a0 = Array.isArray(adr) ? (adr.find(z => z.type_adresse === 'Adresse') || adr[0] || {}) : {};
+    const tel = _vrParseJson(rec.telephone); const site = _vrParseJson(rec.site_internet);
+    const found = {
+      email: typeof rec.adresse_courriel === 'string' ? rec.adresse_courriel : '',
+      phone: (Array.isArray(tel) && tel[0] && tel[0].valeur) ? tel[0].valeur : '',
+      fax: (rec.telecopie && typeof rec.telecopie === 'string') ? rec.telecopie : '',
+      site_web: (Array.isArray(site) && site[0] && site[0].valeur) ? site[0].valeur : '',
+      siren: rec.siren || '', siret: rec.siret || '',
+      adresse_ligne1: a0.numero_voie || [a0.type_voie, a0.libelle_voie].filter(Boolean).join(' ') || '',
+      code_postal: a0.code_postal || '', city: a0.nom_commune || '',
+    };
+    // Ne compléter que les champs VIDES (sans écraser l'existant)
+    const upd = {};
+    ['email', 'phone', 'fax', 'site_web', 'siren', 'siret', 'adresse_ligne1', 'code_postal', 'city'].forEach(k => { if (found[k] && !c[k]) upd[k] = found[k]; });
+    if (!Object.keys(upd).length) { toast('Rien à compléter : ces champs sont déjà renseignés', 'info'); return; }
+    if (!confirm('Compléter « ' + (c.name || '') + ' » avec :\n\n' + Object.entries(upd).map(([k, v]) => '• ' + k + ' : ' + v).join('\n') + '\n\n(les champs déjà renseignés sont conservés)')) return;
+    showSyncLoading(true); setSyncText('Mise à jour…');
+    const { error } = await sb.from('clients').update(upd).eq('id', c.id);
+    showSyncLoading(false);
+    if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+    Object.assign(c, upd);
+    const dbc = (DB.clients || []).find(x => x.id === c.id); if (dbc) Object.assign(dbc, upd);
+    toast('Fiche complétée via l\'Annuaire de l\'administration', 'success');
+    showClient(c.id);
+  } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
 }
 
 // ═══ CHARGEMENT DES ÉTABLISSEMENTS SECONDAIRES ═══
