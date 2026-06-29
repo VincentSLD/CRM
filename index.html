@@ -5007,9 +5007,11 @@ function _vrInitMap() {
 function _vrAddArgile() {
   if (!_vrMap || !window.L) return;
   if (_vrArgileLayer) { try { _vrMap.removeLayer(_vrArgileLayer); } catch (e) {} }
+  // Deux couches combinées : petite échelle (_PE) pour les vues larges + détaillée pour les vues rapprochées
+  // (la détaillée seule est vide au zoom « département »). Le serveur affiche la bonne selon l'échelle.
   _vrArgileLayer = L.tileLayer.wms('https://geoservices.brgm.fr/risques', {
-    layers: 'ALEARG_REALISE', format: 'image/png', transparent: true, version: '1.3.0',
-    opacity: _vrArgileOpacity, attribution: 'Aléa argile © BRGM/Géorisques'
+    layers: 'ALEARG_REALISE_PE,ALEARG_REALISE', format: 'image/png', transparent: true, version: '1.3.0',
+    opacity: _vrArgileOpacity, attribution: 'Aléa argile © BRGM/Géorisques', zIndex: 400
   }).addTo(_vrMap);
 }
 function vrToggleArgile(on) {
