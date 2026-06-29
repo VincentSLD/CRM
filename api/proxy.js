@@ -31,8 +31,9 @@ export default async function handler(req, res) {
     const txt = await r.text();
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Content-Type', r.headers.get('content-type') || 'application/json; charset=utf-8');
-    // Cache léger côté CDN pour soulager les API publiques
-    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+    // Cache CDN uniquement sur les réponses réussies (ne jamais mettre une erreur en cache)
+    if (r.ok) res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+    else res.setHeader('Cache-Control', 'no-store');
     return res.status(r.status).send(txt);
   } catch (e) {
     return res.status(502).json({ error: 'proxy: ' + e.message });
