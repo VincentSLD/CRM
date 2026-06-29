@@ -4781,14 +4781,15 @@ let _vrEdsOn = false, _vrEdsLayer = null, _vrEdsData = [], _vrEdsDept = null, _v
 const VR_NAF = { notaire: { naf: '6910Z', label: 'Notaire' }, agence: { naf: '6831Z', label: 'Agence immobilière' }, geometre: { naf: '7112B', label: 'Géomètre-expert' } };
 
 function renderVeilleRegar() {
-  const _vrTypeLabel = { pa: "Permis d'aménager", pc: 'Permis de construire (logements)', pc_existant: 'Permis sur bâti existant', dpe_ter: 'DPE tertiaire F/G', dpe_log: 'DPE logements F/G', copro: 'Copropriétés (BDNB)' }[_vrPermisType] || 'Permis';
+  const _vrTypeLabel = { pa: "Permis d'aménager", pc: 'Permis de construire (logements)', pc_existant: 'Permis sur bâti existant', dpe_ter: 'DPE tertiaire F/G', dpe_log: 'DPE logements F/G', copro: 'Copropriétés (BDNB)', boamp: 'Marchés publics travaux (BOAMP)' }[_vrPermisType] || 'Permis';
   const _vrIsDpe = (_vrPermisType === 'dpe_ter' || _vrPermisType === 'dpe_log');
   const _vrIsCopro = (_vrPermisType === 'copro');
+  const _vrIsBoamp = (_vrPermisType === 'boamp');
   return `
   <div style="max-width:1100px;margin:0 auto">
     <div style="margin-bottom:14px"><button class="btn btn-sm" onclick="go(_vrReturn)">← Retour</button></div>
     <div class="card" style="margin-bottom:14px">
-      <div class="card-header"><div class="card-title">🗺️ Carte des opportunités — permis & aléa argile</div></div>
+      <div class="card-header"><div class="card-title">🗺️ Carte des opportunités</div></div>
       <div class="card-body">
         <p style="font-size:13px;color:var(--t3);margin:0 0 12px;line-height:1.5">
           Visualise les <strong>permis d'aménager (lotissements)</strong> et <strong>permis de construire (logements)</strong> récents par département (source Sitadel), géolocalisés, avec le <strong>calque d'aléa retrait-gonflement des argiles</strong> (BRGM). Repère les projets à prospecter et crée un prospect ou une opportunité d'un clic.
@@ -4802,22 +4803,23 @@ function renderVeilleRegar() {
             <option value="dpe_ter"${_vrPermisType === 'dpe_ter' ? ' selected' : ''}>DPE tertiaire F/G (à rénover)</option>
             <option value="dpe_log"${_vrPermisType === 'dpe_log' ? ' selected' : ''}>DPE logements F/G (passoires)</option>
             <option value="copro"${_vrPermisType === 'copro' ? ' selected' : ''}>Copropriétés (BDNB)</option>
+            <option value="boamp"${_vrPermisType === 'boamp' ? ' selected' : ''}>Marchés publics travaux (BOAMP)</option>
           </select>
           <select id="vr-nblgt" title="Filtre logements (s'applique aux permis de construire)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
-            <option value=""${_vrNbLgt === '' ? ' selected' : ''}>Tous logements</option>
-            <option value="1"${_vrNbLgt === '1' ? ' selected' : ''}>Maison individuelle (1) → GPH</option>
-            <option value="collectif"${_vrNbLgt === 'collectif' ? ' selected' : ''}>Collectif (2+) → SERBA/ECTS/NERGIK…</option>
+            <option value=""${_vrNbLgt === '' ? ' selected' : ''}>Tous</option>
+            <option value="1"${_vrNbLgt === '1' ? ' selected' : ''}>1 Logt</option>
+            <option value="collectif"${_vrNbLgt === 'collectif' ? ' selected' : ''}>&gt;1 Logt</option>
           </select>
           <span style="font-size:11px;color:var(--t3)">autorisés du</span>
           <input type="date" id="vr-pa-from" value="${cmdEsc(_vrPaFrom)}" title="À partir du" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
           <span style="font-size:11px;color:var(--t3)">au</span>
           <input type="date" id="vr-pa-to" value="${cmdEsc(_vrPaTo)}" title="Jusqu'au" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
-          <button class="btn btn-primary" onclick="vrLoadPA()">🗺️ Afficher la carte (Sitadel)</button>
+          <button class="btn btn-primary" onclick="vrLoadPA()">🗺️ Afficher la carte</button>
         </div>
       </div>
     </div>
     ${(_vrShowMap || _vrPALoading) ? `<div class="card" style="margin-bottom:14px">
-      <div class="card-header"><div class="card-title">🗺️ ${_vrTypeLabel}${(_vrIsDpe || _vrIsCopro) ? '' : ' récents'} — dép. ${cmdEsc(_vrDept)}${_vrPA.length ? ' (' + _vrPA.length + ')' : ''}</div></div>
+      <div class="card-header"><div class="card-title">🗺️ ${_vrTypeLabel}${(_vrIsDpe || _vrIsCopro || _vrIsBoamp) ? '' : ' récents'} — dép. ${cmdEsc(_vrDept)}${_vrPA.length ? ' (' + _vrPA.length + ')' : ''}</div></div>
       <div class="card-body" style="padding:0">
         ${_vrPALoading ? '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">⏳ Chargement des permis…</div>' : (_vrPA.length ? `<div id="vr-map-wrap" style="position:relative">
           <div style="padding:8px 12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--border);background:var(--card,#fff)">
@@ -4831,7 +4833,9 @@ function renderVeilleRegar() {
           <div id="vr-map" style="height:460px"></div>
         </div>` : '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Aucun permis géolocalisé pour ce département (sur la période choisie).</div>')}
       </div>
-      <div style="padding:8px 12px;font-size:11px;color:var(--t3)">${_vrIsCopro
+      <div style="padding:8px 12px;font-size:11px;color:var(--t3)">${_vrIsBoamp
+        ? 'Marqueurs : <span style="color:#2563eb">●</span> marché public de travaux en cours (BOAMP), position approximative (commune du lieu d\'exécution). Date limite de réponse indiquée.'
+        : _vrIsCopro
         ? 'Marqueurs : <span style="color:#8b5cf6">●</span> copropriété (source BDNB / registre national, position approximative). Cible syndics/bailleurs pour rénovation globale.'
         : _vrIsDpe
         ? 'Marqueurs : <span style="color:#f59e0b">●</span> classe F · <span style="color:#ef4444">●</span> classe G (passoires thermiques à rénover). Source : observatoire DPE ADEME.'
@@ -4970,6 +4974,7 @@ async function vrLoadPA() {
   try {
     const t = _vrPermisType;
     if (t === 'copro') { await _vrLoadCopros(dept); _vrPALoading = false; renderPage('veille-regar'); return; }
+    if (t === 'boamp') { await _vrLoadBoamp(dept); _vrPALoading = false; renderPage('veille-regar'); return; }
     const isDpe = (t === 'dpe_ter' || t === 'dpe_log');
     const isSitPc = (t === 'pc' || t === 'pc_existant');
     let base, sel = null, sort = null;
@@ -5010,7 +5015,7 @@ async function vrLoadPA() {
 
 // Certaines API open data bloquent le CORS navigateur (data.ademe.fr, api.bdnb.io) → passer par /api/proxy
 function _vrFetchUrl(url) {
-  if (/^https:\/\/(data\.ademe\.fr|api\.bdnb\.io)\//.test(url)) return '/api/proxy?url=' + encodeURIComponent(url);
+  if (/^https:\/\/(data\.ademe\.fr|api\.bdnb\.io|boamp-datadila\.opendatasoft\.com|geo\.api\.gouv\.fr)\//.test(url)) return '/api/proxy?url=' + encodeURIComponent(url);
   return url;
 }
 function _vrGeo(x) {
@@ -5041,6 +5046,59 @@ function _geomCentroidL93(geom) {
     let sx = 0, sy = 0; ring.forEach(p => { sx += p[0]; sy += p[1]; });
     return [sx / ring.length, sy / ring.length];
   } catch (e) { return null; }
+}
+// Marchés publics de travaux (BOAMP) — géocodés par code postal du lieu d'exécution (précision commune)
+async function _vrLoadBoamp(dept) {
+  const today = new Date().toISOString().slice(0, 10);
+  const wheres = ['type_marche="TRAVAUX"', `startswith(code_departement,"${dept}")`, `datelimitereponse >= "${today}"`];
+  const p = new URLSearchParams();
+  p.set('where', wheres.join(' and '));
+  p.set('order_by', 'datelimitereponse asc');
+  p.set('limit', '100');
+  const url = 'https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?' + p.toString();
+  const r = await fetch(_vrFetchUrl(url));
+  if (!r.ok) throw new Error('BOAMP ' + r.status);
+  const j = await r.json();
+  const withCp = (j.results || []).map(a => ({ a, cp: _boampCP(a) })).filter(x => x.cp);
+  const uniqueCps = [...new Set(withCp.map(x => x.cp))];
+  const cpGeo = {};
+  await Promise.all(uniqueCps.map(async cp => {
+    try {
+      const gr = await fetch(_vrFetchUrl(`https://geo.api.gouv.fr/communes?codePostal=${cp}&fields=centre&format=json`));
+      const gj = await gr.json();
+      const c = gj && gj[0] && gj[0].centre && gj[0].centre.coordinates;
+      cpGeo[cp] = c ? [c[1], c[0]] : null;
+    } catch (e) { cpGeo[cp] = null; }
+  }));
+  const out = [];
+  withCp.forEach(({ a, cp }) => {
+    const ll = cpGeo[cp]; if (!ll) return;
+    out.push({
+      kind: 'boamp', siren: '',
+      lat: ll[0] + (Math.random() - 0.5) * 0.006, lon: ll[1] + (Math.random() - 0.5) * 0.006,
+      demandeur: a.nomacheteur || 'Acheteur public',
+      objet: a.objet || '', nature: a.nature_libelle || '', procedure: a.procedure_libelle || '',
+      cp, dateLimite: a.datelimitereponse || '', dateParution: a.dateparution || '',
+      lien: a.url_avis || (a.idweb ? 'https://www.boamp.fr/avis/detail/' + a.idweb : ''),
+    });
+  });
+  _vrPA = out;
+}
+function _boampCP(a) {
+  let found = null;
+  const visit = (o, depth) => {
+    if (found || o == null || depth > 6) return;
+    if (typeof o === 'object') {
+      for (const k in o) {
+        if (found) return;
+        const v = o[k];
+        if (typeof v === 'string' && /^\d{5}$/.test(v) && /cp|postal/i.test(k)) { found = v; return; }
+        if (v && typeof v === 'object') visit(v, depth + 1);
+      }
+    }
+  };
+  visit(a.donnees || a, 0);
+  return found;
 }
 // Copropriétés via BDNB (2 requêtes : registre RNC → géométrie du bâtiment)
 async function _vrLoadCopros(dept) {
@@ -5141,6 +5199,18 @@ function _vrInitMap() {
         `<div style="color:#888;font-size:11px">Position approximative (BDNB)</div>`,
       ].filter(Boolean).join('');
       buttons = `<button onclick="vrPAOpportunity(${idx})" style="font-size:11px;padding:2px 6px;cursor:pointer">🎯 + Opportunité (rénovation)</button>`;
+    } else if (d.kind === 'boamp') {
+      color = '#2563eb';
+      rows = [
+        `<div style="color:#0891b2;font-size:11px;font-weight:600">Marché public de travaux (BOAMP)</div>`,
+        d.objet ? `<div style="color:#555">${cmdEsc(d.objet.length > 160 ? d.objet.slice(0, 160) + '…' : d.objet)}</div>` : '',
+        d.nature ? `<div style="color:#555;font-size:11px">Nature : ${cmdEsc(d.nature)}</div>` : '',
+        d.procedure ? `<div style="color:#555;font-size:11px">Procédure : ${cmdEsc(d.procedure)}</div>` : '',
+        d.dateLimite ? `<div style="color:#c0392b;font-size:11px;font-weight:600">Réponse avant le ${fmtDateFR(d.dateLimite)}</div>` : '',
+        `<div style="color:#888;font-size:11px">Lieu (CP ${cmdEsc(d.cp || '')}) — position approximative</div>`,
+      ].filter(Boolean).join('');
+      buttons = `<button onclick="vrPAOpportunity(${idx})" style="font-size:11px;padding:2px 6px;cursor:pointer">🎯 + Opportunité</button>
+        ${d.lien ? `<a href="${cmdEsc(d.lien)}" target="_blank" rel="noopener" style="font-size:11px">Voir l'avis BOAMP ↗</a>` : ''}`;
     } else if (isDpe) {
       const kindLbl = (d.kind === 'dpe_ter' ? 'DPE tertiaire' : 'DPE logement') + ' — à rénover';
       color = d.dpeClass === 'G' ? '#ef4444' : '#f59e0b';
@@ -5304,6 +5374,18 @@ function vrPAProspect(idx) {
 }
 function vrPAOpportunity(idx) {
   const d = _vrPA[idx]; if (!d) return;
+  if (d.kind === 'boamp') {
+    const desc = [
+      'Marché public de travaux (BOAMP) en cours.',
+      d.demandeur ? 'Acheteur : ' + d.demandeur : '',
+      d.objet ? 'Objet : ' + d.objet : '',
+      d.nature ? 'Nature : ' + d.nature : '',
+      d.dateLimite ? 'Date limite de réponse : ' + fmtDateFR(d.dateLimite) : '',
+      d.lien ? 'Avis : ' + d.lien : '',
+    ].filter(Boolean).join('\n');
+    oppModalOpen(null, { name: 'Marché public — ' + (d.demandeur || '') + (d.objet ? ' : ' + d.objet.slice(0, 60) : ''), description: desc, clientHint: d.demandeur || '' });
+    return;
+  }
   if (d.kind === 'copro') {
     const desc = [
       'Copropriété repérée via la BDNB (registre national des copropriétés).',

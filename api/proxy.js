@@ -9,6 +9,8 @@ const ALLOWED_HOSTS = [
   'api-lannuaire.service-public.gouv.fr',
   'recherche-entreprises.api.gouv.fr',
   'georisques.gouv.fr',
+  'boamp-datadila.opendatasoft.com',
+  'geo.api.gouv.fr',
 ];
 
 export default async function handler(req, res) {
@@ -20,7 +22,7 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'hôte non autorisé' });
   }
   try {
-    const r = await fetch(target, { headers: { 'Accept': 'application/json' } });
+    const r = await fetch(target, { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; CRM-NOVAM/1.0; +https://novam-ingenierie.com)' } });
     const txt = await r.text();
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Content-Type', r.headers.get('content-type') || 'application/json; charset=utf-8');
