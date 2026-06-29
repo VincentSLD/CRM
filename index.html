@@ -5371,6 +5371,7 @@ let _tacheEditId = null, _tacheEditPrefill = null, _tacheEditReturn = 'taches';
 function tacheModalOpen(id, prefill) {
   _tacheEditId = id || null;
   _tacheEditPrefill = prefill || null;
+  _tacheNovaOrigin = !id && !!(prefill && prefill.novaOrigin);
   _tacheEditReturn = (currentPage && currentPage !== 'tache-edit') ? currentPage : 'taches';
   const t = id ? _taches.find(x => String(x.id) === String(id)) : null;
   _tacheSel = t
@@ -5534,6 +5535,7 @@ async function saveTache() {
   const back = (currentPage === 'tache-edit') ? (_tacheEditReturn || 'taches') : currentPage;
   currentPage = back;
   renderPage(back);
+  if (!id && _tacheNovaOrigin) { _tacheNovaOrigin = false; novaActionDone('tache', { id: saved.id, titre: saved.titre, client_name: saved.client_name || '', opportunite_id: saved.opportunite_id || null }); }
 }
 async function pushTacheToTodo(t) {
   try {
@@ -5854,11 +5856,14 @@ async function oppModalOpen(akId, prefill) {
       if (prefill.montant != null && prefill.montant !== '') _oppForm.montant = prefill.montant;
       if (prefill.montantTravaux != null && prefill.montantTravaux !== '') _oppForm.montantTravaux = prefill.montantTravaux;
       if (prefill.dateSignature) _oppForm.dateSignature = prefill.dateSignature;
+      _oppForm._novaOrigin = !!prefill.novaOrigin;
     }
     renderPage('opportunite-edit');
     if (_oppForm.clientId) _oppLoadContacts(_oppForm.clientId, _oppForm.contactAkId);
     if (_oppForm.customerAkId) _oppLoadSites(_oppForm.customerAkId, _oppForm.customerLocationId);
-    if (!akId && prefill && prefill.clientHint) { const inp = document.getElementById('of-client'); if (inp) { inp.value = prefill.clientHint; _oppClientSearch(prefill.clientHint, false); } }
+    // NOVA : si un client_id réel est fourni (enchaînement), le sélectionner directement ; sinon pré-remplir la recherche avec le nom
+    if (!akId && prefill && prefill.client_id) { _oppPickClientById(String(prefill.client_id), false); }
+    else if (!akId && prefill && prefill.clientHint) { const inp = document.getElementById('of-client'); if (inp) { inp.value = prefill.clientHint; _oppClientSearch(prefill.clientHint, false); } }
   } catch (e) { toast('Erreur ouverture : ' + e.message, 'error'); }
 }
 
@@ -6266,6 +6271,7 @@ async function saveOpportunite() {
     showSyncLoading(false);
     toast(f.akId ? 'Opportunité mise à jour' : 'Opportunité créée', 'success');
     oppDetail(akId); // ouvrir la fiche en pleine page
+    if (!isUpdate && f._novaOrigin) novaActionDone('opportunite', { akuiteo_id: String(akId), nom: f.name.trim(), client_id: f.clientId || null, client_name: f.clientName || '' });
   } catch (e) {
     showSyncLoading(false);
     console.error('saveOpportunite', e);
@@ -17228,6 +17234,7 @@ async function openCRDetail(reportId) {
 // Modal uniquement pour Nouveau CR
 function openCRModal() {
   currentReport = null;
+  _crNovaOrigin = false;
   crAttachments = [];
   _crSelectedClients = [];
   _crSelectedContacts = [];
@@ -17258,6 +17265,7 @@ function closeCRModal() {
 let _crPrefill = null;
 function goToCR(clientId, clientName, contactId, contactName) {
   currentReport = null;
+  _crNovaOrigin = false;
   crAttachments = [];
   _crSelectedClients = [];
   _crSelectedContacts = [];
@@ -17777,6 +17785,7 @@ async function saveReport(silent) {
   const saveBtnText = saveBtn ? saveBtn.innerHTML : '';
   if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><span style="display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></span>Enregistrement...</span>'; }
 
+  const isNewReport = !currentReport;
   const redacteur = (DB.commerciaux||[]).find(co => co.id == redacteurId);
   const clientsList = [..._crSelectedClients];
   const contactsList = [..._crSelectedContacts];
@@ -17832,6 +17841,7 @@ async function saveReport(silent) {
     crViewMode = 'list';
     renderPage('cr');
   }
+  if (isNewReport && _crNovaOrigin) { _crNovaOrigin = false; novaActionDone('cr', { id: currentReport && currentReport.id, titre: titre, client_name: allClientNames }); }
   return true;
 }
 
@@ -21659,6 +21669,8 @@ function _novaCleanText(s) {
 function novaNewConversation() {
   try { aiStopSpeak(); } catch (e) {}
   _aiChatHistory = [];
+  _novaWorkCtx = { client: null, opportunite: null, tache: null, cr: null };
+  _tacheNovaOrigin = false; _crNovaOrigin = false;
   const box = document.getElementById('aiChatMsgs'); if (box) box.innerHTML = '';
   const _p = (typeof _getAIUserProfile === 'function') ? _getAIUserProfile() : null;
   const _hello = _p && _p.prenom ? `Bonjour ${_p.prenom} ! ` : 'Bonjour ! ';
@@ -21720,14 +21732,15 @@ function novaToggleFullscreen() {
     if (btn) { btn.title = 'Plein écran'; btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>'; }
   }
 }
-async function askAIChat(presetQuestion) {
+async function askAIChat(presetQuestion, opts) {
+  opts = opts || {};
   const input = document.getElementById('aiChatInput');
   const question = (presetQuestion || input?.value || '').trim();
   if (!question) return;
-  if (input) { input.value = ''; input.style.height = 'auto'; }
+  if (input && !opts.hideUserBubble) { input.value = ''; input.style.height = 'auto'; }
   // Couper la dictée en cours pour ne pas interférer
   if (_aiDictOn) { _aiDictOn = false; if (_aiDictRec) _aiDictRec.stop(); _aiDictRec = null; const db = document.getElementById('aiDictBtn'); if (db) { db.classList.remove('recording'); db.style.color = ''; } }
-  addAIMsg('user', question.replace(/</g,'&lt;'));
+  if (!opts.hideUserBubble) addAIMsg('user', question.replace(/</g,'&lt;'));
   const loadingDiv = addAIMsg('assistant', '<span style="opacity:.6">✦ Réflexion...</span>');
   const box = document.getElementById('aiChatMsgs');
   try {
@@ -21813,7 +21826,12 @@ async function askAIChat(presetQuestion) {
 }
 
 // ═══ Actions exécutables proposées par NOVA (confirmation avant écriture) ═══
+// Mémoire de travail de la session : ce que NOVA a fait créer (avec les id réels) → permet d'enchaîner les étapes
+let _novaWorkCtx = { client: null, opportunite: null, tache: null, cr: null };
+// Marqueurs d'origine NOVA (posés à l'ouverture d'un formulaire depuis une action NOVA, lus à l'enregistrement)
+let _tacheNovaOrigin = false, _crNovaOrigin = false;
 const _NOVA_ACTION_META = {
+  create_client: { icon: '🏢', label: 'Créer le client', desc: p => 'Client : ' + (p.name || p.client_name || '') },
   create_task: { icon: '✅', label: 'Créer la tâche', desc: p => 'Tâche : ' + (p.titre || '') },
   create_opportunity: { icon: '🎯', label: 'Créer l\'opportunité', desc: p => 'Opportunité : ' + (p.name || '') + (p.client_name ? ' — ' + p.client_name : '') },
   relance_email: { icon: '✉️', label: 'Préparer l\'email', desc: p => 'Relance : ' + (p.subject || '') },
@@ -21835,17 +21853,43 @@ function _novaActionCard(action) {
 }
 function _novaExecAction(action) {
   const p = action.payload || {};
-  if (action.type === 'create_task') {
+  if (action.type === 'create_client') {
+    _ncReturnCtx = 'nova';
+    toggleAIChat();
+    openModal('new-client');
+    setTimeout(() => _ncPrefillAndSearch(p.name || p.client_name || ''), 60);
+  } else if (action.type === 'create_task') {
     toggleAIChat(); // fermer le panneau pour voir le formulaire
-    tacheModalOpen(null, { client_id: p.client_id || null, client_name: p.client_name || null, opportunite_id: p.opportunite_id || null, affaire_id: p.affaire_id || null, titre: p.titre || '', description: p.description || '', echeance: p.echeance || '', priorite: p.priorite || '' });
+    tacheModalOpen(null, { client_id: p.client_id || null, client_name: p.client_name || null, opportunite_id: p.opportunite_id || null, affaire_id: p.affaire_id || null, titre: p.titre || '', description: p.description || '', echeance: p.echeance || '', priorite: p.priorite || '', novaOrigin: true });
   } else if (action.type === 'create_opportunity') {
     toggleAIChat();
-    oppModalOpen(null, { name: p.name || '', description: p.description || '', montant: p.montant, montantTravaux: p.montant_travaux, dateSignature: p.date_signature || '', clientHint: p.client_name || '' });
+    oppModalOpen(null, { name: p.name || '', description: p.description || '', montant: p.montant, montantTravaux: p.montant_travaux, dateSignature: p.date_signature || '', clientHint: p.client_name || '', client_id: p.client_id || '', novaOrigin: true });
   } else if (action.type === 'relance_email') {
     _novaRelanceCard(p);
   } else if (action.type === 'create_cr') {
     _novaCreateCR(p);
   }
+}
+// Boucle de retour : appelée quand une création proposée par NOVA a réellement abouti.
+// Met à jour la mémoire de session, confirme dans le chat, puis demande à NOVA de proposer la suite.
+function novaActionDone(type, entity) {
+  _novaWorkCtx[type] = entity || {};
+  const panel = document.getElementById('aiChatPanel');
+  if (panel && panel.style.display === 'none') toggleAIChat();
+  const L = { client: 'Client', opportunite: 'Opportunité', tache: 'Tâche', cr: 'Compte-rendu' };
+  const fem = (type === 'opportunite' || type === 'tache');
+  const nm = (entity && (entity.nom || entity.name || entity.titre)) || '';
+  addAIMsg('assistant', '✅ ' + (L[type] || type) + ' cré' + (fem ? 'ée' : 'é') + ' : <strong>' + cmdEsc(nm) + '</strong>');
+  const ctxParts = [];
+  if (_novaWorkCtx.client) ctxParts.push('client « ' + (_novaWorkCtx.client.name || '') + ' » (id=' + (_novaWorkCtx.client.id || '') + ')');
+  if (_novaWorkCtx.opportunite) ctxParts.push('opportunité « ' + (_novaWorkCtx.opportunite.nom || '') + ' » (akuiteo_id=' + (_novaWorkCtx.opportunite.akuiteo_id || '') + ')');
+  if (_novaWorkCtx.cr) ctxParts.push('compte-rendu « ' + (_novaWorkCtx.cr.titre || '') + ' »');
+  if (_novaWorkCtx.tache) ctxParts.push('tâche « ' + (_novaWorkCtx.tache.titre || '') + ' »');
+  const note = '[CONTEXTE SYSTÈME — ne réponds pas à ceci comme à une question de l\'utilisateur]\n'
+    + 'La création vient d\'aboutir : ' + (L[type] || type) + ' « ' + nm + ' ».\n'
+    + 'Éléments déjà créés dans cette session : ' + (ctxParts.join(' ; ') || '—') + '.\n'
+    + 'Si la demande initiale impliquait d\'autres étapes (ordre : client → opportunité → compte-rendu → tâche), propose MAINTENANT la prochaine étape pertinente sous forme d\'UN bloc [[ACTION:...]] en réutilisant ces id réels (client_id, opportunite_id = akuiteo_id). Sinon, confirme en une phrase, sans bloc.';
+  setTimeout(() => askAIChat(note, { hideUserBubble: true }), 150);
 }
 async function _novaCreateCR(p) {
   const panel = document.getElementById('aiChatPanel'); if (panel && panel.style.display !== 'none') toggleAIChat();
@@ -21856,6 +21900,7 @@ async function _novaCreateCR(p) {
     if (!cid && cname) { const { data } = await sb.from('clients').select('id,name').ilike('name', '%' + cname.replace(/[%,]/g, '') + '%').order('name').limit(1); if (data && data[0]) { cid = data[0].id; cname = data[0].name; } }
   } catch (e) { /* ignore */ }
   if (cid) goToCR(cid, cname); else openCRModal();
+  _crNovaOrigin = true; // marquer après l'ouverture (openCRModal/goToCR le réinitialisent)
   setTimeout(() => {
     const setv = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; };
     setv('crTitre', p.titre);
@@ -23269,7 +23314,14 @@ async function submitNewClient() {
     window._ncSecondaryEstablishments = [];
     closeModal('new-client');
 
-    if (_ncReturnCtx === 'task') {
+    if (_ncReturnCtx === 'nova') {
+      // Création demandée par NOVA : informer NOVA + proposer la suite (sans quitter la page courante)
+      _ncReturnCtx = null;
+      setStep('Finalisation…', 95);
+      overlay.style.display = 'none';
+      await loadDB(); // rendre la société disponible dans les listes (opportunités, etc.)
+      novaActionDone('client', { id, name });
+    } else if (_ncReturnCtx === 'task') {
       // Retour vers l'édition de tâche : sélectionner la société sans recharger la page (préserve les champs saisis)
       _ncReturnCtx = null;
       setStep('Finalisation…', 95);
