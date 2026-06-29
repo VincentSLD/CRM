@@ -4777,6 +4777,7 @@ let _vrNbLgt = '';                  // filtre logements (permis de construire) :
 let _vrReturn = 'endev';            // page de retour du bouton « ← Retour » (En Dev' ou Opportunités)
 let _vrArgileOn = true, _vrArgileOpacity = 0.55, _vrArgileLayer = null;   // calque aléa argile (BRGM)
 let _vrRoadsOn = true, _vrBaseLayer = null, _vrFsBound = false;           // fond de carte (routes) + plein écran
+let _vrEdsOn = false, _vrEdsLayer = null, _vrEdsData = [], _vrEdsDept = null, _vrEdsCols = null, _vrEdsSample = null; // études de sol GPH (GEOCARTO)
 const VR_NAF = { notaire: { naf: '6910Z', label: 'Notaire' }, agence: { naf: '6831Z', label: 'Agence immobilière' }, geometre: { naf: '7112B', label: 'Géomètre-expert' } };
 
 function renderVeilleRegar() {
@@ -4824,6 +4825,7 @@ function renderVeilleRegar() {
             <span style="font-size:11px;color:var(--t3)">Opacité</span>
             <input type="range" min="0" max="100" value="${Math.round(_vrArgileOpacity * 100)}" oninput="vrSetArgileOpacity(this.value/100)" style="width:120px" title="Transparence du calque argile">
             <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" ${_vrRoadsOn ? 'checked' : ''} onchange="vrToggleRoads(this.checked)"> 🛣️ Routes</label>
+            <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer" title="Études de sol déjà réalisées par GPH (projet GEOCARTO)"><input type="checkbox" ${_vrEdsOn ? 'checked' : ''} onchange="vrToggleEds(this.checked)"> 🟡 Études de sol GPH</label>
             <button class="btn" style="font-size:11px;padding:3px 8px;margin-left:auto" onclick="vrMapFullscreen()" title="Afficher la carte en plein écran">⛶ Plein écran</button>
           </div>
           <div id="vr-map" style="height:460px"></div>
@@ -5181,7 +5183,70 @@ function _vrInitMap() {
     bounds.push([d.lat, d.lon]);
   });
   if (bounds.length) { try { _vrMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 }); } catch (e) {} }
+  if (_vrEdsOn) _vrEnsureEds();
   setTimeout(() => { try { _vrMap.invalidateSize(); } catch (e) {} }, 120);
+}
+
+// ─ Études de sol GPH (GEOCARTO) — couche superposable depuis Supabase ─
+function vrToggleEds(on) {
+  _vrEdsOn = on;
+  if (!_vrMap) return;
+  if (on) _vrEnsureEds();
+  else if (_vrEdsLayer) { try { _vrMap.removeLayer(_vrEdsLayer); } catch (e) {} _vrEdsLayer = null; }
+}
+async function _vrEnsureEds() {
+  if (!_vrMap) return;
+  if (_vrEdsDept !== _vrDept) {
+    try { _vrEdsData = await _vrFetchEds(_vrDept); _vrEdsDept = _vrDept; }
+    catch (e) { _vrEdsData = []; toast('Études de sol GPH indisponibles : ' + e.message, 'error'); }
+  }
+  _vrAddEdsLayer();
+}
+async function _vrFetchEds(dept) {
+  // Découverte des colonnes (une fois) pour trouver la colonne "département"
+  if (!_vrEdsCols) {
+    const { data } = await sb.from('geocarto_eds').select('*').limit(1);
+    _vrEdsSample = (data && data[0]) || {};
+    _vrEdsCols = Object.keys(_vrEdsSample);
+  }
+  const cols = _vrEdsCols;
+  const depCol = ['departement', 'code_departement', 'dep', 'code_dept', 'dpt', 'departement_code', 'num_departement'].find(c => cols.includes(c));
+  const cpCol = ['code_postal', 'cp', 'codepostal', 'code_postal_ban'].find(c => cols.includes(c));
+  let q = sb.from('geocarto_eds').select('*').not('latitude', 'is', null);
+  if (depCol) {
+    const v = (typeof _vrEdsSample[depCol] === 'number') ? Number(dept) : dept;
+    q = q.eq(depCol, v);
+  } else if (cpCol) {
+    q = q.like(cpCol, dept + '%');
+  }
+  const { data, error } = await q.limit(4000);
+  if (error) throw error;
+  return data || [];
+}
+function _vrAddEdsLayer() {
+  if (!_vrMap || !window.L) return;
+  if (_vrEdsLayer) { try { _vrMap.removeLayer(_vrEdsLayer); } catch (e) {} }
+  _vrEdsLayer = L.layerGroup();
+  (_vrEdsData || []).forEach(r => {
+    const la = Number(r.latitude), lo = Number(r.longitude);
+    if (!la || !lo) return;
+    const m = L.circleMarker([la, lo], { radius: 6, color: '#ca8a04', fillColor: '#facc15', fillOpacity: 0.9, weight: 2 });
+    m.bindPopup(_vrEdsPopup(r));
+    m.addTo(_vrEdsLayer);
+  });
+  _vrEdsLayer.addTo(_vrMap);
+}
+function _vrEdsPopup(r) {
+  const pick = (...keys) => { for (const k of keys) { if (r[k] != null && r[k] !== '') return r[k]; } return ''; };
+  const esc = v => cmdEsc(String(v));
+  const title = pick('client', 'client_nom', 'nom_client', 'nom', 'raison_sociale', 'reference', 'ref', 'affaire', 'nom_affaire') || 'Étude de sol GPH';
+  const lines = [];
+  const adr = [pick('adresse', 'adresse_ligne1', 'adresse1'), pick('code_postal', 'cp'), pick('ville', 'commune', 'localite')].filter(Boolean).map(esc).join(' ');
+  if (adr) lines.push(adr);
+  const mission = pick('mission', 'type_mission', 'type', 'type_etude', 'libelle'); if (mission) lines.push('Mission : ' + esc(mission));
+  const ref = pick('reference', 'ref', 'affaire', 'code_affaire', 'numero'); if (ref && String(ref) !== String(title)) lines.push('Réf : ' + esc(ref));
+  const date = pick('date', 'date_etude', 'date_creation', 'created_at', 'annee'); if (date) lines.push('Date : ' + esc(String(date).slice(0, 10)));
+  return `<div style="font-size:12px;min-width:180px"><div style="font-weight:700;margin-bottom:3px">🟡 ${esc(title)}</div>${lines.map(l => `<div style="color:#555">${l}</div>`).join('')}<div style="color:#888;font-size:11px;margin-top:3px">Étude de sol GPH (GEOCARTO)</div></div>`;
 }
 
 function _vrAddArgile() {
