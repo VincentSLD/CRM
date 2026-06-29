@@ -1069,6 +1069,16 @@ tbody tr:last-child td { border-bottom: none; }
   height: 100%;
   z-index: 1;
 }
+/* Plein écran de la carte Veille REGAR */
+#vr-map-wrap:fullscreen, #vr-map-wrap:-webkit-full-screen {
+  display: flex;
+  flex-direction: column;
+  background: var(--card, #fff);
+}
+#vr-map-wrap:fullscreen #vr-map, #vr-map-wrap:-webkit-full-screen #vr-map {
+  flex: 1;
+  height: auto !important;
+}
 
 .map-popup {
   padding: 1rem 1.2rem;
@@ -4762,6 +4772,7 @@ let _vrMap = null;
 let _vrPALoading = false;
 let _vrPaFrom = '', _vrPaTo = '';   // filtre sur la date d'autorisation
 let _vrArgileOn = true, _vrArgileOpacity = 0.55, _vrArgileLayer = null;   // calque aléa argile (BRGM)
+let _vrRoadsOn = true, _vrBaseLayer = null, _vrFsBound = false;           // fond de carte (routes) + plein écran
 const VR_NAF = { notaire: { naf: '6910Z', label: 'Notaire' }, agence: { naf: '6831Z', label: 'Agence immobilière' }, geometre: { naf: '7112B', label: 'Géomètre-expert' } };
 
 function renderVeilleRegar() {
@@ -4796,12 +4807,16 @@ function renderVeilleRegar() {
     ${(_vrShowMap || _vrPALoading) ? `<div class="card" style="margin-bottom:14px">
       <div class="card-header"><div class="card-title">🗺️ Permis d'aménager récents — dép. ${cmdEsc(_vrDept)}${_vrPA.length ? ' (' + _vrPA.length + ')' : ''}</div></div>
       <div class="card-body" style="padding:0">
-        ${_vrPALoading ? '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">⏳ Chargement des permis d\'aménager…</div>' : (_vrPA.length ? `<div style="padding:8px 12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--border)">
-          <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" ${_vrArgileOn ? 'checked' : ''} onchange="vrToggleArgile(this.checked)"> 🟫 Aléa argile (RGA)</label>
-          <span style="font-size:11px;color:var(--t3)">Opacité du calque</span>
-          <input type="range" min="0" max="100" value="${Math.round(_vrArgileOpacity * 100)}" oninput="vrSetArgileOpacity(this.value/100)" style="width:130px" title="Transparence du calque argile">
-        </div>
-        <div id="vr-map" style="height:460px;border-radius:0 0 8px 8px"></div>` : '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Aucun permis d\'aménager géolocalisé pour ce département.</div>')}
+        ${_vrPALoading ? '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">⏳ Chargement des permis d\'aménager…</div>' : (_vrPA.length ? `<div id="vr-map-wrap" style="position:relative">
+          <div style="padding:8px 12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--border);background:var(--card,#fff)">
+            <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" ${_vrArgileOn ? 'checked' : ''} onchange="vrToggleArgile(this.checked)"> 🟫 Aléa argile (RGA)</label>
+            <span style="font-size:11px;color:var(--t3)">Opacité</span>
+            <input type="range" min="0" max="100" value="${Math.round(_vrArgileOpacity * 100)}" oninput="vrSetArgileOpacity(this.value/100)" style="width:120px" title="Transparence du calque argile">
+            <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" ${_vrRoadsOn ? 'checked' : ''} onchange="vrToggleRoads(this.checked)"> 🛣️ Routes</label>
+            <button class="btn" style="font-size:11px;padding:3px 8px;margin-left:auto" onclick="vrMapFullscreen()" title="Afficher la carte en plein écran">⛶ Plein écran</button>
+          </div>
+          <div id="vr-map" style="height:460px"></div>
+        </div>` : '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Aucun permis d\'aménager géolocalisé pour ce département.</div>')}
       </div>
       <div style="padding:8px 12px;font-size:11px;color:var(--t3)">Marqueurs : <span style="color:#10b981">●</span> autorisé · <span style="color:#f59e0b">●</span> chantier ouvert · <span style="color:#6b7280">●</span> travaux achevés. Calque argile (BRGM) : du jaune (faible) au rouge/violet (fort) — l'obligation G1 concerne les zones <strong>moyen et fort</strong>. Sources : Sitadel (permis d'aménager) + exposition RGA BRGM/Géorisques.</div>
     </div>` : ''}
@@ -4967,9 +4982,17 @@ function _vrInitMap() {
   const el = document.getElementById('vr-map'); if (!el || !window.L) return;
   if (_vrMap) { try { _vrMap.remove(); } catch (e) {} _vrMap = null; }
   _vrMap = L.map('vr-map', { zoomControl: true }).setView([46.8, 2.5], 6);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(_vrMap);
+  _vrBaseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
+  if (_vrRoadsOn) _vrBaseLayer.addTo(_vrMap);
   _vrArgileLayer = null;
   if (_vrArgileOn) _vrAddArgile();
+  // Réajuster la carte lors d'un changement de plein écran
+  if (!_vrFsBound) {
+    const onFs = () => { if (_vrMap) setTimeout(() => { try { _vrMap.invalidateSize(); } catch (e) {} }, 120); };
+    document.addEventListener('fullscreenchange', onFs);
+    document.addEventListener('webkitfullscreenchange', onFs);
+    _vrFsBound = true;
+  }
   const bounds = [];
   _vrPA.forEach((d, idx) => {
     if (!(d.lat && d.lon)) return;
@@ -5024,6 +5047,17 @@ function vrToggleArgile(on) {
 function vrSetArgileOpacity(v) {
   _vrArgileOpacity = Number(v);
   if (_vrArgileLayer && _vrArgileLayer.setOpacity) _vrArgileLayer.setOpacity(_vrArgileOpacity);
+}
+function vrToggleRoads(on) {
+  _vrRoadsOn = on;
+  if (!_vrMap || !_vrBaseLayer) return;
+  if (on) _vrBaseLayer.addTo(_vrMap); else _vrMap.removeLayer(_vrBaseLayer);
+}
+function vrMapFullscreen() {
+  const w = document.getElementById('vr-map-wrap'); if (!w) return;
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (fsEl) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); }
+  else { (w.requestFullscreen || w.webkitRequestFullscreen || function () {}).call(w); }
 }
 function vrPAProspect(idx) {
   const d = _vrPA[idx]; if (!d) return;
