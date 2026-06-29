@@ -5000,7 +5000,7 @@ async function vrLoadPA() {
     if (sort) p.set('sort', sort);
     p.set('size', isDpe ? '600' : '1000');
     if (sel) p.set('select', sel);
-    const r = await fetch(base + '/lines?' + p.toString());
+    const r = await fetch(_vrFetchUrl(base + '/lines?' + p.toString()));
     if (!r.ok) throw new Error('Source ' + r.status);
     const j = await r.json();
     _vrPA = (j.results || []).map(x => _vrMapRow(x, t)).filter(d => d.lat && d.lon);
@@ -5008,6 +5008,11 @@ async function vrLoadPA() {
   _vrPALoading = false; renderPage('veille-regar');
 }
 
+// Certaines API open data bloquent le CORS navigateur (data.ademe.fr, api.bdnb.io) → passer par /api/proxy
+function _vrFetchUrl(url) {
+  if (/^https:\/\/(data\.ademe\.fr|api\.bdnb\.io)\//.test(url)) return '/api/proxy?url=' + encodeURIComponent(url);
+  return url;
+}
 function _vrGeo(x) {
   if (x.latitude && x.longitude) return [Number(x.latitude), Number(x.longitude)];
   if (typeof x._geopoint === 'string') { const a = x._geopoint.split(','); const la = Number(a[0]), lo = Number(a[1]); if (la && lo) return [la, lo]; }
@@ -5041,7 +5046,7 @@ function _geomCentroidL93(geom) {
 async function _vrLoadCopros(dept) {
   const base = 'https://api.bdnb.io/v1/bdnb/donnees';
   // 1) Copropriétés du département (registre national)
-  const r1 = await fetch(`${base}/batiment_groupe_rnc?code_departement_insee=eq.${dept}&select=batiment_groupe_id,nb_lot_tot,periode_construction_max&limit=300`);
+  const r1 = await fetch(_vrFetchUrl(`${base}/batiment_groupe_rnc?code_departement_insee=eq.${dept}&select=batiment_groupe_id,nb_lot_tot,periode_construction_max&limit=300`));
   if (!r1.ok) throw new Error('BDNB ' + r1.status);
   const copros = await r1.json();
   if (!Array.isArray(copros) || !copros.length) { _vrPA = []; return; }
@@ -5052,7 +5057,7 @@ async function _vrLoadCopros(dept) {
   const geoById = {};
   for (let i = 0; i < ids.length; i += 100) {
     const chunk = ids.slice(i, i + 100);
-    const r2 = await fetch(`${base}/batiment_groupe_complet?batiment_groupe_id=in.(${chunk.join(',')})&select=batiment_groupe_id,libelle_adr_principale_ban,classe_bilan_dpe,geom_groupe&limit=100`);
+    const r2 = await fetch(_vrFetchUrl(`${base}/batiment_groupe_complet?batiment_groupe_id=in.(${chunk.join(',')})&select=batiment_groupe_id,libelle_adr_principale_ban,classe_bilan_dpe,geom_groupe&limit=100`));
     if (!r2.ok) continue;
     const rows = await r2.json();
     (rows || []).forEach(b => { geoById[b.batiment_groupe_id] = b; });
