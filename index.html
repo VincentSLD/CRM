@@ -4354,7 +4354,7 @@ function go(page) {
   const titles = {dashboard:'Tableau de bord',analyse:'Analyse / KPI',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing','marches-publics':'Veille marchés publics','procedures-coll':'Veille procédures collectives (BODACC)',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
     cr:'Comptes-rendus',taches:'Tâches commerciales',opportunites:'Opportunités',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
-    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'",'mode-emploi':"Mode d'emploi",'cahier-charges':'Cahier des charges','veille-regar':'Veille REGAR'};
+    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'",'mode-emploi':"Mode d'emploi",'cahier-charges':'Cahier des charges','veille-regar':'Carte des opportunités'};
   document.getElementById('pageTitle').textContent = titles[page]||page;
   renderPage(page);
   if(window.innerWidth<=768) toggleSidebar(false);
@@ -4377,7 +4377,7 @@ function renderEnDev() {
     { page: 'marches-publics', label: 'Veille Marchés Publics', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' },
     { page: 'objectifs', label: 'Objectifs', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>' },
     { page: 'carte-affaires', label: 'Carte des Affaires', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>' },
-    { page: 'veille-regar', label: 'Veille REGAR', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6l9-3 9 3v12l-9 3-9-3z"/><path d="M3 6l9 3 9-3M12 9v12"/></svg>' },
+    { page: 'veille-regar', label: 'Carte des opportunités', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6l9-3 9 3v12l-9 3-9-3z"/><path d="M3 6l9 3 9-3M12 9v12"/></svg>' },
     { page: 'enrich-siren', label: 'SIRETAGE', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>' },
     { page: 'procedures-coll', label: 'Procédures collectives', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v2m0 4h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>' },
     { page: 'duplicates', label: 'Doublons clients', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>' },
@@ -4779,26 +4779,18 @@ let _vrRoadsOn = true, _vrBaseLayer = null, _vrFsBound = false;           // fon
 const VR_NAF = { notaire: { naf: '6910Z', label: 'Notaire' }, agence: { naf: '6831Z', label: 'Agence immobilière' }, geometre: { naf: '7112B', label: 'Géomètre-expert' } };
 
 function renderVeilleRegar() {
-  const chk = (k, lbl) => `<label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;padding:4px 8px;border:1px solid var(--border);border-radius:6px"><input type="checkbox" ${_vrTypes[k] ? 'checked' : ''} onchange="_vrTypes['${k}']=this.checked"> ${lbl}</label>`;
-  const withEmail = _vrResults.filter(r => r.email).length;
   return `
   <div style="max-width:1100px;margin:0 auto">
     <div style="margin-bottom:14px"><button class="btn btn-sm" onclick="go(_vrReturn)">← Retour</button></div>
     <div class="card" style="margin-bottom:14px">
-      <div class="card-header"><div class="card-title">🏞️ Veille REGAR — prescripteurs (études de sol G1)</div></div>
+      <div class="card-header"><div class="card-title">🗺️ Carte des opportunités — permis & aléa argile</div></div>
       <div class="card-body">
         <p style="font-size:13px;color:var(--t3);margin:0 0 12px;line-height:1.5">
-          Cible les prescripteurs de REGAR (mairies, notaires, agences immobilières, géomètres-experts) par département, à partir de sources <strong>100 % open data</strong>.
-          Les <strong>emails des mairies</strong> sont récupérés automatiquement (Annuaire de l'administration). Pour les autres, l'email est à compléter (l'API entreprises ne le fournit pas).
+          Visualise les <strong>permis d'aménager (lotissements)</strong> et <strong>permis de construire (logements)</strong> récents par département (source Sitadel), géolocalisés, avec le <strong>calque d'aléa retrait-gonflement des argiles</strong> (BRGM). Repère les projets à prospecter et crée un prospect ou une opportunité d'un clic.
         </p>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-          <input id="vr-dept" value="${cmdEsc(_vrDept)}" placeholder="Département (ex. 85)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:160px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrSearch()">
-          ${chk('mairie', '🏛️ Mairies')} ${chk('notaire', '⚖️ Notaires')} ${chk('agence', '🏠 Agences immo')} ${chk('geometre', '📐 Géomètres')}
-          <button class="btn btn-primary" onclick="vrSearch()">🔍 Rechercher prescripteurs</button>
-          ${_vrResults.length ? `<button class="btn" onclick="vrExportCsv()">⬇ Export CSV</button>` : ''}
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-top:1px dashed var(--border);padding-top:10px">
-          <select id="vr-permis-type" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="vr-dept" value="${cmdEsc(_vrDept)}" placeholder="Département (ex. 85)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:150px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrLoadPA()">
+          <select id="vr-permis-type" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
             <option value="pa"${_vrPermisType === 'pa' ? ' selected' : ''}>Permis d'aménager (lotissements)</option>
             <option value="pc"${_vrPermisType === 'pc' ? ' selected' : ''}>Permis de construire (logements)</option>
           </select>
@@ -4806,9 +4798,8 @@ function renderVeilleRegar() {
           <input type="date" id="vr-pa-from" value="${cmdEsc(_vrPaFrom)}" title="À partir du" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
           <span style="font-size:11px;color:var(--t3)">au</span>
           <input type="date" id="vr-pa-to" value="${cmdEsc(_vrPaTo)}" title="Jusqu'au" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
-          <button class="btn" onclick="vrLoadPA()">🗺️ Afficher la carte (Sitadel)</button>
+          <button class="btn btn-primary" onclick="vrLoadPA()">🗺️ Afficher la carte (Sitadel)</button>
         </div>
-        <div style="font-size:11px;color:var(--t3)">⚠️ Prospection B2B : objet en lien avec le métier du destinataire, lien de désinscription + identité de l'expéditeur obligatoires (RGPD/CNIL). Conserver les emails ≤ 3 ans après le dernier contact. Cibler en priorité les communes en aléa argile moyen/fort.</div>
       </div>
     </div>
     ${(_vrShowMap || _vrPALoading) ? `<div class="card" style="margin-bottom:14px">
@@ -4827,8 +4818,6 @@ function renderVeilleRegar() {
       </div>
       <div style="padding:8px 12px;font-size:11px;color:var(--t3)">Marqueurs : <span style="color:#10b981">●</span> autorisé · <span style="color:#f59e0b">●</span> chantier ouvert · <span style="color:#6b7280">●</span> travaux achevés. Calque argile (BRGM) : du jaune (faible) au rouge/violet (fort) — l'obligation G1 concerne les zones <strong>moyen et fort</strong>. Sources : Sitadel (${_vrPermisType === 'pc' ? 'permis de construire de logements' : 'permis d\'aménager'}) + exposition RGA BRGM/Géorisques.</div>
     </div>` : ''}
-    <div id="vr-status" style="font-size:13px;color:var(--t2);margin-bottom:10px">${_vrLoading ? '⏳ Recherche en cours…' : (_vrMsg || (_vrResults.length ? `${_vrResults.length} prescripteur(s) — ${withEmail} avec email` : ''))}</div>
-    <div id="vr-results">${_vrRenderTable()}</div>
   </div>`;
 }
 
