@@ -6416,13 +6416,13 @@ async function _oppClientSearch(q, isEnd) {
 }
 // Sélection d'un client dans l'opportunité à partir de son id CRM.
 // Si le client n'existe pas encore dans Akuiteo (akuiteo_id null), on le crée à la volée (avec confirmation).
-async function _oppPickClientById(clientId, isEnd) {
+async function _oppPickClientById(clientId, isEnd, auto) {
   const box = document.getElementById(isEnd ? 'of-endclientRes' : 'of-clientRes'); if (box) box.style.display = 'none';
   const { data: c } = await sb.from('clients').select('id,name,code,akuiteo_id,code_postal,city,adresse_ligne1,siret,siren,pays,status').eq('id', clientId).maybeSingle();
   if (!c) { toast('Client introuvable', 'error'); return; }
   let akId = c.akuiteo_id;
   if (!akId) {
-    if (!confirm('« ' + c.name + ' » n\'existe pas encore dans Akuiteo.\n\nLe créer maintenant dans Akuiteo pour pouvoir l\'utiliser dans cette opportunité ?')) return;
+    if (!auto && !confirm('« ' + c.name + ' » n\'existe pas encore dans Akuiteo.\n\nLe créer maintenant dans Akuiteo pour pouvoir l\'utiliser dans cette opportunité ?')) return;
     if (!c.code_postal || !c.city) { toast('Code postal et ville manquants sur la fiche client — complétez-la avant de la lier à Akuiteo', 'error'); return; }
     showSyncLoading(true); setSyncText('Création du client dans Akuiteo…');
     try {
@@ -6517,7 +6517,17 @@ function _oppHonoSetAg(i, v) { if (_oppForm.honorairesAgences[i]) _oppForm.honor
 function _oppHonoSetMt(i, v) { if (_oppForm.honorairesAgences[i]) _oppForm.honorairesAgences[i].montant = v; _oppHonoUpdateTotals(); }
 
 // Création d'un nouveau client (dans Akuiteo + CRM) depuis le formulaire d'opportunité
+// Création d'un client depuis l'opportunité : on ouvre le FORMULAIRE COMPLET (tous les champs + SIRENE + Annuaire),
+// puis on sélectionne automatiquement le client créé dans l'opportunité (création Akuiteo à la volée).
 function oppNewClientOpen(prefillName, isEnd) {
+  const resBox = document.getElementById(isEnd ? 'of-endclientRes' : 'of-clientRes'); if (resBox) resBox.style.display = 'none';
+  _ncReturnCtx = 'opp';
+  _ncOppIsEnd = !!isEnd;
+  openModal('new-client');
+  setTimeout(() => _ncPrefillAndSearch(prefillName || ''), 60);
+}
+// (ancien mini-formulaire conservé mais plus utilisé : oppNewClientOpenMini)
+function oppNewClientOpenMini(prefillName, isEnd) {
   const resBox = document.getElementById(isEnd ? 'of-endclientRes' : 'of-clientRes'); if (resBox) resBox.style.display = 'none';
   const lbl = 'display:block;font-size:11px;color:var(--t3);margin-bottom:3px';
   const fi = 'width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)';
@@ -17821,6 +17831,7 @@ async function searchCRClient(q) {
 // Contexte de retour après création via le formulaire complet « new-client »
 // (null = page clients ; 'cr' = éditeur CR ; 'task' = édition d'une tâche)
 let _ncReturnCtx = null;
+let _ncOppIsEnd = false;   // pour le contexte 'opp' : client principal (false) ou client final (true)
 
 // Pré-remplit le nom et lance automatiquement une recherche SIRENE pour enrichir la fiche
 function _ncPrefillAndSearch(name) {
@@ -23865,7 +23876,14 @@ async function submitNewClient() {
     window._ncSecondaryEstablishments = [];
     closeModal('new-client');
 
-    if (_ncReturnCtx === 'nova') {
+    if (_ncReturnCtx === 'opp') {
+      // Retour vers l'édition d'opportunité : sélectionner le client créé (création Akuiteo à la volée, sans confirmation)
+      _ncReturnCtx = null;
+      setStep('Sélection dans l\'opportunité…', 95);
+      overlay.style.display = 'none';
+      try { await _oppPickClientById(id, _ncOppIsEnd, true); } catch (e) { console.warn('opp pick', e); }
+      toast('Client créé et sélectionné pour l\'opportunité', 'success');
+    } else if (_ncReturnCtx === 'nova') {
       // Création demandée par NOVA : informer NOVA + proposer la suite (sans quitter la page courante)
       _ncReturnCtx = null;
       setStep('Finalisation…', 95);
