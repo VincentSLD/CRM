@@ -537,6 +537,7 @@ Procédure :
    [[ACTION:relance_email]]{"to":"<email du contact si connu>","subject":"...","body":"..."}[[/ACTION]]
    [[ACTION:create_cr]]{"client_id":"<id clients>","client_name":"...","opportunite_id":"<akuiteo_id de l'opportunité si liée>","titre":"...","type_cr":"rdv_ext|rdv_int|salon_foire|tel|visio|autre","date":"AAAA-MM-JJ","contenu":"compte-rendu rédigé, en texte simple, retours à la ligne autorisés"}[[/ACTION]]
 Pour create_client : utilise-le quand la société n'existe PAS encore dans le CRM (vérifie d'abord via search_clients/query_table). Le formulaire complet s'ouvrira, pré-rempli et enrichi automatiquement via l'API SIRENE.
+Pour create_opportunity, NE CONFONDS PAS les deux montants : "montant" = Montant Prestations HT (honoraires/prestations facturés par le groupe, saisi manuellement par l'utilisateur) ; "montant_travaux" = montant global des travaux du chantier. Ne renseigne "montant" que si l'utilisateur l'a donné explicitement ; sinon laisse-le vide (il le saisira manuellement).
 Pour create_cr (compte-rendu de visite) : aide d'abord l'utilisateur à rédiger le CONTENU (structuré et clair : contexte, points abordés, décisions, prochaines étapes), récupère le client_id réel via query_table/search_clients, puis propose le bloc. Le type_cr par défaut est "rdv_ext".
 Règles :
 - N'émets un bloc QUE si l'utilisateur veut réellement créer/préparer (pas pour une simple analyse).
