@@ -2914,6 +2914,9 @@ tbody tr:last-child td { border-bottom: none; }
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
       </button>
       <button id="aiSpeedToggle" onclick="cycleAITtsSpeed()" title="Vitesse vocale" style="background:none;border:none;color:#fff;cursor:pointer;font-size:11px;opacity:.7;padding:4px;font-weight:700;min-width:30px">1x</button>
+      <button id="novaFullBtn" onclick="novaToggleFullscreen()" title="Plein écran" style="background:none;border:none;color:#fff;cursor:pointer;opacity:.7;padding:4px;display:flex;align-items:center">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      </button>
       <button onclick="toggleAIChat()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:22px;line-height:1">×</button>
     </div>
   </div>
@@ -21647,6 +21650,22 @@ function novaDragMove(e) {
   panel.style.left = x + 'px'; panel.style.top = y + 'px';
 }
 function novaDragEnd() { _novaDrag = null; document.removeEventListener('mousemove', novaDragMove); document.removeEventListener('mouseup', novaDragEnd); }
+// Bascule NOVA en plein écran (ou retour à la fenêtre flottante)
+let _novaFull = false;
+function novaToggleFullscreen() {
+  const p = document.getElementById('aiChatPanel'); if (!p) return;
+  _novaFull = !_novaFull;
+  const btn = document.getElementById('novaFullBtn');
+  if (_novaFull) {
+    p.style.top = '12px'; p.style.left = '12px'; p.style.right = '12px'; p.style.bottom = '12px';
+    p.style.width = 'auto'; p.style.height = 'auto'; p.style.maxWidth = 'none'; p.style.maxHeight = 'none'; p.style.resize = 'none';
+    if (btn) { btn.title = 'Réduire'; btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>'; }
+  } else {
+    p.style.top = ''; p.style.left = ''; p.style.right = '24px'; p.style.bottom = '90px';
+    p.style.width = '720px'; p.style.height = '680px'; p.style.maxWidth = 'calc(100vw - 32px)'; p.style.maxHeight = 'calc(100vh - 120px)'; p.style.resize = 'both';
+    if (btn) { btn.title = 'Plein écran'; btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>'; }
+  }
+}
 async function askAIChat(presetQuestion) {
   const input = document.getElementById('aiChatInput');
   const question = (presetQuestion || input?.value || '').trim();
