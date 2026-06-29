@@ -96,7 +96,7 @@ const TOOLS = [
   },
   {
     name: 'search_permis_amenager',
-    description: "Veille FONCIÈRE REGAR : permis d'AMÉNAGER (lotissements) récents par département/commune/date (Sitadel). Pour chaque permis, indique le niveau d'ALÉA retrait-gonflement des ARGILES (Géorisques). L'obligation d'étude de sol G1 (métier de REGAR) ne concerne que les terrains constructibles en zone d'aléa argile MOYEN ou FORT. Renvoie demandeur, commune, superficie du terrain, date d'autorisation, SIREN et exposition argile. Idéal pour repérer les lotissements à cibler pour REGAR.",
+    description: "Veille FONCIÈRE : permis d'AMÉNAGER (créations de lotissements) récents par département/commune/date (Sitadel), enrichis du niveau d'ALÉA retrait-gonflement des ARGILES (Géorisques). Un lotissement intéresse PLUSIEURS entités : GPH85/GPH64 (G1 PGC du lotissement, EN PRIORITÉ, toutes zones), GRAVITY (étude de voirie, toutes zones) et REGAR (G1 à la parcelle, uniquement zones moyen/fort). Renvoie demandeur (aménageur/lotisseur), commune, superficie, date d'autorisation, SIREN et exposition argile. Idéal pour prospecter les aménageurs et proposer les bonnes missions selon l'aléa.",
     input_schema: {
       type: 'object',
       properties: {
@@ -576,8 +576,14 @@ Quand l'information utile n'est pas dans le CRM (actualité d'un prospect, son s
 VEILLE CONSTRUCTION DE LOGEMENTS (Sitadel) :
 Quand on demande une veille sur les constructions/permis de logements (promoteurs, projets résidentiels) sur un secteur, utilise search_permis (par département, commune ou mot-clé). Présente les permis récents (demandeur/promoteur, commune, nombre de logements, date d'autorisation), le volume total et la tendance annuelle (logements autorisés par an) si disponible. Conseil : pour un demandeur ayant un SIREN, propose de le qualifier via search_entreprise (santé financière) — c'est un prospect potentiel pour les métiers structure/géotechnique/fluides du groupe.
 
-VEILLE FONCIÈRE REGAR (permis d'aménager + aléa argile) :
-Quand on demande les NOUVEAUX PERMIS D'AMÉNAGER / lotissements (notamment pour REGAR et les études de sol G1), utilise search_permis_amenager (par département, commune, et date_min pour « récents »). Chaque permis est enrichi du niveau d'ALÉA ARGILE (faible/moyen/fort). Mets en avant ceux en aléa MOYEN ou FORT : ce sont les terrains où l'étude de sol G1 est obligatoire à la vente → cible directe de REGAR. Pour ne garder que ces cas, passe argile_min="moyen". Présente : demandeur (+ propose de le qualifier via search_entreprise s'il a un SIREN), commune, superficie du terrain, date d'autorisation et niveau d'aléa argile. Rappelle que REGAR travaille via des prescripteurs (notaires, agences immobilières, géomètres, mairies) à animer sur ces communes.
+VEILLE FONCIÈRE — PERMIS D'AMÉNAGER / LOTISSEMENTS (+ aléa argile) :
+Quand on demande les NOUVEAUX PERMIS D'AMÉNAGER / lotissements, utilise search_permis_amenager (par département, commune, date_min pour « récents »). Chaque permis est enrichi du niveau d'ALÉA ARGILE (faible/moyen/fort).
+IMPORTANT — un permis d'aménager = une création de LOTISSEMENT, donc une opportunité pour PLUSIEURS entités du groupe (à présenter ENSEMBLE, ne te limite pas à REGAR) :
+- GPH85 / GPH64 (EN PRIORITÉ) : étude de sol G1 PGC du lotissement dans sa GLOBALITÉ — quel que soit l'aléa argile (toutes zones).
+- GRAVITY : étude de VOIRIE du lotissement — toutes zones.
+- REGAR : G1 loi ELAN À LA PARCELLE (vente des lots) — UNIQUEMENT si l'aléa argile est MOYEN ou FORT.
+Donc NE FILTRE PAS par défaut sur l'argile (GPH et Gravity sont concernés en toutes zones) : présente TOUS les lotissements récents, et pour chacun indique le niveau d'aléa — quand il est moyen/fort, ajoute que REGAR peut aussi faire le G1 à la parcelle. (argile_min="moyen" ne sert que si on veut isoler spécifiquement la cible REGAR-parcelle.)
+Pour chaque lotissement, présente : demandeur (aménageur/lotisseur — propose de le qualifier via search_entreprise s'il a un SIREN, c'est le prospect direct pour GPH/Gravity), commune, superficie, date d'autorisation et niveau d'aléa argile. Pour REGAR spécifiquement, rappelle qu'il passe par des prescripteurs (notaires, agences immobilières, géomètres, mairies) à animer sur ces communes.
 
 PROSPECTION PAR ACTIVITÉ (NAF) :
 Pour trouver des prospects par secteur d'activité (et repérer les nouvelles immatriculations), utilise search_entreprises_naf avec le code NAF et le département. Codes utiles pour NOVAM : 41.10A (promotion immobilière), 41.20A (construction de maisons individuelles), 41.20B (construction d'autres bâtiments), 71.11Z (architecture), 68.10Z/68.20A (immobilier), 43.xx (travaux spécialisés). Pour les "nouveaux" prospects, passe crees_depuis (ex. 12 derniers mois). Présente nom, ville, date de création, dirigeants ; propose de qualifier les plus pertinents via search_entreprise et de créer une opportunité.
