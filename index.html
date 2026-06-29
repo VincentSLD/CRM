@@ -4777,7 +4777,7 @@ let _vrNbLgt = '';                  // filtre logements (permis de construire) :
 let _vrReturn = 'endev';            // page de retour du bouton « ← Retour » (En Dev' ou Opportunités)
 let _vrArgileOn = true, _vrArgileOpacity = 0.55, _vrArgileLayer = null;   // calque aléa argile (BRGM)
 let _vrBaseType = 'routes', _vrBaseLayer = null, _vrFsBound = false;       // fond de carte (routes / aérien) + plein écran
-let _vrEdsOn = false, _vrEdsLayer = null, _vrEdsData = [], _vrEdsDept = null, _vrEdsCols = null, _vrEdsSample = null; // études de sol GPH (GEOCARTO)
+let _vrEdsOn = false, _vrEdsLayer = null, _vrEdsData = [], _vrEdsLoaded = false, _vrEdsCols = null, _vrEdsSample = null; // études de sol GPH (GEOCARTO)
 const VR_NAF = { notaire: { naf: '6910Z', label: 'Notaire' }, agence: { naf: '6831Z', label: 'Agence immobilière' }, geometre: { naf: '7112B', label: 'Géomètre-expert' } };
 
 function renderVeilleRegar() {
@@ -5271,34 +5271,25 @@ function vrToggleEds(on) {
 }
 async function _vrEnsureEds() {
   if (!_vrMap) return;
-  if (_vrEdsDept !== _vrDept) {
-    try { _vrEdsData = await _vrFetchEds(_vrDept); _vrEdsDept = _vrDept; }
+  if (!_vrEdsLoaded) {
+    try { _vrEdsData = await _vrFetchEdsAll(); _vrEdsLoaded = true; }
     catch (e) { _vrEdsData = []; toast('Études de sol GPH indisponibles : ' + e.message, 'error'); }
   }
   _vrAddEdsLayer();
 }
-async function _vrFetchEds(dept) {
-  // Découverte des colonnes (une fois) pour trouver la colonne "département"
+// On charge TOUTES les études de sol (pas de filtre département) pour ne rien manquer ; mises en cache.
+async function _vrFetchEdsAll() {
   if (!_vrEdsCols) {
     const { data } = await sb.from('geocarto_eds').select('*').limit(1);
     _vrEdsSample = (data && data[0]) || {};
     _vrEdsCols = Object.keys(_vrEdsSample);
   }
   const cols = _vrEdsCols;
-  const depCol = ['departement', 'code_departement', 'dep', 'code_dept', 'dpt', 'departement_code', 'num_departement'].find(c => cols.includes(c));
-  const cpCol = ['code_postal', 'cp', 'codepostal', 'code_postal_ban'].find(c => cols.includes(c));
   // Colonne de tri stable (sinon range() peut sauter des lignes entre les pages)
   const orderCol = cols.includes('id') ? 'id' : (cols.find(c => /(^id$|_id$|uuid|gid)$/i.test(c)) || 'latitude');
-  const buildQ = () => {
-    let q = sb.from('geocarto_eds').select('*').not('latitude', 'is', null);
-    if (depCol) { const v = (typeof _vrEdsSample[depCol] === 'number') ? Number(dept) : dept; q = q.eq(depCol, v); }
-    else if (cpCol) { q = q.like(cpCol, dept + '%'); }
-    return q.order(orderCol, { ascending: true });
-  };
-  // Pagination : PostgREST/Supabase plafonne à ~1000 lignes par requête → on boucle avec range()
   const PAGE = 1000; let all = [], from = 0;
-  for (let i = 0; i < 40; i++) {
-    const { data, error } = await buildQ().range(from, from + PAGE - 1);
+  for (let i = 0; i < 100; i++) { // garde-fou 100 000 lignes
+    const { data, error } = await sb.from('geocarto_eds').select('*').not('latitude', 'is', null).order(orderCol, { ascending: true }).range(from, from + PAGE - 1);
     if (error) throw error;
     const rows = data || [];
     all = all.concat(rows);
@@ -5311,10 +5302,11 @@ function _vrAddEdsLayer() {
   if (!_vrMap || !window.L) return;
   if (_vrEdsLayer) { try { _vrMap.removeLayer(_vrEdsLayer); } catch (e) {} }
   _vrEdsLayer = L.layerGroup();
+  const canvas = L.canvas({ padding: 0.5 }); // rendu canvas → fluide même avec beaucoup de points
   (_vrEdsData || []).forEach(r => {
     const la = Number(String(r.latitude).replace(',', '.')), lo = Number(String(r.longitude).replace(',', '.'));
     if (!la || !lo) return;
-    const m = L.circleMarker([la, lo], { radius: 6, color: '#ca8a04', fillColor: '#facc15', fillOpacity: 0.9, weight: 2 });
+    const m = L.circleMarker([la, lo], { renderer: canvas, radius: 5, color: '#ca8a04', fillColor: '#facc15', fillOpacity: 0.9, weight: 1 });
     m.bindPopup(_vrEdsPopup(r));
     m.addTo(_vrEdsLayer);
   });
