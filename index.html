@@ -4776,7 +4776,7 @@ let _vrPermisType = 'pa';           // 'pa' = permis d'aménager ; 'pc' = permis
 let _vrNbLgt = '';                  // filtre logements (permis de construire) : '' tous, '1' individuelle, 'collectif' 2+
 let _vrReturn = 'endev';            // page de retour du bouton « ← Retour » (En Dev' ou Opportunités)
 let _vrArgileOn = true, _vrArgileOpacity = 0.55, _vrArgileLayer = null;   // calque aléa argile (BRGM)
-let _vrRoadsOn = true, _vrBaseLayer = null, _vrFsBound = false;           // fond de carte (routes) + plein écran
+let _vrBaseType = 'routes', _vrBaseLayer = null, _vrFsBound = false;       // fond de carte (routes / aérien) + plein écran
 let _vrEdsOn = false, _vrEdsLayer = null, _vrEdsData = [], _vrEdsDept = null, _vrEdsCols = null, _vrEdsSample = null; // études de sol GPH (GEOCARTO)
 const VR_NAF = { notaire: { naf: '6910Z', label: 'Notaire' }, agence: { naf: '6831Z', label: 'Agence immobilière' }, geometre: { naf: '7112B', label: 'Géomètre-expert' } };
 
@@ -4823,7 +4823,10 @@ function renderVeilleRegar() {
             <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" ${_vrArgileOn ? 'checked' : ''} onchange="vrToggleArgile(this.checked)"> 🟫 Aléa argile (RGA)</label>
             <span style="font-size:11px;color:var(--t3)">Opacité</span>
             <input type="range" min="0" max="100" value="${Math.round(_vrArgileOpacity * 100)}" oninput="vrSetArgileOpacity(this.value/100)" style="width:120px" title="Transparence du calque argile">
-            <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" ${_vrRoadsOn ? 'checked' : ''} onchange="vrToggleRoads(this.checked)"> 🛣️ Routes</label>
+            <select onchange="vrSetBase(this.value)" title="Fond de carte" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+              <option value="routes" ${_vrBaseType === 'routes' ? 'selected' : ''}>🛣️ Routes</option>
+              <option value="aerien" ${_vrBaseType === 'aerien' ? 'selected' : ''}>🛰️ Aérienne</option>
+            </select>
             <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer" title="Études de sol déjà réalisées par GPH (projet GEOCARTO)"><input type="checkbox" ${_vrEdsOn ? 'checked' : ''} onchange="vrToggleEds(this.checked)"> 🟡 Études de sol GPH</label>
             <button class="btn" style="font-size:11px;padding:3px 8px;margin-left:auto" onclick="vrMapFullscreen()" title="Afficher la carte en plein écran">⛶ Plein écran</button>
           </div>
@@ -5169,8 +5172,8 @@ function _vrInitMap() {
   const el = document.getElementById('vr-map'); if (!el || !window.L) return;
   if (_vrMap) { try { _vrMap.remove(); } catch (e) {} _vrMap = null; }
   _vrMap = L.map('vr-map', { zoomControl: true }).setView([46.8, 2.5], 6);
-  _vrBaseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
-  if (_vrRoadsOn) _vrBaseLayer.addTo(_vrMap);
+  _vrBaseLayer = _vrMakeBase(_vrBaseType);
+  _vrBaseLayer.addTo(_vrMap);
   _vrArgileLayer = null;
   if (_vrArgileOn) _vrAddArgile();
   // Réajuster la carte lors d'un changement de plein écran
@@ -5284,11 +5287,13 @@ async function _vrFetchEds(dept) {
   const cols = _vrEdsCols;
   const depCol = ['departement', 'code_departement', 'dep', 'code_dept', 'dpt', 'departement_code', 'num_departement'].find(c => cols.includes(c));
   const cpCol = ['code_postal', 'cp', 'codepostal', 'code_postal_ban'].find(c => cols.includes(c));
+  // Colonne de tri stable (sinon range() peut sauter des lignes entre les pages)
+  const orderCol = cols.includes('id') ? 'id' : (cols.find(c => /(^id$|_id$|uuid|gid)$/i.test(c)) || 'latitude');
   const buildQ = () => {
     let q = sb.from('geocarto_eds').select('*').not('latitude', 'is', null);
     if (depCol) { const v = (typeof _vrEdsSample[depCol] === 'number') ? Number(dept) : dept; q = q.eq(depCol, v); }
     else if (cpCol) { q = q.like(cpCol, dept + '%'); }
-    return q;
+    return q.order(orderCol, { ascending: true });
   };
   // Pagination : PostgREST/Supabase plafonne à ~1000 lignes par requête → on boucle avec range()
   const PAGE = 1000; let all = [], from = 0;
@@ -5307,7 +5312,7 @@ function _vrAddEdsLayer() {
   if (_vrEdsLayer) { try { _vrMap.removeLayer(_vrEdsLayer); } catch (e) {} }
   _vrEdsLayer = L.layerGroup();
   (_vrEdsData || []).forEach(r => {
-    const la = Number(r.latitude), lo = Number(r.longitude);
+    const la = Number(String(r.latitude).replace(',', '.')), lo = Number(String(r.longitude).replace(',', '.'));
     if (!la || !lo) return;
     const m = L.circleMarker([la, lo], { radius: 6, color: '#ca8a04', fillColor: '#facc15', fillOpacity: 0.9, weight: 2 });
     m.bindPopup(_vrEdsPopup(r));
@@ -5348,10 +5353,17 @@ function vrSetArgileOpacity(v) {
   _vrArgileOpacity = Number(v);
   if (_vrArgileLayer && _vrArgileLayer.setOpacity) _vrArgileLayer.setOpacity(_vrArgileOpacity);
 }
-function vrToggleRoads(on) {
-  _vrRoadsOn = on;
-  if (!_vrMap || !_vrBaseLayer) return;
-  if (on) _vrBaseLayer.addTo(_vrMap); else _vrMap.removeLayer(_vrBaseLayer);
+function _vrMakeBase(type) {
+  if (type === 'aerien') return L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: '© Esri, Maxar, Earthstar Geographics' });
+  return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
+}
+function vrSetBase(type) {
+  _vrBaseType = type;
+  if (!_vrMap) return;
+  if (_vrBaseLayer) { try { _vrMap.removeLayer(_vrBaseLayer); } catch (e) {} }
+  _vrBaseLayer = _vrMakeBase(type);
+  _vrBaseLayer.addTo(_vrMap);
+  try { _vrBaseLayer.bringToBack(); } catch (e) {}
 }
 function vrMapFullscreen() {
   const w = document.getElementById('vr-map-wrap'); if (!w) return;
