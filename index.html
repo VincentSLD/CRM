@@ -5013,6 +5013,27 @@ async function vrLoadPA() {
   _vrPALoading = false; renderPage('veille-regar');
 }
 
+// Chargement à la demande du plugin de clustering (regroupe les points proches, éclate les superposés au clic)
+let _mcLoading = null;
+function _loadMarkerCluster() {
+  if (window.L && L.markerClusterGroup) return Promise.resolve();
+  if (_mcLoading) return _mcLoading;
+  _mcLoading = new Promise((resolve, reject) => {
+    const add = (tag, attrs) => { const el = document.createElement(tag); Object.assign(el, attrs); document.head.appendChild(el); return el; };
+    add('link', { rel: 'stylesheet', href: 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css' });
+    add('link', { rel: 'stylesheet', href: 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css' });
+    const s = add('script', { src: 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js' });
+    s.onload = () => resolve();
+    s.onerror = () => { _mcLoading = null; reject(new Error('markercluster')); };
+  });
+  return _mcLoading;
+}
+function _vrClusterGroup(opts) {
+  if (window.L && L.markerClusterGroup) {
+    return L.markerClusterGroup(Object.assign({ maxClusterRadius: 24, spiderfyOnMaxZoom: true, showCoverageOnHover: false, chunkedLoading: true, spiderfyDistanceMultiplier: 1.6 }, opts || {}));
+  }
+  return L.layerGroup(); // repli sans plugin
+}
 // Certaines API open data bloquent le CORS navigateur (data.ademe.fr, api.bdnb.io) → passer par /api/proxy
 function _vrFetchUrl(url) {
   if (/^https:\/\/(data\.ademe\.fr|api\.bdnb\.io|boamp-datadila\.opendatasoft\.com|geo\.api\.gouv\.fr)\//.test(url)) return '/api/proxy?url=' + encodeURIComponent(url);
@@ -5172,8 +5193,10 @@ function _vrMapRow(x, t) {
   };
 }
 
-function _vrInitMap() {
+async function _vrInitMap() {
   const el = document.getElementById('vr-map'); if (!el || !window.L) return;
+  try { await _loadMarkerCluster(); } catch (e) { /* fallback layerGroup */ }
+  if (!document.getElementById('vr-map')) return; // page changée pendant le chargement
   if (_vrMap) { try { _vrMap.remove(); } catch (e) {} _vrMap = null; }
   _vrMap = L.map('vr-map', { zoomControl: true }).setView([46.8, 2.5], 6);
   _vrBaseLayer = _vrMakeBase(_vrBaseType);
@@ -5187,6 +5210,7 @@ function _vrInitMap() {
     document.addEventListener('webkitfullscreenchange', onFs);
     _vrFsBound = true;
   }
+  const dataGroup = _vrClusterGroup();
   const bounds = [];
   _vrPA.forEach((d, idx) => {
     if (!(d.lat && d.lon)) return;
@@ -5254,13 +5278,15 @@ function _vrInitMap() {
         <button onclick="vrPAOpportunity(${idx})" style="font-size:11px;padding:2px 6px;cursor:pointer">🎯 + Opportunité</button>
         ${d.siren ? `<a href="https://annuaire-entreprises.data.gouv.fr/entreprise/${cmdEsc(d.siren)}" target="_blank" rel="noopener" style="font-size:11px">Fiche SIRENE ↗</a>` : ''}`;
     }
-    const m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#0891b2', fillColor: color, fillOpacity: 0.75, weight: 2 }).addTo(_vrMap);
+    const m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#0891b2', fillColor: color, fillOpacity: 0.75, weight: 2 });
     m.bindPopup(`<div style="font-size:12px;min-width:220px;max-width:300px">
       <div style="font-weight:700;margin-bottom:3px">${cmdEsc(d.demandeur)}</div>
       ${rows}
       <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${buttons}</div></div>`);
+    m.addTo(dataGroup);
     bounds.push([d.lat, d.lon]);
   });
+  dataGroup.addTo(_vrMap);
   if (bounds.length) { try { _vrMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 }); } catch (e) {} }
   if (_vrEdsOn) _vrEnsureEds();
   setTimeout(() => { try { _vrMap.invalidateSize(); } catch (e) {} }, 120);
@@ -5275,6 +5301,7 @@ function vrToggleEds(on) {
 }
 async function _vrEnsureEds() {
   if (!_vrMap) return;
+  try { await _loadMarkerCluster(); } catch (e) { /* fallback */ }
   if (!_vrEdsLoaded) {
     try { _vrEdsData = await _vrFetchEdsAll(); _vrEdsLoaded = true; }
     catch (e) { _vrEdsData = []; toast('Études de sol GPH indisponibles : ' + e.message, 'error'); }
@@ -5305,12 +5332,11 @@ async function _vrFetchEdsAll() {
 function _vrAddEdsLayer() {
   if (!_vrMap || !window.L) return;
   if (_vrEdsLayer) { try { _vrMap.removeLayer(_vrEdsLayer); } catch (e) {} }
-  _vrEdsLayer = L.layerGroup();
-  const canvas = L.canvas({ padding: 0.5 }); // rendu canvas → fluide même avec beaucoup de points
+  _vrEdsLayer = _vrClusterGroup({ maxClusterRadius: 35 });
   (_vrEdsData || []).forEach(r => {
     const la = Number(String(r.latitude).replace(',', '.')), lo = Number(String(r.longitude).replace(',', '.'));
     if (!la || !lo) return;
-    const m = L.circleMarker([la, lo], { renderer: canvas, radius: 5, color: '#ca8a04', fillColor: '#facc15', fillOpacity: 0.9, weight: 1 });
+    const m = L.circleMarker([la, lo], { radius: 5, color: '#ca8a04', fillColor: '#facc15', fillOpacity: 0.9, weight: 1 });
     m.bindPopup(_vrEdsPopup(r));
     m.addTo(_vrEdsLayer);
   });
