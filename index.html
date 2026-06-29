@@ -6719,6 +6719,16 @@ function renderOppAnalyse() {
   const respSorted = Object.entries(byResp).sort((a, b) => b[1] - a[1]).slice(0, 12);
   // Par origine
   const byOrig = grp(enCours, o => o.type_origine, o => num(o.montant));
+  // Par agence (basé sur la décomposition CRM des honoraires) — les opportunités sans décomposition sont regroupées en "(Non réparti)"
+  const byAgence = {};
+  let nonReparti = 0;
+  enCours.forEach(o => {
+    if (Array.isArray(o.honoraires_agences) && o.honoraires_agences.length) {
+      o.honoraires_agences.forEach(h => { if (h.agence) byAgence[h.agence] = (byAgence[h.agence] || 0) + (Number(h.montant) || 0); });
+    } else { nonReparti += num(o.montant); }
+  });
+  if (nonReparti > 0) byAgence['(Non réparti)'] = nonReparti;
+  const agenceSorted = Object.entries(byAgence).sort((a, b) => b[1] - a[1]);
   // Signatures prévues par mois (12 prochains mois, en cours)
   const months = []; const mLab = [];
   for (let i = 0; i < 12; i++) { const d = new Date(today.getFullYear(), today.getMonth() + i, 1); const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); months.push(k); mLab.push(d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })); }
@@ -6733,6 +6743,7 @@ function renderOppAnalyse() {
     { id: 'oppAnaResp', cfg: { type: 'bar', data: { labels: respSorted.map(r => r[0]), datasets: [{ label: 'Pipeline (HT)', data: respSorted.map(r => r[1]), backgroundColor: '#8b5cf6' }] }, options: { indexAxis: 'y', plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false } } },
     { id: 'oppAnaMonth', cfg: { type: 'bar', data: { labels: mLab, datasets: [{ label: 'Signatures prévues (HT)', data: months.map(m => byMonth[m] || 0), backgroundColor: '#10b981' }] }, options: { plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false } } },
     { id: 'oppAnaOrig', cfg: { type: 'doughnut', data: { labels: Object.keys(byOrig), datasets: [{ data: Object.values(byOrig), backgroundColor: PAL }] }, options: { plugins: { legend: { position: 'bottom' } }, responsive: true, maintainAspectRatio: false } } },
+    { id: 'oppAnaAgence', cfg: { type: 'bar', data: { labels: agenceSorted.map(a => a[0]), datasets: [{ label: 'Honoraires en cours (HT)', data: agenceSorted.map(a => a[1]), backgroundColor: '#06b6d4' }] }, options: { indexAxis: 'y', plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false } } },
   ];
 
   // Résumé pour l'export PDF
@@ -6775,6 +6786,7 @@ function renderOppAnalyse() {
       ${chartBox('oppAnaPipe', '💼 Répartition par portefeuille', 240)}
       ${chartBox('oppAnaStatut', '🥧 Répartition par statut', 240)}
       ${chartBox('oppAnaOrig', '🌱 Répartition par origine', 240)}
+      ${chartBox('oppAnaAgence', '🏢 Honoraires par agence (décomposition CRM)', 280)}
     </div>`;
 }
 let _oppAnaCharts = {};
@@ -6807,7 +6819,7 @@ async function oppAnaExportPdf() {
       y += 3;
     }
     // Graphiques (3 par ligne)
-    const ids = ['oppAnaMonth', 'oppAnaStage', 'oppAnaResp', 'oppAnaPipe', 'oppAnaStatut', 'oppAnaOrig'];
+    const ids = ['oppAnaMonth', 'oppAnaStage', 'oppAnaResp', 'oppAnaPipe', 'oppAnaStatut', 'oppAnaOrig', 'oppAnaAgence'];
     let col = 0;
     for (const id of ids) {
       const ch = _oppAnaCharts[id]; if (!ch) continue;
