@@ -5212,16 +5212,23 @@ async function _vrFetchEds(dept) {
   const cols = _vrEdsCols;
   const depCol = ['departement', 'code_departement', 'dep', 'code_dept', 'dpt', 'departement_code', 'num_departement'].find(c => cols.includes(c));
   const cpCol = ['code_postal', 'cp', 'codepostal', 'code_postal_ban'].find(c => cols.includes(c));
-  let q = sb.from('geocarto_eds').select('*').not('latitude', 'is', null);
-  if (depCol) {
-    const v = (typeof _vrEdsSample[depCol] === 'number') ? Number(dept) : dept;
-    q = q.eq(depCol, v);
-  } else if (cpCol) {
-    q = q.like(cpCol, dept + '%');
+  const buildQ = () => {
+    let q = sb.from('geocarto_eds').select('*').not('latitude', 'is', null);
+    if (depCol) { const v = (typeof _vrEdsSample[depCol] === 'number') ? Number(dept) : dept; q = q.eq(depCol, v); }
+    else if (cpCol) { q = q.like(cpCol, dept + '%'); }
+    return q;
+  };
+  // Pagination : PostgREST/Supabase plafonne à ~1000 lignes par requête → on boucle avec range()
+  const PAGE = 1000; let all = [], from = 0;
+  for (let i = 0; i < 40; i++) {
+    const { data, error } = await buildQ().range(from, from + PAGE - 1);
+    if (error) throw error;
+    const rows = data || [];
+    all = all.concat(rows);
+    if (rows.length < PAGE) break;
+    from += PAGE;
   }
-  const { data, error } = await q.limit(4000);
-  if (error) throw error;
-  return data || [];
+  return all;
 }
 function _vrAddEdsLayer() {
   if (!_vrMap || !window.L) return;
