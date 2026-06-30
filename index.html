@@ -4775,7 +4775,8 @@ let _vrPaFrom = '', _vrPaTo = '';   // filtre sur la date d'autorisation
 let _vrPermisType = 'pa';           // 'pa' = permis d'aménager ; 'pc' = permis de construire (logements)
 let _vrNbLgt = '';                  // filtre logements (permis de construire) : '' tous, '1' individuelle, 'collectif' 2+
 let _vrReturn = 'endev';            // page de retour du bouton « ← Retour » (En Dev' ou Opportunités)
-let _vrArgileOn = true, _vrArgileOpacity = 0.55, _vrArgileLayer = null;   // calque aléa argile (BRGM)
+let _vrArgileOn = false, _vrArgileOpacity = 0.55, _vrArgileLayer = null;  // calque aléa argile (BRGM) — décoché par défaut
+let _vrCadastreOn = false, _vrCadastreLayer = null;                       // calque cadastre (parcelles IGN)
 let _vrBaseType = 'routes', _vrBaseLayer = null, _vrFsBound = false;       // fond de carte (routes / aérien) + plein écran
 let _vrEdsOn = false, _vrEdsLayer = null, _vrEdsData = [], _vrEdsLoaded = false, _vrEdsCols = null, _vrEdsSample = null; // études de sol GPH (GEOCARTO)
 const VR_NAF = { notaire: { naf: '6910Z', label: 'Notaire' }, agence: { naf: '6831Z', label: 'Agence immobilière' }, geometre: { naf: '7112B', label: 'Géomètre-expert' } };
@@ -4827,6 +4828,7 @@ function renderVeilleRegar() {
               <option value="routes" ${_vrBaseType === 'routes' ? 'selected' : ''}>🛣️ Routes</option>
               <option value="aerien" ${_vrBaseType === 'aerien' ? 'selected' : ''}>🛰️ Aérienne</option>
             </select>
+            <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer" title="Parcelles cadastrales (numéros visibles en zoomant)"><input type="checkbox" ${_vrCadastreOn ? 'checked' : ''} onchange="vrToggleCadastre(this.checked)"> 🧩 Cadastre</label>
             <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer" title="Études de sol déjà réalisées par GPH (projet GEOCARTO)"><input type="checkbox" ${_vrEdsOn ? 'checked' : ''} onchange="vrToggleEds(this.checked)"> 🟡 Études de sol GPH</label>
             <button class="btn" style="font-size:11px;padding:3px 8px;margin-left:auto" onclick="vrMapFullscreen()" title="Afficher la carte en plein écran">⛶ Plein écran</button>
           </div>
@@ -5203,6 +5205,8 @@ async function _vrInitMap() {
   _vrBaseLayer.addTo(_vrMap);
   _vrArgileLayer = null;
   if (_vrArgileOn) _vrAddArgile();
+  _vrCadastreLayer = null;
+  if (_vrCadastreOn) _vrAddCadastre();
   // Réajuster la carte lors d'un changement de plein écran
   if (!_vrFsBound) {
     const onFs = () => { if (_vrMap) setTimeout(() => { try { _vrMap.invalidateSize(); } catch (e) {} }, 120); };
@@ -5379,6 +5383,20 @@ function _vrAddArgile() {
     layers: 'ALEARG_REALISE_PE,ALEARG_REALISE', format: 'image/png', transparent: true, version: '1.3.0',
     opacity: _vrArgileOpacity, attribution: 'Aléa argile © BRGM/Géorisques', zIndex: 400
   }).addTo(_vrMap);
+}
+function _vrAddCadastre() {
+  if (!_vrMap || !window.L) return;
+  if (_vrCadastreLayer) { try { _vrMap.removeLayer(_vrCadastreLayer); } catch (e) {} }
+  _vrCadastreLayer = L.tileLayer.wms('https://data.geopf.fr/wms-r/wms', {
+    layers: 'CADASTRALPARCELS.PARCELLAIRE_EXPRESS', format: 'image/png', transparent: true, version: '1.3.0',
+    attribution: 'Cadastre © IGN / DGFiP', zIndex: 450,
+  }).addTo(_vrMap);
+}
+function vrToggleCadastre(on) {
+  _vrCadastreOn = on;
+  if (!_vrMap) return;
+  if (on) _vrAddCadastre();
+  else if (_vrCadastreLayer) { try { _vrMap.removeLayer(_vrCadastreLayer); } catch (e) {} _vrCadastreLayer = null; }
 }
 function vrToggleArgile(on) {
   _vrArgileOn = on;
