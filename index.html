@@ -4819,10 +4819,10 @@ function renderVeilleRegar() {
         </div>
       </div>
     </div>
-    ${(_vrShowMap || _vrPALoading) ? `<div class="card" style="margin-bottom:14px">
-      <div class="card-header"><div class="card-title">🗺️ ${_vrTypeLabel}${(_vrIsDpe || _vrIsCopro || _vrIsBoamp) ? '' : ' récents'} — dép. ${cmdEsc(_vrDept)}${_vrPA.length ? ' (' + _vrPA.length + ')' : ''}</div></div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-header"><div class="card-title">🗺️ ${_vrTypeLabel}${_vrDept ? ' — dép. ' + cmdEsc(_vrDept) : ''}${_vrPA.length ? ' (' + _vrPA.length + ')' : ''}</div></div>
       <div class="card-body" style="padding:0">
-        ${_vrPALoading ? '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">⏳ Chargement des permis…</div>' : (_vrPA.length ? `<div id="vr-map-wrap" style="position:relative">
+        <div id="vr-map-wrap" style="position:relative">
           <div style="padding:8px 12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--border);background:var(--card,#fff)">
             <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" ${_vrArgileOn ? 'checked' : ''} onchange="vrToggleArgile(this.checked)"> 🟫 Aléa argile (RGA)</label>
             <span style="font-size:11px;color:var(--t3)">Opacité</span>
@@ -4837,8 +4837,9 @@ function renderVeilleRegar() {
             <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" ${_vrZonesOn ? 'checked' : ''} onchange="vrToggleZones(this.checked)"> 🔷 Zones d'opportunité (<span id="vr-zones-count">${_vrZones.length}</span>)</label>
             <button class="btn" style="font-size:11px;padding:3px 8px;margin-left:auto" onclick="vrMapFullscreen()" title="Afficher la carte en plein écran">⛶ Plein écran</button>
           </div>
+          ${_vrPALoading ? '<div style="padding:6px 12px;font-size:12px;color:var(--t3);border-bottom:1px solid var(--border)">⏳ Chargement…</div>' : (_vrShowMap && !_vrPA.length ? '<div style="padding:6px 12px;font-size:12px;color:#d97706;border-bottom:1px solid var(--border)">Aucun résultat pour ce département (sur la période choisie).</div>' : '')}
           <div id="vr-map" style="height:460px"></div>
-        </div>` : '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Aucun permis géolocalisé pour ce département (sur la période choisie).</div>')}
+        </div>
       </div>
       <div style="padding:8px 12px;font-size:11px;color:var(--t3)">${_vrIsBoamp
         ? 'Marqueurs : <span style="color:#2563eb">●</span> marché public de travaux en cours (BOAMP), position approximative (commune du lieu d\'exécution). Date limite de réponse indiquée.'
@@ -4846,8 +4847,8 @@ function renderVeilleRegar() {
         ? 'Marqueurs : <span style="color:#8b5cf6">●</span> copropriété (source BDNB / registre national, position approximative). Cible syndics/bailleurs pour rénovation globale.'
         : _vrIsDpe
         ? 'Marqueurs : <span style="color:#f59e0b">●</span> classe F · <span style="color:#ef4444">●</span> classe G (passoires thermiques à rénover). Source : observatoire DPE ADEME.'
-        : 'Marqueurs : <span style="color:#10b981">●</span> autorisé · <span style="color:#f59e0b">●</span> chantier ouvert · <span style="color:#6b7280">●</span> travaux achevés. Source : Sitadel.'} Calque argile (BRGM) : du jaune (faible) au rouge/violet (fort).</div>
-    </div>` : ''}
+        : 'Sélectionnez un département puis « Afficher la carte ». Marqueurs : <span style="color:#10b981">●</span> autorisé · <span style="color:#f59e0b">●</span> chantier ouvert · <span style="color:#6b7280">●</span> travaux achevés (Sitadel).'} Calque argile (BRGM) : du jaune (faible) au rouge/violet (fort).</div>
+    </div>
   </div>`;
 }
 
@@ -7815,7 +7816,7 @@ function renderPage(page) {
   if (page === 'cr') initEditor();
   if (page === 'carte') setTimeout(initCarteMap, 50);
   if (page === 'carte-affaires') setTimeout(initCarteAffairesMap, 50);
-  if (page === 'veille-regar' && _vrShowMap && _vrPA.length) setTimeout(_vrInitMap, 60);
+  if (page === 'veille-regar') setTimeout(_vrInitMap, 60);
   if (page === 'enrich-siren') {
     setTimeout(imxRenderEsList, 50);
     if (!clientsFilterOptsLoaded) loadClientsFilterOpts().then(() => { if (currentPage === 'enrich-siren') renderPage('enrich-siren'); });
