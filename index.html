@@ -15437,10 +15437,12 @@ function campRenderPreviewArea() {
 const MP_SOURCES = {
   decp: {
     label: '🏆 DECP — Marchés attribués',
-    url: 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/decp-v3-marches-valides/records',
+    // Dataset à jour (arrêté 22/12/2022) — couvre jusqu'à 2026. (L'ancien decp-v3-marches-valides était figé fin 2023/début 2024.)
+    url: 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/decp-2022-marches-valides/records',
     avisUrl: null,
-    fields: { objet: 'objet', acheteur: 'acheteur_nom', dept: 'lieuexecution_code', date: 'datenotification', montant: 'montant', titulaire: 'titulaire_denominationsociale_1', titulaireSiret: 'titulaire_id_1', cpv: 'codecpv', desc: 'There is no description' },
-    qFields: ['objet', 'acheteur_nom', 'titulaire_denominationsociale_1'],
+    // Ce dataset ne fournit que les SIRET (pas les noms) pour acheteur/titulaire → affichage SIRET + lien Pappers.
+    fields: { objet: 'objet', acheteur: '', acheteurSiret: 'acheteur_id', dept: 'lieuexecution_code', date: 'datenotification', montant: 'montant', titulaire: '', titulaireSiret: 'titulaire_id_1', cpv: 'codecpv', typo: 'ccag', nature: 'nature', desc: '' },
+    qFields: ['objet'],
   },
   boamp: {
     label: '📢 BOAMP — Avis en cours',
@@ -15457,12 +15459,12 @@ const MP_SOURCES = {
   },
 };
 
-let _mpFilters = { tab: 'decp', q: '', dept: '', montantMin: '', montantMax: '', dateMin: '', dateMax: '', acheteur: '', titulaire: '', cpv: '', typeMarche: '', procedure: '' };
+let _mpFilters = { tab: 'decp', q: '', dept: '', montantMin: '', montantMax: '', dateMin: '', dateMax: '', acheteur: '', titulaire: '', cpv: '', typeMarche: '', procedure: '', sort: 'date' };
 let _mpResults = [];
 let _mpTotal = 0;
 let _mpPage = 0;
 let _mpRunning = false;
-const MP_PAGE_SIZE = 50;
+const MP_PAGE_SIZE = 100;
 
 function mpSetTab(t) {
   _mpFilters.tab = t;
@@ -15525,7 +15527,10 @@ function mpBuildQuery() {
   if (wheres.length) params.set('where', wheres.join(' and '));
   params.set('limit', String(MP_PAGE_SIZE));
   params.set('offset', String(_mpPage * MP_PAGE_SIZE));
-  params.set('order_by', src.fields.date + ' desc');
+  // Tri : par défaut date décroissante (plus récents) ; option « typologie » (DECP) = par CCAG puis date
+  let orderBy = src.fields.date + ' desc';
+  if (_mpFilters.tab === 'decp' && _mpFilters.sort === 'typo') orderBy = 'ccag asc, datenotification desc';
+  params.set('order_by', orderBy);
   return params;
 }
 
@@ -15608,13 +15613,17 @@ function renderMarchesPublics() {
         <button class="btn" onclick="mpResetFilters()" style="font-size:12px">✕ Reset</button>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input type="text" placeholder="Acheteur (contient)" value="${(_mpFilters.acheteur||'').replace(/"/g,'&quot;')}" oninput="_mpFilters.acheteur=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="width:170px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">
-        ${_mpFilters.tab !== 'boamp' ? `<input type="text" placeholder="Titulaire (contient)" value="${(_mpFilters.titulaire||'').replace(/"/g,'&quot;')}" oninput="_mpFilters.titulaire=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="width:170px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">` : ''}
+        ${_mpFilters.tab !== 'decp' ? `<input type="text" placeholder="Acheteur (contient)" value="${(_mpFilters.acheteur||'').replace(/"/g,'&quot;')}" oninput="_mpFilters.acheteur=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="width:170px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">` : ''}
+        ${_mpFilters.tab === 'mef' ? `<input type="text" placeholder="Titulaire (contient)" value="${(_mpFilters.titulaire||'').replace(/"/g,'&quot;')}" oninput="_mpFilters.titulaire=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="width:170px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">` : ''}
         <input type="number" placeholder="Montant min €" value="${_mpFilters.montantMin||''}" oninput="_mpFilters.montantMin=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="width:130px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)" ${_mpFilters.tab==='boamp'?'disabled title="Pas de montant en BOAMP"':''}>
         <input type="number" placeholder="Montant max €" value="${_mpFilters.montantMax||''}" oninput="_mpFilters.montantMax=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="width:130px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)" ${_mpFilters.tab==='boamp'?'disabled':''}>
         <input type="date" value="${_mpFilters.dateMin||''}" oninput="_mpFilters.dateMin=this.value" title="Date min" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">
         <input type="date" value="${_mpFilters.dateMax||''}" oninput="_mpFilters.dateMax=this.value" title="Date max" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">
-        ${_mpFilters.tab === 'decp' ? `<input type="text" placeholder="Code CPV (préfixe)" value="${(_mpFilters.cpv||'').replace(/"/g,'&quot;')}" oninput="_mpFilters.cpv=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="width:130px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">` : ''}
+        ${_mpFilters.tab === 'decp' ? `<input type="text" placeholder="Code CPV (préfixe)" value="${(_mpFilters.cpv||'').replace(/"/g,'&quot;')}" oninput="_mpFilters.cpv=this.value" onkeydown="if(event.key==='Enter')mpSearch(0)" style="width:130px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">
+        <select onchange="_mpFilters.sort=this.value;mpSearch(0)" title="Tri" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">
+          <option value="date" ${_mpFilters.sort==='date'?'selected':''}>Tri : plus récents</option>
+          <option value="typo" ${_mpFilters.sort==='typo'?'selected':''}>Tri : par typologie</option>
+        </select>` : ''}
         ${_mpFilters.tab === 'boamp' ? `<select onchange="_mpFilters.typeMarche=this.value" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--t1)">
           <option value="" ${!_mpFilters.typeMarche?'selected':''}>— Type marché —</option>
           <option value="TRAVAUX" ${_mpFilters.typeMarche==='TRAVAUX'?'selected':''}>Travaux</option>
@@ -15661,7 +15670,7 @@ function mpRenderResults() {
   const f = MP_SOURCES[tab].fields;
   let head = '', rows = '';
   if (tab === 'decp') {
-    head = '<tr><th>Date</th><th>Lieu</th><th>Acheteur</th><th>Objet</th><th>Titulaire</th><th style="text-align:right">Montant</th><th>Actions</th></tr>';
+    head = '<tr><th>Date</th><th>Lieu</th><th>Acheteur</th><th>Objet</th><th>Type</th><th>Titulaire</th><th style="text-align:right">Montant</th><th>Actions</th></tr>';
     rows = _mpResults.map(r => {
       // Acheteur : nom si dispo, sinon SIRET avec lien Pappers
       const acheteurNom = _mpEntiteNom(r[f.acheteur]);
@@ -15677,12 +15686,15 @@ function mpRenderResults() {
       // Lieu d'exécution (commune) plus utile que juste le code dept
       const lieuNom = r.lieuexecution_nom || '';
       const lieuCode = r[f.dept] || '';
+      const typo = [r.nature, r.ccag].filter(Boolean).join(' · ');
+      const cpv = r.codecpv || '';
       const addBtn = titulaireSiret ? `<button class="btn" onclick="mpAddTitulaireConcurrent('${titulaireSiret}','${(titulaireNom||titulaireSiret||'').replace(/'/g,"\\'")}')" style="font-size:10px;padding:2px 6px" title="Ajouter aux concurrents">+ concurrent</button>` : '';
       return `<tr>
         <td style="font-size:11px;white-space:nowrap">${mpFmtDate(r[f.date])}</td>
         <td style="font-size:11px"><strong>${lieuCode}</strong>${lieuNom?'<br><span style="color:var(--t3);font-size:10px">'+lieuNom+'</span>':''}</td>
         <td style="font-size:11px;max-width:200px"><div>${acheteurPappers}<strong>${acheteurDisp}</strong></div></td>
         <td style="font-size:12px;max-width:340px">${r[f.objet]||'—'}</td>
+        <td style="font-size:11px;max-width:130px">${typo?cmdEsc(typo):'—'}${cpv?'<br><span style="color:var(--t3);font-size:10px">CPV '+cmdEsc(cpv)+'</span>':''}</td>
         <td style="font-size:11px;max-width:180px">${titulairePappers}<strong>${titulaireDisp}</strong></td>
         <td style="text-align:right;font-weight:700;white-space:nowrap">${mpFmtMoney(r[f.montant])}</td>
         <td>${addBtn}</td>
