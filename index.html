@@ -7326,6 +7326,25 @@ function _oppSetChantier(lat, lng) {
   _oppForm.chantierLat = lat; _oppForm.chantierLng = lng;
   if (_oppChMap) _oppSetChantierMarker(lat, lng);
   const c = document.getElementById('of-chantier-coords'); if (c) c.textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
+  _oppFillDeptFromLatLng(lat, lng);
+}
+// Déduit le n° de département depuis un code INSEE commune (gère Corse 2A/2B et DOM 97x)
+function _deptFromInsee(insee) {
+  insee = String(insee || ''); if (!insee) return '';
+  if (/^97[1-8]/.test(insee)) return insee.slice(0, 3);
+  if (/^2[AB]/i.test(insee)) return insee.slice(0, 2).toUpperCase();
+  return insee.slice(0, 2);
+}
+// Remplit automatiquement le département du chantier par géocodage inverse (BAN)
+function _oppFillDeptFromLatLng(lat, lng) {
+  fetch('https://api-adresse.data.gouv.fr/reverse/?lon=' + lng + '&lat=' + lat).then(r => r.json()).then(j => {
+    const p = j && j.features && j.features[0] && j.features[0].properties;
+    let dept = _deptFromInsee(p && (p.citycode || p.postcode));
+    if (dept && _frDeptList().indexOf(dept) === -1) dept = 'Autres';
+    if (!dept) return;
+    _oppForm.chantierDept = dept;
+    const sel = document.getElementById('of-chantier-dept'); if (sel) sel.value = dept;
+  }).catch(() => {});
 }
 function _oppChantierClear() {
   _oppForm.chantierLat = null; _oppForm.chantierLng = null;
