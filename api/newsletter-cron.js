@@ -130,30 +130,64 @@ const WEB_RUBRIQUES = {
 };
 const WEB_KEYS = Object.keys(WEB_RUBRIQUES);
 // Recherche web pour les rubriques demandées → texte groupé (### Titre + puces avec sources)
-async function fetchWebVeille(rubriqueKeys) {
-  const items = (rubriqueKeys || []).map(k => WEB_RUBRIQUES[k] ? { k, ...WEB_RUBRIQUES[k] } : null).filter(Boolean);
-  if (!items.length) return '';
+async function fetchWebVeilleChunk(items) {
   const ask = items.map((it, i) => `${i + 1}. « ${it.label} » : ${it.query}`).join('\n');
   const messages = [{ role: 'user', content: "Recherche sur le web (sources françaises récentes) et renvoie, pour CHAQUE rubrique ci-dessous, 2 à 3 puces FACTUELLES et datées avec source. Format STRICT, sans intro ni conclusion : pour chaque rubrique, une ligne « ### <Titre exact> » puis les puces une par ligne commençant par '- ' = info datée + courte explication + (Source : Nom — URL). Si rien de fiable : « ### <Titre> » puis « - (pas d'actualité notable cette semaine) ».\n\nRubriques :\n" + ask }];
   let text = '';
+  for (let i = 0; i < 5; i++) {
+    const j = await callClaude({
+      model: MODEL, max_tokens: 4000,
+      system: "Tu es un analyste de veille pour un bureau d'études du bâtiment en France. Tu DOIS utiliser l'outil de recherche web pour trouver des informations RÉCENTES et FRANÇAISES.",
+      messages,
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+    });
+    const t = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+    if (t) text += (text ? '\n' : '') + t;
+    if (j.stop_reason === 'pause_turn' && Array.isArray(j.content)) { messages.push({ role: 'assistant', content: j.content }); continue; }
+    break;
+  }
+  return text.trim();
+}
+async function fetchWebVeille(rubriqueKeys) {
+  const items = (rubriqueKeys || []).map(k => WEB_RUBRIQUES[k] ? { k, ...WEB_RUBRIQUES[k] } : null).filter(Boolean);
+  if (!items.length) return '';
+  let text = '';
   try {
-    for (let i = 0; i < 5; i++) {
-      const j = await callClaude({
-        model: MODEL, max_tokens: 2600,
-        system: "Tu es un analyste de veille pour un bureau d'études du bâtiment en France. Tu DOIS utiliser l'outil de recherche web pour trouver des informations RÉCENTES et FRANÇAISES.",
-        messages,
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: Math.min(10, items.length * 2) }],
-      });
-      const t = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+    for (let i = 0; i < items.length; i += 3) {
+      const t = await fetchWebVeilleChunk(items.slice(i, i + 3));
       if (t) text += (text ? '\n' : '') + t;
-      if (j.stop_reason === 'pause_turn' && Array.isArray(j.content)) { messages.push({ role: 'assistant', content: j.content }); continue; }
-      break;
     }
-    return text.trim();
-  } catch (e) { console.error('fetchWebVeille:', e.message); return ''; }
+  } catch (e) { console.error('fetchWebVeille:', e.message); }
+  return text.trim();
+}
+function _esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+// Rendu HTML déterministe du bloc veille (présence garantie), filtré sur les rubriques autorisées
+function renderVeilleHtml(text, allowedLabels) {
+  if (!text) return '';
+  const allow = allowedLabels && allowedLabels.length ? allowedLabels.map(l => l.toLowerCase()) : null;
+  const linkify = s => s.replace(/\(\s*Sources?\s*:\s*(.+?)\s*[—–\-]+\s*(https?:\/\/[^\s)]+)\s*\)/gi, '(<a href="$2" style="color:#7c3aed">$1</a>)');
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  let html = '', any = false, title = null, buf = [];
+  const flush = () => {
+    if (title) {
+      const ok = !allow || allow.some(l => title.toLowerCase().includes(l) || l.includes(title.toLowerCase()));
+      const real = buf.filter(b => !/pas d['’]actualit/i.test(b));
+      if (ok && real.length) { any = true; html += '<h3 style="font-size:14px;margin:14px 0 4px;color:#4c1d95">' + _esc(title) + '</h3><ul style="margin:0 0 6px 18px;padding:0">' + real.map(b => '<li style="margin:3px 0">' + linkify(_esc(b)) + '</li>').join('') + '</ul>'; }
+    }
+    title = null; buf = [];
+  };
+  for (const l of lines) {
+    if (/^#{2,}\s*/.test(l)) { flush(); title = l.replace(/^#{2,}\s*/, ''); }
+    else if (/^[-•*]\s+/.test(l)) { buf.push(l.replace(/^[-•*]\s+/, '').trim()); }
+    else if (title) { buf.push(l); }
+  }
+  flush();
+  if (!any) return '';
+  return '<h2 style="font-size:16px;margin:22px 0 10px;border-bottom:1px solid #eee;padding-bottom:6px">🌐 Veille externe</h2>' + html;
 }
 async function generateHtml(data, opts) {
   const o = opts || {};
+  const veilleHtml = renderVeilleHtml(o.veille, o.allowedLabels);
   const sys = [
     "Tu es le rédacteur de l'infolettre hebdomadaire interne du CRM du groupe NOVAM Ingénierie (bureaux d'études techniques du bâtiment : structure, géotechnique/études de sol, VRD, fluides, environnement ; entités GPH, REGAR/GPH-R, SERBA, GRAVITY, ECTS, EXECOME). Lecteurs : commerciaux, lundi matin. Objectif : donner envie de se connecter au CRM.",
     'Ton convivial, positif et motivant, emojis bien dosés. Salutation collective (ex. « Bonjour à toutes et à tous »).',
@@ -166,14 +200,18 @@ async function generateHtml(data, opts) {
   const user = [
     'Rédige l\'infolettre en français à partir de ces données de la semaine.',
     o.sections ? ('Sections activées (true = inclure, omets les autres) : ' + JSON.stringify(o.sections)) : '',
-    o.veille
-      ? ("Bloc « 🌐 Veille externe » : METS EN FORME en HTML les faits ci-dessous, groupés par rubrique (« ### Titre »). Pour chaque rubrique : un <h3 style=\"font-size:14px;margin:14px 0 4px;color:#4c1d95\">Titre</h3> puis une liste <ul><li> ; transforme « (Source : Nom — URL) » en <a href=\"URL\" style=\"color:#7c3aed\">Nom</a>. Ignore les rubriques « pas d'actualité notable »." + (o.allowedLabels ? " N'INCLUS QUE ces rubriques : " + o.allowedLabels.join(', ') + '.' : '') + "\nFAITS DE VEILLE :\n" + o.veille)
-      : "Pas de données de veille web : OMETS le bloc veille externe.",
+    veilleHtml
+      ? "IMPORTANT : ne rédige PAS toi-même le bloc « Veille externe ». Insère EXACTEMENT le marqueur <!--VEILLE--> sur sa propre ligne, après les sections CRM et AVANT la signature. Ce bloc sera injecté automatiquement."
+      : "Pas de bloc veille externe.",
     '```json', JSON.stringify(data).slice(0, 60000), '```',
   ].filter(Boolean).join('\n');
   const j = await callClaude({ model: MODEL, max_tokens: 6000, system: sys, messages: [{ role: 'user', content: user }] });
-  const html = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
-  return html.replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  let clean = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim().replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  if (veilleHtml) {
+    if (clean.includes('<!--VEILLE-->')) clean = clean.replace('<!--VEILLE-->', veilleHtml);
+    else { const sig = clean.search(/—\s*NOVA/); clean = sig > -1 ? clean.slice(0, sig) + veilleHtml + clean.slice(sig) : clean + veilleHtml; }
+  } else { clean = clean.replace('<!--VEILLE-->', ''); }
+  return clean;
 }
 
 // ─ Brief commercial personnel (par abonné) ─
