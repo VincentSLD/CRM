@@ -26,6 +26,22 @@ async function callClaude(key, body) {
   return j;
 }
 
+// Recherche web dédiée : renvoie 3-4 faits chiffrés FR (conjoncture BTP + taux) avec sources.
+// Étape séparée pour fiabiliser (toujours appelée) et permettre une mise en forme propre ensuite.
+async function fetchConjoncture(key) {
+  try {
+    const j = await callClaude(key, {
+      model: MODEL,
+      max_tokens: 1200,
+      system: "Tu es un analyste de veille économique pour un bureau d'études du bâtiment en France. Tu DOIS utiliser l'outil de recherche web pour trouver des chiffres RÉCENTS et FRANÇAIS.",
+      messages: [{ role: 'user', content: "Recherche sur le web et donne 3 à 4 puces FACTUELLES et datées sur : (1) la conjoncture du secteur du bâtiment en France (FFB ou Insee), (2) l'indice du coût de la construction (BT01 ou ICC), (3) les taux des crédits immobiliers. Format STRICT : une puce par ligne commençant par '- ', chaque puce = un chiffre daté + une très courte explication + la source sous la forme (Source : Nom — URL). Pas d'introduction, pas de conclusion, uniquement les puces." }],
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }],
+    });
+    const txt = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+    return txt || '';
+  } catch (e) { console.error('fetchConjoncture:', e.message); return ''; }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
@@ -78,10 +94,16 @@ export default async function handler(req, res) {
     "Termine par une signature légère « — NOVA, votre assistant CRM 🤖 » et une note discrète « Vous pouvez vous désabonner depuis Mon espace dans le CRM ».",
   ].filter(Boolean);
 
+  // Étape 1 : recherche web (conjoncture) — séparée pour fiabilité + mise en forme propre
+  let conjoncture = '';
+  if (useWeb && sections.conjoncture !== false) conjoncture = await fetchConjoncture(key);
+
   const userPrompt = [
     "Voici les données agrégées de la semaine (JSON). Rédige l'infolettre en français.",
     recipientName ? ('Destinataire : ' + recipientName + ' (salue-le/la par son prénom).') : '',
-    useWeb ? "Avant de rédiger la section « Conjoncture », fais 1 à 3 recherches web RÉCENTES et FRANÇAISES sur : activité/conjoncture du secteur du bâtiment (FFB/Insee), indice du coût de la construction (BT01/ICC), et taux des crédits immobiliers. Cite brièvement 1-2 chiffres datés avec la source (nom + lien)." : "Pas de recherche web : rédige une section conjoncture courte et générique sans chiffres inventés, ou omets-la.",
+    conjoncture
+      ? "Section « Conjoncture BTP & taux » : METS EN FORME en HTML les faits ci-dessous (liste à puces <ul>/<li>, transforme chaque « (Source : Nom — URL) » en lien <a href=\"URL\" style=\"color:#7c3aed\">Nom</a>). N'invente aucun chiffre, n'ajoute rien d'autre.\nFAITS CONJONCTURE :\n" + conjoncture
+      : "Pas de données de conjoncture disponibles : OMETS la section conjoncture (ne mets pas de texte générique).",
     'Sections activées (true = inclure) : ' + JSON.stringify(sections),
     'DONNÉES :',
     '```json',
@@ -89,13 +111,13 @@ export default async function handler(req, res) {
     '```',
   ].filter(Boolean).join('\n');
 
+  // Étape 2 : génération HTML (sans outil → sortie propre et déterministe)
   const body = {
     model: MODEL,
     max_tokens: 6000,
     system: sysParts.join('\n'),
     messages: [{ role: 'user', content: userPrompt }],
   };
-  if (useWeb) body.tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }];
 
   try {
     const j = await callClaude(key, body);

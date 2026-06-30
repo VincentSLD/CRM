@@ -114,7 +114,19 @@ async function aggregateWeek() {
   return out;
 }
 
-async function generateHtml(data) {
+// Recherche web dédiée (conjoncture BTP + taux), étape séparée pour fiabilité + mise en forme propre
+async function fetchConjoncture() {
+  try {
+    const j = await callClaude({
+      model: MODEL, max_tokens: 1200,
+      system: "Tu es un analyste de veille économique pour un bureau d'études du bâtiment en France. Tu DOIS utiliser l'outil de recherche web pour trouver des chiffres RÉCENTS et FRANÇAIS.",
+      messages: [{ role: 'user', content: "Recherche sur le web et donne 3 à 4 puces FACTUELLES et datées sur : (1) la conjoncture du secteur du bâtiment en France (FFB ou Insee), (2) l'indice du coût de la construction (BT01 ou ICC), (3) les taux des crédits immobiliers. Format STRICT : une puce par ligne commençant par '- ', chaque puce = un chiffre daté + une très courte explication + la source sous la forme (Source : Nom — URL). Pas d'introduction ni de conclusion, uniquement les puces." }],
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }],
+    });
+    return (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+  } catch (e) { console.error('fetchConjoncture:', e.message); return ''; }
+}
+async function generateHtml(data, conjoncture) {
   const sys = [
     "Tu es le rédacteur de l'infolettre hebdomadaire interne du CRM du groupe NOVAM Ingénierie (bureaux d'études techniques du bâtiment : structure, géotechnique/études de sol, VRD, fluides, environnement ; entités GPH, REGAR/GPH-R, SERBA, GRAVITY, ECTS, EXECOME). Lecteurs : commerciaux, lundi matin. Objectif : donner envie de se connecter au CRM.",
     'Ton convivial, positif et motivant, emojis bien dosés. Salutation collective (ex. « Bonjour à toutes et à tous »).',
@@ -126,10 +138,12 @@ async function generateHtml(data) {
   ].filter(Boolean).join('\n');
   const user = [
     'Rédige l\'infolettre en français à partir de ces données de la semaine.',
-    "Avant la section conjoncture, fais 1 à 3 recherches web récentes et françaises : conjoncture du bâtiment (FFB/Insee), indice du coût de la construction (BT01/ICC), taux des crédits immobiliers. Cite 1-2 chiffres datés avec source (nom + lien).",
+    conjoncture
+      ? "Section « Conjoncture BTP & taux » : METS EN FORME en HTML les faits ci-dessous (liste <ul>/<li>, transforme chaque « (Source : Nom — URL) » en lien <a href=\"URL\" style=\"color:#7c3aed\">Nom</a>). N'invente aucun chiffre, n'ajoute rien d'autre.\nFAITS CONJONCTURE :\n" + conjoncture
+      : "Pas de données de conjoncture : OMETS la section conjoncture.",
     '```json', JSON.stringify(data).slice(0, 60000), '```',
   ].join('\n');
-  const j = await callClaude({ model: MODEL, max_tokens: 6000, system: sys, messages: [{ role: 'user', content: user }], tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }] });
+  const j = await callClaude({ model: MODEL, max_tokens: 6000, system: sys, messages: [{ role: 'user', content: user }] });
   const html = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
   return html.replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/i, '').trim();
 }
@@ -231,7 +245,8 @@ export default async function handler(req, res) {
     let sent = 0; const errors = [];
     if (emails.length) {
       const data = await aggregateWeek();
-      const inner = await generateHtml(data);
+      const conjoncture = await fetchConjoncture();
+      const inner = await generateHtml(data, conjoncture);
       if (inner) {
         const html = wrap(inner);
         const subject = '📰 Infolettre CRM — semaine du ' + new Date().toLocaleDateString('fr-FR');
