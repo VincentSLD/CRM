@@ -4,6 +4,7 @@
     { "source": "/api/lucca", "destination": "/api/lucca" }
   ],
   "crons": [
-    { "path": "/api/taches-rappels", "schedule": "0 6 * * *" }
+    { "path": "/api/taches-rappels", "schedule": "0 6 * * *" },
+    { "path": "/api/newsletter-cron", "schedule": "0 7 * * 1" }
   ]
 }
