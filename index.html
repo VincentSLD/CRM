@@ -4790,6 +4790,7 @@ let _vrZones = [], _vrZonesOn = true, _vrZonesLayer = null, _vrZonesLoaded = fal
 let _vrZonePendingGeo = null, _vrZoneEditId = null, _vrZoneDraftColor = VR_ZONE_COLORS[0], _drawLoading = null;
 let _vrBaseType = 'routes', _vrBaseLayer = null, _vrFsBound = false;       // fond de carte (routes / aérien) + plein écran
 let _vrEdsOn = false, _vrEdsLayer = null, _vrEdsData = [], _vrEdsLoaded = false, _vrEdsCols = null, _vrEdsSample = null; // études de sol GPH (GEOCARTO)
+let _vrOppsOn = false, _vrOppsLayer = null, _vrOppsData = [], _vrOppsLoaded = false; // opportunités géolocalisées (via client)
 const VR_NAF = { notaire: { naf: '6910Z', label: 'Notaire' }, agence: { naf: '6831Z', label: 'Agence immobilière' }, geometre: { naf: '7112B', label: 'Géomètre-expert' } };
 
 function renderVeilleRegar() {
@@ -4850,6 +4851,7 @@ function renderVeilleRegar() {
             <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer" title="Études de sol déjà réalisées par GPH (projet GEOCARTO)"><input type="checkbox" ${_vrEdsOn ? 'checked' : ''} onchange="vrToggleEds(this.checked)"> 🟡 Études de sol GPH</label>
             <button class="btn" style="font-size:11px;padding:3px 8px" onclick="vrStartDrawZone()" title="Tracer une zone d'opportunité sur la carte">✏️ Tracer une Opportunité</button>
             <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" ${_vrZonesOn ? 'checked' : ''} onchange="vrToggleZones(this.checked)"> 🔷 Zones d'opportunité (<span id="vr-zones-count">${_vrZones.length}</span>)</label>
+            <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer" title="Opportunités du CRM géolocalisées via leur client"><input type="checkbox" ${_vrOppsOn ? 'checked' : ''} onchange="vrToggleOpps(this.checked)"> 🎯 Opportunités (<span id="vr-opps-count">${_vrOppsData.length}</span>)</label>
             <button class="btn" style="font-size:11px;padding:3px 8px;margin-left:auto" onclick="vrMapFullscreen()" title="Afficher la carte en plein écran">⛶ Plein écran</button>
           </div>
           ${_vrPALoading ? '<div style="padding:6px 12px;font-size:12px;color:var(--t3);border-bottom:1px solid var(--border)">⏳ Chargement…</div>' : (_vrShowMap && !_vrPA.length ? '<div style="padding:6px 12px;font-size:12px;color:#d97706;border-bottom:1px solid var(--border)">Aucun résultat pour ce département (sur la période choisie).</div>' : '')}
@@ -5513,6 +5515,7 @@ async function _vrInitMap() {
   }
   if (bounds.length) { try { _vrMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 }); } catch (e) {} }
   if (_vrEdsOn) _vrEnsureEds();
+  if (_vrOppsOn) _vrEnsureOpps();
   setTimeout(() => { try { _vrMap.invalidateSize(); } catch (e) {} }, 120);
 }
 
@@ -5522,6 +5525,38 @@ function vrToggleEds(on) {
   if (!_vrMap) return;
   if (on) _vrEnsureEds();
   else if (_vrEdsLayer) { try { _vrMap.removeLayer(_vrEdsLayer); } catch (e) {} _vrEdsLayer = null; }
+}
+// ─ Couche « Opportunités » (positionnées sur le chantier saisi) ─
+function vrToggleOpps(on) {
+  _vrOppsOn = on;
+  if (!_vrMap) return;
+  if (on) _vrEnsureOpps();
+  else if (_vrOppsLayer) { try { _vrMap.removeLayer(_vrOppsLayer); } catch (e) {} _vrOppsLayer = null; }
+}
+async function _vrEnsureOpps() {
+  if (!_vrMap) return;
+  try { await _loadMarkerCluster(); } catch (e) {}
+  if (!_vrOppsLoaded) {
+    try { if (!_oppsLoaded) await loadOpportunites(); } catch (e) {}
+    _vrOppsData = (_opps || []).filter(o => o.chantier_lat && o.chantier_lng).map(o => ({
+      akId: o.akuiteo_id, nom: o.nom, client_name: o.client_name, montant: o.montant, stage: o.stage, statut: o.statut,
+      lat: Number(o.chantier_lat), lon: Number(o.chantier_lng),
+    }));
+    _vrOppsLoaded = true;
+    const el = document.getElementById('vr-opps-count'); if (el) el.textContent = _vrOppsData.length;
+  }
+  _vrAddOppsLayer();
+}
+function _vrAddOppsLayer() {
+  if (!_vrMap || !window.L) return;
+  if (_vrOppsLayer) { try { _vrMap.removeLayer(_vrOppsLayer); } catch (e) {} }
+  _vrOppsLayer = _vrClusterGroup({ maxClusterRadius: 30 });
+  _vrOppsData.forEach(d => {
+    const m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#4338ca', fillColor: '#6366f1', fillOpacity: 0.85, weight: 2 });
+    m.bindPopup(`<div style="font-size:12px;min-width:200px"><div style="font-weight:700">🎯 ${cmdEsc(d.nom || 'Opportunité')}</div>${d.client_name ? `<div style="color:#555">${cmdEsc(d.client_name)}</div>` : ''}<div style="color:#555;font-size:11px;margin-top:2px">${d.stage ? cmdEsc(d.stage) : ''}${d.montant != null ? ' · ' + fmt(d.montant) : ''}</div><div style="margin-top:6px;display:flex;gap:8px"><button onclick="oppDetail('${d.akId}')" style="font-size:11px;cursor:pointer">Voir la fiche</button><button onclick="oppModalOpen('${d.akId}')" style="font-size:11px;cursor:pointer">✎ Modifier</button></div></div>`);
+    m.addTo(_vrOppsLayer);
+  });
+  _vrOppsLayer.addTo(_vrMap);
 }
 function _vrEdsLoadingOverlay(show) {
   const wrap = document.getElementById('vr-map-wrap'); if (!wrap) return;
@@ -6925,6 +6960,11 @@ async function oppModalOpen(akId, prefill) {
       description: raw.description || (o && o.description) || '',
       // CRM-only : décomposition des honoraires par agence (non synchronisé Akuiteo)
       honorairesAgences: (o && Array.isArray(o.honoraires_agences)) ? o.honoraires_agences.map(h => ({ agence: h.agence || '', montant: (h.montant != null ? h.montant : '') })) : [],
+      // CRM-only : localisation du chantier (point placé sur la carte)
+      chantierLat: (o && o.chantier_lat != null) ? Number(o.chantier_lat) : null,
+      chantierLng: (o && o.chantier_lng != null) ? Number(o.chantier_lng) : null,
+      chantierAdresse: (o && o.chantier_adresse) || '',
+      chantierDept: (o && o.chantier_dept) || '',
     };
     // Pré-remplissage proposé par NOVA (nouvelle opportunité)
     if (!akId && prefill) {
@@ -6937,6 +6977,7 @@ async function oppModalOpen(akId, prefill) {
     }
     renderPage('opportunite-edit');
     _oppHonoOpen = (_oppForm.honorairesAgences || []).length > 0; _oppHonoRender();
+    setTimeout(_oppInitChantierMap, 80);
     if (_oppForm.clientId) _oppLoadContacts(_oppForm.clientId, _oppForm.contactAkId);
     if (_oppForm.customerAkId) _oppLoadSites(_oppForm.customerAkId, _oppForm.customerLocationId);
     // NOVA : si un client_id réel est fourni (enchaînement), le sélectionner directement ; sinon pré-remplir la recherche avec le nom
@@ -7084,6 +7125,21 @@ function renderOppEditPage() {
       ${sec('Description')}
       <div style="grid-column:1/3"><label style="${lbl}">Description</label>
         <textarea id="of-desc" rows="3" style="${fi};resize:vertical" oninput="_oppForm.description=this.value">${cmdEsc(f.description || '')}</textarea></div>
+
+      ${sec('Localisation du chantier')}
+      <div style="grid-column:1/3">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+          <label style="font-size:12px;color:var(--t2)">Département du chantier</label>
+          <select id="of-chantier-dept" style="${fi};max-width:130px" onchange="_oppForm.chantierDept=this.value">${_oppDeptOptions(f.chantierDept)}</select>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+          <input id="of-chantier-search" placeholder="Rechercher une adresse pour centrer la carte…" style="${fi};flex:1;min-width:220px" onkeydown="if(event.key==='Enter'){event.preventDefault();_oppChantierSearch()}">
+          <button type="button" class="btn" onclick="_oppChantierSearch()">🔍 Centrer</button>
+          <button type="button" class="btn" onclick="_oppChantierClear()">Effacer</button>
+        </div>
+        <div style="font-size:11px;color:var(--t3);margin-bottom:6px">Cliquez sur la carte pour placer le chantier (le cadastre est affiché). Coordonnées : <strong id="of-chantier-coords">${(f.chantierLat && f.chantierLng) ? (f.chantierLat.toFixed(5) + ', ' + f.chantierLng.toFixed(5)) : 'aucune'}</strong></div>
+        <div id="of-chantier-map" style="height:340px;border:1px solid var(--border);border-radius:8px"></div>
+      </div>
     </div>`;
   const cancel = f.akId ? `oppDetail('${f.akId}')` : `go('opportunites')`;
   const titre = f.akId ? "Modifier l'opportunité" : 'Nouvelle opportunité';
@@ -7163,6 +7219,57 @@ async function _oppPickClientById(clientId, isEnd, auto) {
   }
   if (isEnd) _oppPickEndClient(clientId, akId, c.name);
   else _oppPickClient(clientId, akId, c.name);
+}
+// Liste des numéros de département français (métropole + Corse + DOM) + « Autres »
+function _frDeptList() {
+  const out = [];
+  for (let i = 1; i <= 95; i++) {
+    if (i === 20) { out.push('2A', '2B'); continue; }
+    out.push(String(i).padStart(2, '0'));
+  }
+  out.push('971', '972', '973', '974', '975', '976', '977', '978');
+  out.push('Autres');
+  return out;
+}
+function _oppDeptOptions(selected) {
+  return '<option value="">—</option>' + _frDeptList().map(d =>
+    `<option value="${d}"${String(selected || '') === d ? ' selected' : ''}>${d}</option>`).join('');
+}
+// ─ Localisation du chantier (clic sur carte + cadastre) dans la fiche opportunité ─
+let _oppChMap = null, _oppChMarker = null;
+function _oppInitChantierMap() {
+  const el = document.getElementById('of-chantier-map'); if (!el || !window.L) return;
+  if (_oppChMap) { try { _oppChMap.remove(); } catch (e) {} _oppChMap = null; _oppChMarker = null; }
+  const lat = _oppForm.chantierLat, lng = _oppForm.chantierLng;
+  _oppChMap = L.map('of-chantier-map', { zoomControl: true }).setView((lat && lng) ? [lat, lng] : [46.8, 2.5], (lat && lng) ? 16 : 6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(_oppChMap);
+  L.tileLayer.wms('https://data.geopf.fr/wms-r/wms', { layers: 'CADASTRALPARCELS.PARCELLAIRE_EXPRESS', format: 'image/png', transparent: true, version: '1.3.0', zIndex: 450 }).addTo(_oppChMap);
+  if (lat && lng) _oppSetChantierMarker(lat, lng);
+  _oppChMap.on('click', e => _oppSetChantier(e.latlng.lat, e.latlng.lng));
+  setTimeout(() => { try { _oppChMap.invalidateSize(); } catch (e) {} }, 150);
+}
+function _oppSetChantierMarker(lat, lng) {
+  if (_oppChMarker) { _oppChMarker.setLatLng([lat, lng]); return; }
+  _oppChMarker = L.marker([lat, lng], { draggable: true }).addTo(_oppChMap);
+  _oppChMarker.on('dragend', e => { const p = e.target.getLatLng(); _oppSetChantier(p.lat, p.lng); });
+}
+function _oppSetChantier(lat, lng) {
+  _oppForm.chantierLat = lat; _oppForm.chantierLng = lng;
+  if (_oppChMap) _oppSetChantierMarker(lat, lng);
+  const c = document.getElementById('of-chantier-coords'); if (c) c.textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
+}
+function _oppChantierClear() {
+  _oppForm.chantierLat = null; _oppForm.chantierLng = null;
+  if (_oppChMarker && _oppChMap) { try { _oppChMap.removeLayer(_oppChMarker); } catch (e) {} _oppChMarker = null; }
+  const c = document.getElementById('of-chantier-coords'); if (c) c.textContent = 'aucune';
+}
+function _oppChantierSearch() {
+  const q = (document.getElementById('of-chantier-search')?.value || '').trim(); if (!q || !_oppChMap) return;
+  fetch('https://api-adresse.data.gouv.fr/search/?limit=1&q=' + encodeURIComponent(q)).then(r => r.json()).then(j => {
+    const f = j && j.features && j.features[0];
+    if (f && f.geometry && f.geometry.coordinates) { const [lo, la] = f.geometry.coordinates; _oppChMap.setView([la, lo], 17); }
+    else toast('Adresse introuvable', 'info');
+  }).catch(() => toast('Recherche d\'adresse indisponible', 'error'));
 }
 function _oppPickClient(clientId, akId, name) {
   _oppForm.clientId = clientId; _oppForm.customerAkId = akId; _oppForm.clientName = name; _oppForm.contactAkId = ''; _oppForm.customerLocationId = '';
@@ -7412,8 +7519,15 @@ async function saveOpportunite() {
     await _refreshOneOpp(akId);
     // Champ CRM-only : décomposition par agence (non synchronisé Akuiteo) — écrit après l'upsert de synchro
     try {
-      await sb.from('opportunites').update({ honoraires_agences: honoArr.length ? honoArr : null }).eq('akuiteo_id', String(akId));
-      const mo = (_opps || []).find(x => String(x.akuiteo_id) === String(akId)); if (mo) mo.honoraires_agences = honoArr.length ? honoArr : null;
+      const crmFields = {
+        honoraires_agences: honoArr.length ? honoArr : null,
+        chantier_lat: (f.chantierLat != null ? f.chantierLat : null),
+        chantier_lng: (f.chantierLng != null ? f.chantierLng : null),
+        chantier_adresse: f.chantierAdresse || null,
+        chantier_dept: f.chantierDept || null,
+      };
+      await sb.from('opportunites').update(crmFields).eq('akuiteo_id', String(akId));
+      const mo = (_opps || []).find(x => String(x.akuiteo_id) === String(akId)); if (mo) Object.assign(mo, crmFields);
     } catch (e) { console.warn('honoraires_agences', e.message); }
     showSyncLoading(false);
     toast(f.akId ? 'Opportunité mise à jour' : 'Opportunité créée', 'success');

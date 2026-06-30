@@ -258,6 +258,10 @@ ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS contact_name TEXT;
 ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS contact_akuiteo_id TEXT;
 ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS montant_travaux NUMERIC;  -- donnée perso Akuiteo "Montant de travaux" (1-number01)
 ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS honoraires_agences JSONB; -- CRM-only : décomposition du Montant Prestations (HT) par agence [{agence,montant}] (non synchronisé Akuiteo)
+ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS chantier_lat NUMERIC;     -- CRM-only : latitude du chantier (point placé sur la carte)
+ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS chantier_lng NUMERIC;     -- CRM-only : longitude du chantier
+ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS chantier_adresse TEXT;    -- CRM-only : adresse/repère du chantier (optionnel)
+ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS chantier_dept TEXT;       -- CRM-only : numéro de département du chantier (01-95, 2A/2B, DOM, « Autres »)
 ALTER TABLE opportunites ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "opportunites_all" ON opportunites;
 CREATE POLICY "opportunites_all" ON opportunites FOR ALL TO authenticated USING (true) WITH CHECK (true);
