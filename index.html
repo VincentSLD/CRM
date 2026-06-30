@@ -4851,7 +4851,7 @@ function renderVeilleRegar() {
             <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer" title="Études de sol déjà réalisées par GPH (projet GEOCARTO)"><input type="checkbox" ${_vrEdsOn ? 'checked' : ''} onchange="vrToggleEds(this.checked)"> 🟡 Études de sol GPH</label>
             <button class="btn" style="font-size:11px;padding:3px 8px" onclick="vrStartDrawZone()" title="Tracer une zone d'opportunité sur la carte">✏️ Tracer une Opportunité</button>
             <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" ${_vrZonesOn ? 'checked' : ''} onchange="vrToggleZones(this.checked)"> 🔷 Zones d'opportunité (<span id="vr-zones-count">${_vrZones.length}</span>)</label>
-            <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer" title="Opportunités du CRM géolocalisées via leur client"><input type="checkbox" ${_vrOppsOn ? 'checked' : ''} onchange="vrToggleOpps(this.checked)"> 🎯 Opportunités (<span id="vr-opps-count">${_vrOppsData.length}</span>)</label>
+            <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer" title="Opportunités des agences (hors perdues) — sur le chantier si géolocalisé, sinon sur le département ; les non localisées figurent dans la liste sous la carte"><input type="checkbox" ${_vrOppsOn ? 'checked' : ''} onchange="vrToggleOpps(this.checked)"> 🎯 Opportunités (<span id="vr-opps-count">${_vrOppsData.filter(d => d.geo === 'precise' || d.geo === 'dept').length}</span>)</label>
             <button class="btn" style="font-size:11px;padding:3px 8px;margin-left:auto" onclick="vrMapFullscreen()" title="Afficher la carte en plein écran">⛶ Plein écran</button>
           </div>
           ${_vrPALoading ? '<div style="padding:6px 12px;font-size:12px;color:var(--t3);border-bottom:1px solid var(--border)">⏳ Chargement…</div>' : (_vrShowMap && !_vrPA.length ? '<div style="padding:6px 12px;font-size:12px;color:#d97706;border-bottom:1px solid var(--border)">Aucun résultat pour ce département (sur la période choisie).</div>' : '')}
@@ -4867,6 +4867,7 @@ function renderVeilleRegar() {
         : 'Sélectionnez un département puis « Afficher la carte ». Marqueurs : <span style="color:#10b981">●</span> autorisé · <span style="color:#f59e0b">●</span> chantier ouvert · <span style="color:#6b7280">●</span> travaux achevés (Sitadel).'} Calque argile (BRGM) : du jaune (faible) au rouge/violet (fort).</div>
     </div>
     <div id="vr-list-container">${_vrListHtml()}</div>
+    <div id="vr-opps-list-container">${_vrOppsListHtml()}</div>
   </div>`;
 }
 function _vrDataTableHtml() {
@@ -5526,37 +5527,105 @@ function vrToggleEds(on) {
   if (on) _vrEnsureEds();
   else if (_vrEdsLayer) { try { _vrMap.removeLayer(_vrEdsLayer); } catch (e) {} _vrEdsLayer = null; }
 }
-// ─ Couche « Opportunités » (positionnées sur le chantier saisi) ─
+// ─ Couche « Opportunités » des agences (positionnées sur le chantier, sinon sur le département) ─
+let _vrOppsDeptCache = {};
 function vrToggleOpps(on) {
   _vrOppsOn = on;
-  if (!_vrMap) return;
+  if (!_vrMap) { _vrRenderOppsList(); return; }
   if (on) _vrEnsureOpps();
-  else if (_vrOppsLayer) { try { _vrMap.removeLayer(_vrOppsLayer); } catch (e) {} _vrOppsLayer = null; }
+  else { if (_vrOppsLayer) { try { _vrMap.removeLayer(_vrOppsLayer); } catch (e) {} _vrOppsLayer = null; } _vrRenderOppsList(); }
+}
+// Centre (chef-lieu) d'un département, mis en cache
+async function _vrDeptCenter(dept) {
+  if (!dept || dept === 'Autres') return null;
+  if (_vrOppsDeptCache[dept] !== undefined) return _vrOppsDeptCache[dept];
+  let center = null;
+  try {
+    const dr = await fetch(_vrFetchUrl(`https://geo.api.gouv.fr/departements/${dept}?fields=chefLieu`));
+    const dj = await dr.json(); const cl = dj && dj.chefLieu;
+    if (cl) {
+      const cr = await fetch(_vrFetchUrl(`https://geo.api.gouv.fr/communes/${cl}?fields=centre&format=json`));
+      const cj = await cr.json(); const c = cj && cj.centre && cj.centre.coordinates;
+      if (c) center = [c[1], c[0]];
+    }
+  } catch (e) { /* ignore */ }
+  _vrOppsDeptCache[dept] = center; return center;
 }
 async function _vrEnsureOpps() {
   if (!_vrMap) return;
   try { await _loadMarkerCluster(); } catch (e) {}
   if (!_vrOppsLoaded) {
     try { if (!_oppsLoaded) await loadOpportunites(); } catch (e) {}
-    _vrOppsData = (_opps || []).filter(o => o.chantier_lat && o.chantier_lng).map(o => ({
-      akId: o.akuiteo_id, nom: o.nom, client_name: o.client_name, montant: o.montant, stage: o.stage, statut: o.statut,
-      lat: Number(o.chantier_lat), lon: Number(o.chantier_lng),
+    // On exclut les opportunités PERDUES (statut LOST)
+    const rows = (_opps || []).filter(o => o.statut !== 'LOST').map(o => ({
+      akId: o.akuiteo_id, nom: o.nom, client_name: o.client_name, montant: o.montant,
+      stage: o.stage, statut: o.statut, dept: o.chantier_dept || '',
+      lat: (o.chantier_lat != null ? Number(o.chantier_lat) : null),
+      lon: (o.chantier_lng != null ? Number(o.chantier_lng) : null),
+      geo: 'none',
     }));
-    _vrOppsLoaded = true;
-    const el = document.getElementById('vr-opps-count'); if (el) el.textContent = _vrOppsData.length;
+    for (const r of rows) {
+      if (r.lat != null && r.lon != null) { r.geo = 'precise'; }
+      else if (r.dept && r.dept !== 'Autres') {
+        const c = await _vrDeptCenter(r.dept);
+        if (c) { r.lat = c[0]; r.lon = c[1]; r.geo = 'dept'; } else { r.geo = 'none'; }
+      } else { r.geo = 'none'; }
+    }
+    _vrOppsData = rows; _vrOppsLoaded = true;
   }
+  const onMap = _vrOppsData.filter(r => r.geo === 'precise' || r.geo === 'dept').length;
+  const el = document.getElementById('vr-opps-count'); if (el) el.textContent = onMap;
   _vrAddOppsLayer();
+  _vrRenderOppsList();
 }
 function _vrAddOppsLayer() {
   if (!_vrMap || !window.L) return;
   if (_vrOppsLayer) { try { _vrMap.removeLayer(_vrOppsLayer); } catch (e) {} }
   _vrOppsLayer = _vrClusterGroup({ maxClusterRadius: 30 });
-  _vrOppsData.forEach(d => {
-    const m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#4338ca', fillColor: '#6366f1', fillOpacity: 0.85, weight: 2 });
-    m.bindPopup(`<div style="font-size:12px;min-width:200px"><div style="font-weight:700">🎯 ${cmdEsc(d.nom || 'Opportunité')}</div>${d.client_name ? `<div style="color:#555">${cmdEsc(d.client_name)}</div>` : ''}<div style="color:#555;font-size:11px;margin-top:2px">${d.stage ? cmdEsc(d.stage) : ''}${d.montant != null ? ' · ' + fmt(d.montant) : ''}</div><div style="margin-top:6px;display:flex;gap:8px"><button onclick="oppDetail('${d.akId}')" style="font-size:11px;cursor:pointer">Voir la fiche</button><button onclick="oppModalOpen('${d.akId}')" style="font-size:11px;cursor:pointer">✎ Modifier</button></div></div>`);
+  _vrOppsData.filter(d => d.lat != null && d.lon != null).forEach(d => {
+    const approx = d.geo === 'dept';
+    const m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#4338ca', fillColor: '#6366f1', fillOpacity: approx ? 0.35 : 0.85, weight: 2, dashArray: approx ? '3,3' : null });
+    const stLbl = (OPP_STATUTS[d.statut] && OPP_STATUTS[d.statut][0]) || d.statut || '';
+    m.bindPopup(`<div style="font-size:12px;min-width:200px"><div style="font-weight:700">🎯 ${cmdEsc(d.nom || 'Opportunité')}</div>${d.client_name ? `<div style="color:#555">${cmdEsc(d.client_name)}</div>` : ''}<div style="color:#555;font-size:11px;margin-top:2px">${cmdEsc(stLbl)}${d.stage ? ' · ' + cmdEsc(d.stage) : ''}${d.montant != null ? ' · ' + fmt(d.montant) : ''}</div>${approx ? '<div style="color:#b45309;font-size:11px;margin-top:2px">📍 Localisation approximative (chef-lieu ' + cmdEsc(d.dept) + ')</div>' : ''}<div style="margin-top:6px;display:flex;gap:8px"><button onclick="oppDetail('${d.akId}')" style="font-size:11px;cursor:pointer">Voir la fiche</button><button onclick="oppModalOpen('${d.akId}')" style="font-size:11px;cursor:pointer">✎ Modifier</button></div></div>`);
     m.addTo(_vrOppsLayer);
   });
   _vrOppsLayer.addTo(_vrMap);
+}
+function _vrRenderOppsList() { const el = document.getElementById('vr-opps-list-container'); if (el) el.innerHTML = _vrOppsListHtml(); }
+function _vrOppsListHtml() {
+  if (!_vrOppsOn) return '';
+  const rows = _vrOppsData || [];
+  if (!rows.length) return '<div class="card" style="margin-top:12px"><div class="card-body" style="padding:14px;color:var(--t3);font-size:12px">Aucune opportunité (hors perdues) à afficher.</div></div>';
+  const order = { precise: 0, dept: 1, none: 2 };
+  const sorted = rows.slice().sort((a, b) => (order[a.geo] - order[b.geo]) || String(a.nom || '').localeCompare(String(b.nom || '')));
+  const trs = sorted.map(d => {
+    const loc = d.geo === 'precise' ? '<span style="color:#10b981">● Précise</span>'
+      : d.geo === 'dept' ? '<span style="color:#f59e0b">● Dépt ' + cmdEsc(d.dept) + '</span>'
+      : '<span style="color:#9ca3af">○ Non localisée</span>';
+    const stLbl = (OPP_STATUTS[d.statut] && OPP_STATUTS[d.statut][0]) || d.statut || '';
+    return `<tr>
+      <td style="padding:6px 8px">${cmdEsc(d.nom || '—')}</td>
+      <td style="padding:6px 8px">${cmdEsc(d.client_name || '—')}</td>
+      <td style="padding:6px 8px;text-align:right;font-family:'DM Mono',monospace">${d.montant != null ? fmt(d.montant) : '—'}</td>
+      <td style="padding:6px 8px">${cmdEsc(stLbl)}${d.stage ? ' · ' + cmdEsc(d.stage) : ''}</td>
+      <td style="padding:6px 8px;white-space:nowrap">${loc}</td>
+      <td style="padding:6px 8px;white-space:nowrap"><button onclick="oppDetail('${d.akId}')" style="font-size:11px;cursor:pointer">Fiche</button> <button onclick="oppModalOpen('${d.akId}')" style="font-size:11px;cursor:pointer">✎</button></td>
+    </tr>`;
+  }).join('');
+  const nNone = rows.filter(r => r.geo === 'none').length;
+  return `<div class="card" style="margin-top:12px"><div class="card-body" style="padding:0">
+    <div style="padding:10px 12px;font-weight:700;font-size:13px;display:flex;justify-content:space-between;align-items:center">
+      <span>🎯 Opportunités des agences (${rows.length}, hors perdues)</span>
+      <span style="font-weight:400;color:var(--t3);font-size:11px">${nNone} non localisée(s)</span>
+    </div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:var(--bg2,#f4f5f7);text-align:left">
+        <th style="padding:6px 8px">Opportunité</th><th style="padding:6px 8px">Client</th>
+        <th style="padding:6px 8px;text-align:right">Montant</th><th style="padding:6px 8px">Statut / Stade</th>
+        <th style="padding:6px 8px">Localisation</th><th style="padding:6px 8px"></th>
+      </tr></thead><tbody>${trs}</tbody>
+    </table></div>
+  </div></div>`;
 }
 function _vrEdsLoadingOverlay(show) {
   const wrap = document.getElementById('vr-map-wrap'); if (!wrap) return;
@@ -7528,6 +7597,7 @@ async function saveOpportunite() {
       };
       await sb.from('opportunites').update(crmFields).eq('akuiteo_id', String(akId));
       const mo = (_opps || []).find(x => String(x.akuiteo_id) === String(akId)); if (mo) Object.assign(mo, crmFields);
+      _vrOppsLoaded = false; // forcer le recalcul de la couche/liste « Opportunités » de la Carte
     } catch (e) { console.warn('honoraires_agences', e.message); }
     showSyncLoading(false);
     toast(f.akId ? 'Opportunité mise à jour' : 'Opportunité créée', 'success');
