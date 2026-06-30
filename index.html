@@ -5476,6 +5476,20 @@ async function _vrInitMap() {
     bounds.push([d.lat, d.lon]);
   });
   dataGroup.addTo(_vrMap);
+  // BOAMP : marqueur « avis non localisés » au centre du département (clic → liste)
+  if (_vrPermisType === 'boamp') {
+    const nogeo = (_vrBoampList || []).map((r, idx) => ({ r, idx })).filter(x => !x.r.geocoded);
+    if (nogeo.length && bounds.length) {
+      let sx = 0, sy = 0; bounds.forEach(b => { sx += b[0]; sy += b[1]; });
+      const c = [sx / bounds.length, sy / bounds.length];
+      const items = nogeo.map(({ r, idx }) => `<div style="border-top:1px solid var(--border);padding:5px 0">
+        <div style="font-weight:600">${cmdEsc(r.acheteur || 'Acheteur public')}</div>
+        <div style="color:#555">${cmdEsc((r.objet || '').slice(0, 140))}</div>
+        <div style="margin-top:3px;display:flex;gap:8px;align-items:center">${r.dateLimite ? '<span style="color:#c0392b;font-size:11px">avant ' + fmtDateFR(r.dateLimite) + '</span>' : ''}<button class="btn" style="font-size:10px;padding:2px 6px" onclick="vrBoampRowOpp(${idx})">🎯</button>${r.lien ? `<a href="${cmdEsc(r.lien)}" target="_blank" rel="noopener" style="font-size:11px">avis ↗</a>` : ''}</div></div>`).join('');
+      const m = L.circleMarker(c, { radius: 11, color: '#6b7280', fillColor: '#9ca3af', fillOpacity: 0.85, weight: 2 }).addTo(_vrMap);
+      m.bindPopup(`<div style="font-size:12px;min-width:240px;max-width:320px"><div style="font-weight:700;margin-bottom:2px">📍✕ ${nogeo.length} avis non localisés — dép. ${cmdEsc(_vrDept)}</div><div style="color:#888;font-size:11px;margin-bottom:4px">(code postal du lieu d'exécution absent)</div><div style="max-height:240px;overflow:auto">${items}</div></div>`);
+    }
+  }
   if (bounds.length) { try { _vrMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 }); } catch (e) {} }
   if (_vrEdsOn) _vrEnsureEds();
   setTimeout(() => { try { _vrMap.invalidateSize(); } catch (e) {} }, 120);
