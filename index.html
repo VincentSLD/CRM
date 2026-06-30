@@ -4782,6 +4782,7 @@ let _vrPaFrom = '', _vrPaTo = '';   // filtre sur la date d'autorisation
 let _vrPermisType = 'pa';           // 'pa' = permis d'aménager ; 'pc' = permis de construire (logements)
 let _vrNbLgt = '';                  // filtre logements (permis de construire) : '' tous, '1' individuelle, 'collectif' 2+
 let _vrBoampType = 'TRAVAUX';       // filtre type de marché BOAMP (TRAVAUX par défaut ; '' = tous)
+let _vrBoampKw = '';                // filtre mot-clé sur l'objet du marché BOAMP (ex. « construction »)
 let _vrReturn = 'endev';            // page de retour du bouton « ← Retour » (En Dev' ou Opportunités)
 let _vrArgileOn = false, _vrArgileOpacity = 0.55, _vrArgileLayer = null;  // calque aléa argile (BRGM) — décoché par défaut
 let _vrCadastreOn = false, _vrCadastreLayer = null;                       // calque cadastre (parcelles IGN)
@@ -4826,6 +4827,7 @@ function renderVeilleRegar() {
             <option value="FOURNITURES"${_vrBoampType === 'FOURNITURES' ? ' selected' : ''}>Fournitures</option>
             <option value=""${_vrBoampType === '' ? ' selected' : ''}>Tous types</option>
           </select>
+          <input id="vr-boamp-kw" value="${cmdEsc(_vrBoampKw)}" placeholder="Mot-clé objet (ex. construction)" title="Filtrer l'objet du marché par mot-clé (BOAMP)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:200px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrLoadPA()">
           <span style="font-size:11px;color:var(--t3)">autorisés du</span>
           <input type="date" id="vr-pa-from" value="${cmdEsc(_vrPaFrom)}" title="À partir du" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
           <span style="font-size:11px;color:var(--t3)">au</span>
@@ -5035,6 +5037,7 @@ async function vrLoadPA() {
   _vrPermisType = document.getElementById('vr-permis-type')?.value || 'pa';
   _vrNbLgt = document.getElementById('vr-nblgt')?.value || '';
   _vrBoampType = document.getElementById('vr-boamp-type') ? document.getElementById('vr-boamp-type').value : _vrBoampType;
+  _vrBoampKw = (document.getElementById('vr-boamp-kw')?.value || '').trim();
   _vrDept = dept; _vrShowMap = true; _vrPALoading = true; _vrPA = []; _vrListPage = 0; renderPage('veille-regar');
   try {
     const t = _vrPermisType;
@@ -5139,6 +5142,7 @@ async function _vrLoadBoamp(dept) {
   // Avis en cours, filtré par type de marché (TRAVAUX par défaut ; '' = tous), paginé
   let where = `startswith(code_departement,"${dept}") and datelimitereponse >= "${today}"`;
   if (_vrBoampType) where += ` and type_marche="${_vrBoampType}"`;
+  if (_vrBoampKw) where += ` and search(objet, "${_vrBoampKw.replace(/"/g, ' ')}")`;
   let recs = [];
   for (let page = 0; page < 5; page++) { // jusqu'à 500
     const p = new URLSearchParams();
@@ -5272,7 +5276,7 @@ function _vrRenderListInto() { const el = document.getElementById('vr-list-conta
 // Vider la carte : aucune donnée, aucun département (remise à zéro de la recherche)
 function vrResetMap() {
   _vrDept = ''; _vrPA = []; _vrBoampList = []; _vrListPage = 0; _vrShowMap = false; _vrPALoading = false; _vrMsg = '';
-  _vrPaFrom = ''; _vrPaTo = '';
+  _vrPaFrom = ''; _vrPaTo = ''; _vrBoampKw = '';
   renderPage('veille-regar');
 }
 function vrListGoPage(delta) { _vrListPage += delta; _vrRenderListInto(); }
