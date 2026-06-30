@@ -5554,8 +5554,9 @@ async function _vrDeptCenter(dept) {
 async function _vrEnsureOpps() {
   if (!_vrMap) return;
   try { await _loadMarkerCluster(); } catch (e) {}
-  if (!_vrOppsLoaded) {
-    try { if (!_oppsLoaded) await loadOpportunites(); } catch (e) {}
+  // Toujours reconstruire à partir des opportunités en mémoire (pas de cache figé) → données fraîches à chaque affichage
+  try { if (!_oppsLoaded) await loadOpportunites(); } catch (e) {}
+  {
     // On exclut les opportunités PERDUES (statut LOST)
     const rows = (_opps || []).filter(o => o.statut !== 'LOST').map(o => ({
       akId: o.akuiteo_id, nom: o.nom, client_name: o.client_name, montant: o.montant,
