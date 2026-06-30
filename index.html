@@ -586,6 +586,9 @@ tbody td {
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
+/* Tableaux-listes de la Carte des opportunités : texte sur plusieurs lignes, aucun chevauchement */
+table.vr-list { width: 100%; table-layout: fixed; }
+table.vr-list th, table.vr-list td { white-space: normal !important; word-break: break-word; overflow-wrap: anywhere; vertical-align: top; }
 
 /* Tables compactes devis/commandes/factures */
 table.tbl-compact thead th { padding: 6px 8px; font-size: 0.55rem; }
@@ -4769,12 +4772,15 @@ let _vrLoading = false;
 let _vrMsg = '';
 let _vrPA = [];          // permis d'aménager (Sitadel) géolocalisés
 let _vrBoampList = [];   // BOAMP : tous les avis récupérés (y compris non géocodés) pour la liste sous la carte
+let _vrListPage = 0;     // pagination du tableau-liste sous la carte (100 par page)
+const VR_LIST_PAGE = 100;
 let _vrShowMap = false;
 let _vrMap = null;
 let _vrPALoading = false;
 let _vrPaFrom = '', _vrPaTo = '';   // filtre sur la date d'autorisation
 let _vrPermisType = 'pa';           // 'pa' = permis d'aménager ; 'pc' = permis de construire (logements)
 let _vrNbLgt = '';                  // filtre logements (permis de construire) : '' tous, '1' individuelle, 'collectif' 2+
+let _vrBoampType = 'TRAVAUX';       // filtre type de marché BOAMP (TRAVAUX par défaut ; '' = tous)
 let _vrReturn = 'endev';            // page de retour du bouton « ← Retour » (En Dev' ou Opportunités)
 let _vrArgileOn = false, _vrArgileOpacity = 0.55, _vrArgileLayer = null;  // calque aléa argile (BRGM) — décoché par défaut
 let _vrCadastreOn = false, _vrCadastreLayer = null;                       // calque cadastre (parcelles IGN)
@@ -4812,11 +4818,18 @@ function renderVeilleRegar() {
             <option value="1"${_vrNbLgt === '1' ? ' selected' : ''}>1 Logt</option>
             <option value="collectif"${_vrNbLgt === 'collectif' ? ' selected' : ''}>&gt;1 Logt</option>
           </select>
+          <select id="vr-boamp-type" title="Type de marché (BOAMP)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+            <option value="TRAVAUX"${_vrBoampType === 'TRAVAUX' ? ' selected' : ''}>Travaux</option>
+            <option value="SERVICES"${_vrBoampType === 'SERVICES' ? ' selected' : ''}>Services</option>
+            <option value="FOURNITURES"${_vrBoampType === 'FOURNITURES' ? ' selected' : ''}>Fournitures</option>
+            <option value=""${_vrBoampType === '' ? ' selected' : ''}>Tous types</option>
+          </select>
           <span style="font-size:11px;color:var(--t3)">autorisés du</span>
           <input type="date" id="vr-pa-from" value="${cmdEsc(_vrPaFrom)}" title="À partir du" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
           <span style="font-size:11px;color:var(--t3)">au</span>
           <input type="date" id="vr-pa-to" value="${cmdEsc(_vrPaTo)}" title="Jusqu'au" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
           <button class="btn btn-primary" onclick="vrLoadPA()">🗺️ Afficher sur la carte</button>
+          <button class="btn" onclick="vrResetMap()" title="Vider la carte (aucune donnée, aucun département)">↺ Réinitialiser</button>
         </div>
       </div>
     </div>
@@ -4850,7 +4863,7 @@ function renderVeilleRegar() {
         ? 'Marqueurs : <span style="color:#f59e0b">●</span> classe F · <span style="color:#ef4444">●</span> classe G (passoires thermiques à rénover). Source : observatoire DPE ADEME.'
         : 'Sélectionnez un département puis « Afficher la carte ». Marqueurs : <span style="color:#10b981">●</span> autorisé · <span style="color:#f59e0b">●</span> chantier ouvert · <span style="color:#6b7280">●</span> travaux achevés (Sitadel).'} Calque argile (BRGM) : du jaune (faible) au rouge/violet (fort).</div>
     </div>
-    ${_vrIsBoamp ? (_vrBoampList.length ? _vrBoampListHtml() : '') : (_vrPA.length ? _vrDataTableHtml() : '')}
+    <div id="vr-list-container">${_vrListHtml()}</div>
   </div>`;
 }
 function _vrDataTableHtml() {
@@ -5017,7 +5030,8 @@ async function vrLoadPA() {
   _vrPaTo = (document.getElementById('vr-pa-to')?.value || '').trim();
   _vrPermisType = document.getElementById('vr-permis-type')?.value || 'pa';
   _vrNbLgt = document.getElementById('vr-nblgt')?.value || '';
-  _vrDept = dept; _vrShowMap = true; _vrPALoading = true; _vrPA = []; renderPage('veille-regar');
+  _vrBoampType = document.getElementById('vr-boamp-type') ? document.getElementById('vr-boamp-type').value : _vrBoampType;
+  _vrDept = dept; _vrShowMap = true; _vrPALoading = true; _vrPA = []; _vrListPage = 0; renderPage('veille-regar');
   try {
     const t = _vrPermisType;
     if (t === 'copro') { await _vrLoadCopros(dept); _vrPALoading = false; renderPage('veille-regar'); return; }
@@ -5118,8 +5132,9 @@ function _geomCentroidL93(geom) {
 // Marchés publics de travaux (BOAMP) — géocodés par code postal du lieu d'exécution (précision commune)
 async function _vrLoadBoamp(dept) {
   const today = new Date().toISOString().slice(0, 10);
-  // Tous types de marchés (travaux ET services/MOE/études — pertinents pour le groupe), avis en cours, paginé
-  const where = `startswith(code_departement,"${dept}") and datelimitereponse >= "${today}"`;
+  // Avis en cours, filtré par type de marché (TRAVAUX par défaut ; '' = tous), paginé
+  let where = `startswith(code_departement,"${dept}") and datelimitereponse >= "${today}"`;
+  if (_vrBoampType) where += ` and type_marche="${_vrBoampType}"`;
   let recs = [];
   for (let page = 0; page < 5; page++) { // jusqu'à 500
     const p = new URLSearchParams();
@@ -5166,21 +5181,107 @@ async function _vrLoadBoamp(dept) {
   });
   _vrPA = out; _vrBoampList = list;
 }
-function _vrBoampListHtml() {
-  const geoN = _vrBoampList.filter(r => r.geocoded).length;
-  const rows = _vrBoampList.map((r, i) => `<tr style="border-bottom:1px solid var(--border)">
-    <td style="padding:6px 8px;font-size:11px;white-space:nowrap">${r.dateLimite ? fmtDateFR(r.dateLimite) : '—'}</td>
-    <td style="padding:6px 8px;font-size:11px">${cmdEsc(r.typeMarche || '')}</td>
-    <td style="padding:6px 8px;font-size:12px;max-width:340px">${cmdEsc(r.objet || '—')}</td>
-    <td style="padding:6px 8px;font-size:11px;max-width:180px">${cmdEsc(r.acheteur || '')}</td>
-    <td style="padding:6px 8px;font-size:11px;white-space:nowrap">${cmdEsc((r.cp || '') + (r.dept ? ' (' + r.dept + ')' : ''))}${r.geocoded ? '' : ' <span title="Non localisé sur la carte (code postal indisponible)" style="color:#d97706">📍✕</span>'}</td>
-    <td style="padding:6px 8px;white-space:nowrap"><button class="btn" style="font-size:10px;padding:2px 6px" title="Créer une opportunité" onclick="vrBoampRowOpp(${i})">🎯</button>${r.lien ? ` <a href="${cmdEsc(r.lien)}" target="_blank" rel="noopener" style="font-size:11px">avis ↗</a>` : ''}</td>
-  </tr>`).join('');
-  return `<div class="card" style="margin-bottom:14px"><div class="card-header"><div class="card-title">📋 Marchés publics (liste) — ${_vrBoampList.length} avis · ${geoN} géolocalisés</div></div>
-    <div class="card-body" style="padding:0"><div class="table-wrap"><table>
-    <thead><tr><th>Date limite</th><th>Type</th><th>Objet</th><th>Acheteur</th><th>Lieu</th><th></th></tr></thead>
-    <tbody>${rows}</tbody></table></div></div>
-    <div style="padding:6px 12px;font-size:11px;color:var(--t3)">📍✕ = avis non localisable sur la carte (code postal du lieu d'exécution absent) ; il reste listé ici.</div></div>`;
+// Données de la liste selon le type courant : { kind, all (tableau complet) }
+function _vrListData() {
+  if (_vrPermisType === 'boamp') return { kind: 'boamp', all: _vrBoampList };
+  return { kind: _vrPermisType, all: _vrPA };
+}
+function _vrListHeadBoamp() { return '<tr><th style="width:78px">Date limite</th><th style="width:78px">Type</th><th>Objet</th><th style="width:150px">Acheteur</th><th style="width:90px">Lieu</th><th style="width:90px"></th></tr>'; }
+function _vrListRowBoamp(r, i) {
+  return `<tr style="border-bottom:1px solid var(--border)">
+    <td style="font-size:11px">${r.dateLimite ? fmtDateFR(r.dateLimite) : '—'}</td>
+    <td style="font-size:11px">${cmdEsc(r.typeMarche || '')}</td>
+    <td style="font-size:12px">${cmdEsc(r.objet || '—')}</td>
+    <td style="font-size:11px">${cmdEsc(r.acheteur || '')}</td>
+    <td style="font-size:11px">${cmdEsc((r.cp || '') + (r.dept ? ' (' + r.dept + ')' : ''))}${r.geocoded ? '' : ' <span title="Non localisé sur la carte (code postal indisponible)" style="color:#d97706">📍✕</span>'}</td>
+    <td><button class="btn" style="font-size:10px;padding:2px 6px" title="Créer une opportunité" onclick="vrBoampRowOpp(${i})">🎯</button>${r.lien ? ` <a href="${cmdEsc(r.lien)}" target="_blank" rel="noopener" style="font-size:11px">avis ↗</a>` : ''}</td>
+  </tr>`;
+}
+function _vrListHeadData(k) {
+  if (k === 'dpe_ter' || k === 'dpe_log') return '<tr><th>Adresse</th><th style="width:70px">Classe</th><th style="width:90px">Surface</th><th style="width:110px">Construction</th><th style="width:60px"></th></tr>';
+  if (k === 'copro') return '<tr><th>Adresse</th><th style="width:60px">Lots</th><th style="width:110px">Construction</th><th style="width:90px">DPE estimé</th><th style="width:60px"></th></tr>';
+  return `<tr><th style="width:90px">Date</th><th>Demandeur</th><th style="width:160px">Commune</th><th style="width:90px">${k === 'pa' ? 'Superficie' : 'Logements'}</th><th style="width:130px"></th></tr>`;
+}
+function _vrListRowData(d, i, k) {
+  if (k === 'dpe_ter' || k === 'dpe_log') {
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="font-size:12px">${cmdEsc(d.adresse || d.commune || '—')}</td>
+      <td style="font-size:12px"><strong style="color:${d.dpeClass === 'G' ? '#ef4444' : '#f59e0b'}">${cmdEsc(d.dpeClass || '')}</strong>${d.gesClass ? ' / ' + cmdEsc(d.gesClass) : ''}</td>
+      <td style="font-size:11px">${d.surface ? Number(d.surface).toLocaleString('fr-FR') + ' m²' : '—'}</td>
+      <td style="font-size:11px">${cmdEsc(d.periode || '—')}</td>
+      <td><button class="btn" style="font-size:10px;padding:2px 6px" title="Créer une opportunité" onclick="vrPAOpportunity(${i})">🎯</button></td></tr>`;
+  }
+  if (k === 'copro') {
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="font-size:12px">${cmdEsc(d.adresse || '—')}</td>
+      <td style="font-size:11px">${d.nbLot != null ? cmdEsc(String(d.nbLot)) : '—'}</td>
+      <td style="font-size:11px">${cmdEsc(d.periode || '—')}</td>
+      <td style="font-size:11px">${cmdEsc(d.dpeClass || '—')}</td>
+      <td><button class="btn" style="font-size:10px;padding:2px 6px" title="Créer une opportunité" onclick="vrPAOpportunity(${i})">🎯</button></td></tr>`;
+  }
+  const qty = k === 'pa' ? (d.superficie ? Number(d.superficie).toLocaleString('fr-FR') + ' m²' : '—') : (d.nbLgt != null ? String(d.nbLgt) : '—');
+  return `<tr style="border-bottom:1px solid var(--border)">
+    <td style="font-size:11px">${d.date ? fmtDateFR(d.date) : '—'}</td>
+    <td style="font-size:12px">${cmdEsc(d.demandeur || '—')}</td>
+    <td style="font-size:11px">${cmdEsc((d.cp || '') + ' ' + (d.commune || ''))}</td>
+    <td style="font-size:11px">${qty}</td>
+    <td><button class="btn" style="font-size:10px;padding:2px 6px" title="Créer un prospect" onclick="vrPAProspect(${i})">+ Prospect</button> <button class="btn" style="font-size:10px;padding:2px 6px" title="Créer une opportunité" onclick="vrPAOpportunity(${i})">🎯</button></td>`;
+}
+function _vrListHtml() {
+  const { kind, all } = _vrListData();
+  if (!all || !all.length) return '';
+  const isB = kind === 'boamp';
+  const pages = Math.max(1, Math.ceil(all.length / VR_LIST_PAGE));
+  if (_vrListPage >= pages) _vrListPage = pages - 1;
+  if (_vrListPage < 0) _vrListPage = 0;
+  const start = _vrListPage * VR_LIST_PAGE;
+  const slice = all.slice(start, start + VR_LIST_PAGE);
+  const head = isB ? _vrListHeadBoamp() : _vrListHeadData(kind);
+  const body = slice.map((r, j) => isB ? _vrListRowBoamp(r, start + j) : _vrListRowData(r, start + j, kind)).join('');
+  const lbl = { pa: "Permis d'aménager", pc: 'Permis de construire', pc_existant: 'Permis sur bâti existant', dpe_ter: 'DPE tertiaire F/G', dpe_log: 'DPE logements F/G', copro: 'Copropriétés', boamp: 'Marchés publics' }[kind] || 'Résultats';
+  const geoNote = isB ? ' · ' + _vrBoampList.filter(r => r.geocoded).length + ' géolocalisés' : '';
+  const nav = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid var(--border)">
+      <button class="btn" style="font-size:12px;padding:3px 10px" ${_vrListPage <= 0 ? 'disabled' : ''} onclick="vrListGoPage(-1)">← Précédent</button>
+      <span style="font-size:12px;color:var(--t3)">${start + 1}–${start + slice.length} sur ${all.length} · page ${_vrListPage + 1}/${pages}</span>
+      <button class="btn" style="font-size:12px;padding:3px 10px" ${_vrListPage >= pages - 1 ? 'disabled' : ''} onclick="vrListGoPage(1)">Suivant →</button>
+      <button class="btn" style="font-size:12px;padding:3px 10px;margin-left:auto" onclick="vrListExportCsv()">⬇ Export CSV</button></div>`;
+  return `<div class="card" style="margin-bottom:14px"><div class="card-header"><div class="card-title">📋 ${lbl} (liste) — ${all.length}${geoNote}</div></div>
+    <div class="card-body" style="padding:0"><div class="table-wrap"><table class="vr-list"><thead>${head}</thead><tbody>${body}</tbody></table></div>${nav}
+    ${isB ? '<div style="padding:6px 12px;font-size:11px;color:var(--t3)">📍✕ = avis non localisable sur la carte (code postal absent) ; il reste listé ici.</div>' : ''}</div>`;
+}
+function _vrRenderListInto() { const el = document.getElementById('vr-list-container'); if (el) el.innerHTML = _vrListHtml(); }
+// Vider la carte : aucune donnée, aucun département (remise à zéro de la recherche)
+function vrResetMap() {
+  _vrDept = ''; _vrPA = []; _vrBoampList = []; _vrListPage = 0; _vrShowMap = false; _vrPALoading = false; _vrMsg = '';
+  _vrPaFrom = ''; _vrPaTo = '';
+  renderPage('veille-regar');
+}
+function vrListGoPage(delta) { _vrListPage += delta; _vrRenderListInto(); }
+function vrListExportCsv() {
+  const { kind, all } = _vrListData();
+  if (!all || !all.length) { toast('Rien à exporter.', 'info'); return; }
+  const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  let header, mapRow, name;
+  if (kind === 'boamp') {
+    header = ['Date limite', 'Type', 'Objet', 'Acheteur', 'CP', 'Département', 'Géolocalisé', 'Lien'];
+    mapRow = r => [r.dateLimite, r.typeMarche, r.objet, r.acheteur, r.cp, r.dept, r.geocoded ? 'oui' : 'non', r.lien];
+    name = 'marches_publics';
+  } else if (kind === 'dpe_ter' || kind === 'dpe_log') {
+    header = ['Adresse', 'Commune', 'Classe DPE', 'Classe GES', 'Surface m2', 'Construction'];
+    mapRow = d => [d.adresse, d.commune, d.dpeClass, d.gesClass, d.surface, d.periode];
+    name = kind;
+  } else if (kind === 'copro') {
+    header = ['Adresse', 'Nb lots', 'Construction', 'DPE estimé'];
+    mapRow = d => [d.adresse, d.nbLot, d.periode, d.dpeClass];
+    name = 'coproprietes';
+  } else {
+    header = ['Date', 'Demandeur', 'SIREN', 'CP', 'Commune', 'Logements', 'Superficie m2', 'N PA'];
+    mapRow = d => [d.date, d.demandeur, d.siren, d.cp, d.commune, d.nbLgt, d.superficie, d.numPa];
+    name = kind;
+  }
+  const lines = [header.map(esc).join(';')].concat(all.map(r => mapRow(r).map(esc).join(';')));
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name + '_' + (_vrDept || '') + '.csv'; a.click(); URL.revokeObjectURL(a.href);
 }
 function vrBoampRowOpp(i) {
   const r = _vrBoampList[i]; if (!r) return;
