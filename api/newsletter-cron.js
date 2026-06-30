@@ -114,35 +114,55 @@ async function aggregateWeek() {
   return out;
 }
 
-// Recherche web dédiée (conjoncture BTP + taux), étape séparée pour fiabilité + mise en forme propre
-async function fetchConjoncture() {
+// Rubriques de veille web (clé → libellé + consigne)
+const WEB_RUBRIQUES = {
+  conjoncture: { label: 'Conjoncture bâtiment & indices', query: "activité/conjoncture du secteur du bâtiment en France (FFB, Insee) et indice du coût de la construction (BT01 ou ICC)" },
+  taux: { label: 'Taux & financement', query: "taux des crédits immobiliers, taux directeur BCE, PTZ et aides à la rénovation (MaPrimeRénov')" },
+  rga: { label: 'Sécheresse & argile (RGA)', query: "arrêtés de catastrophe naturelle sécheresse récents et retrait-gonflement des argiles (RGA), obligation d'étude géotechnique G1 loi ELAN" },
+  permis: { label: 'Permis & mises en chantier', query: "derniers chiffres des permis de construire et des mises en chantier de logements en France (SDES/Sit@del), tendance" },
+  reglementaire: { label: 'Réglementaire & normes', query: "actualités réglementaires construction : ZAN, RE2020, DPE, décret tertiaire, audit énergétique" },
+  materiaux: { label: 'Prix des matériaux', query: "évolution récente des prix des matériaux de construction (acier, ciment, bois, bitume) et indices" },
+  appels_projets: { label: 'Appels à projets & aides', query: "appels à projets et aides récents pour le bâtiment/l'énergie/l'eau (ADEME, France 2030)" },
+  projets_locaux: { label: 'Grands projets régionaux', query: "grands projets de construction / ZAC / aménagements annoncés récemment en Pays de la Loire, Nouvelle-Aquitaine et Bretagne" },
+  concurrence_web: { label: 'Veille concurrence (BE)', query: "actualités récentes des bureaux d'études techniques / géotechnique en France (rachats, implantations, levées de fonds)" },
+  innovation: { label: 'Innovation construction', query: "innovations et tendances récentes dans la construction (IA, BIM, matériaux biosourcés, réemploi, géotechnique)" },
+  agenda_pro: { label: 'Agenda salons & événements', query: "salons et événements professionnels du BTP / géotechnique à venir en France (BATIMAT, Salon des Maires, etc.)" },
+};
+const WEB_KEYS = Object.keys(WEB_RUBRIQUES);
+// Recherche web pour les rubriques demandées → texte groupé (### Titre + puces avec sources)
+async function fetchWebVeille(rubriqueKeys) {
+  const items = (rubriqueKeys || []).map(k => WEB_RUBRIQUES[k] ? { k, ...WEB_RUBRIQUES[k] } : null).filter(Boolean);
+  if (!items.length) return '';
+  const ask = items.map((it, i) => `${i + 1}. « ${it.label} » : ${it.query}`).join('\n');
   try {
     const j = await callClaude({
-      model: MODEL, max_tokens: 1200,
-      system: "Tu es un analyste de veille économique pour un bureau d'études du bâtiment en France. Tu DOIS utiliser l'outil de recherche web pour trouver des chiffres RÉCENTS et FRANÇAIS.",
-      messages: [{ role: 'user', content: "Recherche sur le web et donne 3 à 4 puces FACTUELLES et datées sur : (1) la conjoncture du secteur du bâtiment en France (FFB ou Insee), (2) l'indice du coût de la construction (BT01 ou ICC), (3) les taux des crédits immobiliers. Format STRICT : une puce par ligne commençant par '- ', chaque puce = un chiffre daté + une très courte explication + la source sous la forme (Source : Nom — URL). Pas d'introduction ni de conclusion, uniquement les puces." }],
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }],
+      model: MODEL, max_tokens: 2600,
+      system: "Tu es un analyste de veille pour un bureau d'études du bâtiment en France. Tu DOIS utiliser l'outil de recherche web pour trouver des informations RÉCENTES et FRANÇAISES.",
+      messages: [{ role: 'user', content: "Recherche sur le web (sources françaises récentes) et renvoie, pour CHAQUE rubrique ci-dessous, 2 à 3 puces FACTUELLES et datées avec source. Format STRICT, sans intro ni conclusion : pour chaque rubrique, une ligne « ### <Titre exact> » puis les puces une par ligne commençant par '- ' = info datée + courte explication + (Source : Nom — URL). Si rien de fiable : « ### <Titre> » puis « - (pas d'actualité notable cette semaine) ».\n\nRubriques :\n" + ask }],
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: Math.min(10, items.length * 2) }],
     });
     return (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
-  } catch (e) { console.error('fetchConjoncture:', e.message); return ''; }
+  } catch (e) { console.error('fetchWebVeille:', e.message); return ''; }
 }
-async function generateHtml(data, conjoncture) {
+async function generateHtml(data, opts) {
+  const o = opts || {};
   const sys = [
     "Tu es le rédacteur de l'infolettre hebdomadaire interne du CRM du groupe NOVAM Ingénierie (bureaux d'études techniques du bâtiment : structure, géotechnique/études de sol, VRD, fluides, environnement ; entités GPH, REGAR/GPH-R, SERBA, GRAVITY, ECTS, EXECOME). Lecteurs : commerciaux, lundi matin. Objectif : donner envie de se connecter au CRM.",
     'Ton convivial, positif et motivant, emojis bien dosés. Salutation collective (ex. « Bonjour à toutes et à tous »).',
     "Tu produis UNIQUEMENT le corps HTML de l'email (pas de <html>/<head>/<body>, pas de markdown, pas de ```). Tableaux + styles INLINE uniquement, largeur max 640px, police Arial/Helvetica. PALETTE NOVAM (violet) : bandeau en dégradé linear-gradient(135deg,#7c3aed,#4c1d95) texte blanc ; accent/liens/boutons #7c3aed ; fonds doux #f5f0ff ; violet secondaire #8b5cf6 ; vert #10b981 / rouge #ef4444 / orange #f59e0b pour les statuts. Titres de section en <h2> avec fine bordure basse grise.",
-    "Sections selon données : édito + bonne fête (prénoms du jour) / anniversaires, météo du pipeline, analyses clés, top client par agence, opportunités (gagnées/nouvelles/à relancer), marchés publics travaux bâtiment & environnement (avec liens), nouveaux clients, dormants à réveiller, nouveaux concurrents, conjoncture BTP & taux immobilier, agenda à venir, podium & badges, « le saviez-vous » + défi de la semaine.",
-    "N'invente JAMAIS de chiffres : seulement les données fournies. Omets les sections vides.",
+    "Sections selon données ET activées : édito + bonne fête / anniversaires, météo du pipeline, analyses clés, top client par agence, opportunités, marchés publics travaux bâtiment & environnement (avec liens), nouveaux clients, dormants à réveiller, nouveaux concurrents, un bloc « 🌐 Veille externe » (rubriques web fournies), agenda à venir, podium & badges, « le saviez-vous » + défi.",
+    "N'invente JAMAIS de chiffres : seulement les données fournies. Omets les sections vides ou désactivées.",
     CRM_URL ? ('Ajoute un bouton CTA « Ouvrir le CRM » (fond #7c3aed) vers ' + CRM_URL + '.') : '',
     "Termine par « — NOVA, votre assistant CRM 🤖 » et une note discrète de désabonnement depuis Mon espace.",
   ].filter(Boolean).join('\n');
   const user = [
     'Rédige l\'infolettre en français à partir de ces données de la semaine.',
-    conjoncture
-      ? "Section « Conjoncture BTP & taux » : METS EN FORME en HTML les faits ci-dessous (liste <ul>/<li>, transforme chaque « (Source : Nom — URL) » en lien <a href=\"URL\" style=\"color:#7c3aed\">Nom</a>). N'invente aucun chiffre, n'ajoute rien d'autre.\nFAITS CONJONCTURE :\n" + conjoncture
-      : "Pas de données de conjoncture : OMETS la section conjoncture.",
+    o.sections ? ('Sections activées (true = inclure, omets les autres) : ' + JSON.stringify(o.sections)) : '',
+    o.veille
+      ? ("Bloc « 🌐 Veille externe » : METS EN FORME en HTML les faits ci-dessous, groupés par rubrique (« ### Titre »). Pour chaque rubrique : un <h3 style=\"font-size:14px;margin:14px 0 4px;color:#4c1d95\">Titre</h3> puis une liste <ul><li> ; transforme « (Source : Nom — URL) » en <a href=\"URL\" style=\"color:#7c3aed\">Nom</a>. Ignore les rubriques « pas d'actualité notable »." + (o.allowedLabels ? " N'INCLUS QUE ces rubriques : " + o.allowedLabels.join(', ') + '.' : '') + "\nFAITS DE VEILLE :\n" + o.veille)
+      : "Pas de données de veille web : OMETS le bloc veille externe.",
     '```json', JSON.stringify(data).slice(0, 60000), '```',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
   const j = await callClaude({ model: MODEL, max_tokens: 6000, system: sys, messages: [{ role: 'user', content: user }] });
   const html = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
   return html.replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/i, '').trim();
@@ -226,12 +246,11 @@ export default async function handler(req, res) {
   if (!CLIENT_ID || !CLIENT_SECRET) return res.status(500).json({ error: 'AZURE_CLIENT_ID / AZURE_CLIENT_SECRET non configurés' });
 
   try {
-    // Abonnés (newsletter groupe) + abonnés (brief perso)
-    const subs = await sbGet('newsletter_prefs', 'select=email&abonne=eq.true&email=not.is.null');
-    const emails = [...new Set((subs || []).map(x => x.email).filter(Boolean))];
+    // Abonnés (newsletter groupe, avec leurs préférences) + abonnés (brief perso)
+    const groupSubs = (await sbGet('newsletter_prefs', 'select=email,nom,ton,sections&abonne=eq.true&email=not.is.null')) || [];
     const briefSubs = (await sbGet('newsletter_prefs', 'select=email,nom,manager_id&brief_perso=eq.true&email=not.is.null&manager_id=not.is.null')) || [];
     const force = req.query && (req.query.force === '1' || req.query.test === '1');
-    if (!emails.length && !briefSubs.length && !force) return res.status(200).json({ ok: true, message: 'Aucun abonné', envoyes: 0 });
+    if (!groupSubs.length && !briefSubs.length && !force) return res.status(200).json({ ok: true, message: 'Aucun abonné', envoyes: 0 });
 
     // Anti-doublon : une édition déjà créée depuis lundi 0h ?
     const monday = new Date(); const day = (monday.getDay() + 6) % 7; monday.setDate(monday.getDate() - day); monday.setHours(0, 0, 0, 0);
@@ -240,20 +259,27 @@ export default async function handler(req, res) {
 
     const token = await appToken();
     const wrap = inner => `<div style="max-width:640px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#222">${inner}</div>`;
+    const selOf = s => (s && typeof s === 'object') ? s : {};
 
-    // 1) Newsletter groupe
-    let sent = 0; const errors = [];
-    if (emails.length) {
+    // 1) Newsletter groupe — générée PAR DESTINATAIRE selon ses sections + rubriques web
+    let sent = 0; const errors = []; let firstHtml = null;
+    if (groupSubs.length) {
       const data = await aggregateWeek();
-      const conjoncture = await fetchConjoncture();
-      const inner = await generateHtml(data, conjoncture);
-      if (inner) {
-        const html = wrap(inner);
-        const subject = '📰 Infolettre CRM — semaine du ' + new Date().toLocaleDateString('fr-FR');
-        try { await sbReq('newsletters', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ titre: subject, periode_debut: data.meta.periode_debut, periode_fin: data.meta.periode_fin, html, data, cree_par: 'cron', envoye_a: emails.length }) }); } catch (e) {}
-        for (const email of emails) {
-          try { await graphSend(token, email, subject, html); sent++; } catch (e) { errors.push('news ' + email + ': ' + e.message); }
-        }
+      // Recherche web : une seule fois pour l'UNION des rubriques sélectionnées par les abonnés
+      const union = new Set();
+      groupSubs.forEach(s => { const sec = selOf(s.sections); WEB_KEYS.forEach(k => { if (sec[k] !== false) union.add(k); }); });
+      const veille = union.size ? await fetchWebVeille([...union]) : '';
+      const subject = '📰 Infolettre CRM — semaine du ' + new Date().toLocaleDateString('fr-FR');
+      for (const s of groupSubs) {
+        try {
+          const sec = selOf(s.sections);
+          const allowedLabels = WEB_KEYS.filter(k => sec[k] !== false).map(k => WEB_RUBRIQUES[k].label);
+          const inner = await generateHtml(data, { veille, allowedLabels, sections: sec, ton: s.ton });
+          if (!inner) { errors.push('news ' + s.email + ': génération vide'); continue; }
+          const html = wrap(inner);
+          if (!firstHtml) { firstHtml = html; try { await sbReq('newsletters', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ titre: subject, periode_debut: data.meta.periode_debut, periode_fin: data.meta.periode_fin, html, data, cree_par: 'cron', envoye_a: groupSubs.length }) }); } catch (e) {} }
+          await graphSend(token, s.email, subject, html); sent++;
+        } catch (e) { errors.push('news ' + s.email + ': ' + e.message); }
       }
     }
 
@@ -270,7 +296,7 @@ export default async function handler(req, res) {
       } catch (e) { briefErr.push(s.email + ': ' + e.message); }
     }
 
-    return res.status(200).json({ ok: true, abonnes: emails.length, envoyes: sent, erreurs: errors, briefs_abonnes: briefSubs.length, briefs_envoyes: briefSent, briefs_erreurs: briefErr });
+    return res.status(200).json({ ok: true, abonnes: groupSubs.length, envoyes: sent, erreurs: errors, briefs_abonnes: briefSubs.length, briefs_envoyes: briefSent, briefs_erreurs: briefErr });
   } catch (e) {
     console.error('newsletter-cron:', e.message);
     return res.status(500).json({ error: e.message });

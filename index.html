@@ -7878,15 +7878,29 @@ const NL_SECTIONS = [
   ['nouveaux', 'Nouveaux clients'],
   ['dormants', 'Clients dormants à réveiller'],
   ['concurrents', 'Nouveaux concurrents'],
-  ['conjoncture', 'Conjoncture BTP & taux immobilier (web)'],
   ['fetes', 'Fêtes & anniversaires'],
   ['podium', 'Podium & badges de la semaine'],
   ['perso', 'Section personnalisée + liens CRM'],
 ];
+// Rubriques de veille WEB (recherche externe) — activables individuellement
+const NL_WEB_RUBRIQUES = [
+  ['conjoncture', 'Conjoncture bâtiment & indices (FFB/Insee, BT01)'],
+  ['taux', 'Taux & financement (crédit immo, BCE, PTZ, aides)'],
+  ['rga', 'Sécheresse & argile (arrêtés Cat-Nat RGA)'],
+  ['permis', 'Permis de construire & mises en chantier'],
+  ['reglementaire', 'Réglementaire & normes (ZAN, RE2020, DPE…)'],
+  ['materiaux', 'Prix des matériaux'],
+  ['appels_projets', 'Appels à projets & aides (ADEME, France 2030)'],
+  ['projets_locaux', 'Grands projets & ZAC régionaux'],
+  ['concurrence_web', 'Veille concurrence (bureaux d\'études)'],
+  ['innovation', 'Innovation & tendances construction'],
+  ['agenda_pro', 'Agenda salons & événements'],
+];
+const NL_WEB_KEYS = NL_WEB_RUBRIQUES.map(r => r[0]);
 let _nlPrefs = null, _nlEditions = [], _nlEditionsLoaded = false;
 
 function _nlUserId() { return (currentCommercial && currentCommercial.id) || (currentCommercial && currentCommercial.email) || ''; }
-function _nlDefaultSections() { const s = {}; NL_SECTIONS.forEach(([k]) => s[k] = true); return s; }
+function _nlDefaultSections() { const s = {}; NL_SECTIONS.forEach(([k]) => s[k] = true); NL_WEB_RUBRIQUES.forEach(([k]) => s[k] = true); return s; }
 
 async function _nlLoadPrefs() {
   const uid = _nlUserId(); if (!uid) return null;
@@ -7942,9 +7956,14 @@ async function monEspaceOpen() {
       </select>
       <div style="font-size:12px;font-weight:700;margin:14px 0 6px">Date de naissance (pour les anniversaires, optionnel)</div>
       <input type="date" id="nl-naissance" value="${p.date_naissance || ''}" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)">
-      <div style="font-size:12px;font-weight:700;margin:14px 0 6px">Sections à inclure</div>
+      <div style="font-size:12px;font-weight:700;margin:14px 0 6px">Sections du CRM</div>
       <div style="display:grid;grid-template-columns:1fr;gap:4px">
-        ${NL_SECTIONS.map(([k, lbl]) => `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" class="nl-sec" data-k="${k}" ${sec[k] !== false ? 'checked' : ''} style="accent-color:#4f8ff7"> ${cmdEsc(lbl)}</label>`).join('')}
+        ${NL_SECTIONS.map(([k, lbl]) => `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" class="nl-sec" data-k="${k}" ${sec[k] !== false ? 'checked' : ''} style="accent-color:#7c3aed"> ${cmdEsc(lbl)}</label>`).join('')}
+      </div>
+      <div style="font-size:12px;font-weight:700;margin:16px 0 6px">🌐 Rubriques de veille web</div>
+      <div style="font-size:11px;color:var(--t3);margin-bottom:6px">Infos externes récupérées sur le web (avec sources).</div>
+      <div style="display:grid;grid-template-columns:1fr;gap:4px">
+        ${NL_WEB_RUBRIQUES.map(([k, lbl]) => `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" class="nl-sec" data-k="${k}" ${sec[k] !== false ? 'checked' : ''} style="accent-color:#7c3aed"> ${cmdEsc(lbl)}</label>`).join('')}
       </div>
     </div>
     <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between">
@@ -8073,7 +8092,7 @@ async function nlGenerate() {
       recipientName: ((currentCommercial && currentCommercial.nom) || '').split(' ')[0] || '',
       ton: (p.ton || 'convivial'),
       sections: p.sections || _nlDefaultSections(),
-      useWeb: (p.sections ? p.sections.conjoncture !== false : true),
+      useWeb: NL_WEB_KEYS.some(k => (p.sections ? p.sections[k] !== false : true)),
       crmUrl: data.meta.crmUrl,
     }),
   });
