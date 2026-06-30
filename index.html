@@ -7248,6 +7248,34 @@ async function oppLose(akId) {
     closeModal('opp'); if (currentPage === 'opportunites' || currentPage === 'opportunite-detail') renderPage(currentPage);
   } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
 }
+// Suppression définitive d'une opportunité (Akuiteo + CRM). Gère les tâches liées.
+async function oppDelete(akId) {
+  const o = (_opps || []).find(x => String(x.akuiteo_id) === String(akId));
+  const nom = (o && o.nom) || 'cette opportunité';
+  // 1) Vérifier les tâches liées
+  let taches = [];
+  try { const { data } = await sb.from('taches_commerciales').select('id,titre').eq('opportunite_id', String(akId)); taches = data || []; } catch (e) {}
+  if (taches.length) {
+    if (!confirm('« ' + nom + ' » est liée à ' + taches.length + ' tâche(s) :\n' + taches.map(t => '• ' + (t.titre || '')).join('\n') + '\n\nSupprimer aussi ces tâches puis l\'opportunité ?')) return;
+  } else {
+    if (!confirm('Supprimer définitivement « ' + nom + ' » dans Akuiteo et le CRM ?\n\nCette action est irréversible.')) return;
+  }
+  showSyncLoading(true); setSyncText('Suppression dans Akuiteo…');
+  try {
+    // 2) Supprimer dans Akuiteo
+    await akuiteoFetch('DELETE', `/crm/opportunities/${akId}`, null, { accept: 'text/plain' });
+    // 3) Supprimer les tâches liées (si confirmé)
+    if (taches.length) { try { await sb.from('taches_commerciales').delete().eq('opportunite_id', String(akId)); await loadTaches().catch(() => {}); } catch (e) {} }
+    // 4) Supprimer côté CRM (Supabase) + mémoire
+    try { await sb.from('opportunites').delete().eq('akuiteo_id', String(akId)); } catch (e) {}
+    _opps = (_opps || []).filter(x => String(x.akuiteo_id) !== String(akId));
+    showSyncLoading(false);
+    toast('Opportunité supprimée', 'success');
+    closeModal('opp');
+    if (currentPage === 'opportunite-detail') { currentPage = 'opportunites'; }
+    renderPage('opportunites');
+  } catch (e) { showSyncLoading(false); toast('Erreur suppression Akuiteo : ' + e.message, 'error'); }
+}
 
 // Créer une tâche commerciale pré-remplie depuis une opportunité
 function oppCreerTache(akId) {
@@ -7509,6 +7537,7 @@ function renderOppDetailPage() {
     enCours ? `<button class="btn" style="color:#10b981" onclick="oppWin('${o.akuiteo_id}')">🏆 Gagnée</button>` : '',
     enCours ? `<button class="btn" style="color:#ef4444" onclick="oppLose('${o.akuiteo_id}')">Perdue</button>` : '',
     o.client_id ? `<button class="btn" onclick="showClient('${o.client_id}')">Voir le client</button>` : '',
+    `<button class="btn" style="color:var(--red)" onclick="oppDelete('${o.akuiteo_id}')">🗑 Supprimer</button>`,
   ].filter(Boolean).join('');
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
