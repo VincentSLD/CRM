@@ -5079,16 +5079,23 @@ function _geomCentroidL93(geom) {
 // Marchés publics de travaux (BOAMP) — géocodés par code postal du lieu d'exécution (précision commune)
 async function _vrLoadBoamp(dept) {
   const today = new Date().toISOString().slice(0, 10);
-  const wheres = ['type_marche="TRAVAUX"', `startswith(code_departement,"${dept}")`, `datelimitereponse >= "${today}"`];
-  const p = new URLSearchParams();
-  p.set('where', wheres.join(' and '));
-  p.set('order_by', 'datelimitereponse asc');
-  p.set('limit', '100');
-  const url = 'https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?' + p.toString();
-  const r = await fetch(_vrFetchUrl(url));
-  if (!r.ok) throw new Error('BOAMP ' + r.status);
-  const j = await r.json();
-  const withCp = (j.results || []).map(a => ({ a, cp: _boampCP(a) })).filter(x => x.cp);
+  // Tous types de marchés (travaux ET services/MOE/études — pertinents pour le groupe), avis en cours, paginé
+  const where = `startswith(code_departement,"${dept}") and datelimitereponse >= "${today}"`;
+  let recs = [];
+  for (let page = 0; page < 5; page++) { // jusqu'à 500
+    const p = new URLSearchParams();
+    p.set('where', where);
+    p.set('order_by', 'datelimitereponse asc');
+    p.set('limit', '100');
+    p.set('offset', String(page * 100));
+    const r = await fetch(_vrFetchUrl('https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?' + p.toString()));
+    if (!r.ok) { if (page === 0) throw new Error('BOAMP ' + r.status); break; }
+    const j = await r.json();
+    const rows = j.results || [];
+    recs = recs.concat(rows);
+    if (rows.length < 100) break;
+  }
+  const withCp = recs.map(a => ({ a, cp: _boampCP(a) })).filter(x => x.cp);
   const uniqueCps = [...new Set(withCp.map(x => x.cp))];
   const cpGeo = {};
   await Promise.all(uniqueCps.map(async cp => {
@@ -5107,6 +5114,7 @@ async function _vrLoadBoamp(dept) {
       lat: ll[0] + (Math.random() - 0.5) * 0.006, lon: ll[1] + (Math.random() - 0.5) * 0.006,
       demandeur: a.nomacheteur || 'Acheteur public',
       objet: a.objet || '', nature: a.nature_libelle || '', procedure: a.procedure_libelle || '',
+      typeMarche: a.type_marche || '',
       cp, dateLimite: a.datelimitereponse || '', dateParution: a.dateparution || '',
       lien: a.url_avis || (a.idweb ? 'https://www.boamp.fr/avis/detail/' + a.idweb : ''),
     });
@@ -5245,6 +5253,7 @@ async function _vrInitMap() {
       rows = [
         `<div style="color:#0891b2;font-size:11px;font-weight:600">Marché public de travaux (BOAMP)</div>`,
         d.objet ? `<div style="color:#555">${cmdEsc(d.objet.length > 160 ? d.objet.slice(0, 160) + '…' : d.objet)}</div>` : '',
+        d.typeMarche ? `<div style="color:#555;font-size:11px">Type : ${cmdEsc(d.typeMarche)}</div>` : '',
         d.nature ? `<div style="color:#555;font-size:11px">Nature : ${cmdEsc(d.nature)}</div>` : '',
         d.procedure ? `<div style="color:#555;font-size:11px">Procédure : ${cmdEsc(d.procedure)}</div>` : '',
         d.dateLimite ? `<div style="color:#c0392b;font-size:11px;font-weight:600">Réponse avant le ${fmtDateFR(d.dateLimite)}</div>` : '',
