@@ -322,8 +322,12 @@ CREATE TABLE IF NOT EXISTS newsletter_prefs (
   agences TEXT[],                      -- agences suivies (vide = toutes)
   sections JSONB,                      -- sections activées {analyses,topClients,opportunites,marches,nouveaux,dormants,concurrents,conjoncture,fetes,podium,perso}
   date_naissance DATE,                 -- pour les anniversaires (optionnel)
+  brief_perso BOOLEAN DEFAULT FALSE,   -- abonnement au brief commercial personnalisé (2e email)
+  manager_id TEXT,                     -- akuiteo_manager_id du collaborateur (pour filtrer son périmètre côté cron)
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+ALTER TABLE newsletter_prefs ADD COLUMN IF NOT EXISTS brief_perso BOOLEAN DEFAULT FALSE;
+ALTER TABLE newsletter_prefs ADD COLUMN IF NOT EXISTS manager_id TEXT;
 ALTER TABLE newsletter_prefs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "newsletter_prefs_all" ON newsletter_prefs;
 CREATE POLICY "newsletter_prefs_all" ON newsletter_prefs FOR ALL TO authenticated USING (true) WITH CHECK (true);

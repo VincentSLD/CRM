@@ -7927,6 +7927,13 @@ async function monEspaceOpen() {
         </label>
         <div style="font-size:12px;color:var(--t3);margin-top:6px">Un récap convivial chaque lundi : analyses, top clients, opportunités, marchés publics, conjoncture BTP… et des liens directs vers le CRM.</div>
       </div></div>
+      <div class="card" style="margin-bottom:14px"><div class="card-body" style="padding:14px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:700;font-size:14px">
+          <input type="checkbox" id="nl-brief" ${p.brief_perso ? 'checked' : ''} style="width:18px;height:18px;accent-color:#7c3aed"> 📊 M'envoyer aussi mon brief commercial perso
+        </label>
+        <div style="font-size:12px;color:var(--t3);margin-top:6px">Un 2ᵉ email, rien que pour vous : vos tâches & signatures de la semaine, vos relances de devis, votre avancement objectif, vos nouveaux clients attribués et vos dormants à réveiller.</div>
+        <button class="btn" onclick="nlBriefPreview()" style="margin-top:10px;font-size:12px">👁️ M'envoyer mon brief maintenant</button>
+      </div></div>
       <div style="font-size:12px;font-weight:700;margin:12px 0 6px">Ton de la newsletter</div>
       <select id="nl-ton" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)">
         <option value="convivial"${(p.ton || 'convivial') === 'convivial' ? ' selected' : ''}>Convivial</option>
@@ -7958,6 +7965,8 @@ async function nlSavePrefs() {
     email: (currentCommercial && currentCommercial.email) || (_nlPrefs && _nlPrefs.email) || null,
     nom: (currentCommercial && currentCommercial.nom) || null,
     abonne: !!document.getElementById('nl-abonne')?.checked,
+    brief_perso: !!document.getElementById('nl-brief')?.checked,
+    manager_id: (currentCommercial && currentCommercial.akuiteo_manager_id) || null,
     ton: document.getElementById('nl-ton')?.value || 'convivial',
     date_naissance: document.getElementById('nl-naissance')?.value || null,
     sections,
@@ -8118,6 +8127,88 @@ async function nlPublish() {
     await sb.from('newsletters').insert({ titre: _nlSubject(), periode_debut: d.meta && d.meta.periode_debut, periode_fin: d.meta && d.meta.periode_fin, html: window._nlLast.wrapped, data: d, cree_par: (currentCommercial && currentCommercial.nom) || null, envoye_a: emails.length });
   } catch (e) { /* archive non bloquante */ }
   try { await _nlSendMail(emails, _nlSubject(), window._nlLast.wrapped); toast('Édition publiée et envoyée à ' + emails.length + ' abonné(s) 🎉', 'success'); _nlEditionsLoaded = false; }
+  catch (e) { toast('Erreur envoi : ' + e.message, 'error'); }
+}
+
+// ═══ Brief commercial personnel ═══
+// Filtre « mon périmètre » (indépendant du toggle Mes données) : docs dont je suis responsable ou de mes clients
+function _briefMine(arr) {
+  const myId = currentCommercial && currentCommercial.akuiteo_manager_id; if (!myId) return [];
+  const myClientIds = new Set((DB.clients || []).filter(c => c.account_manager_id === myId).map(c => c.id));
+  return (arr || []).filter(d => d.responsable_id === myId || d.commercial_id === myId || (d.client_id && myClientIds.has(d.client_id)));
+}
+async function nlBuildBriefData() {
+  const myId = currentCommercial && currentCommercial.akuiteo_manager_id;
+  const myEmail = (currentCommercial && currentCommercial.email) || '';
+  const myNom = (currentCommercial && currentCommercial.nom) || '';
+  const now = new Date(); const todayISO = now.toISOString().slice(0, 10);
+  const weekAgoISO = new Date(now.getTime() - 7 * 864e5).toISOString();
+  const weekAhead = new Date(now.getTime() + 7 * 864e5).toISOString().slice(0, 10);
+  const year = now.getFullYear(); const yearStart = year + '-01-01';
+  const num = v => Number(v) || 0;
+  const out = { meta: { commercial: myNom, periode_debut: weekAgoISO.slice(0, 10), periode_fin: todayISO, crmUrl: location.origin + location.pathname } };
+  try { if (!_oppsLoaded) await loadOpportunites(); } catch (e) {}
+  try { if (!_tachesLoaded) await loadTaches(); } catch (e) {}
+  // Agenda : mes tâches
+  const myTaches = (_taches || []).filter(t => (t.statut === 'a_faire' || t.statut === 'en_cours') && (t.assigne_email === myEmail || (myId && String(t.assigne_id) === String(myId))));
+  const mapT = t => ({ titre: t.titre, echeance: (t.echeance || '').slice(0, 10), client: t.client_name || '' });
+  out.taches = {
+    semaine: myTaches.filter(t => t.echeance && t.echeance.slice(0, 10) >= todayISO && t.echeance.slice(0, 10) <= weekAhead).map(mapT),
+    en_retard: myTaches.filter(t => t.echeance && t.echeance.slice(0, 10) < todayISO).map(mapT),
+  };
+  // Mes opportunités
+  const myOpps = (_opps || []).filter(o => (myId && String(o.responsable_id) === String(myId)) || (myNom && o.responsable === myNom));
+  const enCours = myOpps.filter(o => o.statut === 'IN_PROGRESS');
+  out.pipeline = { en_cours_nb: enCours.length, en_cours_montant: Math.round(enCours.reduce((s, o) => s + num(o.montant), 0)), pondere: Math.round(enCours.reduce((s, o) => s + num(o.montant) * (num(o.probabilite) / 100), 0)) };
+  out.signatures_semaine = enCours.filter(o => o.date_signature && o.date_signature >= todayISO && o.date_signature <= weekAhead).map(o => ({ nom: o.nom, client: o.client_name, montant: o.montant, signature: o.date_signature }));
+  out.opp_a_relancer = enCours.filter(o => o.date_signature && o.date_signature < todayISO).sort((a, b) => num(b.montant) - num(a.montant)).slice(0, 8).map(o => ({ nom: o.nom, client: o.client_name, montant: o.montant, signature: o.date_signature }));
+  out.ca_signe_semaine = Math.round(myOpps.filter(o => o.statut === 'WON' && (o.date_signature || '') >= weekAgoISO.slice(0, 10)).reduce((s, o) => s + num(o.montant), 0));
+  // Mes relances de devis + factures impayées
+  out.devis_a_relancer = _briefMine(DB.devis).filter(isDevisARelancer).slice(0, 12).map(d => ({ ref: d.ref, client: d.client || d.client_name, montant: num(d.montant), jours: joursDepuis(d.date_raw) }));
+  out.factures_impayees = _briefMine(DB.factures).filter(f => f.statut !== 'payee' && num(f.reste_a_payer || f.montant) > 0 && num(f.jours) > 0).slice(0, 10).map(f => ({ ref: f.ref, client: f.client || f.client_name, montant: num(f.reste_a_payer || f.montant), jours: num(f.jours) }));
+  // Portefeuille (Supabase, filtré sur moi) + objectif
+  if (myId) {
+    const [nv, dorm, objc] = await Promise.all([
+      sb.from('clients').select('name,city,created_at').eq('account_manager_id', myId).gte('created_at', weekAgoISO).order('created_at', { ascending: false }).limit(20).then(r => r.data || []).catch(() => []),
+      sb.from('clients').select('name,city,ca').eq('account_manager_id', myId).eq('status', 'dormant').order('ca', { ascending: false }).limit(8).then(r => r.data || []).catch(() => []),
+      sb.from('objectifs_clients').select('client_id,objectif_ht,annee').eq('annee', year).then(r => r.data || []).catch(() => []),
+    ]);
+    out.nouveaux_clients = nv.map(c => ({ nom: c.name, ville: c.city, depuis: (c.created_at || '').slice(0, 10) }));
+    out.dormants = dorm.map(c => ({ nom: c.name, ville: c.city, ca: Math.round(num(c.ca)) }));
+    const myClientIds = new Set((DB.clients || []).filter(c => c.account_manager_id === myId).map(c => c.id));
+    const objectif = objc.filter(o => myClientIds.has(o.client_id)).reduce((s, o) => s + num(o.objectif_ht), 0);
+    const realise = _briefMine(DB.factures).filter(f => f.date_raw && f.date_raw >= yearStart).reduce((s, f) => s + num(f.montant), 0);
+    out.objectif = objectif > 0 ? { cible: Math.round(objectif), realise: Math.round(realise), pct: Math.round(realise / objectif * 100) } : { realise: Math.round(realise) };
+  }
+  return out;
+}
+async function nlBriefPreview() {
+  if (!(currentCommercial && currentCommercial.akuiteo_manager_id)) { toast("Votre profil n'a pas d'identifiant commercial (manager Akuiteo) — brief perso indisponible.", 'info'); return; }
+  await _nlLoadPrefs();
+  toast('Génération de votre brief… (10-20 s)', 'info');
+  let data; try { data = await nlBuildBriefData(); } catch (e) { toast('Erreur agrégation : ' + e.message, 'error'); return; }
+  let html;
+  try {
+    const r = await fetch('/api/newsletter-build', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'brief', data, recipientName: (currentCommercial.nom || '').split(' ')[0] || '', ton: (_nlPrefs && _nlPrefs.ton) || 'convivial', crmUrl: data.meta.crmUrl }) });
+    const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || ('build ' + r.status)); html = j.html;
+  } catch (e) { toast('Erreur génération : ' + e.message, 'error'); return; }
+  const wrapped = _nlWrap(html);
+  const ov = _nlOverlay(`
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:16px;font-weight:700">📊 Aperçu de mon brief commercial</div>
+      <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
+    </div>
+    <iframe id="nl-brief-frame" style="width:100%;height:60vh;border:0;background:#fff"></iframe>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-primary" onclick="nlSendBriefSelf()">✉️ Me l'envoyer</button>
+    </div>`, 760);
+  const fr = ov.querySelector('#nl-brief-frame'); if (fr) fr.srcdoc = wrapped;
+  window._nlBriefLast = { wrapped };
+}
+async function nlSendBriefSelf() {
+  const me = currentCommercial && currentCommercial.email; if (!me) { toast('Email introuvable', 'error'); return; }
+  if (!window._nlBriefLast) { toast('Générez d\'abord un aperçu', 'info'); return; }
+  try { await _nlSendMail(me, '📊 Mon brief commercial — semaine du ' + new Date().toLocaleDateString('fr-FR'), window._nlBriefLast.wrapped); toast('Brief envoyé à ' + me, 'success'); }
   catch (e) { toast('Erreur envoi : ' + e.message, 'error'); }
 }
 
