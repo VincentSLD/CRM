@@ -265,6 +265,22 @@ CREATE INDEX IF NOT EXISTS idx_opp_statut ON opportunites(statut);
 CREATE INDEX IF NOT EXISTS idx_opp_client ON opportunites(client_id);
 CREATE INDEX IF NOT EXISTS idx_opp_stage ON opportunites(stage);
 
+-- Zones d'opportunité tracées sur la Carte des opportunités (polygones + titre/commentaire/couleur)
+CREATE TABLE IF NOT EXISTS carte_zones (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  titre TEXT,
+  commentaire TEXT,
+  couleur TEXT,
+  opacite NUMERIC,
+  geojson JSONB,          -- géométrie du polygone (GeoJSON Feature, coordonnées lon/lat WGS84)
+  created_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE carte_zones ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "carte_zones_all" ON carte_zones;
+CREATE POLICY "carte_zones_all" ON carte_zones FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
 -- Lien tâche commerciale → opportunité
 ALTER TABLE taches_commerciales ADD COLUMN IF NOT EXISTS opportunite_id TEXT;
 ALTER TABLE taches_commerciales ADD COLUMN IF NOT EXISTS opportunite_nom TEXT;

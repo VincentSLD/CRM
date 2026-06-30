@@ -4777,6 +4777,9 @@ let _vrNbLgt = '';                  // filtre logements (permis de construire) :
 let _vrReturn = 'endev';            // page de retour du bouton « ← Retour » (En Dev' ou Opportunités)
 let _vrArgileOn = false, _vrArgileOpacity = 0.55, _vrArgileLayer = null;  // calque aléa argile (BRGM) — décoché par défaut
 let _vrCadastreOn = false, _vrCadastreLayer = null;                       // calque cadastre (parcelles IGN)
+const VR_ZONE_COLORS = ['#ef4444', '#2563eb', '#10b981', '#f59e0b', '#8b5cf6']; // 5 couleurs de zones
+let _vrZones = [], _vrZonesOn = true, _vrZonesLayer = null, _vrZonesLoaded = false;
+let _vrZonePendingGeo = null, _vrZoneEditId = null, _vrZoneDraftColor = VR_ZONE_COLORS[0], _drawLoading = null;
 let _vrBaseType = 'routes', _vrBaseLayer = null, _vrFsBound = false;       // fond de carte (routes / aérien) + plein écran
 let _vrEdsOn = false, _vrEdsLayer = null, _vrEdsData = [], _vrEdsLoaded = false, _vrEdsCols = null, _vrEdsSample = null; // études de sol GPH (GEOCARTO)
 const VR_NAF = { notaire: { naf: '6910Z', label: 'Notaire' }, agence: { naf: '6831Z', label: 'Agence immobilière' }, geometre: { naf: '7112B', label: 'Géomètre-expert' } };
@@ -4830,6 +4833,8 @@ function renderVeilleRegar() {
             </select>
             <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer" title="Parcelles cadastrales (numéros visibles en zoomant)"><input type="checkbox" ${_vrCadastreOn ? 'checked' : ''} onchange="vrToggleCadastre(this.checked)"> 🧩 Cadastre</label>
             <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer" title="Études de sol déjà réalisées par GPH (projet GEOCARTO)"><input type="checkbox" ${_vrEdsOn ? 'checked' : ''} onchange="vrToggleEds(this.checked)"> 🟡 Études de sol GPH</label>
+            <button class="btn" style="font-size:11px;padding:3px 8px" onclick="vrStartDrawZone()" title="Tracer une zone d'opportunité sur la carte">✏️ Tracer une zone</button>
+            <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" ${_vrZonesOn ? 'checked' : ''} onchange="vrToggleZones(this.checked)"> 🔷 Zones d'opportunité (<span id="vr-zones-count">${_vrZones.length}</span>)</label>
             <button class="btn" style="font-size:11px;padding:3px 8px;margin-left:auto" onclick="vrMapFullscreen()" title="Afficher la carte en plein écran">⛶ Plein écran</button>
           </div>
           <div id="vr-map" style="height:460px"></div>
@@ -5207,6 +5212,9 @@ async function _vrInitMap() {
   if (_vrArgileOn) _vrAddArgile();
   _vrCadastreLayer = null;
   if (_vrCadastreOn) _vrAddCadastre();
+  _vrZonesLayer = null;
+  if (!_vrZonesLoaded) { try { await _vrLoadZones(); _vrUpdateZonesCount(); } catch (e) {} }
+  if (_vrZonesOn) _vrRenderZones();
   // Réajuster la carte lors d'un changement de plein écran
   if (!_vrFsBound) {
     const onFs = () => { if (_vrMap) setTimeout(() => { try { _vrMap.invalidateSize(); } catch (e) {} }, 120); };
@@ -5398,6 +5406,98 @@ function vrToggleCadastre(on) {
   if (on) _vrAddCadastre();
   else if (_vrCadastreLayer) { try { _vrMap.removeLayer(_vrCadastreLayer); } catch (e) {} _vrCadastreLayer = null; }
 }
+
+// ─ Zones d'opportunité (dessin de polygones + commentaire) ─
+function _loadLeafletDraw() {
+  if (window.L && L.Draw && L.Draw.Polygon) return Promise.resolve();
+  if (_drawLoading) return _drawLoading;
+  _drawLoading = new Promise((resolve, reject) => {
+    const add = (t, a) => { const e = document.createElement(t); Object.assign(e, a); document.head.appendChild(e); return e; };
+    add('link', { rel: 'stylesheet', href: 'https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css' });
+    const s = add('script', { src: 'https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js' });
+    s.onload = () => resolve();
+    s.onerror = () => { _drawLoading = null; reject(new Error('leaflet-draw')); };
+  });
+  return _drawLoading;
+}
+async function vrStartDrawZone() {
+  if (!_vrMap) { toast('Affichez d\'abord la carte', 'info'); return; }
+  try { await _loadLeafletDraw(); } catch (e) { toast('Outil de dessin indisponible', 'error'); return; }
+  toast('Cliquez pour tracer la zone, double-clic pour terminer', 'info');
+  const drawer = new L.Draw.Polygon(_vrMap, { shapeOptions: { color: _vrZoneDraftColor, weight: 2 } });
+  drawer.enable();
+  _vrMap.once('draw:created', (e) => { _vrZonePendingGeo = e.layer.toGeoJSON(); _vrZoneEditId = null; _vrZoneForm(null); });
+}
+function _vzPickColor(c) {
+  _vrZoneDraftColor = c;
+  document.querySelectorAll('#vz-colors [data-c]').forEach(el => { el.style.border = '3px solid ' + (el.getAttribute('data-c') === c ? '#111' : 'transparent'); });
+}
+function _vrZoneForm(z) {
+  _vrZoneDraftColor = (z && z.couleur) || _vrZoneDraftColor || VR_ZONE_COLORS[0];
+  const op = (z && z.opacite != null) ? Math.round(z.opacite * 100) : 35;
+  const fi = 'width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)';
+  const sw = VR_ZONE_COLORS.map(c => `<span data-c="${c}" onclick="_vzPickColor('${c}')" style="width:30px;height:30px;border-radius:6px;background:${c};cursor:pointer;border:3px solid ${c === _vrZoneDraftColor ? '#111' : 'transparent'}"></span>`).join('');
+  const body = `
+    <div style="margin-bottom:8px"><label style="font-size:11px;color:var(--t3)">Titre</label><input id="vz-title" style="${fi}" value="${z ? cmdEsc(z.titre || '') : ''}"></div>
+    <div style="margin-bottom:8px"><label style="font-size:11px;color:var(--t3)">Commentaire</label><textarea id="vz-comment" style="${fi};min-height:80px">${z ? cmdEsc(z.commentaire || '') : ''}</textarea></div>
+    <div style="margin-bottom:8px"><label style="font-size:11px;color:var(--t3)">Couleur</label><div id="vz-colors" style="display:flex;gap:8px;margin-top:4px">${sw}</div></div>
+    <div><label style="font-size:11px;color:var(--t3)">Opacité du remplissage</label><input type="range" id="vz-opacity" min="5" max="80" value="${op}" style="width:100%"></div>`;
+  openDynModal('vrZone', z ? 'Modifier la zone' : 'Nouvelle zone d\'opportunité', body,
+    `<button class="btn" onclick="closeModal('vrZone')">Annuler</button><button class="btn btn-primary" onclick="vrZoneSave()">Enregistrer</button>`, '460px');
+}
+async function vrZoneSave() {
+  const titre = (document.getElementById('vz-title')?.value || '').trim();
+  const commentaire = (document.getElementById('vz-comment')?.value || '').trim();
+  const opacite = (Number(document.getElementById('vz-opacity')?.value) || 35) / 100;
+  const row = { titre, commentaire, couleur: _vrZoneDraftColor, opacite, updated_at: new Date().toISOString() };
+  try {
+    if (_vrZoneEditId) {
+      const { error } = await sb.from('carte_zones').update(row).eq('id', _vrZoneEditId); if (error) throw error;
+      const z = _vrZones.find(x => String(x.id) === String(_vrZoneEditId)); if (z) Object.assign(z, row);
+    } else {
+      row.geojson = _vrZonePendingGeo; row.created_by = (currentCommercial && currentCommercial.email) || null;
+      const { data, error } = await sb.from('carte_zones').insert(row).select().single(); if (error) throw error;
+      _vrZones.unshift(data);
+    }
+    closeModal('vrZone'); _vrZonePendingGeo = null; _vrZoneEditId = null;
+    _vrZonesOn = true; _vrRenderZones(); _vrUpdateZonesCount();
+    toast('Zone enregistrée', 'success');
+  } catch (e) { toast('Erreur : ' + e.message, 'error'); }
+}
+function vrZoneEdit(id) { const z = _vrZones.find(x => String(x.id) === String(id)); if (z) { _vrZoneEditId = z.id; _vrZoneForm(z); } }
+async function vrZoneDelete(id) {
+  if (!confirm('Supprimer cette zone ?')) return;
+  try { const { error } = await sb.from('carte_zones').delete().eq('id', id); if (error) throw error; } catch (e) { toast('Erreur : ' + e.message, 'error'); return; }
+  _vrZones = _vrZones.filter(x => String(x.id) !== String(id));
+  _vrRenderZones(); _vrUpdateZonesCount(); toast('Zone supprimée', 'success');
+}
+async function _vrLoadZones() {
+  const { data, error } = await sb.from('carte_zones').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  _vrZones = data || []; _vrZonesLoaded = true;
+}
+function _vrRenderZones() {
+  if (!_vrMap) return;
+  if (_vrZonesLayer) { try { _vrMap.removeLayer(_vrZonesLayer); } catch (e) {} _vrZonesLayer = null; }
+  if (!_vrZonesOn) return;
+  _vrZonesLayer = L.layerGroup();
+  _vrZones.forEach(z => {
+    if (!z.geojson) return;
+    const col = z.couleur || '#2563eb';
+    let lyr;
+    try { lyr = L.geoJSON(z.geojson, { style: { color: col, weight: 2, fillColor: col, fillOpacity: (z.opacite != null ? z.opacite : 0.35) } }); } catch (e) { return; }
+    lyr.bindPopup(`<div style="font-size:12px;min-width:180px;max-width:280px"><div style="font-weight:700">${cmdEsc(z.titre || 'Zone d\'opportunité')}</div>${z.commentaire ? `<div style="color:#555;margin-top:3px;white-space:pre-wrap">${cmdEsc(z.commentaire)}</div>` : ''}<div style="margin-top:6px;display:flex;gap:10px"><button onclick="vrZoneEdit('${z.id}')" style="font-size:11px;cursor:pointer">✎ Modifier</button><button onclick="vrZoneDelete('${z.id}')" style="font-size:11px;cursor:pointer;color:#c0392b">× Supprimer</button></div></div>`);
+    lyr.addTo(_vrZonesLayer);
+  });
+  _vrZonesLayer.addTo(_vrMap);
+}
+function vrToggleZones(on) {
+  _vrZonesOn = on;
+  if (!_vrMap) return;
+  if (on) _vrRenderZones();
+  else if (_vrZonesLayer) { try { _vrMap.removeLayer(_vrZonesLayer); } catch (e) {} _vrZonesLayer = null; }
+}
+function _vrUpdateZonesCount() { const el = document.getElementById('vr-zones-count'); if (el) el.textContent = _vrZones.length; }
 function vrToggleArgile(on) {
   _vrArgileOn = on;
   if (!_vrMap) return;
