@@ -5466,6 +5466,11 @@ async function vrZoneSave() {
   } catch (e) { toast('Erreur : ' + e.message, 'error'); }
 }
 function vrZoneEdit(id) { const z = _vrZones.find(x => String(x.id) === String(id)); if (z) { _vrZoneEditId = z.id; _vrZoneForm(z); } }
+function vrZoneOpportunity(id) {
+  const z = _vrZones.find(x => String(x.id) === String(id)); if (!z) return;
+  const desc = ['Opportunité créée depuis une zone tracée sur la carte.', z.commentaire ? 'Commentaire : ' + z.commentaire : ''].filter(Boolean).join('\n');
+  oppModalOpen(null, { name: z.titre || 'Opportunité (zone)', description: desc, clientHint: '' });
+}
 async function vrZoneDelete(id) {
   if (!confirm('Supprimer cette zone ?')) return;
   try { const { error } = await sb.from('carte_zones').delete().eq('id', id); if (error) throw error; } catch (e) { toast('Erreur : ' + e.message, 'error'); return; }
@@ -5487,7 +5492,7 @@ function _vrRenderZones() {
     const col = z.couleur || '#2563eb';
     let lyr;
     try { lyr = L.geoJSON(z.geojson, { style: { color: col, weight: 2, fillColor: col, fillOpacity: (z.opacite != null ? z.opacite : 0.35) } }); } catch (e) { return; }
-    lyr.bindPopup(`<div style="font-size:12px;min-width:180px;max-width:280px"><div style="font-weight:700">${cmdEsc(z.titre || 'Zone d\'opportunité')}</div>${z.commentaire ? `<div style="color:#555;margin-top:3px;white-space:pre-wrap">${cmdEsc(z.commentaire)}</div>` : ''}<div style="margin-top:6px;display:flex;gap:10px"><button onclick="vrZoneEdit('${z.id}')" style="font-size:11px;cursor:pointer">✎ Modifier</button><button onclick="vrZoneDelete('${z.id}')" style="font-size:11px;cursor:pointer;color:#c0392b">× Supprimer</button></div></div>`);
+    lyr.bindPopup(`<div style="font-size:12px;min-width:180px;max-width:280px"><div style="font-weight:700">${cmdEsc(z.titre || 'Zone d\'opportunité')}</div>${z.commentaire ? `<div style="color:#555;margin-top:3px;white-space:pre-wrap">${cmdEsc(z.commentaire)}</div>` : ''}<div style="margin-top:6px;display:flex;gap:10px;flex-wrap:wrap"><button onclick="vrZoneOpportunity('${z.id}')" style="font-size:11px;cursor:pointer">🎯 + Opportunité</button><button onclick="vrZoneEdit('${z.id}')" style="font-size:11px;cursor:pointer">✎ Modifier</button><button onclick="vrZoneDelete('${z.id}')" style="font-size:11px;cursor:pointer;color:#c0392b">× Supprimer</button></div></div>`);
     lyr.addTo(_vrZonesLayer);
   });
   _vrZonesLayer.addTo(_vrMap);
