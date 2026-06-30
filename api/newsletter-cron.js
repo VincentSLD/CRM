@@ -261,7 +261,9 @@ export default async function handler(req, res) {
     const wrap = inner => `<div style="max-width:640px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#222">${inner}</div>`;
     const selOf = s => (s && typeof s === 'object') ? s : {};
 
-    // 1) Newsletter groupe — générée PAR DESTINATAIRE selon ses sections + rubriques web
+    // 1) Newsletter groupe — 1 génération MUTUALISÉE par combinaison identique (sections + rubriques + ton)
+    const CRM_SECTION_KEYS = ['analyses', 'topClients', 'opportunites', 'marches', 'nouveaux', 'dormants', 'concurrents', 'fetes', 'podium', 'perso'];
+    const ALL_SECTION_KEYS = CRM_SECTION_KEYS.concat(WEB_KEYS);
     let sent = 0; const errors = []; let firstHtml = null;
     if (groupSubs.length) {
       const data = await aggregateWeek();
@@ -270,16 +272,27 @@ export default async function handler(req, res) {
       groupSubs.forEach(s => { const sec = selOf(s.sections); WEB_KEYS.forEach(k => { if (sec[k] !== false) union.add(k); }); });
       const veille = union.size ? await fetchWebVeille([...union]) : '';
       const subject = '📰 Infolettre CRM — semaine du ' + new Date().toLocaleDateString('fr-FR');
+
+      // Regrouper les abonnés par signature (mêmes sections/rubriques + même ton) → 1 seule génération par groupe
+      const groups = {};
       for (const s of groupSubs) {
+        const sec = selOf(s.sections);
+        const norm = {}; ALL_SECTION_KEYS.forEach(k => norm[k] = sec[k] !== false);
+        const sig = JSON.stringify(norm) + '|' + (s.ton || 'convivial');
+        (groups[sig] = groups[sig] || { sec: norm, ton: s.ton || 'convivial', emails: [] }).emails.push(s.email);
+      }
+      for (const sig of Object.keys(groups)) {
+        const g = groups[sig];
         try {
-          const sec = selOf(s.sections);
-          const allowedLabels = WEB_KEYS.filter(k => sec[k] !== false).map(k => WEB_RUBRIQUES[k].label);
-          const inner = await generateHtml(data, { veille, allowedLabels, sections: sec, ton: s.ton });
-          if (!inner) { errors.push('news ' + s.email + ': génération vide'); continue; }
+          const allowedLabels = WEB_KEYS.filter(k => g.sec[k] !== false).map(k => WEB_RUBRIQUES[k].label);
+          const inner = await generateHtml(data, { veille, allowedLabels, sections: g.sec, ton: g.ton });
+          if (!inner) { errors.push('groupe (' + g.emails.length + ' dest.) : génération vide'); continue; }
           const html = wrap(inner);
           if (!firstHtml) { firstHtml = html; try { await sbReq('newsletters', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ titre: subject, periode_debut: data.meta.periode_debut, periode_fin: data.meta.periode_fin, html, data, cree_par: 'cron', envoye_a: groupSubs.length }) }); } catch (e) {} }
-          await graphSend(token, s.email, subject, html); sent++;
-        } catch (e) { errors.push('news ' + s.email + ': ' + e.message); }
+          for (const email of g.emails) {
+            try { await graphSend(token, email, subject, html); sent++; } catch (e) { errors.push('news ' + email + ': ' + e.message); }
+          }
+        } catch (e) { errors.push('groupe : ' + e.message); }
       }
     }
 
