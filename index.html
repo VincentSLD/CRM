@@ -5299,12 +5299,27 @@ function vrToggleEds(on) {
   if (on) _vrEnsureEds();
   else if (_vrEdsLayer) { try { _vrMap.removeLayer(_vrEdsLayer); } catch (e) {} _vrEdsLayer = null; }
 }
+function _vrEdsLoadingOverlay(show) {
+  const wrap = document.getElementById('vr-map-wrap'); if (!wrap) return;
+  let ov = document.getElementById('vr-eds-loading');
+  if (show) {
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'vr-eds-loading';
+      ov.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1200;background:rgba(0,0,0,.78);color:#fff;padding:12px 18px;border-radius:10px;font-size:13px;display:flex;align-items:center;gap:10px;box-shadow:0 4px 16px rgba(0,0,0,.3)';
+      ov.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></span> Chargement des études de sol GPH…';
+      wrap.appendChild(ov);
+    }
+  } else if (ov) { ov.remove(); }
+}
 async function _vrEnsureEds() {
   if (!_vrMap) return;
   try { await _loadMarkerCluster(); } catch (e) { /* fallback */ }
   if (!_vrEdsLoaded) {
+    _vrEdsLoadingOverlay(true);
     try { _vrEdsData = await _vrFetchEdsAll(); _vrEdsLoaded = true; }
     catch (e) { _vrEdsData = []; toast('Études de sol GPH indisponibles : ' + e.message, 'error'); }
+    finally { _vrEdsLoadingOverlay(false); }
   }
   _vrAddEdsLayer();
 }
