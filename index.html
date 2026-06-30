@@ -7837,7 +7837,7 @@ function renderPage(page) {
     _clientsServerLoaded = true;
     loadClientsPage(clientsPage || 0, clientsLetter, clientsSearch);
   }
-  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); loadConnexionsLog(); }, 50);
+  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); }, 50);
   if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); }, 50);
   if (page === 'analyse') setTimeout(initAnalyse, 30);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
@@ -20148,16 +20148,21 @@ function renderAdmin() {
       </div>
     </div>
     <div class="card-body">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-        <input type="text" id="connexLogSearch" placeholder="Utilisateur ou email..." value="${(_connexLogSearch||'').replace(/"/g,'&quot;')}" oninput="_connexLogSearch=this.value" onkeydown="if(event.key==='Enter')loadConnexionsLog()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);min-width:200px">
-        <label style="font-size:11px;color:var(--t3)">Du</label>
-        <input type="date" id="connexLogFrom" value="${_connexLogFrom||''}" onchange="_connexLogFrom=this.value;loadConnexionsLog()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
-        <label style="font-size:11px;color:var(--t3)">au</label>
-        <input type="date" id="connexLogTo" value="${_connexLogTo||''}" onchange="_connexLogTo=this.value;loadConnexionsLog()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
-        <button class="btn" onclick="loadConnexionsLog()" style="font-size:12px">Filtrer</button>
-        ${(_connexLogSearch||_connexLogFrom||_connexLogTo) ? '<button class="btn" style="font-size:12px;color:var(--red)" onclick="_connexLogSearch=\'\';_connexLogFrom=\'\';_connexLogTo=\'\';loadConnexionsLog()">✕ Effacer</button>' : ''}
-      </div>
-      <div id="connexionsLogContainer" style="color:var(--t3);font-size:13px">Chargement...</div>
+      <details id="connexLogDetails" ontoggle="if(this.open) loadConnexionsLog()">
+        <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--accent);user-select:none">▸ Afficher le journal</summary>
+        <div style="margin-top:12px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+            <input type="text" id="connexLogSearch" placeholder="Utilisateur ou email..." value="${(_connexLogSearch||'').replace(/"/g,'&quot;')}" oninput="_connexLogSearch=this.value" onkeydown="if(event.key==='Enter')connexLogReload()" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);min-width:200px">
+            <label style="font-size:11px;color:var(--t3)">Du</label>
+            <input type="date" id="connexLogFrom" value="${_connexLogFrom||''}" onchange="_connexLogFrom=this.value;connexLogReload()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+            <label style="font-size:11px;color:var(--t3)">au</label>
+            <input type="date" id="connexLogTo" value="${_connexLogTo||''}" onchange="_connexLogTo=this.value;connexLogReload()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+            <button class="btn" onclick="connexLogReload()" style="font-size:12px">Filtrer</button>
+            ${(_connexLogSearch||_connexLogFrom||_connexLogTo) ? '<button class="btn" style="font-size:12px;color:var(--red)" onclick="_connexLogSearch=\'\';_connexLogFrom=\'\';_connexLogTo=\'\';connexLogReload()">✕ Effacer</button>' : ''}
+          </div>
+          <div id="connexionsLogContainer" style="color:var(--t3);font-size:13px">Cliquez pour charger…</div>
+        </div>
+      </details>
     </div>
   </div>
   <div class="card">
@@ -24726,7 +24731,19 @@ async function requireDeletePassword() {
 
 // ═══ JOURNAL DE CONNEXIONS ═══
 let _connexLogSearch = '', _connexLogFrom = '', _connexLogTo = '', _connexLogRows = [];
+let _connexLogPage = 0, _connexLogTotal = 0;
+const CONNEX_LOG_PAGE = 100;
 function _connexLogCutoff6m() { const d = new Date(); d.setMonth(d.getMonth() - 6); return d.toISOString(); }
+function _connexLogBaseQuery(withCount) {
+  let q = sb.from('connexions_log').select('email,nom,created_at', withCount ? { count: 'exact' } : undefined).order('created_at', { ascending: false });
+  const s = (_connexLogSearch || '').trim();
+  if (s) q = q.or(`email.ilike.%${s}%,nom.ilike.%${s}%`);
+  if (_connexLogFrom) q = q.gte('created_at', _connexLogFrom + 'T00:00:00');
+  if (_connexLogTo) q = q.lte('created_at', _connexLogTo + 'T23:59:59');
+  return q;
+}
+function connexLogReload() { _connexLogPage = 0; loadConnexionsLog(); }
+function connexLogGoPage(delta) { _connexLogPage = Math.max(0, _connexLogPage + delta); loadConnexionsLog(); }
 async function loadConnexionsLog() {
   const el = document.getElementById('connexionsLogContainer');
   if (!el) return;
@@ -24734,27 +24751,43 @@ async function loadConnexionsLog() {
   // Purge automatique : supprimer les connexions de plus de 6 mois (non bloquant)
   try { sb.from('connexions_log').delete().lt('created_at', _connexLogCutoff6m()).then(() => {}, () => {}); } catch (e) {}
   try {
-    let q = sb.from('connexions_log').select('email,nom,created_at').order('created_at', { ascending: false }).limit(500);
-    const s = (_connexLogSearch || '').trim();
-    if (s) q = q.or(`email.ilike.%${s}%,nom.ilike.%${s}%`);
-    if (_connexLogFrom) q = q.gte('created_at', _connexLogFrom + 'T00:00:00');
-    if (_connexLogTo) q = q.lte('created_at', _connexLogTo + 'T23:59:59');
-    const { data, error } = await q;
+    const from = _connexLogPage * CONNEX_LOG_PAGE;
+    const { data, error, count } = await _connexLogBaseQuery(true).range(from, from + CONNEX_LOG_PAGE - 1);
     if (error) throw error;
     _connexLogRows = data || [];
-    if (!_connexLogRows.length) { el.innerHTML = '<div style="color:var(--t3)">Aucune connexion ' + ((s || _connexLogFrom || _connexLogTo) ? 'pour ces filtres' : 'enregistrée pour le moment') + '.</div>'; return; }
+    _connexLogTotal = count || 0;
+    const s = (_connexLogSearch || '').trim();
+    if (!_connexLogTotal) { el.innerHTML = '<div style="color:var(--t3)">Aucune connexion ' + ((s || _connexLogFrom || _connexLogTo) ? 'pour ces filtres' : 'enregistrée pour le moment') + '.</div>'; return; }
+    const pages = Math.max(1, Math.ceil(_connexLogTotal / CONNEX_LOG_PAGE));
+    if (_connexLogPage >= pages) { _connexLogPage = pages - 1; return loadConnexionsLog(); }
+    const startN = from + 1, endN = from + _connexLogRows.length;
+    const nav = `<div style="display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
+      <button class="btn" style="font-size:12px;padding:3px 10px" ${_connexLogPage <= 0 ? 'disabled' : ''} onclick="connexLogGoPage(-1)">← Précédent</button>
+      <span style="font-size:12px;color:var(--t3)">${startN}–${endN} sur ${_connexLogTotal} · page ${_connexLogPage + 1}/${pages}</span>
+      <button class="btn" style="font-size:12px;padding:3px 10px" ${_connexLogPage >= pages - 1 ? 'disabled' : ''} onclick="connexLogGoPage(1)">Suivant →</button>
+      <span style="font-size:11px;color:var(--t3);margin-left:auto">conservées 6 mois</span></div>`;
     el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Date &amp; heure</th><th>Utilisateur</th><th>Email</th></tr></thead><tbody>'
       + _connexLogRows.map(r => '<tr><td style="font-size:12px;white-space:nowrap">' + (r.created_at ? new Date(r.created_at).toLocaleString('fr-FR') : '—') + '</td><td style="font-size:12px">' + cmdEsc(r.nom || '—') + '</td><td style="font-size:12px">' + cmdEsc(r.email || '—') + '</td></tr>').join('')
-      + '</tbody></table></div><div style="font-size:11px;color:var(--t3);margin-top:6px">' + _connexLogRows.length + ' connexion(s) affichée(s) — conservées 6 mois</div>';
+      + '</tbody></table></div>' + nav;
   } catch (e) {
     el.innerHTML = '<div style="color:var(--red)">Journal indisponible. Exécutez la création de la table <code>connexions_log</code> (docs add_missing_columns.sql).</div>';
   }
 }
-function exportConnexionsLogCSV() {
-  if (!_connexLogRows || !_connexLogRows.length) { toast('Rien à exporter.', 'info'); return; }
+async function exportConnexionsLogCSV() {
+  // Export de TOUTES les lignes correspondant aux filtres (pas seulement la page affichée)
+  let all = [];
+  try {
+    for (let i = 0; i < 100; i++) {
+      const { data, error } = await _connexLogBaseQuery(false).range(i * 1000, i * 1000 + 999);
+      if (error) throw error;
+      const rows = data || []; all = all.concat(rows);
+      if (rows.length < 1000) break;
+    }
+  } catch (e) { toast('Erreur export : ' + e.message, 'error'); return; }
+  if (!all.length) { toast('Rien à exporter.', 'info'); return; }
   const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
   const lines = [['Date & heure', 'Utilisateur', 'Email'].map(esc).join(';')];
-  _connexLogRows.forEach(r => lines.push([r.created_at ? new Date(r.created_at).toLocaleString('fr-FR') : '', r.nom || '', r.email || ''].map(esc).join(';')));
+  all.forEach(r => lines.push([r.created_at ? new Date(r.created_at).toLocaleString('fr-FR') : '', r.nom || '', r.email || ''].map(esc).join(';')));
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob); const a = document.createElement('a');
   a.href = url; a.download = 'journal_connexions.csv'; a.click(); URL.revokeObjectURL(url);
