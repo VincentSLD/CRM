@@ -4774,6 +4774,7 @@ let _vrPA = [];          // permis d'aménager (Sitadel) géolocalisés
 let _vrBoampList = [];   // BOAMP : tous les avis récupérés (y compris non géocodés) pour la liste sous la carte
 let _vrListPage = 0;     // pagination du tableau-liste sous la carte (100 par page)
 const VR_LIST_PAGE = 100;
+let _vrBoampNoGeoCenter = null; // position du marqueur « avis non localisés » = chef-lieu du département
 let _vrShowMap = false;
 let _vrMap = null;
 let _vrPALoading = false;
@@ -5180,6 +5181,21 @@ async function _vrLoadBoamp(dept) {
     });
   });
   _vrPA = out; _vrBoampList = list;
+  // Position pour les avis non localisés = chef-lieu du département
+  _vrBoampNoGeoCenter = null;
+  if (list.some(r => !r.geocoded)) {
+    try {
+      const dr = await fetch(_vrFetchUrl(`https://geo.api.gouv.fr/departements/${dept}?fields=chefLieu`));
+      const dj = await dr.json();
+      const cl = dj && dj.chefLieu;
+      if (cl) {
+        const cr = await fetch(_vrFetchUrl(`https://geo.api.gouv.fr/communes/${cl}?fields=centre&format=json`));
+        const cj = await cr.json();
+        const c = cj && cj.centre && cj.centre.coordinates;
+        if (c) _vrBoampNoGeoCenter = [c[1], c[0]];
+      }
+    } catch (e) { /* ignore */ }
+  }
 }
 // Données de la liste selon le type courant : { kind, all (tableau complet) }
 function _vrListData() {
@@ -5479,9 +5495,9 @@ async function _vrInitMap() {
   // BOAMP : marqueur « avis non localisés » au centre du département (clic → liste)
   if (_vrPermisType === 'boamp') {
     const nogeo = (_vrBoampList || []).map((r, idx) => ({ r, idx })).filter(x => !x.r.geocoded);
-    if (nogeo.length && bounds.length) {
-      let sx = 0, sy = 0; bounds.forEach(b => { sx += b[0]; sy += b[1]; });
-      const c = [sx / bounds.length, sy / bounds.length];
+    let c = _vrBoampNoGeoCenter;
+    if (!c && bounds.length) { let sx = 0, sy = 0; bounds.forEach(b => { sx += b[0]; sy += b[1]; }); c = [sx / bounds.length, sy / bounds.length]; }
+    if (nogeo.length && c) {
       const items = nogeo.map(({ r, idx }) => `<div style="border-top:1px solid var(--border);padding:5px 0">
         <div style="font-weight:600">${cmdEsc(r.acheteur || 'Acheteur public')}</div>
         <div style="color:#555">${cmdEsc((r.objet || '').slice(0, 140))}</div>
