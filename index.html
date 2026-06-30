@@ -15637,6 +15637,21 @@ function renderMarchesPublics() {
   `;
 }
 
+// DECP : les champs acheteur/titulaire peuvent être une chaîne, un objet {id,nom,denominationSociale}, ou un tableau d'objets
+function _mpStr(v) { return v == null ? '' : (typeof v === 'string' ? v : (typeof v === 'number' ? String(v) : '')); }
+function _mpEntiteNom(o) { return (o && typeof o === 'object') ? (o.denominationSociale || o.denomination || o.nom || o.raison_sociale || o.name || '') : _mpStr(o); }
+function _mpEntiteId(o) { return (o && typeof o === 'object') ? _mpStr(o.id || o.siret || o.identifiant || o.siren || '') : _mpStr(o); }
+function _mpTitulaire(r, f) {
+  let t = r[f.titulaire];
+  let nom = '', siret = _mpStr(r[f.titulaireSiret]);
+  if (Array.isArray(t)) {
+    nom = t.map(_mpEntiteNom).filter(Boolean).join(', ');
+    if (!siret && t.length) siret = _mpEntiteId(t[0]);
+  } else if (t && typeof t === 'object') {
+    nom = _mpEntiteNom(t); if (!siret) siret = _mpEntiteId(t);
+  } else { nom = _mpStr(t); }
+  return { nom, siret };
+}
 function mpRenderResults() {
   const el = document.getElementById('mpResults');
   if (!el) return;
@@ -15649,13 +15664,14 @@ function mpRenderResults() {
     head = '<tr><th>Date</th><th>Lieu</th><th>Acheteur</th><th>Objet</th><th>Titulaire</th><th style="text-align:right">Montant</th><th>Actions</th></tr>';
     rows = _mpResults.map(r => {
       // Acheteur : nom si dispo, sinon SIRET avec lien Pappers
-      const acheteurNom = r[f.acheteur];
-      const acheteurSiret = r.acheteur_id || '';
+      const acheteurNom = _mpEntiteNom(r[f.acheteur]);
+      const acheteurSiret = _mpStr(r.acheteur_id) || _mpEntiteId(r[f.acheteur]) || '';
       const acheteurDisp = acheteurNom || (acheteurSiret ? '<span class="mono" style="font-size:10px;color:var(--t3)">SIRET ' + acheteurSiret + '</span>' : '—');
       const acheteurPappers = acheteurSiret ? '<a href="https://www.pappers.fr/entreprise/' + String(acheteurSiret).substring(0,9) + '" target="_blank" rel="noopener" style="color:#3b82f6;margin-right:4px;text-decoration:none" title="Pappers">📋</a>' : '';
-      // Titulaire : nom si dispo, sinon SIRET avec lien Pappers
-      const titulaireNom = r[f.titulaire];
-      const titulaireSiret = r[f.titulaireSiret] || '';
+      // Titulaire : nom si dispo, sinon SIRET avec lien Pappers (peut être objet ou tableau)
+      const _tit = _mpTitulaire(r, f);
+      const titulaireNom = _tit.nom;
+      const titulaireSiret = _tit.siret || '';
       const titulaireDisp = titulaireNom || (titulaireSiret ? '<span class="mono" style="font-size:10px;color:var(--t3)">SIRET ' + titulaireSiret + '</span>' : '—');
       const titulairePappers = titulaireSiret ? '<a href="https://www.pappers.fr/entreprise/' + String(titulaireSiret).substring(0,9) + '" target="_blank" rel="noopener" style="color:#3b82f6;margin-right:4px;text-decoration:none" title="Pappers">📋</a>' : '';
       // Lieu d'exécution (commune) plus utile que juste le code dept
