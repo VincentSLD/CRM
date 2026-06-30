@@ -134,14 +134,22 @@ async function fetchWebVeille(rubriqueKeys) {
   const items = (rubriqueKeys || []).map(k => WEB_RUBRIQUES[k] ? { k, ...WEB_RUBRIQUES[k] } : null).filter(Boolean);
   if (!items.length) return '';
   const ask = items.map((it, i) => `${i + 1}. « ${it.label} » : ${it.query}`).join('\n');
+  const messages = [{ role: 'user', content: "Recherche sur le web (sources françaises récentes) et renvoie, pour CHAQUE rubrique ci-dessous, 2 à 3 puces FACTUELLES et datées avec source. Format STRICT, sans intro ni conclusion : pour chaque rubrique, une ligne « ### <Titre exact> » puis les puces une par ligne commençant par '- ' = info datée + courte explication + (Source : Nom — URL). Si rien de fiable : « ### <Titre> » puis « - (pas d'actualité notable cette semaine) ».\n\nRubriques :\n" + ask }];
+  let text = '';
   try {
-    const j = await callClaude({
-      model: MODEL, max_tokens: 2600,
-      system: "Tu es un analyste de veille pour un bureau d'études du bâtiment en France. Tu DOIS utiliser l'outil de recherche web pour trouver des informations RÉCENTES et FRANÇAISES.",
-      messages: [{ role: 'user', content: "Recherche sur le web (sources françaises récentes) et renvoie, pour CHAQUE rubrique ci-dessous, 2 à 3 puces FACTUELLES et datées avec source. Format STRICT, sans intro ni conclusion : pour chaque rubrique, une ligne « ### <Titre exact> » puis les puces une par ligne commençant par '- ' = info datée + courte explication + (Source : Nom — URL). Si rien de fiable : « ### <Titre> » puis « - (pas d'actualité notable cette semaine) ».\n\nRubriques :\n" + ask }],
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: Math.min(10, items.length * 2) }],
-    });
-    return (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+    for (let i = 0; i < 5; i++) {
+      const j = await callClaude({
+        model: MODEL, max_tokens: 2600,
+        system: "Tu es un analyste de veille pour un bureau d'études du bâtiment en France. Tu DOIS utiliser l'outil de recherche web pour trouver des informations RÉCENTES et FRANÇAISES.",
+        messages,
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: Math.min(10, items.length * 2) }],
+      });
+      const t = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+      if (t) text += (text ? '\n' : '') + t;
+      if (j.stop_reason === 'pause_turn' && Array.isArray(j.content)) { messages.push({ role: 'assistant', content: j.content }); continue; }
+      break;
+    }
+    return text.trim();
   } catch (e) { console.error('fetchWebVeille:', e.message); return ''; }
 }
 async function generateHtml(data, opts) {

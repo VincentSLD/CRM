@@ -8098,12 +8098,17 @@ async function nlGenerate() {
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || ('build ' + r.status));
-  return { html: j.html, data };
+  return { html: j.html, data, web: j.web };
 }
 async function nlPreview() {
   toast('Génération de l\'aperçu… (10-20 s)', 'info');
   let res;
   try { res = await nlGenerate(); } catch (e) { toast('Erreur génération : ' + e.message, 'error'); return; }
+  // Diagnostic veille web
+  if (res.web && res.web.rubriques) {
+    if (res.web.error) toast('⚠️ Veille web indisponible : ' + res.web.error, 'error');
+    else if (!res.web.chars) toast('⚠️ Veille web vide (aucun résultat renvoyé). Réessayez ou décochez des rubriques.', 'info');
+  }
   const wrapped = _nlWrap(res.html);
   const ov = _nlOverlay(`
     <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">

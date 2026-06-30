@@ -44,19 +44,26 @@ const WEB_RUBRIQUES = {
 // Étape séparée pour fiabiliser (toujours appelée) et permettre une mise en forme propre ensuite.
 async function fetchWebVeille(key, rubriqueKeys) {
   const items = (rubriqueKeys || []).map(k => WEB_RUBRIQUES[k] ? { k, ...WEB_RUBRIQUES[k] } : null).filter(Boolean);
-  if (!items.length) return '';
+  if (!items.length) return { text: '', error: null, stop: null };
   const ask = items.map((it, i) => `${i + 1}. « ${it.label} » : ${it.query}`).join('\n');
+  const messages = [{ role: 'user', content: "Recherche sur le web (sources françaises récentes) et renvoie, pour CHAQUE rubrique ci-dessous, 2 à 3 puces FACTUELLES et datées avec source. Format STRICT, sans introduction ni conclusion : pour chaque rubrique, d'abord une ligne « ### <Titre exact de la rubrique> », puis les puces, une par ligne, commençant par '- ', chaque puce = info datée + très courte explication + (Source : Nom — URL). Si une rubrique ne donne rien de fiable, mets « ### <Titre> » suivi de « - (pas d'actualité notable cette semaine) ».\n\nRubriques :\n" + ask }];
+  let text = '', stop = null;
   try {
-    const j = await callClaude(key, {
-      model: MODEL,
-      max_tokens: 2600,
-      system: "Tu es un analyste de veille pour un bureau d'études du bâtiment en France. Tu DOIS utiliser l'outil de recherche web pour trouver des informations RÉCENTES et FRANÇAISES.",
-      messages: [{ role: 'user', content: "Recherche sur le web (sources françaises récentes) et renvoie, pour CHAQUE rubrique ci-dessous, 2 à 3 puces FACTUELLES et datées avec source. Format STRICT, sans introduction ni conclusion : pour chaque rubrique, d'abord une ligne « ### <Titre exact de la rubrique> », puis les puces, une par ligne, commençant par '- ', chaque puce = info datée + très courte explication + (Source : Nom — URL). Si une rubrique ne donne rien de fiable, mets « ### <Titre> » suivi de « - (pas d'actualité notable cette semaine) ».\n\nRubriques :\n" + ask }],
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: Math.min(10, items.length * 2) }],
-    });
-    const txt = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
-    return txt || '';
-  } catch (e) { console.error('fetchWebVeille:', e.message); return ''; }
+    for (let i = 0; i < 5; i++) {
+      const j = await callClaude(key, {
+        model: MODEL, max_tokens: 2600,
+        system: "Tu es un analyste de veille pour un bureau d'études du bâtiment en France. Tu DOIS utiliser l'outil de recherche web pour trouver des informations RÉCENTES et FRANÇAISES.",
+        messages,
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: Math.min(10, items.length * 2) }],
+      });
+      stop = j.stop_reason;
+      const t = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+      if (t) text += (text ? '\n' : '') + t;
+      if (j.stop_reason === 'pause_turn' && Array.isArray(j.content)) { messages.push({ role: 'assistant', content: j.content }); continue; }
+      break;
+    }
+    return { text: text.trim(), error: null, stop };
+  } catch (e) { console.error('fetchWebVeille:', e.message); return { text: '', error: e.message, stop }; }
 }
 
 export default async function handler(req, res) {
@@ -113,8 +120,8 @@ export default async function handler(req, res) {
 
   // Étape 1 : recherche web (rubriques sélectionnées) — séparée pour fiabilité + mise en forme propre
   const selectedRubriques = Object.keys(WEB_RUBRIQUES).filter(k => sections[k] !== false);
-  let veille = '';
-  if (useWeb && selectedRubriques.length) veille = await fetchWebVeille(key, selectedRubriques);
+  let veille = '', webErr = null, webStop = null;
+  if (useWeb && selectedRubriques.length) { const wr = await fetchWebVeille(key, selectedRubriques); veille = wr.text; webErr = wr.error; webStop = wr.stop; }
 
   const userPrompt = [
     "Voici les données agrégées de la semaine (JSON). Rédige l'infolettre en français.",
@@ -143,7 +150,7 @@ export default async function handler(req, res) {
     if (!html) return res.status(502).json({ error: 'Réponse IA vide' });
     // Nettoyage : retirer d'éventuels fences markdown
     const clean = html.replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/i, '').trim();
-    return res.status(200).json({ html: clean });
+    return res.status(200).json({ html: clean, web: { rubriques: selectedRubriques.length, chars: veille.length, error: webErr, stop: webStop } });
   } catch (e) {
     console.error('newsletter-build:', e.message);
     return res.status(500).json({ error: e.message });
