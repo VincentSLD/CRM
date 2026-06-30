@@ -4850,8 +4850,45 @@ function renderVeilleRegar() {
         ? 'Marqueurs : <span style="color:#f59e0b">●</span> classe F · <span style="color:#ef4444">●</span> classe G (passoires thermiques à rénover). Source : observatoire DPE ADEME.'
         : 'Sélectionnez un département puis « Afficher la carte ». Marqueurs : <span style="color:#10b981">●</span> autorisé · <span style="color:#f59e0b">●</span> chantier ouvert · <span style="color:#6b7280">●</span> travaux achevés (Sitadel).'} Calque argile (BRGM) : du jaune (faible) au rouge/violet (fort).</div>
     </div>
-    ${_vrIsBoamp && _vrBoampList.length ? _vrBoampListHtml() : ''}
+    ${_vrIsBoamp ? (_vrBoampList.length ? _vrBoampListHtml() : '') : (_vrPA.length ? _vrDataTableHtml() : '')}
   </div>`;
+}
+function _vrDataTableHtml() {
+  if (!_vrPA.length) return '';
+  const k = _vrPermisType;
+  const lbl = { pa: "Permis d'aménager", pc: 'Permis de construire', pc_existant: 'Permis sur bâti existant', dpe_ter: 'DPE tertiaire F/G', dpe_log: 'DPE logements F/G', copro: 'Copropriétés' }[k] || 'Résultats';
+  let head, rows;
+  if (k === 'dpe_ter' || k === 'dpe_log') {
+    head = '<tr><th>Adresse</th><th>Classe</th><th>Surface</th><th>Construction</th><th></th></tr>';
+    rows = _vrPA.map((d, i) => `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 8px;font-size:12px;max-width:340px">${cmdEsc(d.adresse || d.commune || '—')}</td>
+      <td style="padding:6px 8px;font-size:12px"><strong style="color:${d.dpeClass === 'G' ? '#ef4444' : '#f59e0b'}">${cmdEsc(d.dpeClass || '')}</strong>${d.gesClass ? ' / ' + cmdEsc(d.gesClass) : ''}</td>
+      <td style="padding:6px 8px;font-size:11px;white-space:nowrap">${d.surface ? Number(d.surface).toLocaleString('fr-FR') + ' m²' : '—'}</td>
+      <td style="padding:6px 8px;font-size:11px">${cmdEsc(d.periode || '—')}</td>
+      <td style="padding:6px 8px;white-space:nowrap"><button class="btn" style="font-size:10px;padding:2px 6px" title="Créer une opportunité" onclick="vrPAOpportunity(${i})">🎯</button></td></tr>`).join('');
+  } else if (k === 'copro') {
+    head = '<tr><th>Adresse</th><th>Lots</th><th>Construction</th><th>DPE estimé</th><th></th></tr>';
+    rows = _vrPA.map((d, i) => `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 8px;font-size:12px;max-width:340px">${cmdEsc(d.adresse || '—')}</td>
+      <td style="padding:6px 8px;font-size:11px">${d.nbLot != null ? cmdEsc(String(d.nbLot)) : '—'}</td>
+      <td style="padding:6px 8px;font-size:11px">${cmdEsc(d.periode || '—')}</td>
+      <td style="padding:6px 8px;font-size:11px">${cmdEsc(d.dpeClass || '—')}</td>
+      <td style="padding:6px 8px;white-space:nowrap"><button class="btn" style="font-size:10px;padding:2px 6px" title="Créer une opportunité" onclick="vrPAOpportunity(${i})">🎯</button></td></tr>`).join('');
+  } else { // Sitadel : pa / pc / pc_existant
+    const qtyHead = k === 'pa' ? 'Superficie' : 'Logements';
+    head = `<tr><th>Date</th><th>Demandeur</th><th>Commune</th><th>${qtyHead}</th><th></th></tr>`;
+    rows = _vrPA.map((d, i) => {
+      const qty = k === 'pa' ? (d.superficie ? Number(d.superficie).toLocaleString('fr-FR') + ' m²' : '—') : (d.nbLgt != null ? String(d.nbLgt) : '—');
+      return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 8px;font-size:11px;white-space:nowrap">${d.date ? fmtDateFR(d.date) : '—'}</td>
+      <td style="padding:6px 8px;font-size:12px;max-width:220px">${cmdEsc(d.demandeur || '—')}</td>
+      <td style="padding:6px 8px;font-size:11px">${cmdEsc((d.cp || '') + ' ' + (d.commune || ''))}</td>
+      <td style="padding:6px 8px;font-size:11px">${qty}</td>
+      <td style="padding:6px 8px;white-space:nowrap"><button class="btn" style="font-size:10px;padding:2px 6px" title="Créer un prospect" onclick="vrPAProspect(${i})">+ Prospect</button> <button class="btn" style="font-size:10px;padding:2px 6px" title="Créer une opportunité" onclick="vrPAOpportunity(${i})">🎯</button></td></tr>`;
+    }).join('');
+  }
+  return `<div class="card" style="margin-bottom:14px"><div class="card-header"><div class="card-title">📋 ${lbl} (liste) — ${_vrPA.length}</div></div>
+    <div class="card-body" style="padding:0"><div class="table-wrap"><table><thead>${head}</thead><tbody>${rows}</tbody></table></div></div></div>`;
 }
 
 function _vrRenderTable() {
