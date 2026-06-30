@@ -1900,7 +1900,7 @@ tbody tr:last-child td { border-bottom: none; }
         <span class="view-toggle-label" id="viewMyDataLabel">Mes données</span>
         <div class="view-toggle-track"><div class="view-toggle-thumb"></div></div>
       </div>
-      <div class="avatar" id="userAvatar" title="Mon profil">--</div>
+      <div class="avatar" id="userAvatar" title="Mon espace" style="cursor:pointer" onclick="monEspaceOpen()">--</div>
       <button class="topbar-btn" onclick="doLogout()" title="Se déconnecter" style="margin-left:4px">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       </button>
@@ -4357,7 +4357,7 @@ function go(page) {
   const titles = {dashboard:'Tableau de bord',analyse:'Analyse / KPI',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing','marches-publics':'Veille marchés publics','procedures-coll':'Veille procédures collectives (BODACC)',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
     cr:'Comptes-rendus',taches:'Tâches commerciales',opportunites:'Opportunités',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
-    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'",'mode-emploi':"Mode d'emploi",'cahier-charges':'Cahier des charges','veille-regar':'Carte des opportunités'};
+    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'",'mode-emploi':"Mode d'emploi",'cahier-charges':'Cahier des charges','veille-regar':'Carte des opportunités',newsletter:'Infolettre hebdomadaire'};
   document.getElementById('pageTitle').textContent = titles[page]||page;
   renderPage(page);
   if(window.innerWidth<=768) toggleSidebar(false);
@@ -4391,6 +4391,7 @@ function renderEnDev() {
     { page: 'ged', label: 'Assistant documentaire', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>' },
     { page: 'mode-emploi', label: "Mode d'emploi", icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>' },
     { page: 'cahier-charges', label: 'Cahier des charges', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>' },
+    { page: 'newsletter', label: 'Infolettre hebdomadaire', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 9v11"/></svg>' },
   ];
   return `
     <div style="max-width:700px;margin:0 auto">
@@ -7865,6 +7866,303 @@ function _oppKanban(rows) {
   }).join('')}</div>`;
 }
 
+// ═══════════════════════════════════════════════════════════
+//  NEWSLETTER HEBDOMADAIRE (IA) — espace perso, génération, archive
+// ═══════════════════════════════════════════════════════════
+const NL_AGENCES = ['NM85', 'SA85', 'SA64', 'AS44', 'ES44', 'EE85', 'OE85', 'NK44', 'SO35', 'WATSO', 'GRAVI', 'GPH85', 'GPH64', 'GPH-R'];
+const NL_SECTIONS = [
+  ['analyses', 'Analyses clés & météo du pipeline'],
+  ['topClients', 'Top client par agence'],
+  ['opportunites', 'Opportunités (nouvelles, gagnées, à relancer)'],
+  ['marches', 'Marchés publics travaux (bâtiment & environnement)'],
+  ['nouveaux', 'Nouveaux clients'],
+  ['dormants', 'Clients dormants à réveiller'],
+  ['concurrents', 'Nouveaux concurrents'],
+  ['conjoncture', 'Conjoncture BTP & taux immobilier (web)'],
+  ['fetes', 'Fêtes & anniversaires'],
+  ['podium', 'Podium & badges de la semaine'],
+  ['perso', 'Section personnalisée + liens CRM'],
+];
+let _nlPrefs = null, _nlEditions = [], _nlEditionsLoaded = false;
+
+function _nlUserId() { return (currentCommercial && currentCommercial.id) || (currentCommercial && currentCommercial.email) || ''; }
+function _nlDefaultSections() { const s = {}; NL_SECTIONS.forEach(([k]) => s[k] = true); return s; }
+
+async function _nlLoadPrefs() {
+  const uid = _nlUserId(); if (!uid) return null;
+  try {
+    const { data } = await sb.from('newsletter_prefs').select('*').eq('user_id', String(uid)).maybeSingle();
+    _nlPrefs = data || { user_id: String(uid), email: (currentCommercial && currentCommercial.email) || '', nom: (currentCommercial && currentCommercial.nom) || '', abonne: false, ton: 'convivial', agences: [], sections: _nlDefaultSections(), date_naissance: null };
+  } catch (e) { _nlPrefs = { user_id: String(uid), abonne: false, ton: 'convivial', agences: [], sections: _nlDefaultSections() }; }
+  return _nlPrefs;
+}
+
+// ─ Espace perso (clic sur l'avatar) ─
+function _nlOverlay(innerHtml, maxw) {
+  const ov = document.createElement('div');
+  ov.className = 'nl-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:flex-start;justify-content:center;padding:30px 14px;overflow:auto';
+  ov.onclick = e => { if (e.target === ov) document.body.removeChild(ov); };
+  const box = document.createElement('div');
+  box.style.cssText = `background:var(--card,#fff);color:var(--t1);border-radius:14px;max-width:${maxw || 560}px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.3);overflow:hidden`;
+  box.innerHTML = innerHtml;
+  ov.appendChild(box); document.body.appendChild(ov);
+  return ov;
+}
+async function monEspaceOpen() {
+  await _nlLoadPrefs();
+  const p = _nlPrefs || {};
+  const sec = p.sections || _nlDefaultSections();
+  const nom = (currentCommercial && currentCommercial.nom) || (p.email || 'Mon espace');
+  const html = `
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:17px;font-weight:700">👤 Mon espace</div>
+      <button class="btn" onclick="this.closest('.nl-overlay').remove()" style="font-size:13px">✕</button>
+    </div>
+    <div style="padding:18px 20px;max-height:70vh;overflow:auto">
+      <div style="font-size:13px;color:var(--t3);margin-bottom:14px">${cmdEsc(nom)}</div>
+      <div class="card" style="margin-bottom:14px"><div class="card-body" style="padding:14px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:700;font-size:14px">
+          <input type="checkbox" id="nl-abonne" ${p.abonne ? 'checked' : ''} style="width:18px;height:18px;accent-color:#4f8ff7"> 📰 M'abonner à l'infolettre hebdo du CRM
+        </label>
+        <div style="font-size:12px;color:var(--t3);margin-top:6px">Un récap convivial chaque lundi : analyses, top clients, opportunités, marchés publics, conjoncture BTP… et des liens directs vers le CRM.</div>
+      </div></div>
+      <div style="font-size:12px;font-weight:700;margin:12px 0 6px">Ton de la newsletter</div>
+      <select id="nl-ton" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)">
+        <option value="convivial"${(p.ton || 'convivial') === 'convivial' ? ' selected' : ''}>Convivial</option>
+        <option value="fun"${p.ton === 'fun' ? ' selected' : ''}>Fun (humour + emojis)</option>
+        <option value="pro"${p.ton === 'pro' ? ' selected' : ''}>Professionnel (sobre)</option>
+      </select>
+      <div style="font-size:12px;font-weight:700;margin:14px 0 6px">Date de naissance (pour les anniversaires, optionnel)</div>
+      <input type="date" id="nl-naissance" value="${p.date_naissance || ''}" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)">
+      <div style="font-size:12px;font-weight:700;margin:14px 0 6px">Sections à inclure</div>
+      <div style="display:grid;grid-template-columns:1fr;gap:4px">
+        ${NL_SECTIONS.map(([k, lbl]) => `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" class="nl-sec" data-k="${k}" ${sec[k] !== false ? 'checked' : ''} style="accent-color:#4f8ff7"> ${cmdEsc(lbl)}</label>`).join('')}
+      </div>
+    </div>
+    <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" onclick="nlPreview()">👁️ M'envoyer un aperçu</button>
+        <button class="btn" onclick="this.closest('.nl-overlay').remove();go('newsletter')">📰 Éditions</button>
+      </div>
+      <button class="btn btn-primary" onclick="nlSavePrefs()">💾 Enregistrer</button>
+    </div>`;
+  _nlOverlay(html, 560);
+}
+async function nlSavePrefs() {
+  const uid = _nlUserId(); if (!uid) { toast('Profil non identifié', 'error'); return; }
+  const sections = {};
+  document.querySelectorAll('.nl-sec').forEach(c => sections[c.dataset.k] = c.checked);
+  const row = {
+    user_id: String(uid),
+    email: (currentCommercial && currentCommercial.email) || (_nlPrefs && _nlPrefs.email) || null,
+    nom: (currentCommercial && currentCommercial.nom) || null,
+    abonne: !!document.getElementById('nl-abonne')?.checked,
+    ton: document.getElementById('nl-ton')?.value || 'convivial',
+    date_naissance: document.getElementById('nl-naissance')?.value || null,
+    sections,
+    updated_at: new Date().toISOString(),
+  };
+  try {
+    await sb.from('newsletter_prefs').upsert(row, { onConflict: 'user_id' });
+    _nlPrefs = { ..._nlPrefs, ...row };
+    toast(row.abonne ? 'Abonné ✓ Préférences enregistrées' : 'Préférences enregistrées', 'success');
+  } catch (e) { toast('Erreur enregistrement : ' + e.message, 'error'); }
+}
+
+// ─ Agrégation des données de la semaine (côté navigateur) ─
+function _nlISO(d) { return new Date(d).toISOString(); }
+async function nlBuildData() {
+  const now = new Date();
+  const todayISO = now.toISOString().slice(0, 10);
+  const weekAgo = new Date(now.getTime() - 7 * 864e5);
+  const weekAgoISO = weekAgo.toISOString();
+  const weekAhead = new Date(now.getTime() + 7 * 864e5).toISOString().slice(0, 10);
+  const out = { meta: { genere_le: now.toISOString(), periode_debut: weekAgoISO.slice(0, 10), periode_fin: todayISO, crmUrl: location.origin + location.pathname } };
+
+  try { if (!_oppsLoaded) await loadOpportunites(); } catch (e) {}
+  const opps = _opps || [];
+  const num = v => Number(v) || 0;
+  const enCours = opps.filter(o => o.statut === 'IN_PROGRESS');
+  out.pipeline = {
+    en_cours_nb: enCours.length,
+    en_cours_montant: enCours.reduce((s, o) => s + num(o.montant), 0),
+    pondere: Math.round(enCours.reduce((s, o) => s + num(o.montant) * (num(o.probabilite) / 100), 0)),
+    signatures_depassees: enCours.filter(o => o.date_signature && o.date_signature < todayISO).length,
+    signatures_sous_7j: enCours.filter(o => o.date_signature && o.date_signature >= todayISO && o.date_signature <= weekAhead).length,
+  };
+  out.opportunites = {
+    nouvelles: opps.filter(o => (o.date_creation || '') >= weekAgoISO).slice(0, 12).map(o => ({ nom: o.nom, client: o.client_name, montant: o.montant, stade: o.stage, dept: o.chantier_dept || '' })),
+    gagnees: opps.filter(o => o.statut === 'WON' && (o.date_signature || '') >= weekAgoISO.slice(0, 10)).slice(0, 12).map(o => ({ nom: o.nom, client: o.client_name, montant: o.montant, resp: o.responsable })),
+    a_relancer: enCours.filter(o => o.date_signature && o.date_signature < todayISO).sort((a, b) => num(b.montant) - num(a.montant)).slice(0, 8).map(o => ({ nom: o.nom, client: o.client_name, montant: o.montant, signature: o.date_signature, resp: o.responsable })),
+  };
+  // Podium : CA signé de la semaine par responsable
+  const podiumMap = {};
+  out.opportunites.gagnees.forEach(g => { const r = g.resp || '—'; podiumMap[r] = (podiumMap[r] || 0) + num(g.montant); });
+  out.podium = Object.entries(podiumMap).map(([resp, ca]) => ({ resp, ca })).sort((a, b) => b.ca - a.ca).slice(0, 3);
+
+  // Top client par agence (CA cumulé, source factures en mémoire)
+  try {
+    const fact = (DB && DB.factures) || [];
+    const byAg = {};
+    fact.forEach(f => { const ag = f.societe || f.agence; if (!ag || !f.client_id) return; const o = byAg[ag] || (byAg[ag] = {}); o[f.client_id] = o[f.client_id] || { ca: 0, nom: f.client_name }; o[f.client_id].ca += num(f.montant); });
+    out.top_clients = Object.entries(byAg).map(([ag, clients]) => {
+      const best = Object.values(clients).sort((a, b) => b.ca - a.ca)[0];
+      return best ? { agence: ag, client: best.nom, ca: Math.round(best.ca) } : null;
+    }).filter(Boolean).sort((a, b) => b.ca - a.ca).slice(0, 12);
+  } catch (e) { out.top_clients = []; }
+
+  // Nouveaux clients (Supabase) + dormants + concurrents + tâches à venir (en parallèle)
+  const [nv, dorm, conc, tch] = await Promise.all([
+    sb.from('clients').select('name,city,departement,created_at,status').gte('created_at', weekAgoISO).order('created_at', { ascending: false }).limit(30).then(r => r.data || []).catch(() => []),
+    sb.from('clients').select('name,city,ca').eq('status', 'dormant').order('ca', { ascending: false }).limit(8).then(r => r.data || []).catch(() => []),
+    sb.from('concurrents').select('nom,ville,departement,created_at').gte('created_at', weekAgoISO).order('created_at', { ascending: false }).limit(15).then(r => r.data || []).catch(() => []),
+    sb.from('taches_commerciales').select('titre,echeance,assigne_nom,client_name').in('statut', ['a_faire', 'en_cours']).gte('echeance', todayISO).lte('echeance', weekAhead).order('echeance').limit(25).then(r => r.data || []).catch(() => []),
+  ]);
+  out.nouveaux_clients = nv.map(c => ({ nom: c.name, ville: c.city, dept: c.departement, depuis: (c.created_at || '').slice(0, 10) }));
+  out.dormants = dorm.map(c => ({ nom: c.name, ville: c.city, ca: Math.round(num(c.ca)) }));
+  out.concurrents_nouveaux = conc.map(c => ({ nom: c.nom, ville: c.ville, dept: c.departement }));
+  out.agenda = { taches: tch.map(t => ({ titre: t.titre, echeance: (t.echeance || '').slice(0, 10), qui: t.assigne_nom, client: t.client_name })), signatures: enCours.filter(o => o.date_signature && o.date_signature >= todayISO && o.date_signature <= weekAhead).slice(0, 12).map(o => ({ nom: o.nom, client: o.client_name, montant: o.montant, signature: o.date_signature })) };
+
+  // Anniversaires de la semaine (newsletter_prefs.date_naissance) — comparaison mois/jour
+  try {
+    const { data: pp } = await sb.from('newsletter_prefs').select('nom,date_naissance').not('date_naissance', 'is', null);
+    const md = d => d.slice(5, 10);
+    const set = new Set(); for (let i = 0; i < 7; i++) { const d = new Date(now.getTime() + i * 864e5); set.add(String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')); }
+    out.anniversaires = (pp || []).filter(x => set.has(md(x.date_naissance))).map(x => ({ nom: x.nom, jour: x.date_naissance.slice(5, 10) }));
+  } catch (e) { out.anniversaires = []; }
+
+  // Marchés publics travaux (bâtiment & environnement) parus cette semaine — BOAMP best effort
+  try {
+    const p = new URLSearchParams();
+    p.set('where', `type_marche="TRAVAUX" and dateparution >= "${weekAgoISO.slice(0, 10)}" and search(objet, "bâtiment OR construction OR environnement OR réhabilitation OR rénovation")`);
+    p.set('order_by', 'dateparution desc'); p.set('limit', '20');
+    const r = await fetch(_vrFetchUrl('https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?' + p.toString()));
+    const j = await r.json();
+    out.marches_publics = (j.results || []).slice(0, 15).map(a => ({ objet: (a.objet || '').slice(0, 180), acheteur: a.nomacheteur || '', dept: Array.isArray(a.code_departement) ? a.code_departement.join(',') : (a.code_departement || ''), date_limite: a.datelimitereponse || '', lien: a.url_avis || (a.idweb ? 'https://www.boamp.fr/avis/detail/' + a.idweb : '') }));
+  } catch (e) { out.marches_publics = []; }
+
+  // Collaborateurs (prénoms) pour les fêtes du jour
+  try {
+    const src = (typeof collaborateursData !== 'undefined' && collaborateursData && collaborateursData.length) ? collaborateursData : [];
+    out.collaborateurs_prenoms = src.map(c => c.prenom).filter(Boolean).slice(0, 80);
+  } catch (e) { out.collaborateurs_prenoms = []; }
+
+  return out;
+}
+
+// ─ Génération + aperçu ─
+function _nlWrap(inner) { return `<div style="max-width:640px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#222">${inner}</div>`; }
+async function nlGenerate() {
+  await _nlLoadPrefs();
+  const p = _nlPrefs || {};
+  const data = await nlBuildData();
+  const r = await fetch('/api/newsletter-build', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      data,
+      recipientName: ((currentCommercial && currentCommercial.nom) || '').split(' ')[0] || '',
+      ton: (p.ton || 'convivial'),
+      sections: p.sections || _nlDefaultSections(),
+      useWeb: (p.sections ? p.sections.conjoncture !== false : true),
+      crmUrl: data.meta.crmUrl,
+    }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ('build ' + r.status));
+  return { html: j.html, data };
+}
+async function nlPreview() {
+  toast('Génération de l\'aperçu… (10-20 s)', 'info');
+  let res;
+  try { res = await nlGenerate(); } catch (e) { toast('Erreur génération : ' + e.message, 'error'); return; }
+  const wrapped = _nlWrap(res.html);
+  const ov = _nlOverlay(`
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:16px;font-weight:700">📰 Aperçu de l'infolettre</div>
+      <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
+    </div>
+    <iframe id="nl-preview-frame" style="width:100%;height:60vh;border:0;background:#fff"></iframe>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+      <button class="btn" onclick="nlSendSelf()">✉️ Me l'envoyer</button>
+      <button class="btn btn-primary" onclick="nlPublish()">🚀 Publier & envoyer aux abonnés</button>
+    </div>`, 760);
+  const fr = ov.querySelector('#nl-preview-frame'); if (fr) fr.srcdoc = wrapped;
+  window._nlLast = { html: res.html, wrapped, data: res.data };
+}
+async function _nlSendMail(to, subject, html) {
+  const msRefresh = localStorage.getItem('ms_graph_refresh') || undefined;
+  const at = (typeof msGraphAccessToken !== 'undefined') ? msGraphAccessToken : undefined;
+  const r = await fetch('/api/graph-send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: msRefresh, access_token: at, to: Array.isArray(to) ? to : [to], subject, html }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ('graph ' + r.status));
+  if (j.refresh_token) localStorage.setItem('ms_graph_refresh', j.refresh_token);
+  return true;
+}
+function _nlSubject() { const d = new Date(); return '📰 Infolettre CRM — semaine du ' + d.toLocaleDateString('fr-FR'); }
+async function nlSendSelf() {
+  const me = currentCommercial && currentCommercial.email; if (!me) { toast('Email introuvable', 'error'); return; }
+  if (!window._nlLast) { toast('Générez d\'abord un aperçu', 'info'); return; }
+  try { await _nlSendMail(me, _nlSubject(), window._nlLast.wrapped); toast('Envoyé à ' + me, 'success'); }
+  catch (e) { toast('Erreur envoi : ' + e.message, 'error'); }
+}
+async function nlPublish() {
+  if (!window._nlLast) { toast('Générez d\'abord un aperçu', 'info'); return; }
+  let emails = [];
+  try { const { data } = await sb.from('newsletter_prefs').select('email').eq('abonne', true).not('email', 'is', null); emails = [...new Set((data || []).map(x => x.email).filter(Boolean))]; }
+  catch (e) { toast('Erreur lecture abonnés : ' + e.message, 'error'); return; }
+  if (!emails.length) { toast('Aucun abonné pour le moment', 'info'); return; }
+  if (!confirm('Publier cette édition et l\'envoyer par email à ' + emails.length + ' abonné(s) ?')) return;
+  const d = window._nlLast.data || {};
+  try {
+    await sb.from('newsletters').insert({ titre: _nlSubject(), periode_debut: d.meta && d.meta.periode_debut, periode_fin: d.meta && d.meta.periode_fin, html: window._nlLast.wrapped, data: d, cree_par: (currentCommercial && currentCommercial.nom) || null, envoye_a: emails.length });
+  } catch (e) { /* archive non bloquante */ }
+  try { await _nlSendMail(emails, _nlSubject(), window._nlLast.wrapped); toast('Édition publiée et envoyée à ' + emails.length + ' abonné(s) 🎉', 'success'); _nlEditionsLoaded = false; }
+  catch (e) { toast('Erreur envoi : ' + e.message, 'error'); }
+}
+
+// ─ Page archive ─
+async function _nlLoadEditions() {
+  try { const { data } = await sb.from('newsletters').select('id,titre,periode_debut,periode_fin,created_at,envoye_a').order('created_at', { ascending: false }).limit(40); _nlEditions = data || []; }
+  catch (e) { _nlEditions = []; }
+  _nlEditionsLoaded = true; renderPage('newsletter');
+}
+function renderNewsletter() {
+  if (!_nlEditionsLoaded) { setTimeout(_nlLoadEditions, 30); return '<div style="text-align:center;padding:40px;color:var(--t3)">Chargement des éditions…</div>'; }
+  const list = _nlEditions.length ? _nlEditions.map(e => `
+    <tr style="cursor:pointer" onclick="nlViewEdition('${e.id}')">
+      <td style="padding:8px 10px"><strong>${cmdEsc(e.titre || 'Édition')}</strong></td>
+      <td style="padding:8px 10px;font-size:12px;color:var(--t3)">${e.periode_debut ? fmtDateFR(e.periode_debut) : ''} → ${e.periode_fin ? fmtDateFR(e.periode_fin) : ''}</td>
+      <td style="padding:8px 10px;font-size:12px">${e.envoye_a || 0} dest.</td>
+      <td style="padding:8px 10px;font-size:12px;color:var(--t3)">${e.created_at ? fmtDateFR(e.created_at) : ''}</td>
+    </tr>`).join('') : '<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--t3)">Aucune édition encore. Cliquez « Générer l\'édition de la semaine ».</td></tr>';
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <h2 style="margin:0;font-size:20px">📰 Infolettre hebdomadaire</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" onclick="monEspaceOpen()">⚙️ Mon abonnement</button>
+        <button class="btn btn-primary" onclick="nlPreview()">✨ Générer l'édition de la semaine</button>
+      </div>
+    </div>
+    <div style="font-size:13px;color:var(--t3);margin-bottom:12px">Récap convivial généré par IA (analyses, top clients, opportunités, marchés publics, conjoncture BTP…). Abonnez-vous depuis « Mon espace » (clic sur votre avatar en haut à droite).</div>
+    <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap"><table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:var(--bg2,#f4f5f7);text-align:left"><th style="padding:8px 10px">Édition</th><th style="padding:8px 10px">Période</th><th style="padding:8px 10px">Diffusion</th><th style="padding:8px 10px">Créée le</th></tr></thead>
+      <tbody>${list}</tbody>
+    </table></div></div></div>`;
+}
+async function nlViewEdition(id) {
+  let html = '';
+  try { const { data } = await sb.from('newsletters').select('html').eq('id', id).maybeSingle(); html = (data && data.html) || ''; }
+  catch (e) { toast('Erreur : ' + e.message, 'error'); return; }
+  const ov = _nlOverlay(`
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:16px;font-weight:700">📰 Édition</div>
+      <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
+    </div>
+    <iframe style="width:100%;height:66vh;border:0;background:#fff"></iframe>`, 760);
+  const fr = ov.querySelector('iframe'); if (fr) fr.srcdoc = html;
+}
+
 let _currentOppId = null;
 function oppDetail(akId) {
   _currentOppId = akId;
@@ -8232,6 +8530,7 @@ function renderPage(page) {
     'cahier-charges': renderCahierCharges,
     'veille-regar': renderVeilleRegar,
     ged: renderGed,
+    newsletter: renderNewsletter,
   };
   // Attendre les données différées si la page en a besoin
   if (_DEFERRED_PAGES.has(page) && !_deferredDataLoaded && _deferredLoadPromise) {

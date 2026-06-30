@@ -310,6 +310,41 @@ ALTER TABLE connexions_log ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "connexions_log_all" ON connexions_log;
 CREATE POLICY "connexions_log_all" ON connexions_log FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE INDEX IF NOT EXISTS idx_connexions_log_created ON connexions_log(created_at DESC);
+
+-- ═══ Newsletter hebdomadaire (IA) ═══
+-- Préférences d'abonnement par collaborateur (espace perso, clic sur l'avatar).
+CREATE TABLE IF NOT EXISTS newsletter_prefs (
+  user_id TEXT PRIMARY KEY,            -- id du collaborateur (ou email à défaut)
+  email TEXT,
+  nom TEXT,
+  abonne BOOLEAN DEFAULT FALSE,
+  ton TEXT DEFAULT 'convivial',        -- convivial | pro | fun
+  agences TEXT[],                      -- agences suivies (vide = toutes)
+  sections JSONB,                      -- sections activées {analyses,topClients,opportunites,marches,nouveaux,dormants,concurrents,conjoncture,fetes,podium,perso}
+  date_naissance DATE,                 -- pour les anniversaires (optionnel)
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE newsletter_prefs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "newsletter_prefs_all" ON newsletter_prefs;
+CREATE POLICY "newsletter_prefs_all" ON newsletter_prefs FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Archive des éditions générées (consultables in-app + lien « voir dans le navigateur »).
+CREATE TABLE IF NOT EXISTS newsletters (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  titre TEXT,
+  periode_debut DATE,
+  periode_fin DATE,
+  html TEXT,                           -- corps HTML de l'édition
+  data JSONB,                          -- données agrégées ayant servi à la génération
+  cree_par TEXT,
+  envoye_a INT DEFAULT 0,              -- nombre de destinataires
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE newsletters ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "newsletters_all" ON newsletters;
+CREATE POLICY "newsletters_all" ON newsletters FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE INDEX IF NOT EXISTS idx_newsletters_created ON newsletters(created_at DESC);
+
 CREATE INDEX IF NOT EXISTS idx_clients_legacy_id ON clients(legacy_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_legacy_id ON contacts(legacy_id);
 CREATE INDEX IF NOT EXISTS idx_reports_legacy_id ON reports(legacy_id);
