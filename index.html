@@ -4996,7 +4996,7 @@ async function vrLoadPA() {
       base = t === 'dpe_ter'
         ? 'https://data.ademe.fr/data-fair/api/v1/datasets/j9ol0fwjqckyf49vr29nknbu'
         : 'https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant';
-      clauses.push(`code_postal_ban:${dept}*`);
+      clauses.push(`code_departement_ban:${dept}`);
       clauses.push('etiquette_dpe:(F OR G)');
     }
     if ((t === 'pa' || isSitPc) && (_vrPaFrom || _vrPaTo)) clauses.push(`DATE_REELLE_AUTORISATION:[${_vrPaFrom || '1970-01-01'} TO ${_vrPaTo || '2100-12-31'}]`);
