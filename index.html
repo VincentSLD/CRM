@@ -4768,6 +4768,7 @@ let _vrResults = [];
 let _vrLoading = false;
 let _vrMsg = '';
 let _vrPA = [];          // permis d'aménager (Sitadel) géolocalisés
+let _vrBoampList = [];   // BOAMP : tous les avis récupérés (y compris non géocodés) pour la liste sous la carte
 let _vrShowMap = false;
 let _vrMap = null;
 let _vrPALoading = false;
@@ -4849,6 +4850,7 @@ function renderVeilleRegar() {
         ? 'Marqueurs : <span style="color:#f59e0b">●</span> classe F · <span style="color:#ef4444">●</span> classe G (passoires thermiques à rénover). Source : observatoire DPE ADEME.'
         : 'Sélectionnez un département puis « Afficher la carte ». Marqueurs : <span style="color:#10b981">●</span> autorisé · <span style="color:#f59e0b">●</span> chantier ouvert · <span style="color:#6b7280">●</span> travaux achevés (Sitadel).'} Calque argile (BRGM) : du jaune (faible) au rouge/violet (fort).</div>
     </div>
+    ${_vrIsBoamp && _vrBoampList.length ? _vrBoampListHtml() : ''}
   </div>`;
 }
 
@@ -5095,8 +5097,8 @@ async function _vrLoadBoamp(dept) {
     recs = recs.concat(rows);
     if (rows.length < 100) break;
   }
-  const withCp = recs.map(a => ({ a, cp: _boampCP(a) })).filter(x => x.cp);
-  const uniqueCps = [...new Set(withCp.map(x => x.cp))];
+  const withCp = recs.map(a => ({ a, cp: _boampCP(a) }));
+  const uniqueCps = [...new Set(withCp.filter(x => x.cp).map(x => x.cp))];
   const cpGeo = {};
   await Promise.all(uniqueCps.map(async cp => {
     try {
@@ -5106,20 +5108,47 @@ async function _vrLoadBoamp(dept) {
       cpGeo[cp] = c ? [c[1], c[0]] : null;
     } catch (e) { cpGeo[cp] = null; }
   }));
-  const out = [];
+  const out = [], list = [];
   withCp.forEach(({ a, cp }) => {
-    const ll = cpGeo[cp]; if (!ll) return;
-    out.push({
+    const ll = cp ? cpGeo[cp] : null;
+    const lien = a.url_avis || (a.idweb ? 'https://www.boamp.fr/avis/detail/' + a.idweb : '');
+    const dept = Array.isArray(a.code_departement) ? a.code_departement.join(', ') : (a.code_departement || '');
+    list.push({
+      objet: a.objet || '', acheteur: a.nomacheteur || 'Acheteur public',
+      typeMarche: a.type_marche || '', nature: a.nature_libelle || '', procedure: a.procedure_libelle || '',
+      dept, cp: cp || '', dateLimite: a.datelimitereponse || '', lien, geocoded: !!ll,
+    });
+    if (ll) out.push({
       kind: 'boamp', siren: '',
       lat: ll[0] + (Math.random() - 0.5) * 0.006, lon: ll[1] + (Math.random() - 0.5) * 0.006,
       demandeur: a.nomacheteur || 'Acheteur public',
       objet: a.objet || '', nature: a.nature_libelle || '', procedure: a.procedure_libelle || '',
       typeMarche: a.type_marche || '',
-      cp, dateLimite: a.datelimitereponse || '', dateParution: a.dateparution || '',
-      lien: a.url_avis || (a.idweb ? 'https://www.boamp.fr/avis/detail/' + a.idweb : ''),
+      cp, dateLimite: a.datelimitereponse || '', dateParution: a.dateparution || '', lien,
     });
   });
-  _vrPA = out;
+  _vrPA = out; _vrBoampList = list;
+}
+function _vrBoampListHtml() {
+  const geoN = _vrBoampList.filter(r => r.geocoded).length;
+  const rows = _vrBoampList.map((r, i) => `<tr style="border-bottom:1px solid var(--border)">
+    <td style="padding:6px 8px;font-size:11px;white-space:nowrap">${r.dateLimite ? fmtDateFR(r.dateLimite) : '—'}</td>
+    <td style="padding:6px 8px;font-size:11px">${cmdEsc(r.typeMarche || '')}</td>
+    <td style="padding:6px 8px;font-size:12px;max-width:340px">${cmdEsc(r.objet || '—')}</td>
+    <td style="padding:6px 8px;font-size:11px;max-width:180px">${cmdEsc(r.acheteur || '')}</td>
+    <td style="padding:6px 8px;font-size:11px;white-space:nowrap">${cmdEsc((r.cp || '') + (r.dept ? ' (' + r.dept + ')' : ''))}${r.geocoded ? '' : ' <span title="Non localisé sur la carte (code postal indisponible)" style="color:#d97706">📍✕</span>'}</td>
+    <td style="padding:6px 8px;white-space:nowrap"><button class="btn" style="font-size:10px;padding:2px 6px" title="Créer une opportunité" onclick="vrBoampRowOpp(${i})">🎯</button>${r.lien ? ` <a href="${cmdEsc(r.lien)}" target="_blank" rel="noopener" style="font-size:11px">avis ↗</a>` : ''}</td>
+  </tr>`).join('');
+  return `<div class="card" style="margin-bottom:14px"><div class="card-header"><div class="card-title">📋 Marchés publics (liste) — ${_vrBoampList.length} avis · ${geoN} géolocalisés</div></div>
+    <div class="card-body" style="padding:0"><div class="table-wrap"><table>
+    <thead><tr><th>Date limite</th><th>Type</th><th>Objet</th><th>Acheteur</th><th>Lieu</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table></div></div>
+    <div style="padding:6px 12px;font-size:11px;color:var(--t3)">📍✕ = avis non localisable sur la carte (code postal du lieu d'exécution absent) ; il reste listé ici.</div></div>`;
+}
+function vrBoampRowOpp(i) {
+  const r = _vrBoampList[i]; if (!r) return;
+  const desc = ['Marché public (BOAMP) en cours.', r.acheteur ? 'Acheteur : ' + r.acheteur : '', r.objet ? 'Objet : ' + r.objet : '', r.typeMarche ? 'Type : ' + r.typeMarche : '', r.dateLimite ? 'Date limite de réponse : ' + fmtDateFR(r.dateLimite) : '', r.lien ? 'Avis : ' + r.lien : ''].filter(Boolean).join('\n');
+  oppModalOpen(null, { name: 'Marché public — ' + (r.acheteur || '') + (r.objet ? ' : ' + r.objet.slice(0, 60) : ''), description: desc, clientHint: r.acheteur || '' });
 }
 function _boampCP(a) {
   // "donnees" est souvent une CHAÎNE JSON ; le CP est dans une clé "CP" (ancien format) ou "cbc:PostalZone" (eForms), très imbriquée.
