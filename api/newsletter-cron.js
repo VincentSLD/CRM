@@ -172,7 +172,14 @@ function renderVeilleHtml(text, allowedLabels) {
     if (title) {
       const ok = !allow || allow.some(l => title.toLowerCase().includes(l) || l.includes(title.toLowerCase()));
       const real = buf.filter(b => !/pas d['’]actualit/i.test(b));
-      if (ok && real.length) { any = true; html += '<h3 style="font-size:14px;margin:14px 0 4px;color:#4c1d95">' + _esc(title) + '</h3><ul style="margin:0 0 6px 18px;padding:0">' + real.map(b => '<li style="margin:3px 0">' + linkify(_esc(b)) + '</li>').join('') + '</ul>'; }
+      if (ok && real.length) {
+        any = true;
+        html += '<div style="background:#f5f0ff;border-radius:8px;padding:10px 14px;margin:0 0 8px">'
+          + '<div style="font-weight:700;font-size:13px;color:#5b21b6;margin-bottom:5px">' + _esc(title) + '</div>'
+          + '<ul style="margin:0;padding-left:18px;font-size:13px;color:#444;line-height:1.55">'
+          + real.map(b => '<li style="margin:3px 0">' + linkify(_esc(b)) + '</li>').join('')
+          + '</ul></div>';
+      }
     }
     title = null; buf = [];
   };
@@ -183,7 +190,7 @@ function renderVeilleHtml(text, allowedLabels) {
   }
   flush();
   if (!any) return '';
-  return '<h2 style="font-size:16px;margin:22px 0 10px;border-bottom:1px solid #eee;padding-bottom:6px">🌐 Veille externe</h2>' + html;
+  return '<h2 style="font-size:17px;font-weight:700;margin:24px 0 12px;border-bottom:2px solid #ede9fe;padding-bottom:6px;color:#1a1a1a">🌐 Veille externe</h2>' + html;
 }
 async function generateHtml(data, opts) {
   const o = opts || {};
