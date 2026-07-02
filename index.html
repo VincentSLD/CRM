@@ -17858,7 +17858,8 @@ async function saveCmdComment(id) {
   } catch (e) { console.error('[Commentaire] Erreur sync interventions:', e); }
   if (c.akuiteo_id && key) {
     try {
-      await akuiteoFetch('POST', '/sales/orders/custom-data/batch-update', [{ objectId: c.akuiteo_id, customData: { [key]: { value: val } } }]);
+      const cd = c.custom_data[key];
+      await akuiteoFetch('POST', '/sales/orders/custom-data/batch-update', { ids: [c.akuiteo_id], customData: { [key]: { type: cd.type || 'ALPHANUMERIC', value: val } } });
       syncAkuiteo = true;
     } catch (e) { console.error('[Commentaire] Erreur Akuiteo:', e); }
   }
