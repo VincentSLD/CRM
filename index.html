@@ -17812,6 +17812,86 @@ async function showDevisDetail(id) {
   </div>`;
 }
 
+// ═══ COMMENTAIRES COMMANDE (synchronisé Akuiteo / GéoPlan / Géosolia) ═══
+var _crmCommentCdKey = null;
+function getCmdCommentKey(cd) {
+  if (_crmCommentCdKey) return _crmCommentCdKey;
+  if (!cd) return null;
+  for (var k in cd) {
+    if (!cd[k] || !cd[k].name) continue;
+    var n = cd[k].name.trim().toLowerCase();
+    if (n === 'commentaires' || n === 'commentaire') { _crmCommentCdKey = k; return k; }
+  }
+  for (var k2 in cd) {
+    if (!cd[k2] || !cd[k2].name) continue;
+    var n2 = cd[k2].name.toLowerCase();
+    if (n2.indexOf('commentaire') >= 0 || n2.indexOf('comment') >= 0) { _crmCommentCdKey = k2; return k2; }
+  }
+  return null;
+}
+function getCmdComment(c) {
+  if (!c || !c.custom_data) return '';
+  var key = getCmdCommentKey(c.custom_data);
+  if (key && c.custom_data[key] && c.custom_data[key].value) return c.custom_data[key].value;
+  return '';
+}
+async function saveCmdComment(id) {
+  const c = DB.commandes.find(x => x.id === id);
+  if (!c) return;
+  const ta = document.getElementById('cmdCommentaire');
+  if (!ta) return;
+  const val = ta.value.trim();
+  const statusEl = document.getElementById('cmdCommentStatus');
+  const btnEl = document.getElementById('cmdCommentSaveBtn');
+  if (btnEl) btnEl.disabled = true;
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--t3)">Sauvegarde en cours…</span>';
+  let syncGeoplan = false, syncAkuiteo = false, syncGeosolia = false;
+  const key = getCmdCommentKey(c.custom_data);
+  if (key && c.custom_data && c.custom_data[key]) c.custom_data[key].value = val;
+  try {
+    await sb.from('commandes').update({ custom_data: c.custom_data, description: val }).eq('id', id);
+    syncGeoplan = true;
+  } catch (e) { console.error('[Commentaire] Erreur Supabase commandes:', e); }
+  try {
+    const { data: intRows } = await sb.from('geoplan_interventions').select('id').eq('commande_id', id);
+    if (intRows && intRows.length > 0) await sb.from('geoplan_interventions').update({ infos_adv: val }).eq('commande_id', id);
+  } catch (e) { console.error('[Commentaire] Erreur sync interventions:', e); }
+  if (c.akuiteo_id && key) {
+    try {
+      await akuiteoFetch('POST', '/sales/orders/custom-data/batch-update', [{ objectId: c.akuiteo_id, customData: { [key]: { value: val } } }]);
+      syncAkuiteo = true;
+    } catch (e) { console.error('[Commentaire] Erreur Akuiteo:', e); }
+  }
+  try {
+    const { data: intGeo } = await sb.from('geoplan_interventions').select('geosolia_id').eq('commande_id', id).not('geosolia_id', 'is', null);
+    let geosoliaId = intGeo && intGeo.length > 0 ? intGeo[0].geosolia_id : null;
+    if (!geosoliaId) {
+      const { data: settings } = await sb.from('geoplan_settings').select('value').eq('key', 'geoplan_cmd_geosolia').maybeSingle();
+      if (settings && settings.value && settings.value[id]) geosoliaId = settings.value[id];
+    }
+    if (geosoliaId) {
+      const { data: gp } = await sb.from('geosolia_projects').select('project_data').eq('id', geosoliaId).maybeSingle();
+      if (gp && gp.project_data) {
+        const pd = gp.project_data;
+        pd.infoGeotechnicien = val;
+        if (pd.geocartoData) pd.geocartoData.infosGeotech = val;
+        await sb.from('geosolia_projects').update({ project_data: pd }).eq('id', geosoliaId);
+        syncGeosolia = true;
+      }
+    }
+  } catch (e) { console.error('[Commentaire] Erreur sync Geosolia:', e); }
+  if (btnEl) btnEl.disabled = false;
+  if (statusEl) {
+    const parts = [];
+    parts.push(syncGeoplan ? 'GéoPlan ✓' : 'GéoPlan ✗');
+    parts.push(syncAkuiteo ? 'Akuiteo ✓' : (c.akuiteo_id ? 'Akuiteo ✗' : 'Akuiteo — pas de liaison'));
+    parts.push(syncGeosolia ? 'Géosolia ✓' : 'Géosolia — pas de liaison');
+    const color = syncGeoplan ? 'var(--success,#22c55e)' : 'var(--danger,#ef4444)';
+    statusEl.innerHTML = '<span style="color:' + color + '">' + parts.join(' | ') + '</span>';
+    setTimeout(() => { if (statusEl) statusEl.innerHTML = ''; }, 5000);
+  }
+}
+
 // ═══ FICHE COMMANDE ═══
 async function showCommandeDetail(id) {
   const c = DB.commandes.find(x => x.id === id);
@@ -17877,6 +17957,18 @@ async function showCommandeDetail(id) {
         detailRow('Surface facturée', c.surface_facturee != null ? c.surface_facturee + ' m²' : '—'),
       ])}
       ${(() => { const addr = c.adresse || c.ville || c.code_postal ? c : (c.affaire_id ? DB.affaires.find(x=>x.id===c.affaire_id) : null); return addr && (addr.adresse || addr.ville || addr.code_postal) ? detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region)]) : ''; })()}
+      <div style="grid-column:1/-1">
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header"><div class="card-title">Commentaires <span style="font-weight:400;font-size:11px;color:var(--t3)">(synchronisé avec GéoPlan + Akuiteo + Géosolia)</span></div></div>
+          <div class="card-body">
+            <textarea id="cmdCommentaire" rows="3" style="width:100%;resize:vertical;min-height:60px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1);font-family:inherit;line-height:1.4">${cmdEsc(getCmdComment(c))}</textarea>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+              <button class="btn btn-primary btn-sm" id="cmdCommentSaveBtn" onclick="saveCmdComment('${c.id}')">Enregistrer</button>
+              <span id="cmdCommentStatus" style="font-size:12px"></span>
+            </div>
+          </div>
+        </div>
+      </div>
       ${(() => {
         if (!c.custom_data || !c.custom_data._lines || c.custom_data._lines.length === 0) return '';
         const lines = c.custom_data._lines;
