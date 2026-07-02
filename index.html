@@ -4351,6 +4351,7 @@ const _DEFERRED_PAGES = new Set(['cr', 'marches', 'affaires', 'marche-detail', '
 
 function go(page) {
   currentPage = page;
+  unsubscribeCmdComment();
   if (page === 'cr') { crViewMode = 'list'; currentReport = null; }
   const navPage = page === 'client-detail' ? 'clients' : page === 'contact-detail' ? 'contacts' : page === 'marche-detail' ? 'marches' : page === 'affaire-detail' ? 'marches' : page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
@@ -17892,6 +17893,36 @@ async function saveCmdComment(id) {
   }
 }
 
+// ═══ REALTIME — mise à jour automatique du commentaire ═══
+var _cmdCommentChannel = null;
+function subscribeCmdComment(id) {
+  unsubscribeCmdComment();
+  _cmdCommentChannel = sb.channel('cmd-comment-' + id)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'commandes', filter: 'id=eq.' + id }, payload => {
+      const ta = document.getElementById('cmdCommentaire');
+      if (!ta || document.activeElement === ta) return;
+      const c = DB.commandes.find(x => x.id === id);
+      if (c && payload.new) {
+        if (payload.new.custom_data) c.custom_data = payload.new.custom_data;
+        if (payload.new.description !== undefined) c.description = payload.new.description;
+        ta.value = getCmdComment(c) || c.description || '';
+      }
+    })
+    .subscribe();
+}
+function unsubscribeCmdComment() {
+  if (_cmdCommentChannel) { sb.removeChannel(_cmdCommentChannel); _cmdCommentChannel = null; }
+}
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden || currentPage !== 'commande-detail' || !cmdCurrentCommandeId) return;
+  const { data } = await sb.from('commandes').select('custom_data,description').eq('id', cmdCurrentCommandeId).maybeSingle();
+  if (!data) return;
+  const c = DB.commandes.find(x => x.id === cmdCurrentCommandeId);
+  if (c) { c.custom_data = data.custom_data; c.description = data.description; }
+  const ta = document.getElementById('cmdCommentaire');
+  if (ta && document.activeElement !== ta) ta.value = getCmdComment(c) || data.description || '';
+});
+
 // ═══ FICHE COMMANDE ═══
 async function showCommandeDetail(id) {
   const c = DB.commandes.find(x => x.id === id);
@@ -18024,6 +18055,7 @@ async function showCommandeDetail(id) {
   </div>`;
   // Initialize state for this commande
   cmdCurrentCommandeId = id;
+  subscribeCmdComment(id);
   cmdScannedFiles = [];
   cmdDocCorpus = [];
   cmdDocChatHistory = [];
