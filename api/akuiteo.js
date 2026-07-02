@@ -10,9 +10,12 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const AKUITEO_ROOT = process.env.AKUITEO_URL || 'https://novamingenierie-test.myakuiteo.com/akuiteo/rest';
-  const AKUITEO_USER = process.env.AKUITEO_USER || 'API1';
-  const AKUITEO_PASS = process.env.AKUITEO_PASS || 'API1';
+  const AKUITEO_ROOT = process.env.AKUITEO_BASE_URL || process.env.AKUITEO_URL;
+  const AKUITEO_USER = process.env.AKUITEO_USER;
+  const AKUITEO_PASS = process.env.AKUITEO_PASS;
+  if (!AKUITEO_ROOT || !AKUITEO_USER || !AKUITEO_PASS) {
+    return res.status(500).json({ error: 'Variables AKUITEO_BASE_URL, AKUITEO_USER, AKUITEO_PASS manquantes' });
+  }
 
   // Path: /api/akuiteo?path=/crm/customers/search
   const apiPath = req.query.path;

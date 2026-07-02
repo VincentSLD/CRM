@@ -17856,10 +17856,9 @@ async function saveCmdComment(id) {
     const { data: intRows } = await sb.from('geoplan_interventions').select('id').eq('commande_id', id);
     if (intRows && intRows.length > 0) await sb.from('geoplan_interventions').update({ infos_adv: val }).eq('commande_id', id);
   } catch (e) { console.error('[Commentaire] Erreur sync interventions:', e); }
-  if (c.akuiteo_id && key) {
+  if (c.ref && key && c.custom_data[key]) {
     try {
-      const cd = c.custom_data[key];
-      await akuiteoFetch('POST', '/sales/orders/custom-data/batch-update', { ids: [c.akuiteo_id], customData: { [key]: { type: cd.type || 'ALPHANUMERIC', value: val } } });
+      await akuiteoFetch('POST', '/sales/orders/custom-data/batch-update', { ids: [c.ref], customData: { [key]: { type: c.custom_data[key].type || 'ALPHANUMERIC', value: val || null } } });
       syncAkuiteo = true;
     } catch (e) { console.error('[Commentaire] Erreur Akuiteo:', e); }
   }
