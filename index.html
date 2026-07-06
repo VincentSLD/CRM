@@ -2986,7 +2986,7 @@ body.nova-only #aiChatHeader{ cursor:default !important; }
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('webRecherche')">🌐 Recherche web</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('veilleConstruction')">🏗️ Veille construction</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('prospectsNaf')">🎯 Prospects (activité)</button>
-    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaIndexDossier()" title="Indexer un dossier de documents pour pouvoir l'interroger ici">📂 Indexer un dossier</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaIndexDossier()" title="Indexer un dossier de documents pour pouvoir l'interroger ici">📂 Assistant Documentaire</button>
   </div>
   </div>
   <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;background:var(--card,#fff)">
@@ -6166,12 +6166,13 @@ async function gedPickAndIndex(opts) {
     if (progBar) progBar.style.width = '0%';
 
     let done = 0, indexed = 0, skipped = 0, failed = 0;
-    const issues = [];
+    const issues = [], results = [];
     for (const f of gedFiles) {
       done++;
       const hash = f.size + '-' + f.lastModified;
       if (existing[f.path] === hash) {
         skipped++;
+        results.push({ name: f.name, path: f.path, status: 'skipped' });
       } else {
         let docId = null;
         try {
@@ -6208,10 +6209,12 @@ async function gedPickAndIndex(opts) {
           existing[f.path] = hash;
           indexed++;
           if (partial) issues.push({ path: f.path, type: 'warn', reason: `indexé partiellement (texte volumineux tronqué à ${GED_MAX_CHUNKS} passages)` });
+          results.push({ name: f.name, path: f.path, status: partial ? 'warn' : 'ok', reason: partial ? 'texte tronqué (volumineux)' : '' });
         } catch (e) {
           failed++;
           if (docId) { try { await sb.from('ged_documents').delete().eq('id', docId); } catch (x) {} } // rollback : pas de document sans passages
           issues.push({ path: f.path, type: 'error', reason: e.message });
+          results.push({ name: f.name, path: f.path, status: 'error', reason: e.message });
           console.warn('GED index échec', f.path, e);
         }
       }
@@ -6222,7 +6225,7 @@ async function gedPickAndIndex(opts) {
     if (progWrap) setTimeout(() => { progWrap.style.display = 'none'; }, 1500);
     gedRenderReport(issues, { indexed, skipped, failed, total: gedFiles.length });
     toast(`Indexation terminée : ${indexed} ajoutés, ${skipped} déjà présents, ${failed} échecs.`, failed ? 'warning' : 'success');
-    if (opts.onDone) try { opts.onDone({ indexed, skipped, failed, total: gedFiles.length }); } catch (e) {}
+    if (opts.onDone) try { opts.onDone({ indexed, skipped, failed, total: gedFiles.length, folder: (dir && dir.name) || '', results }); } catch (e) {}
     gedLoadStats();
   } catch (e) {
     toast('Erreur indexation : ' + e.message, 'error');
@@ -6244,7 +6247,18 @@ function novaIndexDossier() {
     onStatus: t => setTxt(cmdEsc(t)),
     onDone: r => {
       if (r && r.error) { setTxt('<span style="color:var(--red)">Erreur : ' + cmdEsc(r.error) + '</span>'); return; }
-      if (r) setTxt(`✅ Terminé : <b>${r.indexed}</b> ajouté(s), ${r.skipped} déjà présent(s), ${r.failed} échec(s).<br>Posez vos questions ici : je chercherai dans ces documents.`);
+      if (!r) return;
+      window._novaLastIndex = { folder: r.folder || '', when: Date.now() };
+      const icon = { ok: '✅', warn: '⚠️', skipped: '⏭️', error: '❌' };
+      const rows = (r.results || []).map(d => {
+        const col = d.status === 'error' ? 'var(--red)' : d.status === 'warn' ? '#b45309' : 'var(--t3)';
+        const rs = d.reason ? ` <span style="color:${col}">— ${cmdEsc(d.reason)}</span>` : '';
+        return `<div style="padding:2px 0;font-size:11px;color:var(--t2);white-space:normal;word-break:break-word">${icon[d.status] || '•'} ${cmdEsc(d.name)}${rs}</div>`;
+      }).join('');
+      const head = `✅ <b>Indexation terminée</b> — dossier « ${cmdEsc(r.folder || '')} »<br>`
+        + `<span style="font-size:12px">${r.indexed} ajouté(s) · ${r.skipped} déjà présent(s) · <span style="color:${r.failed ? 'var(--red)' : 'inherit'}">${r.failed} échec(s)</span> (sur ${r.total})</span>`;
+      const list = rows ? `<div style="max-height:240px;overflow:auto;margin-top:8px;border:1px solid var(--border);border-radius:8px;padding:8px">${rows}</div>` : '';
+      setTxt(head + list + `<div style="margin-top:8px;font-size:12px;color:var(--t2)">Vous pouvez maintenant me poser vos questions : je répondrai <b>à partir de ces documents indexés</b> (avec leurs sources).</div>`);
     },
   });
 }
@@ -23819,7 +23833,7 @@ async function askAIChat(presetQuestion, opts) {
     const resp = await fetch('/api/ai-chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, history: _aiChatHistory, userProfile: _getAIUserProfile(), stream: true, glossary: buildChatGlossary() })
+      body: JSON.stringify({ question, history: _aiChatHistory, userProfile: _getAIUserProfile(), stream: true, glossary: buildChatGlossary(), docScope: (window._novaLastIndex && (Date.now() - window._novaLastIndex.when < 3600000)) ? window._novaLastIndex.folder : null })
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));

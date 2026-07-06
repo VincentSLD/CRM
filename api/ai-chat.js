@@ -782,10 +782,11 @@ export default async function handler(req, res) {
   const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
   if (!ANTHROPIC_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
-  const { question, history, userProfile, stream, glossary } = req.body || {};
+  const { question, history, userProfile, stream, glossary, docScope } = req.body || {};
   if (!question) return res.status(400).json({ error: 'Missing question' });
 
-  const systemPrompt = buildSystemPrompt(userProfile, glossary);
+  let systemPrompt = buildSystemPrompt(userProfile, glossary);
+  if (docScope) systemPrompt += `\n\nCONTEXTE DOCUMENTAIRE : l'utilisateur vient d'indexer le dossier « ${String(docScope).slice(0, 120)} ». Pour toute question portant sur des documents/rapports, utilise EN PRIORITÉ l'outil search_documents ; tu peux passer dossier="${String(docScope).slice(0, 120)}" pour cibler précisément ce dossier. Réponds à partir des passages retournés et cite les documents.`;
 
   // ─── MODE SSE STREAMING ───
   if (stream) {
