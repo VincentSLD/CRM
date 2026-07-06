@@ -26427,12 +26427,31 @@ async function _sbUpsert(table, rows, conflict, chunk = 200) {
   if (ko) console.warn(`[sync] ${table}: ${ko} ligne(s) non écrites après retries`);
   return { ok, ko };
 }
-// akuiteoFetch avec petit retry (pour les fan-outs de lecture)
+// UPDATE par ligne (colonnes partielles) avec concurrence + retry — À utiliser quand on ne fournit
+// PAS toutes les colonnes NOT NULL (sinon un upsert tenterait un INSERT et violerait la contrainte).
+async function _sbUpdateMany(table, rows, idField = 'id', limit = 6) {
+  let ok = 0, ko = 0;
+  await _syncMapLimit(rows, limit, async (r) => {
+    const cols = { ...r }; const idv = cols[idField]; delete cols[idField];
+    if (idv == null || Object.keys(cols).length === 0) return;
+    const res = await _sbRetry(() => sb.from(table).update(cols).eq(idField, idv), table + ' update');
+    if (res.error) ko++; else ok++;
+  });
+  if (ko) console.warn(`[sync] ${table}: ${ko} update(s) en échec après retries`);
+  return { ok, ko };
+}
+// akuiteoFetch avec petit retry — uniquement sur erreurs TRANSITOIRES (5xx/timeout/réseau).
+// Les 4xx (400/401/403/404) sont définitives → on n'insiste pas (évite de saturer Akuiteo et le journal).
 async function _akRetry(method, path, body, tries = 3) {
   let last = null;
   for (let a = 0; a < tries; a++) {
     try { return await akuiteoFetch(method, path, body); }
-    catch (e) { last = e; await _syncSleep(300 * Math.pow(2, a)); }
+    catch (e) {
+      last = e;
+      const m = (e && e.message) || '';
+      if (/Akuiteo 4(00|01|03|04|22)/.test(m)) throw e; // erreur client définitive → pas de retry
+      await _syncSleep(500 * Math.pow(2, a)); // 0.5s, 1s, 2s
+    }
   }
   throw last;
 }
@@ -26558,7 +26577,7 @@ async function syncAkuiteoQuick() {
           responsable_site_id: billingSite.managerId || null,
         });
       });
-      await _sbUpsert('clients', billingUpd, 'id', 200);
+      await _sbUpdateMany('clients', billingUpd);
       console.log(`[QuickSync] Adresses de facturation mises à jour via sites (${billingUpd.length})`);
     }
 
@@ -26571,7 +26590,7 @@ async function syncAkuiteoQuick() {
     const salesmenUpdates = [];
     const paymentUpdates = [];
     let _qcDone = 0;
-    await _syncMapLimit(akCustomers, 6, async ak => {
+    await _syncMapLimit(akCustomers, 4, async ak => {
       if ((_qcDone++ % 50) === 0) setSyncText(`Sync du dernier mois — Contacts & Commerciaux ${_qcDone}/${akCustomers.length}...`);
       const akId = String(ak.id);
       const crmClient = clMap[akId];
@@ -26605,10 +26624,10 @@ async function syncAkuiteoQuick() {
         paymentUpdates.push({ id: crmClient.id, mode_paiement: detail.methodOfPayment });
       }
     });
-    // Écritures groupées + retry (au lieu de N updates individuels)
-    await _sbUpsert('clients', salesmenUpdates, 'id', 200);
+    // Mises à jour partielles → UPDATE (pas upsert) ; contacts = upsert (lignes complètes)
+    await _sbUpdateMany('clients', salesmenUpdates);
     console.log(`[QuickSync] ${salesmenUpdates.length} commerciaux associés`);
-    await _sbUpsert('clients', paymentUpdates, 'id', 200);
+    await _sbUpdateMany('clients', paymentUpdates);
     if (paymentUpdates.length > 0) console.log(`[QuickSync] ${paymentUpdates.length} modes de paiement`);
     await _sbUpsert('contacts', contactRows, 'id', 200);
     console.log(`[QuickSync] ${contactRows.length} contacts`);
@@ -26704,7 +26723,7 @@ async function syncAkuiteoQuick() {
           if (inv && inv.payment && inv.payment.code) condUpd.push({ id: akCMap[cid].id, condition_paiement: inv.payment.code });
         } catch (e) {}
       });
-      await _sbUpsert('clients', condUpd, 'id', 200);
+      await _sbUpdateMany('clients', condUpd);
       if (condUpd.length > 0) console.log(`[QuickSync] ${condUpd.length} conditions de paiement mises à jour`);
     }
 
@@ -26907,8 +26926,8 @@ async function syncAkuiteo() {
         responsable_site_id: billingSite.managerId || null,
       });
     });
-    // Batch upsert des adresses (chunké + retry)
-    await _sbUpsert('clients', billingUpdates, 'id', 200);
+    // Mise à jour des adresses (UPDATE partiel — pas upsert — + retry)
+    await _sbUpdateMany('clients', billingUpdates);
     console.log(`[Akuiteo] Adresses facturation: ${billingUpdates.length}/${billingAkIds.length} en ${((Date.now()-t1Billing)/1000).toFixed(1)}s`);
     toast(`Adresses facturation OK. Sync contacts...`, 'info');
 
@@ -27322,7 +27341,7 @@ async function syncAkuiteo() {
         const mId = 'akm_' + prefix.replace(/[^a-zA-Z0-9.]/g, '_');
         marcheAddrUpdates.push({ id: mId, adresse: addr.line1, code_postal: addr.postalCode, ville: addr.city });
       }
-      await _sbUpsert('marches', marcheAddrUpdates, 'id', 200);
+      await _sbUpdateMany('marches', marcheAddrUpdates);
       console.log(`[Akuiteo] Adresses marchés mises à jour: ${marcheAddrUpdates.length}`);
 
       // Mettre à jour les adresses des affaires via deliverySite
@@ -27333,7 +27352,7 @@ async function syncAkuiteo() {
         const affId = 'aka_' + pid.replace(/[^a-zA-Z0-9.]/g, '_');
         affaireAddrUpdates.push({ id: affId, adresse: addr.line1, code_postal: addr.postalCode, ville: addr.city });
       }
-      await _sbUpsert('affaires', affaireAddrUpdates, 'id', 200);
+      await _sbUpdateMany('affaires', affaireAddrUpdates);
       console.log(`[Akuiteo] Adresses affaires mises à jour: ${affaireAddrUpdates.length}`);
     } catch (e) { console.warn('[Akuiteo] Erreur adresses marchés:', e.message); }
 
@@ -27381,7 +27400,7 @@ async function syncAkuiteo() {
           }
         }
         const comUpdates = Object.entries(managerByClient).map(([clientId, managerId]) => ({ id: clientId, account_manager_id: managerId }));
-        const rCom = await _sbUpsert('clients', comUpdates, 'id', 200);
+        const rCom = await _sbUpdateMany('clients', comUpdates);
         console.log(`[Akuiteo] Commerciaux auto-assignés: ${rCom.ok}/${comUpdates.length}`);
       }
     } catch (e) {
