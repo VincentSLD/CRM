@@ -26442,14 +26442,20 @@ async function _sbUpdateMany(table, rows, idField = 'id', limit = 6) {
 }
 // akuiteoFetch avec petit retry — uniquement sur erreurs TRANSITOIRES (5xx/timeout/réseau).
 // Les 4xx (400/401/403/404) sont définitives → on n'insiste pas (évite de saturer Akuiteo et le journal).
+// Coupe-circuit : dès qu'Akuiteo répond « Maintenance », on arrête d'appeler (évite la tempête de 502)
+let _akDown = false;
+function _akResetBreaker() { _akDown = false; }
+function _akIsMaintenance(m) { return /maintenance|mise à jour en cours/i.test(m || ''); }
 async function _akRetry(method, path, body, tries = 3) {
+  if (_akDown) throw new Error('Akuiteo indisponible (maintenance)');
   let last = null;
   for (let a = 0; a < tries; a++) {
     try { return await akuiteoFetch(method, path, body); }
     catch (e) {
       last = e;
       const m = (e && e.message) || '';
-      if (/Akuiteo 4(00|01|03|04|22)/.test(m)) throw e; // erreur client définitive → pas de retry
+      if (_akIsMaintenance(m)) { _akDown = true; throw e; }       // maintenance globale → on coupe tout
+      if (/Akuiteo 4(00|01|03|04|22)/.test(m)) throw e;            // erreur client définitive → pas de retry
       await _syncSleep(500 * Math.pow(2, a)); // 0.5s, 1s, 2s
     }
   }
@@ -26459,9 +26465,10 @@ async function _akRetry(method, path, body, tries = 3) {
 async function _akSearchAll(path, criteria, pageSize = 500, maxPages = 30) {
   let all = [], off = 0;
   for (let p = 0; p < maxPages; p++) {
+    if (_akDown) break;
     let batch;
     try { batch = await _akRetry('POST', `${path}?limit=${pageSize}&offset=${off}`, criteria); }
-    catch (e) { console.warn('[sync] search échoué ' + path, e.message); break; }
+    catch (e) { if (!_akIsMaintenance(e.message)) console.warn('[sync] search échoué ' + path, e.message); break; }
     if (!Array.isArray(batch) || batch.length === 0) break;
     all = all.concat(batch);
     if (batch.length < pageSize) break;
@@ -26472,6 +26479,7 @@ async function _akSearchAll(path, criteria, pageSize = 500, maxPages = 30) {
 
 async function syncAkuiteoQuick() {
   showSyncLoading(true);
+  _akResetBreaker();
   try {
     // Fenêtre = le DERNIER MOIS (30 jours) — couvre les mises à jour même si une sync a été manquée.
     // On repart au plus tôt de la dernière sync, mais jamais moins loin que 30 jours en arrière.
@@ -26490,6 +26498,7 @@ async function syncAkuiteoQuick() {
       _akSearchAll('/crm/customers/search', { modificationTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate } }),
       _akSearchAll('/crm/customers/search', { createdTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate } }),
     ]);
+    if (_akDown) { toast('⛔ Akuiteo est en maintenance — synchronisation reportée. Réessayez plus tard.', 'warn'); return; }
     const seen = new Set();
     let akCustomers = [];
     for (const list of [created, modified]) {
@@ -26781,16 +26790,20 @@ async function syncAkuiteoQuick() {
       console.log(`[QuickSync] ${marcheRows.length} marchés, ${affaireRows.length} affaires`);
     }
 
-    // Mettre à jour le timestamp de dernière sync (date de démarrage)
-    await _sbRetry(() => sb.from('crm_config').upsert({ key: 'last_sync_timestamp', value: syncStartedAt }, { onConflict: 'key' }), 'crm_config');
-    console.log(`[IncSync] Timestamp mis à jour: ${syncStartedAt}`);
-
-    toast('Sync du dernier mois terminée', 'success');
+    // N'avancer le timestamp et n'annoncer « terminée » que si Akuiteo est resté disponible
+    if (_akDown) {
+      toast('⚠️ Akuiteo est passé en maintenance pendant la synchro — données partielles, réessayez plus tard.', 'warn');
+    } else {
+      await _sbRetry(() => sb.from('crm_config').upsert({ key: 'last_sync_timestamp', value: syncStartedAt }, { onConflict: 'key' }), 'crm_config');
+      console.log(`[IncSync] Timestamp mis à jour: ${syncStartedAt}`);
+      toast('Sync du dernier mois terminée', 'success');
+    }
     await loadDB();
     renderPage(currentPage);
   } catch (e) {
     console.error('IncSync error:', e);
-    toast('Erreur sync du dernier mois: ' + e.message, 'error');
+    if (_akDown || _akIsMaintenance(e.message)) toast('⛔ Akuiteo est en maintenance — synchronisation reportée. Réessayez plus tard.', 'warn');
+    else toast('Erreur sync du dernier mois: ' + e.message, 'error');
   } finally {
     showSyncLoading(false);
   }
@@ -26798,6 +26811,7 @@ async function syncAkuiteoQuick() {
 
 async function syncAkuiteo() {
   showSyncLoading(true); setSyncText('Synchronisation Akuiteo en cours...');
+  _akResetBreaker();
   try {
     // --- ETAPE 1 : Sync clients par pages de 200 ---
     console.log('[Akuiteo] === ETAPE 1 : Appel API clients (paginé)...');
@@ -26805,7 +26819,7 @@ async function syncAkuiteo() {
     let page = 0;
     const PAGE_SIZE = 2000;
     while (true) {
-      const batch = await akuiteoFetch('POST', `/crm/customers/search?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}&sort=id&order=DESC`, {
+      const batch = await _akRetry('POST', `/crm/customers/search?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}&sort=id&order=DESC`, {
         code: { operator: 'LIKE', value: '%' }
       });
       if (!Array.isArray(batch) || batch.length === 0) break;
@@ -27414,7 +27428,8 @@ async function syncAkuiteo() {
     updateSyncLabel();
   } catch (e) {
     console.error('Sync Akuiteo error:', e);
-    toast('Erreur de synchronisation: ' + e.message, 'error');
+    if (_akDown || _akIsMaintenance(e.message)) toast('⛔ Akuiteo est en maintenance — synchronisation reportée. Réessayez plus tard.', 'warn');
+    else toast('Erreur de synchronisation: ' + e.message, 'error');
   } finally {
     showSyncLoading(false);
   }
