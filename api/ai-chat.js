@@ -1,4 +1,12 @@
 // ═══ CHATBOT IA AVEC ACCÈS SUPABASE (tool use) + STREAMING SSE ═══
+// Tarifs indicatifs (Claude Haiku 4.5) en $/million de tokens — surchargeables par variables d'env
+const NOVA_PRICE_IN = Number(process.env.NOVA_PRICE_IN || 1.0);
+const NOVA_PRICE_OUT = Number(process.env.NOVA_PRICE_OUT || 5.0);
+const USD_EUR = Number(process.env.USD_EUR || 0.92);
+function estimCost(inTok, outTok) {
+  const usd = (inTok / 1e6) * NOVA_PRICE_IN + (outTok / 1e6) * NOVA_PRICE_OUT;
+  return { input_tokens: inTok, output_tokens: outTok, cost_usd: +usd.toFixed(5), cost_eur: +(usd * USD_EUR).toFixed(5) };
+}
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://asuccniyofzvwgooxjah.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzdWNjbml5b2Z6dndnb294amFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MDQyNjgsImV4cCI6MjA4ODQ4MDI2OH0.dPerW1BApAxe26xzv9i7oWIubgGuzO5RibMvs-MFm88';
 
@@ -741,7 +749,7 @@ export default async function handler(req, res) {
       const messages = Array.isArray(history) ? history.slice(-10) : [];
       messages.push({ role: 'user', content: question });
 
-      let iterations = 0;
+      let iterations = 0, usageIn = 0, usageOut = 0;
       const MAX_ITER = 6;
       while (iterations < MAX_ITER) {
         iterations++;
@@ -754,6 +762,7 @@ export default async function handler(req, res) {
           tools: TOOLS,
           messages
         });
+        usageIn += data.usage?.input_tokens || 0; usageOut += data.usage?.output_tokens || 0;
 
         if (data.stop_reason === 'tool_use') {
           const toolUses = data.content.filter(c => c.type === 'tool_use');
@@ -775,11 +784,11 @@ export default async function handler(req, res) {
         // Réponse finale
         const textBlock = data.content.find(c => c.type === 'text');
         const result = textBlock?.text || '';
-        sse({ type: 'done', result });
+        sse({ type: 'done', result, usage: estimCost(usageIn, usageOut) });
         res.end();
         return;
       }
-      sse({ type: 'done', result: "Trop d'itérations — reformule ta question." });
+      sse({ type: 'done', result: "Trop d'itérations — reformule ta question.", usage: estimCost(usageIn, usageOut) });
       res.end();
     } catch (e) {
       console.error('AI chat stream error:', e);
@@ -794,7 +803,7 @@ export default async function handler(req, res) {
     const messages = Array.isArray(history) ? history.slice(-10) : [];
     messages.push({ role: 'user', content: question });
 
-    let iterations = 0;
+    let iterations = 0, usageIn = 0, usageOut = 0;
     const MAX_ITER = 6;
     while (iterations < MAX_ITER) {
       iterations++;
@@ -805,6 +814,7 @@ export default async function handler(req, res) {
         tools: TOOLS,
         messages
       });
+      usageIn += data.usage?.input_tokens || 0; usageOut += data.usage?.output_tokens || 0;
 
       if (data.stop_reason === 'tool_use') {
         const toolUses = data.content.filter(c => c.type === 'tool_use');
@@ -822,9 +832,9 @@ export default async function handler(req, res) {
 
       const textBlock = data.content.find(c => c.type === 'text');
       const result = textBlock?.text || '';
-      return res.status(200).json({ result });
+      return res.status(200).json({ result, usage: estimCost(usageIn, usageOut) });
     }
-    return res.status(200).json({ result: 'Trop d\'itérations — reformulez votre question.' });
+    return res.status(200).json({ result: 'Trop d\'itérations — reformulez votre question.', usage: estimCost(usageIn, usageOut) });
   } catch (e) {
     console.error('AI chat error:', e);
     return res.status(500).json({ error: e.message });

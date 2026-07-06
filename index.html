@@ -23744,7 +23744,7 @@ async function askAIChat(presetQuestion, opts) {
     // Lire le flux SSE
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
-    let buf = '', fullResult = '';
+    let buf = '', fullResult = '', _usage = null;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -23761,6 +23761,7 @@ async function askAIChat(presetQuestion, opts) {
             if (box) box.scrollTop = box.scrollHeight;
           } else if (ev.type === 'done') {
             fullResult = ev.result || '';
+            _usage = ev.usage || null;
           } else if (ev.type === 'error') {
             throw new Error(ev.text);
           }
@@ -23802,6 +23803,17 @@ async function askAIChat(presetQuestion, opts) {
     speakBtn.onmouseenter = () => speakBtn.style.opacity = '1';
     speakBtn.onmouseleave = () => speakBtn.style.opacity = '.4';
     loadingDiv.appendChild(speakBtn);
+    // Estimation du coût en tokens (discret, sous la réponse)
+    if (_usage && (_usage.input_tokens || _usage.output_tokens)) {
+      const tot = (_usage.input_tokens || 0) + (_usage.output_tokens || 0);
+      const eur = _usage.cost_eur != null ? _usage.cost_eur : 0;
+      const cout = eur < 0.01 ? '< 0,01 €' : ('~' + eur.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' €');
+      const badge = document.createElement('div');
+      badge.style.cssText = 'margin-top:6px;font-size:10px;color:var(--t3);opacity:.75';
+      badge.title = `Entrée : ${(_usage.input_tokens || 0).toLocaleString('fr-FR')} tokens · Sortie : ${(_usage.output_tokens || 0).toLocaleString('fr-FR')} tokens (coût estimé, tarif Haiku 4.5)`;
+      badge.textContent = `≈ ${tot.toLocaleString('fr-FR')} tokens · ${cout}`;
+      loadingDiv.appendChild(badge);
+    }
     // Carte d'action (confirmation avant écriture)
     if (_novaAction) { const card = _novaActionCard(_novaAction); if (card) loadingDiv.appendChild(card); }
     if (box) box.scrollTop = box.scrollHeight;
