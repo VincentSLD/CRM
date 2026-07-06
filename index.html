@@ -29275,6 +29275,7 @@ window.addEventListener('online', () => {
 
 // ═══ TOAST ═══
 function showSyncLoading(show) {
+  _syncInProgress = !!show; // suspend les rechargements Realtime pendant une opération de synchro
   document.body.style.cursor = show ? 'wait' : '';
   let overlay = document.getElementById('sync-overlay');
   if (show && !overlay) {
@@ -29695,14 +29696,30 @@ async function doLogout() {
 }
 
 // ═══ REAL-TIME SUBSCRIPTIONS ═══
+// Rechargement DÉBOUNCÉ et suspendu pendant les synchros : sinon chaque ligne modifiée
+// (des milliers pendant une sync) relance tout loadDB() → timeouts Postgres + ERR_INSUFFICIENT_RESOURCES.
+let _syncInProgress = false;
+let _rtTimer = null, _rtReloading = false;
+const _rtPending = new Set();
+function _scheduleRealtimeReload(table) {
+  _rtPending.add(table);
+  if (_syncInProgress || _rtReloading) return; // la synchro recharge elle-même à la fin ; évite l'empilement
+  if (_rtTimer) clearTimeout(_rtTimer);
+  _rtTimer = setTimeout(async () => {
+    _rtTimer = null;
+    if (_syncInProgress) return;               // encore en sync → on laissera le prochain événement replanifier
+    _rtPending.clear();
+    _rtReloading = true;
+    try { await loadDB(); renderPage(currentPage); }
+    catch (e) { console.warn('[Realtime] reload:', e.message); }
+    finally { _rtReloading = false; }
+  }, 5000);
+}
 function initRealtime() {
   const tables = ['clients','devis','commandes','factures','reports','notifications'];
   tables.forEach(table => {
-    sb.channel(`public:${table}`).on('postgres_changes', {event:'*', schema:'public', table}, async (payload) => {
-      console.log(`Realtime ${table}:`, payload.eventType);
-      await loadDB();
-      renderPage(currentPage);
-      if (payload.eventType === 'INSERT') toast(`Nouvelle entrée dans ${table}`, 'info');
+    sb.channel(`public:${table}`).on('postgres_changes', {event:'*', schema:'public', table}, (payload) => {
+      _scheduleRealtimeReload(table);
     }).subscribe();
   });
 }
