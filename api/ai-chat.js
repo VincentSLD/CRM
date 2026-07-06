@@ -149,6 +149,19 @@ const TOOLS = [
       },
       required: ['table','op']
     }
+  },
+  {
+    name: 'search_documents',
+    description: "Assistant documentaire (GED) : recherche SÉMANTIQUE dans les documents techniques indexés du bureau d'études (rapports géotechniques G1-G5, études de sol, PV, notes de calcul, comptes-rendus… préalablement indexés depuis un dossier réseau). À utiliser dès que la question porte sur le CONTENU d'un document, d'un rapport, d'une étude, d'une parcelle/chantier, de valeurs techniques (portance, tassements, aléa, missions, recommandations…). Renvoie les passages les plus pertinents avec le NOM et le CHEMIN du document source. Base tes réponses UNIQUEMENT sur les passages renvoyés et cite les documents.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        q: { type: 'string', description: 'Question ou mots-clés à rechercher dans les documents' },
+        dossier: { type: 'string', description: "Filtre optionnel : ne garder que les documents dont le chemin contient ce texte (ex. un nom de dossier, de client ou de commune)." },
+        limit: { type: 'integer', default: 12, maximum: 25 }
+      },
+      required: ['q']
+    }
   }
 ];
 
@@ -185,8 +198,45 @@ function buildQueryParams(filters, select, order, limit) {
   return params.toString();
 }
 
+// Embedding d'une requête (OpenAI) pour la recherche documentaire GED
+async function embedText(text) {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error('OPENAI_API_KEY non configurée (indexation/recherche documentaire)');
+  const r = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+    body: JSON.stringify({ model: 'text-embedding-3-small', input: String(text || '').slice(0, 8000) }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('OpenAI ' + r.status + ': ' + (j.error?.message || JSON.stringify(j)));
+  return j.data[0].embedding;
+}
+
 async function executeTool(name, input) {
   try {
+    if (name === 'search_documents') {
+      const { q, dossier, limit = 12 } = input || {};
+      if (!q || !String(q).trim()) return { ok: false, error: 'q (question) requis' };
+      const emb = await embedText(q);
+      const want = Math.min(limit || 12, 25);
+      const matchCount = dossier ? Math.min(want * 4, 60) : want; // sur-échantillonne si on filtre par dossier
+      const chunks = await sbRequest('rpc/ged_match', {
+        method: 'POST',
+        body: JSON.stringify({ query_embedding: '[' + emb.join(',') + ']', match_count: matchCount }),
+      }).catch(e => { throw new Error('Recherche documentaire : ' + e.message); });
+      let rows = Array.isArray(chunks) ? chunks : [];
+      if (dossier) {
+        const needle = String(dossier).toLowerCase();
+        rows = rows.filter(c => ((c.path || '') + ' ' + (c.name || '')).toLowerCase().includes(needle)).slice(0, want);
+      }
+      if (!rows.length) return { ok: true, count: 0, message: dossier ? 'Aucun passage trouvé dans ce dossier pour cette question.' : 'Aucun document pertinent trouvé dans la base indexée.', rows: [] };
+      return {
+        ok: true,
+        count: rows.length,
+        documents: [...new Set(rows.map(c => c.name))],
+        rows: rows.map(c => ({ document: c.name, chemin: c.path, extrait: String(c.content || '').slice(0, 900) })),
+      };
+    }
     if (name === 'search_boamp') {
       const { departement, q, limit = 20 } = input || {};
       const esc = s => String(s || '').replace(/"/g, '');
@@ -444,6 +494,7 @@ function toolLabel(tu) {
   if (tu.name === 'search_contacts') return 'Recherche contact « ' + (tu.input?.q || '') + ' »';
   if (tu.name === 'query_table') return 'Consultation ' + tbl;
   if (tu.name === 'aggregate_table') return 'Calcul sur ' + tbl;
+  if (tu.name === 'search_documents') return 'Recherche documentaire « ' + (tu.input?.q || '') + ' »' + (tu.input?.dossier ? ' (dossier ' + tu.input.dossier + ')' : '');
   return tu.name;
 }
 
@@ -522,6 +573,7 @@ RÈGLES STRICTES :
 1. Tu DOIS utiliser les outils query_table et aggregate_table pour consulter les données Supabase avant de répondre à toute question factuelle. Ne JAMAIS inventer de chiffres ou d'informations.
 2. Toutes tes réponses doivent s'appuyer EXCLUSIVEMENT sur les données du CRM issues des outils. Si tu n'as pas la donnée, dis-le clairement.
 3. Pour une recherche EXTERNE, tu disposes d'outils intégrés que tu peux utiliser directement (sans demander d'autorisation) : search_web (recherche internet), search_entreprise (fiche légale & finances officielles), search_boamp (marchés publics). N'invente JAMAIS de données externes : appuie-toi uniquement sur ce que renvoient ces outils et CITE tes sources (liens <a href> pour le web).
+3bis. ASSISTANT DOCUMENTAIRE (GED) : pour toute question portant sur le CONTENU des documents/rapports techniques indexés (études de sol, rapports G1-G5, notes de calcul, PV, comptes-rendus, valeurs techniques, recommandations, un chantier/une parcelle précis…), utilise l'outil search_documents (recherche sémantique). Tu peux restreindre à un dossier/client/commune via le paramètre "dossier". Base ta réponse UNIQUEMENT sur les passages renvoyés, cite le NOM des documents sources, et si l'info n'y figure pas, dis-le et invite à préciser (nom de client, référence, commune). Note : seuls les documents déjà indexés depuis la page « Assistant documentaire » sont interrogeables.
 4. Enchaîne plusieurs appels d'outils si nécessaire pour répondre précisément.
 5. Sois TOUJOURS force de proposition : après avoir répondu à une question, propose des analyses complémentaires, des pistes d'action concrètes ou des alertes pertinentes.
 6. Quand on te demande des infos sur une société ou un contact, cherche TOUJOURS dans le CRM d'abord. Pour retrouver une société par son nom, utilise EN PRIORITÉ l'outil search_clients (recherche tolérante) PLUTÔT qu'un query_table avec ilike : il retrouve la société même si le nom est abrégé, mal orthographié ou ponctué différemment (ex. "6K" → "6.K ARCHI"). Ne conclus JAMAIS qu'un client est absent de la base sans avoir essayé search_clients. De même, pour retrouver une personne par son nom, utilise EN PRIORITÉ search_contacts (tolérant). Récupère ensuite ses contacts avec client_id et affiche TOUTES les coordonnées disponibles.
