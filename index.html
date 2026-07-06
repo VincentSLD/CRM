@@ -1887,7 +1887,7 @@ tbody tr:last-child td { border-bottom: none; }
           <div style="padding:4px">
             <button onclick="document.getElementById('syncDropdownMenu').style.display='none';syncAkuiteoQuick()" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:none;background:none;cursor:pointer;border-radius:8px;text-align:left;font-size:13px;color:var(--t1)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''">
               <span style="font-size:18px">⚡</span>
-              <div><div style="font-weight:600">Sync incrémentale</div><div style="font-size:11px;color:var(--t3)">Depuis la dernière sync</div></div>
+              <div><div style="font-weight:600">Sync du dernier mois</div><div style="font-size:11px;color:var(--t3)">Mises à jour des 30 derniers jours</div></div>
             </button>
             <button onclick="document.getElementById('syncDropdownMenu').style.display='none';syncAkuiteo()" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:none;background:none;cursor:pointer;border-radius:8px;text-align:left;font-size:13px;color:var(--t1)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''">
               <span style="font-size:18px">🔄</span>
@@ -26436,28 +26436,40 @@ async function _akRetry(method, path, body, tries = 3) {
   }
   throw last;
 }
+// Recherche Akuiteo paginée (POST search) avec retry — récupère TOUT au-delà de 500 résultats
+async function _akSearchAll(path, criteria, pageSize = 500, maxPages = 30) {
+  let all = [], off = 0;
+  for (let p = 0; p < maxPages; p++) {
+    let batch;
+    try { batch = await _akRetry('POST', `${path}?limit=${pageSize}&offset=${off}`, criteria); }
+    catch (e) { console.warn('[sync] search échoué ' + path, e.message); break; }
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    all = all.concat(batch);
+    if (batch.length < pageSize) break;
+    off += pageSize;
+  }
+  return all;
+}
 
 async function syncAkuiteoQuick() {
   showSyncLoading(true);
   try {
-    // Récupérer la date de dernière sync depuis crm_config (max 24h de lookback)
+    // Fenêtre = le DERNIER MOIS (30 jours) — couvre les mises à jour même si une sync a été manquée.
+    // On repart au plus tôt de la dernière sync, mais jamais moins loin que 30 jours en arrière.
     const { data: cfgRow } = await sb.from('crm_config').select('value').eq('key', 'last_sync_timestamp').maybeSingle();
-    const maxLookback = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const lastSync = cfgRow?.value && cfgRow.value > maxLookback ? cfgRow.value : maxLookback;
+    const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    // lastSync utilisé seulement s'il est PLUS ANCIEN que 30 jours (pour élargir), sinon on force 30 jours
+    const lastSync = (cfgRow?.value && cfgRow.value < monthAgo) ? cfgRow.value : monthAgo;
     const syncStartedAt = new Date().toISOString();
     const sinceDate = lastSync.substring(0,19) + '.000+0000';
     const sinceDay = lastSync.substring(0,10);
-    console.log(`[IncSync] Dernière sync: ${lastSync}`);
+    console.log(`[IncSync] Fenêtre depuis: ${sinceDay} (dernier mois)`);
 
-    // 1. Clients modifiés OU créés depuis la dernière sync
-    setSyncText('Sync incrémentale — Sociétés...');
+    // 1. Clients modifiés OU créés sur la fenêtre (paginé + retry)
+    setSyncText('Sync du dernier mois — Sociétés...');
     const [modified, created] = await Promise.all([
-      akuiteoFetch('POST', '/crm/customers/search?limit=500', {
-        modificationTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate }
-      }).catch(() => []),
-      akuiteoFetch('POST', '/crm/customers/search?limit=500', {
-        createdTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate }
-      }).catch(() => []),
+      _akSearchAll('/crm/customers/search', { modificationTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate } }),
+      _akSearchAll('/crm/customers/search', { createdTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate } }),
     ]);
     const seen = new Set();
     let akCustomers = [];
@@ -26470,13 +26482,13 @@ async function syncAkuiteoQuick() {
     }
     console.log(`[IncSync] ${akCustomers.length} sociétés modifiées/créées depuis ${sinceDay}`);
 
-    const { data: existingClients } = await sb.from('clients').select('id,akuiteo_id');
+    const { data: existingClients } = await _sbRetry(() => sb.from('clients').select('id,akuiteo_id'), 'read existingClients');
     const existingMap = {};
     for (const ec of (existingClients || [])) { if (ec.akuiteo_id) existingMap[ec.akuiteo_id] = ec.id; }
     const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626'];
 
     // Charger les exclusions (clients supprimés du CRM à ne pas re-créer)
-    const { data: excRows } = await sb.from('sync_exclusions').select('akuiteo_id');
+    const { data: excRows } = await _sbRetry(() => sb.from('sync_exclusions').select('akuiteo_id'), 'read exclusions');
     const excludedIds = new Set((excRows || []).map(r => r.akuiteo_id));
     akCustomers = akCustomers.filter(ak => !excludedIds.has(String(ak.id || ak.code)));
     console.log(`[IncSync] ${excludedIds.size} exclusion(s), ${akCustomers.length} société(s) à traiter`);
@@ -26520,34 +26532,34 @@ async function syncAkuiteoQuick() {
           ...(isNew ? { ini, color: colors[Math.floor(Math.random() * colors.length)], ca: 0, obj: 0, margin: 0, dso: 0, score: 50, status: 'nouveau', sentiment_pos: 50, sentiment_neu: 35, sentiment_neg: 15 } : {}),
         };
       });
-      await sb.from('clients').upsert(rows, { onConflict: 'id' });
+      await _sbUpsert('clients', rows, 'id', 200);
       console.log(`[QuickSync] ${rows.length} sociétés upsertées avec infos marketing`);
 
       // Mettre à jour fact_* avec l'adresse du site de facturation (useForBillingAddress)
-      setSyncText('Sync rapide — Adresses de facturation (sites)...');
+      setSyncText('Sync du dernier mois — Adresses de facturation (sites)...');
       const akIds = akCustomers.map(ak => String(ak.id || ak.code));
-      for (let i = 0; i < akIds.length; i += 10) {
-        const batch = akIds.slice(i, i + 10);
-        await Promise.allSettled(batch.map(async (akId) => {
-          const sites = await akuiteoFetch('GET', '/crm/customers/' + akId + '/sites').catch(() => []);
-          if (!Array.isArray(sites) || sites.length === 0) return;
-          const billingSite = sites.find(s => s.useForBillingAddress) || sites.find(s => s.main) || sites[0];
-          const a = billingSite?.address;
-          if (!a) return;
-          const crmId = existingMap[akId];
-          if (!crmId) return;
-          await sb.from('clients').update({
-            fact_adresse_ligne1: a.line1 || null, fact_adresse_ligne2: a.line2 || null,
-            fact_adresse_ligne3: a.line3 || null, fact_code_postal: a.postalCode || null,
-            fact_ville: a.city || null,
-            fact_pays: a.countryName || a.country || null,
-            fact_departement: a.geographicalDepartmentName || a.department || null,
-            fact_region: a.regionName || a.region || null,
-            responsable_site_id: billingSite.managerId || null,
-          }).eq('id', crmId);
-        }));
-      }
-      console.log(`[QuickSync] Adresses de facturation mises à jour via sites`);
+      const billingUpd = [];
+      await _syncMapLimit(akIds, 6, async (akId) => {
+        let sites; try { sites = await _akRetry('GET', '/crm/customers/' + akId + '/sites'); } catch (e) { return; }
+        if (!Array.isArray(sites) || sites.length === 0) return;
+        const billingSite = sites.find(s => s.useForBillingAddress) || sites.find(s => s.main) || sites[0];
+        const a = billingSite?.address;
+        if (!a) return;
+        const crmId = existingMap[akId];
+        if (!crmId) return;
+        billingUpd.push({
+          id: crmId,
+          fact_adresse_ligne1: a.line1 || null, fact_adresse_ligne2: a.line2 || null,
+          fact_adresse_ligne3: a.line3 || null, fact_code_postal: a.postalCode || null,
+          fact_ville: a.city || null,
+          fact_pays: a.countryName || a.country || null,
+          fact_departement: a.geographicalDepartmentName || a.department || null,
+          fact_region: a.regionName || a.region || null,
+          responsable_site_id: billingSite.managerId || null,
+        });
+      });
+      await _sbUpsert('clients', billingUpd, 'id', 200);
+      console.log(`[QuickSync] Adresses de facturation mises à jour via sites (${billingUpd.length})`);
     }
 
     // 2. Contacts + commerciaux associés (salesmen) des clients récupérés
@@ -26558,76 +26570,64 @@ async function syncAkuiteoQuick() {
     for (const ak of akCustomers) { const akId = String(ak.id); if (!clMap[akId]) clMap[akId] = { id: existingMap[akId] || ('ak_' + akId.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 20)), akuiteo_id: akId }; }
     const salesmenUpdates = [];
     const paymentUpdates = [];
-    for (let i = 0; i < akCustomers.length; i += 10) {
-      setSyncText(`Sync rapide — Contacts & Commerciaux ${i}/${akCustomers.length}...`);
-      const batch = akCustomers.slice(i, i + 10);
-      await Promise.allSettled(batch.map(async ak => {
-        const akId = String(ak.id);
-        const crmClient = clMap[akId];
-        if (!crmClient) return;
-        // Contacts + salesmen en parallèle
-        const [contacts, detail] = await Promise.all([
-          akuiteoFetch('GET', '/crm/customers/' + akId + '/contacts').catch(() => []),
-          akuiteoFetch('POST', '/crm/customers/' + akId + '/read', { options: ['SALESMEN', 'METHOD_OF_PAYMENT'] }).catch(() => null),
-        ]);
-        if (Array.isArray(contacts)) {
-          for (const ct of contacts) {
-            contactRows.push({
-              id: 'ct_' + String(ct.id).replace(/[^a-zA-Z0-9]/g, '_') + '_' + crmClient.id.substring(0, 8),
-              client_id: crmClient.id, akuiteo_id: String(ct.id), akuiteo_customer_id: akId,
-              nom: ct.name || '', prenom: ct.firstName || '', titre: ct.title || '',
-              fonction: ct.position || ct.functionTitle || '', service: ct.service || '',
-              email: ct.email || '', telephone: ct.phone || '', mobile: ct.mobilePhone || '',
-            });
-          }
-        }
-        // Commerciaux associés (salesmen)
-        if (detail && Array.isArray(detail.salesmen) && detail.salesmen.length > 0) {
-          const names = detail.salesmen.map(s => {
-            const e = s.employee;
-            const name = e ? ((e.name||'') + ' ' + (e.firstName||'')).trim() : s.employeeId;
-            return name;
+    let _qcDone = 0;
+    await _syncMapLimit(akCustomers, 6, async ak => {
+      if ((_qcDone++ % 50) === 0) setSyncText(`Sync du dernier mois — Contacts & Commerciaux ${_qcDone}/${akCustomers.length}...`);
+      const akId = String(ak.id);
+      const crmClient = clMap[akId];
+      if (!crmClient) return;
+      // Contacts + salesmen en parallèle (avec retry)
+      const [contacts, detail] = await Promise.all([
+        _akRetry('GET', '/crm/customers/' + akId + '/contacts').catch(() => []),
+        _akRetry('POST', '/crm/customers/' + akId + '/read', { options: ['SALESMEN', 'METHOD_OF_PAYMENT'] }).catch(() => null),
+      ]);
+      if (Array.isArray(contacts)) {
+        for (const ct of contacts) {
+          contactRows.push({
+            id: 'ct_' + String(ct.id).replace(/[^a-zA-Z0-9]/g, '_') + '_' + crmClient.id.substring(0, 8),
+            client_id: crmClient.id, akuiteo_id: String(ct.id), akuiteo_customer_id: akId,
+            nom: ct.name || '', prenom: ct.firstName || '', titre: ct.title || '',
+            fonction: ct.position || ct.functionTitle || '', service: ct.service || '',
+            email: ct.email || '', telephone: ct.phone || '', mobile: ct.mobilePhone || '',
           });
-          salesmenUpdates.push({ id: crmClient.id, commerciaux_associes: names.join(', ') });
         }
-        // Mode de paiement (retourné uniquement via read + METHOD_OF_PAYMENT)
-        if (detail && detail.methodOfPayment) {
-          paymentUpdates.push({ id: crmClient.id, mode_paiement: detail.methodOfPayment });
-        }
-      }));
-    }
-    // Upsert commerciaux associés
-    for (const u of salesmenUpdates) {
-      await sb.from('clients').update({ commerciaux_associes: u.commerciaux_associes }).eq('id', u.id);
-    }
-    console.log(`[QuickSync] ${salesmenUpdates.length} commerciaux associés`);
-    // Upsert modes de paiement
-    for (const u of paymentUpdates) {
-      await sb.from('clients').update({ mode_paiement: u.mode_paiement }).eq('id', u.id);
-    }
-    if (paymentUpdates.length > 0) console.log(`[QuickSync] ${paymentUpdates.length} modes de paiement`);
-    if (contactRows.length > 0) {
-      for (let i = 0; i < contactRows.length; i += 100) {
-        await sb.from('contacts').upsert(contactRows.slice(i, i + 100), { onConflict: 'id' });
       }
-    }
+      // Commerciaux associés (salesmen)
+      if (detail && Array.isArray(detail.salesmen) && detail.salesmen.length > 0) {
+        const names = detail.salesmen.map(s => {
+          const e = s.employee;
+          return e ? ((e.name||'') + ' ' + (e.firstName||'')).trim() : s.employeeId;
+        });
+        salesmenUpdates.push({ id: crmClient.id, commerciaux_associes: names.join(', ') });
+      }
+      // Mode de paiement (retourné uniquement via read + METHOD_OF_PAYMENT)
+      if (detail && detail.methodOfPayment) {
+        paymentUpdates.push({ id: crmClient.id, mode_paiement: detail.methodOfPayment });
+      }
+    });
+    // Écritures groupées + retry (au lieu de N updates individuels)
+    await _sbUpsert('clients', salesmenUpdates, 'id', 200);
+    console.log(`[QuickSync] ${salesmenUpdates.length} commerciaux associés`);
+    await _sbUpsert('clients', paymentUpdates, 'id', 200);
+    if (paymentUpdates.length > 0) console.log(`[QuickSync] ${paymentUpdates.length} modes de paiement`);
+    await _sbUpsert('contacts', contactRows, 'id', 200);
     console.log(`[QuickSync] ${contactRows.length} contacts`);
 
-    // 3. Documents récents (devis, commandes, factures) — upsert direct
-    setSyncText('Sync incrémentale — Documents...');
-    const { data: allCl2 } = await sb.from('clients').select('id,akuiteo_id,name');
+    // 3. Documents récents (devis, commandes, factures) — sur le dernier mois (paginé + retry)
+    setSyncText('Sync du dernier mois — Documents...');
+    const { data: allCl2 } = await _sbRetry(() => sb.from('clients').select('id,akuiteo_id,name'), 'read clients docs');
     const akCMap = {}; for (const c of (allCl2||[])) { if (c.akuiteo_id) akCMap[c.akuiteo_id] = c; }
     const docSinceDate = sinceDay;
 
     const [rawQuot, rawOrd, rawInv] = await Promise.all([
-      akuiteoFetch('POST', '/sales/quotations/search?limit=500', { date: { operator: 'GREATER_OR_EQUALS', value: docSinceDate } }).catch(() => []),
-      akuiteoFetch('POST', '/sales/orders/search?limit=500', { date: { operator: 'GREATER_OR_EQUALS', value: docSinceDate } }).catch(() => []),
-      akuiteoFetch('POST', '/sales/invoices/search?limit=500', { date: { operator: 'GREATER_OR_EQUALS', value: docSinceDate } }).catch(() => []),
+      _akSearchAll('/sales/quotations/search', { date: { operator: 'GREATER_OR_EQUALS', value: docSinceDate } }),
+      _akSearchAll('/sales/orders/search', { date: { operator: 'GREATER_OR_EQUALS', value: docSinceDate } }),
+      _akSearchAll('/sales/invoices/search', { date: { operator: 'GREATER_OR_EQUALS', value: docSinceDate } }),
     ]);
     const recentQuot = Array.isArray(rawQuot) ? rawQuot : [];
     const recentOrd = Array.isArray(rawOrd) ? rawOrd : [];
     const recentInv = Array.isArray(rawInv) ? rawInv : [];
-    console.log(`[QuickSync] Docs (24h) : ${recentQuot.length} devis, ${recentOrd.length} cmd, ${recentInv.length} fact`);
+    console.log(`[QuickSync] Docs (dernier mois) : ${recentQuot.length} devis, ${recentOrd.length} cmd, ${recentInv.length} fact`);
 
     // Devis
     if (Array.isArray(recentQuot) && recentQuot.length > 0) {
@@ -26640,25 +26640,18 @@ async function syncAkuiteoQuick() {
           projet: q.projectId || null, agence: q.entityCode || null, societe: q.companyCode || null,
           responsable_id: q.managerId || null, commercial_id: q.salesManagerId || null };
       });
-      await sb.from('devis').upsert(rows, { onConflict: 'id' });
+      await _sbUpsert('devis', rows, 'id', 200);
       console.log(`[QuickSync] ${rows.length} devis`);
     }
 
     // Commandes
     if (Array.isArray(recentOrd) && recentOrd.length > 0) {
-      // Récupérer les lignes (quantity) de chaque commande via GET individuel
-      setSyncText('Sync rapide — Commandes (lignes)...');
-      const ordersWithLines = [];
-      for (let i = 0; i < recentOrd.length; i += 10) {
-        const batch = recentOrd.slice(i, i + 10);
-        await Promise.allSettled(batch.map(async o => {
-          try {
-            const full = await akuiteoFetch('GET', '/sales/orders/' + o.id);
-            if (full) { o.lines = full.lines || []; o.description = full.description || null; }
-          } catch (e) { o.lines = []; }
-          ordersWithLines.push(o);
-        }));
-      }
+      // Récupérer les lignes (quantity) de chaque commande via GET individuel (concurrence limitée + retry)
+      setSyncText('Sync du dernier mois — Commandes (lignes)...');
+      await _syncMapLimit(recentOrd, 6, async o => {
+        try { const full = await _akRetry('GET', '/sales/orders/' + o.id); if (full) { o.lines = full.lines || []; o.description = full.description || null; } }
+        catch (e) { o.lines = []; }
+      });
       const rows = recentOrd.map(o => {
         const c = akCMap[String(o.thirdPartyId || o.customerId || '')];
         const surface = Array.isArray(o.lines) ? o.lines.reduce((s, l) => s + Number(l.quantity || 0), 0) : null;
@@ -26670,7 +26663,7 @@ async function syncAkuiteoQuick() {
           responsable_id: o.managerId || null, commercial_id: o.salesManagerId || null,
           surface_facturee: surface, description: o.description || null };
       });
-      await sb.from('commandes').upsert(rows, { onConflict: 'id' });
+      await _sbUpsert('commandes', rows, 'id', 200);
       console.log(`[QuickSync] ${rows.length} commandes avec surface facturée`);
     }
 
@@ -26688,8 +26681,7 @@ async function syncAkuiteoQuick() {
           projet: f.projectId || null, agence: f.entityCode || null, societe: f.companyCode || null,
           responsable_id: f.managerId || null, type_facture: f.invoiceType || null };
       });
-      const { error: fErr } = await sb.from('factures').upsert(rows, { onConflict: 'id' });
-      if (fErr) console.warn('[QuickSync] Factures upsert err:', fErr.message);
+      await _sbUpsert('factures', rows, 'id', 200);
       console.log(`[QuickSync] ${rows.length} factures`);
     }
 
@@ -26704,29 +26696,23 @@ async function syncAkuiteoQuick() {
           latestByCustomer[cid] = f;
         }
       }
-      let condUpdated = 0;
-      for (const [cid, f] of Object.entries(latestByCustomer)) {
+      const condUpd = [];
+      const _latest = Object.entries(latestByCustomer);
+      await _syncMapLimit(_latest, 6, async ([cid, f]) => {
         try {
-          const inv = await akuiteoFetch('POST', '/sales/invoices/' + f.id + '/read', { options: ['PAYMENT'] });
-          if (inv && inv.payment && inv.payment.code) {
-            const cl = akCMap[cid];
-            await sb.from('clients').update({ condition_paiement: inv.payment.code }).eq('id', cl.id);
-            condUpdated++;
-          }
-        } catch(e) {}
-      }
-      if (condUpdated > 0) console.log(`[QuickSync] ${condUpdated} conditions de paiement mises à jour`);
+          const inv = await _akRetry('POST', '/sales/invoices/' + f.id + '/read', { options: ['PAYMENT'] });
+          if (inv && inv.payment && inv.payment.code) condUpd.push({ id: akCMap[cid].id, condition_paiement: inv.payment.code });
+        } catch (e) {}
+      });
+      await _sbUpsert('clients', condUpd, 'id', 200);
+      if (condUpd.length > 0) console.log(`[QuickSync] ${condUpd.length} conditions de paiement mises à jour`);
     }
 
     // 4. Nouveaux Marchés / Affaires (projets récents non présents en base)
-    setSyncText('Sync incrémentale — Marchés & Affaires...');
+    setSyncText('Sync du dernier mois — Marchés & Affaires...');
     const [modifiedProjects, createdProjects] = await Promise.all([
-      akuiteoFetch('POST', '/projectmanagement/projects/search?limit=500', {
-        modificationTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate }
-      }).catch(() => []),
-      akuiteoFetch('POST', '/projectmanagement/projects/search?limit=500', {
-        createdTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate }
-      }).catch(() => []),
+      _akSearchAll('/projectmanagement/projects/search', { modificationTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate } }),
+      _akSearchAll('/projectmanagement/projects/search', { createdTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate } }),
     ]);
     const seenPids = new Set();
     let akProjects = [];
@@ -26771,29 +26757,21 @@ async function syncAkuiteoQuick() {
       const marcheRows = Object.values(marchesMap);
       console.log('[QuickSync] Marchés à upsert:', JSON.stringify(marcheRows.slice(0,3)));
       console.log('[QuickSync] Affaires à upsert:', JSON.stringify(affaireRows.slice(0,3)));
-      if (marcheRows.length > 0) {
-        const { error: mErr, data: mData } = await sb.from('marches').upsert(marcheRows, { onConflict: 'id' });
-        if (mErr) console.error('[QuickSync] Marchés upsert err:', mErr.message, mErr.details, mErr.hint);
-        else console.log('[QuickSync] Marchés upsert OK');
-      }
-      if (affaireRows.length > 0) {
-        const { error: aErr } = await sb.from('affaires').upsert(affaireRows, { onConflict: 'id' });
-        if (aErr) console.error('[QuickSync] Affaires upsert err:', aErr.message, aErr.details, aErr.hint);
-        else console.log('[QuickSync] Affaires upsert OK');
-      }
+      if (marcheRows.length > 0) await _sbUpsert('marches', marcheRows, 'id', 200);
+      if (affaireRows.length > 0) await _sbUpsert('affaires', affaireRows, 'id', 200);
       console.log(`[QuickSync] ${marcheRows.length} marchés, ${affaireRows.length} affaires`);
     }
 
     // Mettre à jour le timestamp de dernière sync (date de démarrage)
-    await sb.from('crm_config').upsert({ key: 'last_sync_timestamp', value: syncStartedAt }, { onConflict: 'key' });
+    await _sbRetry(() => sb.from('crm_config').upsert({ key: 'last_sync_timestamp', value: syncStartedAt }, { onConflict: 'key' }), 'crm_config');
     console.log(`[IncSync] Timestamp mis à jour: ${syncStartedAt}`);
 
-    toast('Sync incrémentale terminée', 'success');
+    toast('Sync du dernier mois terminée', 'success');
     await loadDB();
     renderPage(currentPage);
   } catch (e) {
     console.error('IncSync error:', e);
-    toast('Erreur sync incrémentale: ' + e.message, 'error');
+    toast('Erreur sync du dernier mois: ' + e.message, 'error');
   } finally {
     showSyncLoading(false);
   }
