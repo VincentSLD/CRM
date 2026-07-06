@@ -5930,7 +5930,7 @@ function vrPAOpportunity(idx) {
 // ═══════════════════════════════════════════════════════════
 //  ASSISTANT DOCUMENTAIRE PERMANENT (GED) — indexation + RAG
 // ═══════════════════════════════════════════════════════════
-const GED_EXTS = ['pdf', 'docx', 'txt', 'csv', 'eml'];
+const GED_EXTS = ['pdf', 'docx', 'txt', 'csv', 'eml', 'msg'];
 const GED_MAX_CHUNKS = 300;   // passages max par document
 let gedFiles = [];
 let gedIndexing = false;
@@ -5944,7 +5944,7 @@ function renderGed() {
       <div class="card-header"><div class="card-title">📚 Assistant documentaire — base permanente</div></div>
       <div class="card-body">
         <p style="font-size:13px;color:var(--t3);margin:0 0 12px;line-height:1.5">
-          Indexez un dossier de documents (PDF, DOCX, TXT, CSV, EML) dans Supabase pour les interroger à tout moment.
+          Indexez un dossier de documents (PDF, DOCX, TXT, CSV, EML, MSG Outlook) dans Supabase pour les interroger à tout moment.
           La recherche est <strong>sémantique</strong> : posez vos questions en langage naturel, l'assistant retrouve les
           passages pertinents parmi tous les documents indexés et répond avec ses sources.
           Seul le <strong>texte</strong> est stocké (pas les fichiers originaux) ; le chemin réseau d'origine est conservé.
@@ -6058,6 +6058,16 @@ async function gedExtractText(file, ext, opts) {
   const MAX = 600000;
   if (ext === 'txt' || ext === 'csv') return (await file.text()).slice(0, MAX);
   if (ext === 'eml') { const raw = await file.text(); const bs = raw.indexOf('\n\n'); return (bs > 0 ? raw.slice(bs + 2) : raw).slice(0, MAX); }
+  if (ext === 'msg') {
+    // Emails Outlook .msg → extraction côté serveur (@kenjiuno/msgreader) via /api/parse
+    if (file.size > 15 * 1024 * 1024) throw new Error('fichier .msg trop volumineux (>15 Mo)');
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = ''; for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + 8192, bytes.length)));
+    const r = await fetch('/api/parse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file: btoa(binary), filename: file.name }) });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || ('extraction .msg serveur ' + r.status)); }
+    const j = await r.json();
+    return String(j.text || '').slice(0, MAX);
+  }
   if (ext === 'pdf') {
     if (!window._pdfjsLib) {
       window._pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs');
@@ -6156,7 +6166,7 @@ async function gedPickAndIndex(opts) {
 
   try {
     await gedScanRecursive(dir, '');
-    if (!gedFiles.length) { setStatus('Aucun fichier supporté trouvé (pdf, docx, txt, csv, eml).'); return; }
+    if (!gedFiles.length) { setStatus('Aucun fichier supporté trouvé (pdf, docx, txt, csv, eml, msg).'); return; }
 
     // Index existant (pour ignorer les fichiers déjà indexés inchangés) — paginé pour fiabilité > 1000 docs
     const existing = {};
