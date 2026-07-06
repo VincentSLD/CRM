@@ -2924,6 +2924,12 @@ tbody tr:last-child td { border-bottom: none; }
 
 <div class="toasts" id="toasts"></div>
 
+<!-- Mode « NOVA seule » (fenêtre détachée sur 2e écran) -->
+<style>
+body.nova-only > *:not(#aiChatPanel){ display:none !important; }
+body.nova-only #aiChatPanel{ display:flex !important; inset:0 !important; top:0 !important; left:0 !important; right:0 !important; bottom:0 !important; width:100vw !important; height:100vh !important; max-width:none !important; max-height:none !important; min-width:0 !important; min-height:0 !important; border:none !important; border-radius:0 !important; box-shadow:none !important; resize:none !important; }
+body.nova-only #aiChatHeader{ cursor:default !important; }
+</style>
 <!-- Chatbot IA flottant -->
 <div id="aiChatBtn" onclick="toggleAIChat()" title="NOVA" style="position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 6px 20px rgba(139,92,246,.4);z-index:900;transition:transform .2s;font-weight:800;font-size:11px;letter-spacing:1px" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform=''">
   NOVA
@@ -2943,6 +2949,9 @@ tbody tr:last-child td { border-bottom: none; }
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
       </button>
       <button id="aiSpeedToggle" onclick="cycleAITtsSpeed()" title="Vitesse vocale" style="background:none;border:none;color:#fff;cursor:pointer;font-size:11px;opacity:.7;padding:4px;font-weight:700;min-width:30px">1x</button>
+      <button id="novaDetachBtn" onclick="novaDetach()" title="Ouvrir NOVA dans une fenêtre séparée (2e écran)" style="background:none;border:none;color:#fff;cursor:pointer;opacity:.7;padding:4px;display:flex;align-items:center">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </button>
       <button id="novaFullBtn" onclick="novaToggleFullscreen()" title="Plein écran" style="background:none;border:none;color:#fff;cursor:pointer;opacity:.7;padding:4px;display:flex;align-items:center">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
       </button>
@@ -23481,6 +23490,26 @@ function toggleAIChat() {
     if (speedBtn) { speedBtn.textContent = _aiTtsSpeed + 'x'; speedBtn.style.opacity = _aiTtsSpeed > 1 ? '1' : '.7'; }
   }
 }
+// Ouvre NOVA dans une fenêtre séparée (déplaçable sur un 2e écran)
+function novaDetach() {
+  const url = location.pathname + '?nova=1';
+  const w = window.open(url, 'NOVA_' + Date.now(), 'popup=yes,width=780,height=860');
+  if (!w) { toast('Autorisez les fenêtres pop-up pour détacher NOVA.', 'info'); return; }
+  // Refermer le panneau intégré ici (il vit désormais dans la fenêtre séparée)
+  const panel = document.getElementById('aiChatPanel');
+  if (panel && panel.style.display === 'flex') toggleAIChat();
+}
+// Mode « NOVA seule » : la page ne montre que l'assistant (fenêtre détachée)
+function _enterNovaOnly() {
+  const panel = document.getElementById('aiChatPanel'); if (!panel) return;
+  try { document.body.appendChild(panel); } catch (e) {} // garantir qu'il est enfant direct de <body> pour le sélecteur CSS
+  document.body.classList.add('nova-only');
+  document.title = 'NOVA';
+  if (panel.style.display !== 'flex') toggleAIChat();
+  const detach = document.getElementById('novaDetachBtn'); if (detach) detach.style.display = 'none';
+  const full = document.getElementById('novaFullBtn'); if (full) full.style.display = 'none';
+  const closeBtn = panel.querySelector('#aiChatHeader button:last-child'); if (closeBtn) closeBtn.style.display = 'none';
+}
 let _aiMsgIdx = 0;
 function addAIMsg(role, html) {
   const box = document.getElementById('aiChatMsgs');
@@ -29685,7 +29714,9 @@ async function onAuthSuccess(user) {
   renderPage('dashboard');
   initRealtime();
   checkAdminPending(user);
-  toast(`Bienvenue ${currentCommercial ? currentCommercial.nom : user.email}`, 'success');
+  // Fenêtre détachée : n'afficher que NOVA (2e écran)
+  if (new URLSearchParams(location.search).get('nova') === '1') { try { _enterNovaOnly(); } catch (e) { console.warn('nova-only', e.message); } }
+  else toast(`Bienvenue ${currentCommercial ? currentCommercial.nom : user.email}`, 'success');
 }
 
 // Vérifier les utilisateurs en attente d'approbation (admin uniquement)
