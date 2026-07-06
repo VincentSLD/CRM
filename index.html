@@ -5951,7 +5951,8 @@ function renderGed() {
         </p>
         <div id="gedStats" style="font-size:13px;color:var(--t2);margin-bottom:12px">Chargement des statistiques…</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-          <button class="btn btn-primary btn-sm" id="gedIndexBtn" onclick="gedPickAndIndex()">📂 Indexer / mettre à jour un dossier</button>
+          <button class="btn btn-primary btn-sm" id="gedIndexBtn" onclick="gedPickAndIndex({ ocr: document.getElementById('gedOcrChk')?.checked })">📂 Indexer / mettre à jour un dossier</button>
+          <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer" title="OCR des PDF scannés (sans couche texte) — beaucoup plus lent"><input type="checkbox" id="gedOcrChk"> 🔎 OCR des PDF scannés</label>
           <button class="btn btn-sm" onclick="gedBackfillPositions()" title="Extrait la position GPS des documents déjà indexés sans refaire les embeddings">📍 Extraire les positions</button>
           <button class="btn btn-sm" onclick="gedLoadStats()">↻ Rafraîchir</button>
           <button class="btn btn-sm" onclick="gedRepair()" title="Supprime les documents enregistrés sans aucun passage (à reprendre à la prochaine indexation)">🛠 Réparer</button>
@@ -6025,7 +6026,35 @@ async function gedScanRecursive(dirHandle, path, depth = 0) {
   }
 }
 
-async function gedExtractText(file, ext) {
+// OCR (Tesseract.js, français) — worker réutilisé entre pages/fichiers
+async function _gedOcrWorker() {
+  if (window._gedOcr) return window._gedOcr;
+  if (!window._TesseractMod) window._TesseractMod = await import('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.esm.min.js');
+  const T = window._TesseractMod.default || window._TesseractMod;
+  window._gedOcr = await T.createWorker('fra');
+  return window._gedOcr;
+}
+async function gedOcrPdf(doc, statusCb) {
+  const worker = await _gedOcrWorker();
+  const MAXP = 12, MAX = 600000;
+  const n = Math.min(doc.numPages, MAXP);
+  let out = '';
+  for (let p = 1; p <= n; p++) {
+    if (statusCb) try { statusCb('OCR page ' + p + '/' + n + '…'); } catch (e) {}
+    const pg = await doc.getPage(p);
+    const viewport = pg.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.min(viewport.width, 2200); canvas.height = Math.min(viewport.height, 2800);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    await pg.render({ canvasContext: ctx, viewport }).promise;
+    try { const { data } = await worker.recognize(canvas); out += (data.text || '') + '\n'; } catch (e) { /* page illisible */ }
+    canvas.width = 0; canvas.height = 0;
+    if (out.length > MAX) break;
+  }
+  return out.trim();
+}
+async function gedExtractText(file, ext, opts) {
+  opts = opts || {};
   const MAX = 600000;
   if (ext === 'txt' || ext === 'csv') return (await file.text()).slice(0, MAX);
   if (ext === 'eml') { const raw = await file.text(); const bs = raw.indexOf('\n\n'); return (bs > 0 ? raw.slice(bs + 2) : raw).slice(0, MAX); }
@@ -6043,7 +6072,12 @@ async function gedExtractText(file, ext) {
       text += c.items.map(it => it.str).join(' ') + '\n';
       if (text.length > MAX) break;
     }
-    return text.trim();
+    text = text.trim();
+    // PDF scanné (pas de couche texte) → OCR de secours si activé
+    if (text.length < 20 && opts.ocr) {
+      try { text = await gedOcrPdf(doc, opts.onOcrStatus); } catch (e) { console.warn('OCR', e); }
+    }
+    return text;
   }
   if (ext === 'docx') {
     if (!window._mammoth) window._mammoth = await import('https://cdn.jsdelivr.net/npm/mammoth@1.8.0/+esm');
@@ -6141,9 +6175,9 @@ async function gedPickAndIndex(opts) {
       } else {
         let docId = null;
         try {
-          const text = await gedExtractText(f.file, f.ext);
+          const text = await gedExtractText(f.file, f.ext, { ocr: !!opts.ocr, onOcrStatus: t => setStatus(`(${done}/${gedFiles.length}) ${f.name} — ${t}`) });
           if (!text || text.length < 20) {
-            throw new Error(f.ext === 'pdf' ? 'aucun texte extrait (PDF scanné/image ?)' : 'aucun texte extrait');
+            throw new Error(f.ext === 'pdf' ? (opts.ocr ? 'aucun texte même après OCR (page vide/illisible ?)' : 'aucun texte extrait (PDF scanné/image — activez l\'OCR)') : 'aucun texte extrait');
           }
           // 1) Découpage + embeddings AVANT toute écriture (évite les documents sans passages)
           const allChunks = gedChunkText(text);
@@ -6202,9 +6236,11 @@ async function gedPickAndIndex(opts) {
 // Indexation d'un dossier lancée DEPUIS NOVA (progression affichée dans le fil de discussion)
 function novaIndexDossier() {
   const box = document.getElementById('aiChatMsgs');
-  const bubble = addAIMsg('assistant', '📂 <b>Indexation documentaire</b><br><span id="nova-idx-status" style="color:var(--t3)">Choisissez un dossier à indexer…</span>');
+  const ocr = confirm('Activer l\'OCR pour les PDF scannés (chèques, devis signés, plans…) ?\n\nOK = OCR activé (plus lent mais lit les documents scannés)\nAnnuler = indexation rapide (PDF avec texte uniquement)');
+  const bubble = addAIMsg('assistant', '📂 <b>Indexation documentaire</b>' + (ocr ? ' <span style="font-size:11px;color:var(--t3)">(OCR activé)</span>' : '') + '<br><span id="nova-idx-status" style="color:var(--t3)">Choisissez un dossier à indexer…</span>');
   const setTxt = html => { const el = bubble && bubble.querySelector('#nova-idx-status'); if (el) el.innerHTML = html; if (box) box.scrollTop = box.scrollHeight; };
   gedPickAndIndex({
+    ocr,
     onStatus: t => setTxt(cmdEsc(t)),
     onDone: r => {
       if (r && r.error) { setTxt('<span style="color:var(--red)">Erreur : ' + cmdEsc(r.error) + '</span>'); return; }
