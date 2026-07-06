@@ -2977,6 +2977,7 @@ tbody tr:last-child td { border-bottom: none; }
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('webRecherche')">🌐 Recherche web</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('veilleConstruction')">🏗️ Veille construction</button>
     <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaQuick('prospectsNaf')">🎯 Prospects (activité)</button>
+    <button class="btn" style="font-size:11px;padding:4px 8px;white-space:nowrap" onclick="novaIndexDossier()" title="Indexer un dossier de documents pour pouvoir l'interroger ici">📂 Indexer un dossier</button>
   </div>
   </div>
   <div style="padding:10px;border-top:1px solid var(--border);display:flex;gap:6px;background:var(--card,#fff)">
@@ -6091,9 +6092,10 @@ function gedExtractLatLon(text) {
   return null;
 }
 
-async function gedPickAndIndex() {
+async function gedPickAndIndex(opts) {
+  opts = opts || {};
   if (gedIndexing) return;
-  if (!window.showDirectoryPicker) { toast('Navigateur non compatible — utilisez Chrome ou Edge.', 'error'); return; }
+  if (!window.showDirectoryPicker) { toast('Navigateur non compatible — utilisez Chrome ou Edge.', 'error'); if (opts.onStatus) opts.onStatus('Navigateur non compatible (Chrome/Edge requis).'); return; }
   let dir;
   try { dir = await window.showDirectoryPicker(); }
   catch (e) { if (e.name === 'AbortError') return; toast('Erreur : ' + e.message, 'error'); return; }
@@ -6103,13 +6105,15 @@ async function gedPickAndIndex() {
   const statusEl = document.getElementById('gedIndexStatus');
   const progWrap = document.getElementById('gedProgress');
   const progBar = document.getElementById('gedProgressBar');
+  const setStatus = t => { if (statusEl) statusEl.textContent = t; if (opts.onStatus) try { opts.onStatus(t); } catch (e) {} };
+  const setProg = pct => { if (progBar) progBar.style.width = pct + '%'; if (opts.onProgress) try { opts.onProgress(pct); } catch (e) {} };
   if (btn) btn.disabled = true;
   gedFiles = [];
-  if (statusEl) statusEl.textContent = 'Analyse du dossier…';
+  setStatus('Analyse du dossier…');
 
   try {
     await gedScanRecursive(dir, '');
-    if (!gedFiles.length) { if (statusEl) statusEl.textContent = 'Aucun fichier supporté trouvé (pdf, docx, txt, csv, eml).'; return; }
+    if (!gedFiles.length) { setStatus('Aucun fichier supporté trouvé (pdf, docx, txt, csv, eml).'); return; }
 
     // Index existant (pour ignorer les fichiers déjà indexés inchangés) — paginé pour fiabilité > 1000 docs
     const existing = {};
@@ -6168,21 +6172,36 @@ async function gedPickAndIndex() {
           console.warn('GED index échec', f.path, e);
         }
       }
-      if (progBar) progBar.style.width = (done / gedFiles.length * 100).toFixed(0) + '%';
-      if (statusEl) statusEl.textContent = `(${done}/${gedFiles.length}) ${indexed} ajoutés · ${skipped} déjà présents · ${failed} échecs`;
+      setProg((done / gedFiles.length * 100).toFixed(0));
+      setStatus(`(${done}/${gedFiles.length}) ${indexed} ajoutés · ${skipped} déjà présents · ${failed} échecs`);
     }
 
     if (progWrap) setTimeout(() => { progWrap.style.display = 'none'; }, 1500);
     gedRenderReport(issues, { indexed, skipped, failed, total: gedFiles.length });
     toast(`Indexation terminée : ${indexed} ajoutés, ${skipped} déjà présents, ${failed} échecs.`, failed ? 'warning' : 'success');
+    if (opts.onDone) try { opts.onDone({ indexed, skipped, failed, total: gedFiles.length }); } catch (e) {}
     gedLoadStats();
   } catch (e) {
     toast('Erreur indexation : ' + e.message, 'error');
-    if (statusEl) statusEl.textContent = 'Erreur : ' + e.message;
+    setStatus('Erreur : ' + e.message);
+    if (opts.onDone) try { opts.onDone({ error: e.message }); } catch (e2) {}
   } finally {
     gedIndexing = false;
     if (btn) btn.disabled = false;
   }
+}
+// Indexation d'un dossier lancée DEPUIS NOVA (progression affichée dans le fil de discussion)
+function novaIndexDossier() {
+  const box = document.getElementById('aiChatMsgs');
+  const bubble = addAIMsg('assistant', '📂 <b>Indexation documentaire</b><br><span id="nova-idx-status" style="color:var(--t3)">Choisissez un dossier à indexer…</span>');
+  const setTxt = html => { const el = bubble && bubble.querySelector('#nova-idx-status'); if (el) el.innerHTML = html; if (box) box.scrollTop = box.scrollHeight; };
+  gedPickAndIndex({
+    onStatus: t => setTxt(cmdEsc(t)),
+    onDone: r => {
+      if (r && r.error) { setTxt('<span style="color:var(--red)">Erreur : ' + cmdEsc(r.error) + '</span>'); return; }
+      if (r) setTxt(`✅ Terminé : <b>${r.indexed}</b> ajouté(s), ${r.skipped} déjà présent(s), ${r.failed} échec(s).<br>Posez vos questions ici : je chercherai dans ces documents.`);
+    },
+  });
 }
 
 function gedRenderReport(issues, summary) {
