@@ -443,3 +443,27 @@ AS $$
   LIMIT LEAST(COALESCE(lim, 20), 50);
 $$;
 GRANT EXECUTE ON FUNCTION search_contacts(text, int) TO anon, authenticated, service_role;
+
+-- ============================================================================
+-- INDEX DE PERFORMANCE (remède aux timeouts 522 au chargement)
+-- Sans ces index, chaque login trie des tables entières (order by date desc
+-- sur ~26 000 lignes) → Postgres met 25 s → Cloudflare coupe à 522.
+-- À exécuter une fois. CONCURRENTLY = pas de verrou (à lancer hors transaction).
+-- ============================================================================
+
+CREATE INDEX IF NOT EXISTS idx_devis_date        ON devis (date DESC);
+CREATE INDEX IF NOT EXISTS idx_commandes_date     ON commandes (date DESC);
+CREATE INDEX IF NOT EXISTS idx_factures_date      ON factures (date DESC);
+CREATE INDEX IF NOT EXISTS idx_marches_date_debut ON marches (date_debut DESC);
+CREATE INDEX IF NOT EXISTS idx_affaires_date_debut ON affaires (date_debut DESC);
+CREATE INDEX IF NOT EXISTS idx_reports_date       ON reports (date DESC);
+CREATE INDEX IF NOT EXISTS idx_clients_name       ON clients (name);
+CREATE INDEX IF NOT EXISTS idx_clients_acct_mgr   ON clients (account_manager_id);
+
+-- Clés étrangères fréquemment filtrées (jointures/agrégations par client)
+CREATE INDEX IF NOT EXISTS idx_devis_client_id    ON devis (client_id);
+CREATE INDEX IF NOT EXISTS idx_commandes_client_id ON commandes (client_id);
+CREATE INDEX IF NOT EXISTS idx_factures_client_id ON factures (client_id);
+CREATE INDEX IF NOT EXISTS idx_affaires_marche_id ON affaires (marche_id);
+
+ANALYZE devis; ANALYZE commandes; ANALYZE factures; ANALYZE marches; ANALYZE affaires; ANALYZE reports; ANALYZE clients;

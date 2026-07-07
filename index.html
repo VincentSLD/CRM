@@ -3577,7 +3577,7 @@ async function loadDB() {
       fetchFast('devis', DEVIS_LITE),
       fetchFast('commandes', CMD_LITE),
       fetchFast('factures', FACT_LITE),
-      sb.from('commerciaux').select('*').then(r => r.data || []),
+      _sbRetry(() => sb.from('commerciaux').select('*'), 'commerciaux').then(r => r.data || []),
     ]);
     console.log(`[loadDB] Phase 1 en ${Date.now()-t0}ms : ${dAll.length} devis, ${cmAll.length} cmd, ${fAll.length} fact`);
 
@@ -3609,16 +3609,16 @@ async function loadDB() {
     _deferredLoadPromise = (async () => {
       const t1 = Date.now();
       const [rAll, nAll, maAll, afAll, luccaAll, akAll, contactsCount, concurrentsCount, campagnesCount, relancesAll] = await Promise.all([
-        (async () => { const RCOLS_FULL='id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,affaire_id,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at'; const RCOLS_FB='id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at'; let cols=RCOLS_FULL, all=[],off=0,first=true; while(true){ const {data,error}=await sb.from('reports').select(cols).order('date',{ascending:false}).range(off,off+999); if(error){ if(first&&cols!==RCOLS_FB){ cols=RCOLS_FB; continue; } break; } if(!data||!data.length) break; all=all.concat(data); first=false; if(data.length<1000) break; off+=1000; } return all; })(),
-        sb.from('notifications').select('id,type,text,time_label,read,created_at').order('created_at', {ascending:false}).limit(100).then(r => r.data || []),
+        (async () => { const RCOLS_FULL='id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,affaire_id,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at'; const RCOLS_FB='id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at'; let cols=RCOLS_FULL, all=[],off=0,first=true; while(true){ const {data,error}=await _sbRetry(() => sb.from('reports').select(cols).order('date',{ascending:false}).range(off,off+999), 'reports'); if(error){ if(first&&cols!==RCOLS_FB){ cols=RCOLS_FB; continue; } break; } if(!data||!data.length) break; all=all.concat(data); first=false; if(data.length<1000) break; off+=1000; } return all; })(),
+        _sbRetry(() => sb.from('notifications').select('id,type,text,time_label,read,created_at').order('created_at', {ascending:false}).limit(100), 'notifications').then(r => r.data || []),
         fetchFast('marches', MARCHE_LITE, 'date_debut', true),
         fetchFast('affaires', AFFAIRE_LITE, 'date_debut', true),
-        sb.from('collaborateurs_lucca').select('id,lucca_id,nom,prenom,email,etablissement,poste').order('nom').then(r => r.data || []),
-        sb.from('collaborateurs').select('id,lucca_id,akuiteo_id,nom,prenom,code,email,telephone,mobile').order('nom').then(r => r.data || []),
-        sb.from('contacts').select('id', { count: 'exact', head: true }).then(r => r.count || 0),
-        sb.from('concurrents').select('id', { count: 'exact', head: true }).then(r => r.count || 0),
-        sb.from('campagnes').select('id', { count: 'exact', head: true }).then(r => r.count || 0),
-        sb.from('relances_devis').select('*').then(r => r.data || []),
+        _sbRetry(() => sb.from('collaborateurs_lucca').select('id,lucca_id,nom,prenom,email,etablissement,poste').order('nom'), 'collaborateurs_lucca').then(r => r.data || []),
+        _sbRetry(() => sb.from('collaborateurs').select('id,lucca_id,akuiteo_id,nom,prenom,code,email,telephone,mobile').order('nom'), 'collaborateurs').then(r => r.data || []),
+        _sbRetry(() => sb.from('contacts').select('id', { count: 'exact', head: true }), 'contacts count').then(r => r.count || 0),
+        _sbRetry(() => sb.from('concurrents').select('id', { count: 'exact', head: true }), 'concurrents count').then(r => r.count || 0),
+        _sbRetry(() => sb.from('campagnes').select('id', { count: 'exact', head: true }), 'campagnes count').then(r => r.count || 0),
+        _sbRetry(() => sb.from('relances_devis').select('*'), 'relances_devis').then(r => r.data || []),
       ]);
       DB.reports = rAll.map(r => ({
         ...r, client: r.client_name, text: r.contenu || '', date_raw: r.date, date: timeAgo(r.date), titre: r.titre,
@@ -29780,8 +29780,8 @@ async function doAuth() {
 async function onAuthSuccess(user) {
   currentUser = user;
 
-  // Charger le profil commercial lié
-  const { data } = await sb.from('commerciaux').select('*').eq('user_id', user.id).maybeSingle();
+  // Charger le profil commercial lié (avec retry : 522/timeout Supabase au login)
+  const { data } = await _sbRetry(() => sb.from('commerciaux').select('*').eq('user_id', user.id).maybeSingle(), 'profil commercial');
   currentCommercial = data;
   // Si pas de profil commercial, en créer un automatiquement
   if (!currentCommercial) {
