@@ -26785,35 +26785,73 @@ async function syncAkuiteoQuick() {
     const existMarSet = new Set((existMar || []).map(m => m.id));
     const allPids = new Set([...Object.keys(projInfo), ...neededProjects.keys()]);
     if (allPids.size > 0) {
+      const pidList = [...allPids];
+      // Enrichissement projet (apporteur d'affaire, architecte, responsable, adresse du site) via /read
+      const enrich = {};
+      let _enrDone = 0;
+      await _syncMapLimit(pidList, 6, async pid => {
+        if ((_enrDone++ % 50) === 0) setSyncText(`Sync du dernier mois — Enrichissement projets ${_enrDone}/${pidList.length}…`);
+        try {
+          const proj = await _akRetry('POST', `/projectmanagement/projects/${pid}/read`, { options: ['PROJECT_SUB_CATEGORY', 'PROJECT_SUB_CATEGORY_LEVEL2', 'MANAGER', 'ADDRESS'] });
+          if (proj) {
+            const a = proj.address || null;
+            enrich[pid] = {
+              name: proj.name || null,
+              apporteur: proj.projectSubCategory?.name || null,
+              architecte: proj.projectSubCategoryLevel2?.name || null,
+              responsable: proj.manager ? [proj.manager.name, proj.manager.firstName].filter(Boolean).join(' ') : null,
+              adresse: a?.line1 || null, ville: a?.city || null, code_postal: a?.postalCode || null,
+              departement: a?.geographicalDepartmentName || null, region: a?.regionName || null,
+            };
+          }
+        } catch (e) {}
+      });
+
       const marchesMap = {};
       const affaireRows = [];
       for (const pid of allPids) {
         const p = projInfo[pid] || null;
+        const en = enrich[pid] || {};
         const nb = neededProjects.get(pid) || {};
         const customerId = String((p && p.customerId) || nb.customerId || '');
         const crmClient = akCMap[customerId];
         const { code: marcheCode, id: marcheId } = _marcheOf(pid);
         const pCreated = (p && p.changeTracking?.createdTime) ? _d10(p.changeTracking.createdTime) : (_d10(nb.date) || new Date().toISOString().slice(0, 10));
-        // Marché : (re)construit si projet récent (p) OU si absent ; sinon on laisse tel quel
+        const nom = en.name || (p && p.name) || ('Affaire ' + pid);
         if (!marchesMap[marcheCode]) {
           marchesMap[marcheCode] = { id: marcheId, akuiteo_id: marcheCode, ref: marcheCode,
-            nom: (p && p.name) || ('Marché ' + marcheCode), client_id: crmClient?.id || null, client_name: crmClient?.name || '',
-            agence: (p && p.companyCode) || nb.agence || '', statut: 'en_cours', nb_affaires: 0, date_debut: pCreated, _recent: !!p };
+            nom: en.name || (p && p.name) || ('Marché ' + marcheCode), client_id: crmClient?.id || null, client_name: crmClient?.name || '',
+            agence: (p && p.companyCode) || nb.agence || '', statut: 'en_cours', nb_affaires: 0, date_debut: pCreated,
+            adresse: en.adresse || null, code_postal: en.code_postal || null, ville: en.ville || null, _recent: !!(p || en.name) };
         }
         marchesMap[marcheCode].nb_affaires++;
         const affId = _affaireIdOf(pid);
-        // Affaire récente (modifiée) → upsert complet ; affaire seulement référencée par un doc → créée uniquement si absente
-        if (p || !existAffSet.has(affId)) {
-          affaireRows.push({ id: affId, akuiteo_id: pid, ref: pid, nom: (p && p.name) || ('Affaire ' + pid), marche_id: marcheId,
+        // Upsert l'affaire si projet récent OU enrichi OU absente (préserve l'existant non enrichi)
+        if (p || enrich[pid] || !existAffSet.has(affId)) {
+          affaireRows.push({ id: affId, akuiteo_id: pid, ref: pid, nom, marche_id: marcheId,
             client_id: crmClient?.id || null, client_name: crmClient?.name || '',
-            agence: (p && p.companyCode) || nb.agence || '', statut: 'en_cours', code_projet: pid, date_debut: pCreated });
+            agence: (p && p.companyCode) || nb.agence || '', statut: 'en_cours', code_projet: pid, date_debut: pCreated,
+            apporteur_affaire: en.apporteur || null, architecte: en.architecte || null, responsable: en.responsable || null,
+            adresse: en.adresse || null, ville: en.ville || null, code_postal: en.code_postal || null });
         }
       }
-      // Marchés : upsert les récents (mis à jour) + les manquants (créés) ; on ne touche pas aux existants non-récents (préserve leur nom enrichi)
       const marcheRows = Object.values(marchesMap).filter(m => m._recent || !existMarSet.has(m.id)).map(m => { const { _recent, ...row } = m; return row; });
       if (marcheRows.length > 0) await _sbUpsert('marches', marcheRows, 'id', 200);
       if (affaireRows.length > 0) await _sbUpsert('affaires', affaireRows, 'id', 200);
-      console.log(`[QuickSync] ${marcheRows.length} marchés, ${affaireRows.length} affaires (union projets récents + docs)`);
+      console.log(`[QuickSync] ${marcheRows.length} marchés, ${affaireRows.length} affaires (union + enrichis)`);
+
+      // Propager apporteur d'affaire + architecte sur les documents (affaire_id/marche_id déjà posés à l'insert)
+      const linkPids = [...neededProjects.keys()].filter(pid => enrich[pid] && (enrich[pid].apporteur || enrich[pid].architecte));
+      if (linkPids.length > 0) {
+        setSyncText('Sync du dernier mois — Apporteur/Architecte sur documents…');
+        await _syncMapLimit(linkPids, 5, async pid => {
+          const upd = { apporteur_affaire: enrich[pid].apporteur || null, architecte: enrich[pid].architecte || null };
+          await _sbRetry(() => sb.from('devis').update(upd).eq('projet', pid), 'link app devis');
+          await _sbRetry(() => sb.from('commandes').update(upd).eq('projet', pid), 'link app commandes');
+          await _sbRetry(() => sb.from('factures').update(upd).eq('projet', pid), 'link app factures');
+        });
+        console.log(`[QuickSync] Apporteur/architecte propagés sur ${linkPids.length} projet(s)`);
+      }
     }
 
     // N'avancer le timestamp et n'annoncer « terminée » que si Akuiteo est resté disponible
