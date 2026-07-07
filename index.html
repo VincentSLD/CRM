@@ -26766,16 +26766,10 @@ async function syncAkuiteoQuick() {
       if (condUpd.length > 0) console.log(`[QuickSync] ${condUpd.length} conditions de paiement mises à jour`);
     }
 
-    // 4. Marchés / Affaires — UNION des projets récents + des projets référencés par les documents.
-    //    Garantit l'existence des affaires/marchés (sinon affaire_id/marche_id des docs pointeraient dans le vide).
+    // 4. Marchés / Affaires — à partir des projets RÉFÉRENCÉS par les documents du mois.
+    //    (Akuiteo n'accepte pas modificationTime/createdTime sur /projectmanagement/projects/search → 400,
+    //     donc on part des projets des docs et on les enrichit via /read.)
     setSyncText('Sync du dernier mois — Marchés & Affaires...');
-    const [modifiedProjects, createdProjects] = await Promise.all([
-      _akSearchAll('/projectmanagement/projects/search', { modificationTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate } }),
-      _akSearchAll('/projectmanagement/projects/search', { createdTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate } }),
-    ]);
-    const projInfo = {}; // pid -> projet Akuiteo (pour enrichir nom/client)
-    for (const list of [createdProjects, modifiedProjects]) { if (!Array.isArray(list)) continue; for (const p of list) { if (p && p.id && !projInfo[p.id]) projInfo[p.id] = p; } }
-
     // Affaires/marchés déjà en base → on ne recrée QUE les manquants (préserve les données enrichies)
     const [{ data: existAff }, { data: existMar }] = await Promise.all([
       _sbRetry(() => sb.from('affaires').select('id'), 'read affaires ids'),
@@ -26783,7 +26777,7 @@ async function syncAkuiteoQuick() {
     ]);
     const existAffSet = new Set((existAff || []).map(a => a.id));
     const existMarSet = new Set((existMar || []).map(m => m.id));
-    const allPids = new Set([...Object.keys(projInfo), ...neededProjects.keys()]);
+    const allPids = new Set([...neededProjects.keys()]);
     if (allPids.size > 0) {
       const pidList = [...allPids];
       // Enrichissement projet (apporteur d'affaire, architecte, responsable, adresse du site) via /read
@@ -26810,27 +26804,25 @@ async function syncAkuiteoQuick() {
       const marchesMap = {};
       const affaireRows = [];
       for (const pid of allPids) {
-        const p = projInfo[pid] || null;
         const en = enrich[pid] || {};
         const nb = neededProjects.get(pid) || {};
-        const customerId = String((p && p.customerId) || nb.customerId || '');
-        const crmClient = akCMap[customerId];
+        const crmClient = akCMap[String(nb.customerId || '')];
         const { code: marcheCode, id: marcheId } = _marcheOf(pid);
-        const pCreated = (p && p.changeTracking?.createdTime) ? _d10(p.changeTracking.createdTime) : (_d10(nb.date) || new Date().toISOString().slice(0, 10));
-        const nom = en.name || (p && p.name) || ('Affaire ' + pid);
+        const pCreated = _d10(nb.date) || new Date().toISOString().slice(0, 10);
+        const nom = en.name || ('Affaire ' + pid);
         if (!marchesMap[marcheCode]) {
           marchesMap[marcheCode] = { id: marcheId, akuiteo_id: marcheCode, ref: marcheCode,
-            nom: en.name || (p && p.name) || ('Marché ' + marcheCode), client_id: crmClient?.id || null, client_name: crmClient?.name || '',
-            agence: (p && p.companyCode) || nb.agence || '', statut: 'en_cours', nb_affaires: 0, date_debut: pCreated,
-            adresse: en.adresse || null, code_postal: en.code_postal || null, ville: en.ville || null, _recent: !!(p || en.name) };
+            nom: en.name || ('Marché ' + marcheCode), client_id: crmClient?.id || null, client_name: crmClient?.name || '',
+            agence: nb.agence || '', statut: 'en_cours', nb_affaires: 0, date_debut: pCreated,
+            adresse: en.adresse || null, code_postal: en.code_postal || null, ville: en.ville || null, _recent: !!en.name };
         }
         marchesMap[marcheCode].nb_affaires++;
         const affId = _affaireIdOf(pid);
-        // Upsert l'affaire si projet récent OU enrichi OU absente (préserve l'existant non enrichi)
-        if (p || enrich[pid] || !existAffSet.has(affId)) {
+        // Upsert l'affaire si enrichie (données fraîches) OU absente (préserve l'existant non enrichi)
+        if (enrich[pid] || !existAffSet.has(affId)) {
           affaireRows.push({ id: affId, akuiteo_id: pid, ref: pid, nom, marche_id: marcheId,
             client_id: crmClient?.id || null, client_name: crmClient?.name || '',
-            agence: (p && p.companyCode) || nb.agence || '', statut: 'en_cours', code_projet: pid, date_debut: pCreated,
+            agence: nb.agence || '', statut: 'en_cours', code_projet: pid, date_debut: pCreated,
             apporteur_affaire: en.apporteur || null, architecte: en.architecte || null, responsable: en.responsable || null,
             adresse: en.adresse || null, ville: en.ville || null, code_postal: en.code_postal || null });
         }
