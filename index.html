@@ -17782,7 +17782,13 @@ function renderCustomData(cd) {
         displayVal = fmt(displayVal);
       }
       const displayName = CUSTOM_DATA_RENAME[v.name] || v.name || k;
-      return { order: v.realOrder || 999, html: detailRow(displayName, displayVal != null ? String(displayVal) : '—') };
+      let valHtml = displayVal != null ? String(displayVal) : '—';
+      // Apporteur d'affaire (Code AA) et Gros-œuvre (Code GO) : afficher le commercial rattaché à la société
+      if ((v.name === 'Code AA' || v.name === 'Code GO') && displayVal != null && String(displayVal).trim() && String(displayVal) !== '—') {
+        const comm = apporteurCommercialLabel(String(displayVal));
+        valHtml += '<br><span style="color:var(--t3);font-size:11px;font-weight:400">Commercial — ' + (comm || 'Non attribué') + '</span>';
+      }
+      return { order: v.realOrder || 999, html: detailRow(displayName, valHtml) };
     }
     return { order: 999, html: detailRow(k, typeof v === 'object' ? JSON.stringify(v) : String(v)) };
   }).sort((a, b) => a.order - b.order).map(r => r.html);
