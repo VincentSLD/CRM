@@ -26729,7 +26729,7 @@ async function syncAkuiteoQuick() {
         if ((_enrDone++ % 50) === 0) setSyncText(`Sync du dernier mois — Enrichissement projets ${_enrDone}/${pidList.length}...`);
         try {
           const proj = await _akRetry('POST', `/projectmanagement/projects/${pid}/read`, { options: ['PROJECT_SUB_CATEGORY', 'PROJECT_SUB_CATEGORY_LEVEL2', 'MANAGER', 'ADDRESS'] });
-          if (proj) { const a = proj.address || null; enrich[pid] = { name: proj.name || null, apporteur: proj.projectSubCategory?.name || null, architecte: proj.projectSubCategoryLevel2?.name || null, responsable: proj.manager ? [proj.manager.name, proj.manager.firstName].filter(Boolean).join(' ') : null, adresse: a?.line1 || null, ville: a?.city || null, code_postal: a?.postalCode || null }; }
+          if (proj) { const a = proj.address || null; enrich[pid] = { name: proj.name || null, apporteur: proj.projectSubCategoryLevel2?.name || null, architecte: proj.projectSubCategory?.name || null, responsable: proj.manager ? [proj.manager.name, proj.manager.firstName].filter(Boolean).join(' ') : null, adresse: a?.line1 || null, ville: a?.city || null, code_postal: a?.postalCode || null }; }
         } catch (e) {}
       });
       const marchesMap = {}, affaireRows = [];
@@ -27300,8 +27300,8 @@ async function syncAkuiteo() {
             if (proj) {
               const a = affairesByProject[pid];
               if (proj.name) a.nom = proj.name;
-              if (proj.projectSubCategory?.name) a.apporteur = proj.projectSubCategory.name;
-              if (proj.projectSubCategoryLevel2?.name) a.architecte = proj.projectSubCategoryLevel2.name;
+              if (proj.projectSubCategoryLevel2?.name) a.apporteur = proj.projectSubCategoryLevel2.name;
+              if (proj.projectSubCategory?.name) a.architecte = proj.projectSubCategory.name;
               if (proj.manager?.name) a.responsable = [proj.manager.name, proj.manager.firstName].filter(Boolean).join(' ');
               // Adresse du site depuis le projet (option ADDRESS)
               const addr = proj.address || null;
