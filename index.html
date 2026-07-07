@@ -8753,7 +8753,10 @@ function renderPage(page) {
     });
     return;
   }
-  C.innerHTML = '<div class="page active">' + (renderers[page] ? renderers[page]() : '<p>Page en construction</p>') + '</div>';
+  // Si la page n'a pas de renderer (ex. fiche détail rendue par sa propre fonction : commande/devis/facture),
+  // on NE touche PAS au contenu affiché → évite « Page en construction » lors d'un re-render (fin de sync, etc.).
+  if (!renderers[page]) return;
+  C.innerHTML = '<div class="page active">' + renderers[page]() + '</div>';
   // Post-render hooks
   if (page === 'cr') initEditor();
   if (page === 'carte') setTimeout(initCarteMap, 50);
@@ -26508,16 +26511,10 @@ async function _akSearchAll(path, criteria, pageSize = 500, maxPages = 30) {
   }
   return all;
 }
-// Documents (devis/commandes/factures) : UNION « datés du dernier mois » + « MODIFIÉS le dernier mois »
-// → récupère aussi les documents anciens dont on a changé la DLR, l'architecte, etc.
-async function _akSearchDocs(path, dayFrom, isoFrom) {
-  const [byDate, byMod] = await Promise.all([
-    _akSearchAll(path, { date: { operator: 'GREATER_OR_EQUALS', value: dayFrom } }),
-    _akSearchAll(path, { modificationTime: { operator: 'GREATER_OR_EQUALS', value: isoFrom } }),
-  ]);
-  const seen = new Set(), out = [];
-  for (const arr of [byDate, byMod]) for (const d of (arr || [])) { const k = String(d.id); if (k && !seen.has(k)) { seen.add(k); out.push(d); } }
-  return out;
+// Documents (devis/commandes/factures) datés du dernier mois.
+// NB : /sales/*/search n'accepte PAS modificationTime (400 « au moins une clause ») → filtre sur la date.
+async function _akSearchDocs(path, dayFrom) {
+  return _akSearchAll(path, { date: { operator: 'GREATER_OR_EQUALS', value: dayFrom } });
 }
 // Ids déterministes marché/affaire à partir d'un code projet Akuiteo (partagés par les 2 syncs)
 function _d10(v) { return v ? String(v).substring(0, 10) : null; }
@@ -26697,9 +26694,9 @@ async function syncAkuiteoQuick() {
 
     // 3a. Récupérer les documents (paginé + retry) — détail des commandes (lignes + customData)
     const [rawQuot, rawOrd, rawInv] = await Promise.all([
-      _akSearchDocs('/sales/quotations/search', docSinceDate, sinceDate),
-      _akSearchDocs('/sales/orders/search', docSinceDate, sinceDate),
-      _akSearchDocs('/sales/invoices/search', docSinceDate, sinceDate),
+      _akSearchDocs('/sales/quotations/search', docSinceDate),
+      _akSearchDocs('/sales/orders/search', docSinceDate),
+      _akSearchDocs('/sales/invoices/search', docSinceDate),
     ]);
     const recentQuot = Array.isArray(rawQuot) ? rawQuot : [];
     const recentOrd = Array.isArray(rawOrd) ? rawOrd : [];
