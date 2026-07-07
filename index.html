@@ -17647,20 +17647,27 @@ async function resolveEmployeeNames() {
 // (avec repli sur le responsable du siège du même SIREN si l'établissement n'en a pas).
 let _apporteurCommMap = null;       // nom normalisé société -> { novam, gph, resp, respId, siren }
 let _clientCommById = null;         // client_id -> même rec (pour les colonnes Novam/GPH des documents)
+let _apporteurCommByCode = null;    // code compte Akuiteo (clients.code) -> même rec (pour Code AA / Code GO)
 let _apporteurSiegeResp = null;     // siren -> nom du responsable du site du siège
 let _apporteurLoading = null;       // promesse en cours (évite les scans concurrents)
 function _normApporteurName(s) { return (s || '').toString().trim().toUpperCase().replace(/\s+/g, ' '); }
+// Résout un compte par CODE Akuiteo (Code AA / Code GO) → rec commercial { nom, id, novam, gph, resp… }
+function _commByCode(code) {
+  const c = (code || '').toString().trim();
+  if (!c || !_apporteurCommByCode) return null;
+  return _apporteurCommByCode[c] || null;
+}
 async function loadApporteurCommMap() {
   if (_apporteurCommMap) return _apporteurCommMap;
   if (_apporteurLoading) return _apporteurLoading;
   // Pagination keyset (par id) : évite les OFFSET profonds qui font expirer Postgres (erreur 500)
   _apporteurLoading = (async () => {
-    const map = {}, byId = {}, siegeResp = {};
+    const map = {}, byId = {}, byCode = {}, siegeResp = {};
     let lastId = '';
     try {
       while (true) {
         let q = sb.from('clients')
-          .select('id,name,raison_sociale,account_manager_name,salesman_name,responsable_site_name,responsable_site_id,est_siege,siren,code_postal')
+          .select('id,name,code,raison_sociale,account_manager_name,salesman_name,responsable_site_name,responsable_site_id,est_siege,siren,code_postal')
           .order('id', { ascending: true }).limit(1000);
         if (lastId) q = q.gt('id', lastId);
         const { data, error } = await q;
@@ -17668,6 +17675,9 @@ async function loadApporteurCommMap() {
         if (!data || !data.length) break;
         for (const c of data) {
           const rec = {
+            nom: c.name || null,
+            id: c.id || null,
+            code: c.code || null,
             novam: c.account_manager_name ? fmtCommercialName(c.account_manager_name) : null,
             gph: c.salesman_name ? fmtCommercialName(c.salesman_name) : null,
             resp: c.responsable_site_name ? fmtCommercialName(c.responsable_site_name) : null,
@@ -17676,6 +17686,7 @@ async function loadApporteurCommMap() {
             cp: c.code_postal || null,
           };
           if (c.id) byId[c.id] = rec;
+          if (c.code && !byCode[c.code]) byCode[c.code] = rec;
           for (const k of [_normApporteurName(c.name), _normApporteurName(c.raison_sociale)]) {
             if (k && !map[k]) map[k] = rec;
           }
@@ -17685,7 +17696,7 @@ async function loadApporteurCommMap() {
         if (data.length < 1000) break;
       }
     } catch (e) { console.warn('[loadApporteurCommMap] exception', e); }
-    _apporteurCommMap = map; _clientCommById = byId; _apporteurSiegeResp = siegeResp; _apporteurLoading = null;
+    _apporteurCommMap = map; _clientCommById = byId; _apporteurCommByCode = byCode; _apporteurSiegeResp = siegeResp; _apporteurLoading = null;
     return _apporteurCommMap;
   })();
   return _apporteurLoading;
@@ -17783,9 +17794,17 @@ function renderCustomData(cd) {
       }
       const displayName = CUSTOM_DATA_RENAME[v.name] || v.name || k;
       let valHtml = displayVal != null ? String(displayVal) : '—';
-      // Apporteur d'affaire (Code AA) et Gros-œuvre (Code GO) : afficher le commercial rattaché à la société
-      if ((v.name === 'Code AA' || v.name === 'Code GO') && displayVal != null && String(displayVal).trim() && String(displayVal) !== '—') {
-        const comm = apporteurCommercialLabel(String(displayVal));
+      // Apporteur d'affaire / Gros-œuvre : résoudre le compte + son commercial (Novam/GPH).
+      // « Code AA »/« Code GO » (1-alpha09/11) portent le CODE compte Akuiteo (ex. SCLI017988) → résolution par code ;
+      // « Apporteur Affaire »/« Gros Oeuvre » (1-alpha10/12) portent le NOM → résolution par nom. Repli croisé si besoin.
+      const _CD_ACCOUNT_CODE = (v.name === 'Code AA' || v.name === 'Code GO');
+      const _CD_ACCOUNT_NAME = (v.name === 'Apporteur Affaire' || v.name === 'Gros Oeuvre');
+      if ((_CD_ACCOUNT_CODE || _CD_ACCOUNT_NAME) && displayVal != null && String(displayVal).trim() && String(displayVal) !== '—') {
+        const raw = String(displayVal).trim();
+        let rec = _CD_ACCOUNT_CODE ? _commByCode(raw) : null;   // essai par code exact
+        if (rec && rec.nom) valHtml = rec.nom + ' <span style="color:var(--t3);font-size:11px;font-weight:400">(' + raw + ')</span>';
+        if (!rec && _apporteurCommMap) rec = _apporteurCommMap[_normApporteurName(raw)] || null;  // repli par nom
+        const comm = _fmtCommRec(rec);
         valHtml += '<br><span style="color:var(--t3);font-size:11px;font-weight:400">Commercial — ' + (comm || 'Non attribué') + '</span>';
       }
       return { order: v.realOrder || 999, html: detailRow(displayName, valHtml) };
