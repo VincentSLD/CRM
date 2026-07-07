@@ -26476,6 +26476,10 @@ async function _akSearchAll(path, criteria, pageSize = 500, maxPages = 30) {
   }
   return all;
 }
+// Ids déterministes marché/affaire à partir d'un code projet Akuiteo (partagés par les 2 syncs)
+function _d10(v) { return v ? String(v).substring(0, 10) : null; }
+function _marcheOf(pid) { const parts = String(pid || '').split('.'); const code = parts.length >= 2 ? parts.slice(0, 2).join('.') : String(pid || ''); return { code, id: 'akm_' + code.replace(/[^a-zA-Z0-9.]/g, '_') }; }
+function _affaireIdOf(pid) { return 'aka_' + String(pid || '').replace(/[^a-zA-Z0-9.]/g, '_'); }
 
 async function syncAkuiteoQuick() {
   showSyncLoading(true);
@@ -26646,6 +26650,9 @@ async function syncAkuiteoQuick() {
     const { data: allCl2 } = await _sbRetry(() => sb.from('clients').select('id,akuiteo_id,name'), 'read clients docs');
     const akCMap = {}; for (const c of (allCl2||[])) { if (c.akuiteo_id) akCMap[c.akuiteo_id] = c; }
     const docSinceDate = sinceDay;
+    const neededProjects = new Map(); // pid -> {customerId, agence, date}
+    const _regProj = (pid, customerId, agence, date) => { if (pid && !neededProjects.has(pid)) neededProjects.set(pid, { customerId, agence, date }); };
+    const _linkOf = pid => pid ? { affaire_id: _affaireIdOf(pid), marche_id: _marcheOf(pid).id } : {};
 
     const [rawQuot, rawOrd, rawInv] = await Promise.all([
       _akSearchAll('/sales/quotations/search', { date: { operator: 'GREATER_OR_EQUALS', value: docSinceDate } }),
@@ -26657,57 +26664,80 @@ async function syncAkuiteoQuick() {
     const recentInv = Array.isArray(rawInv) ? rawInv : [];
     console.log(`[QuickSync] Docs (dernier mois) : ${recentQuot.length} devis, ${recentOrd.length} cmd, ${recentInv.length} fact`);
 
-    // Devis
-    if (Array.isArray(recentQuot) && recentQuot.length > 0) {
+    // Devis — champs alignés sur la sync complète + liaison affaire/marché
+    if (recentQuot.length > 0) {
       const rows = recentQuot.map(q => {
         const c = akCMap[String(q.thirdPartyId || q.customerId || '')];
+        const pid = q.projectId || null;
+        if (pid) _regProj(pid, String(q.thirdPartyId || q.customerId || ''), q.entityCode, q.date);
         return { id: 'akd_' + String(q.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(q.id||''), ref: String(q.number||q.id||''),
           client_name: c?.name || q.name || 'Inconnu', client_id: c?.id || null, sujet: q.name || 'Devis',
-          montant: q.preTaxAmount || 0, statut: q.state === 'SIGNED' ? 'accepted' : q.state === 'ARCHIVED' ? 'refused' : 'pending',
-          date: q.date ? q.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
-          projet: q.projectId || null, agence: q.entityCode || null, societe: q.companyCode || null,
-          responsable_id: q.managerId || null, commercial_id: q.salesManagerId || null };
+          montant: q.preTaxAmount || 0, montant_ttc: q.afterTaxAmount || 0, tva: (q.afterTaxAmount || 0) - (q.preTaxAmount || 0),
+          statut: q.state === 'SIGNED' ? 'accepted' : q.state === 'ARCHIVED' ? 'refused' : 'pending',
+          date: _d10(q.date) || new Date().toISOString().slice(0, 10),
+          projet: pid, agence: q.entityCode || null, societe: q.companyCode || null,
+          responsable_id: q.managerId || null, commercial_id: q.salesManagerId || null,
+          devise: q.currencyCode || 'EUR', reference1: q.reference1 || null, probabilite: q.quotationProbability || null,
+          date_validation: _d10(q.validationDate), date_signature_prevue: _d10(q.expectedSignatureDate), date_signature_reelle: _d10(q.actualSignatureDate),
+          ..._linkOf(pid) };
       });
       await _sbUpsert('devis', rows, 'id', 200);
       console.log(`[QuickSync] ${rows.length} devis`);
     }
 
-    // Commandes
-    if (Array.isArray(recentOrd) && recentOrd.length > 0) {
-      // Récupérer les lignes (quantity) de chaque commande via GET individuel (concurrence limitée + retry)
-      setSyncText('Sync du dernier mois — Commandes (lignes)...');
+    // Commandes — fetch complet (lignes + customData) + champs alignés + liaison affaire/marché
+    if (recentOrd.length > 0) {
+      setSyncText('Sync du dernier mois — Commandes (détail)...');
       await _syncMapLimit(recentOrd, 6, async o => {
-        try { const full = await _akRetry('GET', '/sales/orders/' + o.id); if (full) { o.lines = full.lines || []; o.description = full.description || null; } }
-        catch (e) { o.lines = []; }
+        try { const full = await _akRetry('GET', '/sales/orders/' + o.id); if (full) { o.lines = full.lines || []; o.description = full.description || o.description || null; o.customData = full.customData || o.customData || null; } }
+        catch (e) { o.lines = o.lines || []; }
       });
       const rows = recentOrd.map(o => {
         const c = akCMap[String(o.thirdPartyId || o.customerId || '')];
+        const pid = o.projectId || null;
+        if (pid) _regProj(pid, String(o.thirdPartyId || o.customerId || ''), o.entityCode, o.date);
         const surface = Array.isArray(o.lines) ? o.lines.reduce((s, l) => s + Number(l.quantity || 0), 0) : null;
-        return { id: 'akc_' + String(o.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(o.id||''), ref: String(o.number||o.id||''),
+        const row = { id: 'akc_' + String(o.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(o.id||''), ref: String(o.number||o.id||''),
           client_name: c?.name || o.name || 'Inconnu', client_id: c?.id || null, nom: o.name || 'Commande',
-          montant: o.preTaxAmount || 0, statut: o.state === 'CLOSED' ? 'livree' : o.state === 'INVOICED' ? 'facturee' : 'en_cours',
-          date: o.date ? o.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
-          projet: o.projectId || null, agence: o.entityCode || null, societe: o.companyCode || null,
+          montant: o.preTaxAmount || 0, montant_ttc: o.afterTaxAmount || 0, tva: (o.afterTaxAmount || 0) - (o.preTaxAmount || 0),
+          statut: o.state === 'CLOSED' ? 'livree' : o.state === 'INVOICED' ? 'facturee' : o.state === 'CANCELLED' ? 'annulee' : 'en_cours',
+          date: _d10(o.date) || new Date().toISOString().slice(0, 10), livraison: _d10(o.deliveryDate),
+          projet: pid, agence: o.entityCode || null, societe: o.companyCode || null,
           responsable_id: o.managerId || null, commercial_id: o.salesManagerId || null,
-          surface_facturee: surface, description: o.description || null };
+          devise: o.currencyCode || 'EUR', reference1: o.reference1 || null, devis_origine: o.quotationId || null,
+          date_client: _d10(o.customerDate), date_validation: _d10(o.validationDate),
+          nb_lignes: Array.isArray(o.lines) ? o.lines.length : 0, surface_facturee: surface, description: o.description || null,
+          custom_data: (o.customData && Object.keys(o.customData).length > 0) ? o.customData : null,
+          type_prestation: (o.customData && o.customData['1-alpha06'] && o.customData['1-alpha06'].value) || null,
+          gros_oeuvre: (o.customData && o.customData['1-alpha12'] && o.customData['1-alpha12'].value) || null,
+          ..._linkOf(pid) };
+        if (!row.custom_data) delete row.custom_data;
+        if (!row.type_prestation) delete row.type_prestation;
+        if (!row.gros_oeuvre) delete row.gros_oeuvre;
+        return row;
       });
       await _sbUpsert('commandes', rows, 'id', 200);
-      console.log(`[QuickSync] ${rows.length} commandes avec surface facturée`);
+      console.log(`[QuickSync] ${rows.length} commandes (complètes + liées)`);
     }
 
-    // Factures
-    if (Array.isArray(recentInv) && recentInv.length > 0) {
+    // Factures — champs alignés + liaison affaire/marché
+    if (recentInv.length > 0) {
       const rows = recentInv.map(f => {
         const c = akCMap[String(f.thirdPartyId || f.customerId || '')];
-        const isPaid = f.state === 'PAID' || f.state === 'CLOSED';
+        const pid = f.projectId || null;
+        if (pid) _regProj(pid, String(f.thirdPartyId || f.customerId || ''), f.entityCode, f.date);
+        const isPaid = f.state === 'PAID' || f.state === 'CLOSED' || !!f.paidOn;
         return { id: 'akf_' + String(f.id).replace(/[^a-zA-Z0-9.]/g, '_'), akuiteo_id: String(f.id||''), ref: String(f.number||f.id||''),
           client_name: c?.name || f.name || 'Inconnu', client_id: c?.id || null,
-          montant: f.afterTaxAmount || 0, reste_a_payer: isPaid ? 0 : (f.afterTaxAmount || 0),
+          montant: f.preTaxAmount || 0, montant_ttc: f.afterTaxAmount || 0, tva: (f.afterTaxAmount || 0) - (f.preTaxAmount || 0),
+          reste_a_payer: (f.balance != null ? f.balance : (isPaid ? 0 : (f.afterTaxAmount || 0))),
           statut: isPaid ? 'payee' : f.state === 'SENT' ? 'envoyee' : 'attente',
-          date: f.date ? f.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
-          echeance: f.dueDate ? f.dueDate.substring(0, 10) : null,
-          projet: f.projectId || null, agence: f.entityCode || null, societe: f.companyCode || null,
-          responsable_id: f.managerId || null, type_facture: f.invoiceType || null };
+          date: _d10(f.date) || new Date().toISOString().slice(0, 10),
+          echeance: _d10(f.dueDate) || _d10(f.payment?.dueDate),
+          date_paiement: _d10(f.paidOn), date_comptable: _d10(f.bookedOn),
+          projet: pid, agence: f.entityCode || null, societe: f.companyCode || null,
+          responsable_id: f.managerId || null, type_facture: f.invoiceType || null, devise: f.currencyCode || 'EUR',
+          ..._linkOf(pid) };
       });
       await _sbUpsert('factures', rows, 'id', 200);
       console.log(`[QuickSync] ${rows.length} factures`);
@@ -26736,58 +26766,54 @@ async function syncAkuiteoQuick() {
       if (condUpd.length > 0) console.log(`[QuickSync] ${condUpd.length} conditions de paiement mises à jour`);
     }
 
-    // 4. Nouveaux Marchés / Affaires (projets récents non présents en base)
+    // 4. Marchés / Affaires — UNION des projets récents + des projets référencés par les documents.
+    //    Garantit l'existence des affaires/marchés (sinon affaire_id/marche_id des docs pointeraient dans le vide).
     setSyncText('Sync du dernier mois — Marchés & Affaires...');
     const [modifiedProjects, createdProjects] = await Promise.all([
       _akSearchAll('/projectmanagement/projects/search', { modificationTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate } }),
       _akSearchAll('/projectmanagement/projects/search', { createdTime: { operator: 'GREATER_OR_EQUALS', value: sinceDate } }),
     ]);
-    const seenPids = new Set();
-    let akProjects = [];
-    for (const list of [createdProjects, modifiedProjects]) {
-      if (!Array.isArray(list)) continue;
-      for (const p of list) {
-        if (!seenPids.has(p.id)) { seenPids.add(p.id); akProjects.push(p); }
-      }
-    }
-    if (akProjects.length > 0) {
-      console.log(`[QuickSync] ${akProjects.length} projets nouveaux/modifiés depuis ${sinceDay}`);
-      // Construire marchés (préfixe XX.XXXX) et affaires (XX.XXXX.XX) — même format que sync complète
+    const projInfo = {}; // pid -> projet Akuiteo (pour enrichir nom/client)
+    for (const list of [createdProjects, modifiedProjects]) { if (!Array.isArray(list)) continue; for (const p of list) { if (p && p.id && !projInfo[p.id]) projInfo[p.id] = p; } }
+
+    // Affaires/marchés déjà en base → on ne recrée QUE les manquants (préserve les données enrichies)
+    const [{ data: existAff }, { data: existMar }] = await Promise.all([
+      _sbRetry(() => sb.from('affaires').select('id'), 'read affaires ids'),
+      _sbRetry(() => sb.from('marches').select('id'), 'read marches ids'),
+    ]);
+    const existAffSet = new Set((existAff || []).map(a => a.id));
+    const existMarSet = new Set((existMar || []).map(m => m.id));
+    const allPids = new Set([...Object.keys(projInfo), ...neededProjects.keys()]);
+    if (allPids.size > 0) {
       const marchesMap = {};
       const affaireRows = [];
-      for (const p of akProjects) {
-        const crmClient = akCMap[String(p.customerId || '')];
-        const codeParts = (p.id || '').split('.');
-        const marcheCode = codeParts.length >= 2 ? codeParts.slice(0, 2).join('.') : p.id;
-        const marcheId = 'akm_' + marcheCode.replace(/[^a-zA-Z0-9.]/g, '_');
-        // Marché
-        const pCreated = p.changeTracking?.createdTime ? p.changeTracking.createdTime.substring(0, 10) : new Date().toISOString().slice(0, 10);
+      for (const pid of allPids) {
+        const p = projInfo[pid] || null;
+        const nb = neededProjects.get(pid) || {};
+        const customerId = String((p && p.customerId) || nb.customerId || '');
+        const crmClient = akCMap[customerId];
+        const { code: marcheCode, id: marcheId } = _marcheOf(pid);
+        const pCreated = (p && p.changeTracking?.createdTime) ? _d10(p.changeTracking.createdTime) : (_d10(nb.date) || new Date().toISOString().slice(0, 10));
+        // Marché : (re)construit si projet récent (p) OU si absent ; sinon on laisse tel quel
         if (!marchesMap[marcheCode]) {
-          marchesMap[marcheCode] = {
-            id: marcheId, akuiteo_id: marcheCode, ref: marcheCode,
-            nom: p.name || ('Marché ' + marcheCode),
-            client_id: crmClient?.id || null, client_name: crmClient?.name || '',
-            agence: p.companyCode || '', statut: 'en_cours', nb_affaires: 0,
-            date_debut: pCreated,
-          };
+          marchesMap[marcheCode] = { id: marcheId, akuiteo_id: marcheCode, ref: marcheCode,
+            nom: (p && p.name) || ('Marché ' + marcheCode), client_id: crmClient?.id || null, client_name: crmClient?.name || '',
+            agence: (p && p.companyCode) || nb.agence || '', statut: 'en_cours', nb_affaires: 0, date_debut: pCreated, _recent: !!p };
         }
         marchesMap[marcheCode].nb_affaires++;
-        // Affaire
-        affaireRows.push({
-          id: 'aka_' + String(p.id).replace(/[^a-zA-Z0-9.]/g, '_'),
-          nom: p.name || p.id,
-          marche_id: marcheId,
-          client_id: crmClient?.id || null, client_name: crmClient?.name || '',
-          agence: p.companyCode || '', statut: 'en_cours',
-          code_projet: p.id || null, date_debut: pCreated,
-        });
+        const affId = _affaireIdOf(pid);
+        // Affaire récente (modifiée) → upsert complet ; affaire seulement référencée par un doc → créée uniquement si absente
+        if (p || !existAffSet.has(affId)) {
+          affaireRows.push({ id: affId, akuiteo_id: pid, ref: pid, nom: (p && p.name) || ('Affaire ' + pid), marche_id: marcheId,
+            client_id: crmClient?.id || null, client_name: crmClient?.name || '',
+            agence: (p && p.companyCode) || nb.agence || '', statut: 'en_cours', code_projet: pid, date_debut: pCreated });
+        }
       }
-      const marcheRows = Object.values(marchesMap);
-      console.log('[QuickSync] Marchés à upsert:', JSON.stringify(marcheRows.slice(0,3)));
-      console.log('[QuickSync] Affaires à upsert:', JSON.stringify(affaireRows.slice(0,3)));
+      // Marchés : upsert les récents (mis à jour) + les manquants (créés) ; on ne touche pas aux existants non-récents (préserve leur nom enrichi)
+      const marcheRows = Object.values(marchesMap).filter(m => m._recent || !existMarSet.has(m.id)).map(m => { const { _recent, ...row } = m; return row; });
       if (marcheRows.length > 0) await _sbUpsert('marches', marcheRows, 'id', 200);
       if (affaireRows.length > 0) await _sbUpsert('affaires', affaireRows, 'id', 200);
-      console.log(`[QuickSync] ${marcheRows.length} marchés, ${affaireRows.length} affaires`);
+      console.log(`[QuickSync] ${marcheRows.length} marchés, ${affaireRows.length} affaires (union projets récents + docs)`);
     }
 
     // N'avancer le timestamp et n'annoncer « terminée » que si Akuiteo est resté disponible
@@ -27118,6 +27144,7 @@ async function syncAkuiteo() {
         statut: q.state === 'SIGNED' ? 'accepted' : q.state === 'ARCHIVED' ? 'refused' : q.state === 'SENT' ? 'sent' : 'pending',
         date: q.date ? q.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
         projet: q.projectId || null, agence: q.entityCode || null, societe: q.companyCode || null,
+        ...(q.projectId ? { affaire_id: _affaireIdOf(q.projectId), marche_id: _marcheOf(q.projectId).id } : {}),
         responsable_id: q.managerId || null, commercial_id: q.salesManagerId || null,
         reference1: q.reference1 || null, devise: q.currencyCode || 'EUR',
         probabilite: q.quotationProbability || null, description: q.description || null,
@@ -27157,6 +27184,7 @@ async function syncAkuiteo() {
         date: o.date ? o.date.substring(0, 10) : new Date().toISOString().slice(0, 10),
         livraison: o.deliveryDate ? o.deliveryDate.substring(0, 10) : null,
         projet: o.projectId || null, agence: o.entityCode || null, societe: o.companyCode || null,
+        ...(o.projectId ? { affaire_id: _affaireIdOf(o.projectId), marche_id: _marcheOf(o.projectId).id } : {}),
         description: o.description || null, reference1: o.reference1 || null,
         devis_origine: o.quotationId || null, responsable_id: o.managerId || null,
         commercial_id: o.salesManagerId || null,
@@ -27195,6 +27223,7 @@ async function syncAkuiteo() {
         jours_retard: 0, type_facture: f.invoiceType || null,
         reste_a_payer: f.balance ?? null, description: f.description || null,
         projet: f.projectId || null, agence: f.entityCode || null, societe: f.companyCode || null,
+        ...(f.projectId ? { affaire_id: _affaireIdOf(f.projectId), marche_id: _marcheOf(f.projectId).id } : {}),
         mode_paiement: f.methodOfPayment || null,
         date_envoi: f.sentOn ? f.sentOn.substring(0, 10) : null,
         date_paiement: f.paidOn ? f.paidOn.substring(0, 10) : null,
