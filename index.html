@@ -3609,7 +3609,7 @@ async function loadDB() {
     _deferredLoadPromise = (async () => {
       const t1 = Date.now();
       const [rAll, nAll, maAll, afAll, luccaAll, akAll, contactsCount, concurrentsCount, campagnesCount, relancesAll] = await Promise.all([
-        (async () => { const RCOLS_FULL='id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,affaire_id,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at'; const RCOLS_FB='id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at'; let cols=RCOLS_FULL, all=[],off=0,first=true; while(true){ const {data,error}=await _sbRetry(() => sb.from('reports').select(cols).order('date',{ascending:false}).range(off,off+999), 'reports'); if(error){ if(first&&cols!==RCOLS_FB){ cols=RCOLS_FB; continue; } break; } if(!data||!data.length) break; all=all.concat(data); first=false; if(data.length<1000) break; off+=1000; } return all; })(),
+        (async () => { const RCOLS_FULL='id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,affaire_id,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at'; const RCOLS_FB='id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at'; let cols=RCOLS_FULL, all=[],off=0,first=true; while(true){ const {data,error}=await _sbRetry(() => sb.from('reports').select(cols).or(`date.gte.${dateFilter},date.is.null`).order('date',{ascending:false}).range(off,off+999), 'reports'); if(error){ if(first&&cols!==RCOLS_FB){ cols=RCOLS_FB; continue; } break; } if(!data||!data.length) break; all=all.concat(data); first=false; if(data.length<1000) break; off+=1000; } _crLoadedSince = dateFilter; return all; })(),
         _sbRetry(() => sb.from('notifications').select('id,type,text,time_label,read,created_at').order('created_at', {ascending:false}).limit(100), 'notifications').then(r => r.data || []),
         fetchFast('marches', MARCHE_LITE, 'date_debut', true),
         fetchFast('affaires', AFFAIRE_LITE, 'date_debut', true),
@@ -3620,11 +3620,7 @@ async function loadDB() {
         _sbRetry(() => sb.from('campagnes').select('id', { count: 'exact', head: true }), 'campagnes count').then(r => r.count || 0),
         _sbRetry(() => sb.from('relances_devis').select('*'), 'relances_devis').then(r => r.data || []),
       ]);
-      DB.reports = rAll.map(r => ({
-        ...r, client: r.client_name, text: r.contenu || '', date_raw: r.date, date: timeAgo(r.date), titre: r.titre,
-        clients_list: r.clients_list && r.clients_list.length ? r.clients_list : (r.client_id ? [{id: r.client_id, name: r.client_name}] : []),
-        contacts_list: r.contacts_list && r.contacts_list.length ? r.contacts_list : (r.contact_id ? [{id: r.contact_id, name: r.contact_name}] : []),
-      }));
+      DB.reports = rAll.map(mapReportRow);
       DB.notifications = nAll.map(n => ({ ...n, time: n.time_label }));
       DB.relancesDevis = {};
       for (const r of (relancesAll || [])) { if (r.devis_id) DB.relancesDevis[r.devis_id] = r; }
@@ -18703,6 +18699,56 @@ let crFilterSociete = '';
 let crFilterContact = '';
 let crFilterType = '';
 let crFilterStatut = '';
+// Filtre de dates des CR : 1 an glissant par défaut, extensible au-delà (recharge Supabase à la demande)
+function _crDefaultFrom() { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d.toISOString().slice(0, 10); }
+let crDateFrom = _crDefaultFrom();     // borne basse (YYYY-MM-DD) ; défaut = il y a 1 an
+let crDateTo = '';                     // borne haute (vide = jusqu'à aujourd'hui)
+let _crLoadedSince = crDateFrom;       // date la plus ancienne réellement chargée depuis Supabase
+// Mapping d'une ligne reports Supabase → objet CR de DB.reports (réutilisé par loadDB et le chargement paresseux)
+function mapReportRow(r) {
+  return {
+    ...r, client: r.client_name, text: r.contenu || '', date_raw: r.date, date: timeAgo(r.date), titre: r.titre,
+    clients_list: r.clients_list && r.clients_list.length ? r.clients_list : (r.client_id ? [{id: r.client_id, name: r.client_name}] : []),
+    contacts_list: r.contacts_list && r.contacts_list.length ? r.contacts_list : (r.contact_id ? [{id: r.contact_id, name: r.contact_name}] : []),
+  };
+}
+// Change la borne basse : recharge les CR plus anciens si on remonte au-delà de la fenêtre déjà chargée
+function crSetDateFrom(val) {
+  crDateFrom = val || ''; crPage = 0;
+  if (crDateFrom && crDateFrom < _crLoadedSince) crLoadOlderReports(crDateFrom);
+  else renderPage('cr');
+}
+function crSetDateTo(val) { crDateTo = val || ''; crPage = 0; renderPage('cr'); }
+// Charge depuis Supabase les CR entre `sinceDate` (inclus) et la fenêtre déjà chargée, puis fusionne
+let _crLoadingOlder = false;
+async function crLoadOlderReports(sinceDate) {
+  if (_crLoadingOlder || !sinceDate || sinceDate >= _crLoadedSince) { renderPage('cr'); return; }
+  _crLoadingOlder = true;
+  toast('Chargement des comptes-rendus plus anciens…', 'info');
+  const RCOLS = 'id,client_id,client_name,contact_id,contact_name,clients_list,contacts_list,affaire_id,date,titre,type_cr,statut_cr,redacteur_id,redacteur_nom,pieces_jointes,created_at';
+  let all = [], off = 0, failed = false;
+  while (true) {
+    const { data, error } = await _sbRetry(() => sb.from('reports').select(RCOLS).gte('date', sinceDate).lt('date', _crLoadedSince).order('date', {ascending: false}).range(off, off + 999), 'reports older');
+    if (error) { failed = true; break; }
+    if (!data || !data.length) break;
+    all = all.concat(data);
+    if (data.length < 1000) break;
+    off += 1000;
+  }
+  if (!failed) {
+    if (all.length) {
+      const existing = new Set((DB.reports || []).map(r => r.id));
+      const mapped = all.filter(r => !existing.has(r.id)).map(mapReportRow);
+      DB.reports = (DB.reports || []).concat(mapped);
+      DB.reports.sort((a, b) => (b.date_raw || '').localeCompare(a.date_raw || ''));
+    }
+    _crLoadedSince = sinceDate;
+  }
+  _crLoadingOlder = false;
+  crPage = 0; renderPage('cr');
+  if (failed) toast('Erreur lors du chargement des CR plus anciens', 'error');
+  else toast(all.length ? `${all.length} compte(s)-rendu(s) plus ancien(s) chargé(s)` : 'Aucun CR plus ancien sur cette période', 'success');
+}
 function crSetSort(col) {
   if (crSortCol === col) crSortAsc = !crSortAsc;
   else { crSortCol = col; crSortAsc = (col === 'titre' || col === 'societe' || col === 'contact'); }
@@ -18711,6 +18757,7 @@ function crSetSort(col) {
 function crResetFilters() {
   crFilterAuteur = '__all__'; crFilterDate = ''; crFilterTitre = '';
   crFilterSociete = ''; crFilterContact = ''; crFilterType = ''; crFilterStatut = '';
+  crDateFrom = _crDefaultFrom(); crDateTo = '';
   crSortCol = 'date'; crSortAsc = false; crPage = 0; renderPage('cr');
 }
 let _crFilterTimer = null;
@@ -18873,6 +18920,9 @@ function renderCRList() {
   if (crFilterContact) { const fc = crFilterContact.toLowerCase(); filteredReports = filteredReports.filter(r => crGetContactNames(r).toLowerCase().includes(fc)); }
   if (crFilterType) filteredReports = filteredReports.filter(r => r.type_cr === crFilterType);
   if (crFilterStatut) filteredReports = filteredReports.filter(r => crFilterStatut === 'local' ? (r.statut_cr !== 'envoye') : r.statut_cr === crFilterStatut);
+  // Filtre de dates (borne basse/haute) — les CR sans date restent toujours visibles
+  if (crDateFrom) filteredReports = filteredReports.filter(r => !r.date_raw || r.date_raw >= crDateFrom);
+  if (crDateTo) filteredReports = filteredReports.filter(r => !r.date_raw || r.date_raw <= crDateTo);
   // Tri dynamique
   const sortDir = crSortAsc ? 1 : -1;
   filteredReports.sort((a, b) => {
@@ -18896,7 +18946,7 @@ function renderCRList() {
   const pageReports = filteredReports.slice(crPage * CR_PER_PAGE, (crPage + 1) * CR_PER_PAGE);
   const from = totalCR ? crPage * CR_PER_PAGE + 1 : 0;
   const to = Math.min((crPage + 1) * CR_PER_PAGE, totalCR);
-  const hasFilters = crFilterDate || crFilterTitre || crFilterSociete || crFilterContact || crFilterType || crFilterStatut;
+  const hasFilters = crFilterDate || crFilterTitre || crFilterSociete || crFilterContact || crFilterType || crFilterStatut || crDateFrom !== _crDefaultFrom() || crDateTo;
 
   const _isMobile = window.innerWidth <= 768;
 
@@ -18926,6 +18976,10 @@ function renderCRList() {
         <option value="salon_foire" ${crFilterType==='salon_foire'?'selected':''}>SALON</option>
         <option value="autre" ${crFilterType==='autre'?'selected':''}>AUTRE</option>
       </select>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;font-size:11px;color:var(--t3)">
+      Du <input type="date" value="${crDateFrom}" onchange="crSetDateFrom(this.value)" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1)">
+      au <input type="date" value="${crDateTo}" onchange="crSetDateTo(this.value)" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1)">
     </div>
     <div style="font-size:11px;color:var(--t3);margin-bottom:8px">${totalCR} compte(s)-rendu(s)${hasFilters ? ' — <a href="#" onclick="crResetFilters();return false" style="color:var(--red);text-decoration:none">Effacer filtres</a>' : ''}</div>
     ${pageReports.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--t3)">Aucun compte-rendu</div>' :
@@ -18970,6 +19024,10 @@ function renderCRList() {
         <option value="__all__" ${crFilterAuteur==='__all__'?'selected':''}>Tous</option>
         ${(() => { const ids = new Set((DB.reports||[]).map(r => r.redacteur_id).filter(Boolean)); return (DB.commerciaux||[]).filter(co => ids.has(co.id)).map(co => ({ id: co.id, label: crGetRedacteurLabel(co.id) })).filter(c => c.label).sort((a,b) => a.label.localeCompare(b.label)).map(c => `<option value="${c.id}" ${crFilterAuteur==c.id?'selected':''}>${c.label}</option>`).join(''); })()}
       </select>
+      <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t3)" title="Par défaut 1 an glissant. Choisir une date de début plus ancienne recharge les CR depuis la base.">
+        Du <input type="date" value="${crDateFrom}" onchange="crSetDateFrom(this.value)" style="padding:3px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--bg-1);color:var(--t1)">
+        au <input type="date" value="${crDateTo}" onchange="crSetDateTo(this.value)" style="padding:3px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--bg-1);color:var(--t1)">
+      </span>
       <span style="font-size:11px;color:var(--t3)">${totalCR} CR</span>
       ${hasFilters ? '<button class="btn" style="font-size:10px;padding:2px 8px;color:var(--red)" onclick="crResetFilters()">Reinitialiser filtres</button>' : ''}
     </div>
