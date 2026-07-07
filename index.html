@@ -8688,7 +8688,9 @@ function toggleSidebar(force) {
 }
 
 // ═══ PAGE RENDERER ═══
+let _RENDERABLE = null; // pages ré-affichables (pour le bouton « rafraîchir » du bandeau temps réel)
 function renderPage(page) {
+  try { _rtDismissBanner(); } catch (e) {} // toute navigation affiche déjà les données fraîches
   const C = document.getElementById('contentArea');
   const renderers = {
     dashboard: renderDashboard,
@@ -8736,6 +8738,7 @@ function renderPage(page) {
     ged: renderGed,
     newsletter: renderNewsletter,
   };
+  if (!_RENDERABLE) _RENDERABLE = new Set(Object.keys(renderers));
   // Attendre les données différées si la page en a besoin
   if (_DEFERRED_PAGES.has(page) && !_deferredDataLoaded && _deferredLoadPromise) {
     C.innerHTML = '<div class="page active"><div style="text-align:center;padding:40px;color:var(--t3)">Chargement des données...</div></div>';
@@ -23943,10 +23946,12 @@ async function askAIChat(presetQuestion, opts) {
       const tot = (_usage.input_tokens || 0) + (_usage.output_tokens || 0);
       const eur = _usage.cost_eur != null ? _usage.cost_eur : 0;
       const cout = eur < 0.01 ? '< 0,01 €' : ('~' + eur.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' €');
+      const g = _usage.co2_g != null ? _usage.co2_g : null;
+      const co2 = g == null ? '' : (' · ~' + (g < 1 ? (Math.round(g * 1000) + ' mg') : (g.toLocaleString('fr-FR', { maximumFractionDigits: 1 }) + ' g')) + ' CO₂');
       const badge = document.createElement('div');
       badge.style.cssText = 'margin-top:6px;font-size:10px;color:var(--t3);opacity:.75';
-      badge.title = `Entrée : ${(_usage.input_tokens || 0).toLocaleString('fr-FR')} tokens · Sortie : ${(_usage.output_tokens || 0).toLocaleString('fr-FR')} tokens (coût estimé, tarif Haiku 4.5)`;
-      badge.textContent = `≈ ${tot.toLocaleString('fr-FR')} tokens · ${cout}`;
+      badge.title = `Entrée : ${(_usage.input_tokens || 0).toLocaleString('fr-FR')} tokens · Sortie : ${(_usage.output_tokens || 0).toLocaleString('fr-FR')} tokens (coût et CO₂ estimés — tarif Haiku 4.5)`;
+      badge.textContent = `≈ ${tot.toLocaleString('fr-FR')} tokens · ${cout}${co2}`;
       loadingDiv.appendChild(badge);
     }
     // Carte d'action (confirmation avant écriture)
@@ -29884,12 +29889,35 @@ function _scheduleRealtimeReload(table) {
       await loadDB();
       _rtLastReload = Date.now();
       // IMPORTANT : NE PAS ré-afficher la page en cours (fiche/formulaire/détail) → on ne perd plus le contexte.
-      // Les données fraîches apparaîtront à la prochaine navigation ; on met seulement à jour les badges.
+      // Les données fraîches apparaîtront à la prochaine navigation ; on met seulement à jour les badges,
+      // et on propose un bouton discret pour rafraîchir la vue quand l'utilisateur le souhaite.
       try { updateSyncLabel(); } catch (e) {}
       try { _updateOpportunitesBadge && _updateOpportunitesBadge(); } catch (e) {}
+      _showRtBanner();
     } catch (e) { console.warn('[Realtime] reload:', e.message); }
     finally { _rtReloading = false; }
   }, RT_DEBOUNCE);
+}
+// Bandeau discret « Nouvelles données — cliquer pour rafraîchir »
+function _showRtBanner() {
+  let b = document.getElementById('rt-banner');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'rt-banner';
+    b.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:8500;background:#4c1d95;color:#fff;border-radius:24px;box-shadow:0 6px 20px rgba(0,0,0,.28);display:flex;align-items:center;gap:12px;padding:8px 10px 8px 16px;font-size:13px;font-family:inherit';
+    b.innerHTML = '<span>🔄 Nouvelles données disponibles</span>'
+      + '<button onclick="_rtRefreshNow()" style="background:#fff;color:#4c1d95;border:none;border-radius:16px;padding:5px 12px;font-weight:700;font-size:12px;cursor:pointer">Rafraîchir</button>'
+      + '<button onclick="_rtDismissBanner()" title="Ignorer" style="background:none;border:none;color:#fff;opacity:.7;cursor:pointer;font-size:16px;line-height:1;padding:2px 4px">×</button>';
+    document.body.appendChild(b);
+  }
+  b.style.display = 'flex';
+}
+function _rtDismissBanner() { const b = document.getElementById('rt-banner'); if (b) b.style.display = 'none'; }
+function _rtRefreshNow() {
+  _rtDismissBanner();
+  // Ré-afficher uniquement si la page courante est une vue « liste » ré-affichable (sinon on ne casse pas la fiche/détail)
+  if (_RENDERABLE && _RENDERABLE.has(currentPage)) renderPage(currentPage);
+  else toast('Données à jour — revenez sur la liste pour voir les changements.', 'success');
 }
 function initRealtime() {
   const tables = ['clients','devis','commandes','factures','reports','notifications'];

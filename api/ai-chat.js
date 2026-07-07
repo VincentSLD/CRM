@@ -3,9 +3,13 @@
 const NOVA_PRICE_IN = Number(process.env.NOVA_PRICE_IN || 1.0);
 const NOVA_PRICE_OUT = Number(process.env.NOVA_PRICE_OUT || 5.0);
 const USD_EUR = Number(process.env.USD_EUR || 0.92);
+// Estimation CO2e (indicative) : grammes de CO2e par MILLION de tokens (entrée+sortie).
+// Ordre de grandeur pour un petit modèle hébergé ; surchargeable via NOVA_CO2_G_PER_MTOK.
+const NOVA_CO2_G_PER_MTOK = Number(process.env.NOVA_CO2_G_PER_MTOK || 100);
 function estimCost(inTok, outTok) {
   const usd = (inTok / 1e6) * NOVA_PRICE_IN + (outTok / 1e6) * NOVA_PRICE_OUT;
-  return { input_tokens: inTok, output_tokens: outTok, cost_usd: +usd.toFixed(5), cost_eur: +(usd * USD_EUR).toFixed(5) };
+  const co2_g = ((inTok + outTok) / 1e6) * NOVA_CO2_G_PER_MTOK;
+  return { input_tokens: inTok, output_tokens: outTok, cost_usd: +usd.toFixed(5), cost_eur: +(usd * USD_EUR).toFixed(5), co2_g: +co2_g.toFixed(3) };
 }
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://asuccniyofzvwgooxjah.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzdWNjbml5b2Z6dndnb294amFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI5MDQyNjgsImV4cCI6MjA4ODQ4MDI2OH0.dPerW1BApAxe26xzv9i7oWIubgGuzO5RibMvs-MFm88';
