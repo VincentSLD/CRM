@@ -3499,9 +3499,9 @@ async function loadDB() {
     }
 
     // Colonnes minimales pour agrégation + affichage liste
-    const DEVIS_LITE = 'id,ref,client_id,client_name,sujet,montant,montant_ttc,date,statut,projet,agence,societe,responsable_id,commercial_id,probabilite,marche_id,affaire_id,apporteur_affaire,architecte,akuiteo_id,adresse,ville,code_postal,type_prestation';
-    const CMD_LITE = 'id,ref,client_id,client_name,nom,montant,montant_ttc,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id,marche_id,affaire_id,apporteur_affaire,architecte,akuiteo_id,adresse,ville,code_postal,surface_facturee,type_prestation';
-    const FACT_LITE = 'id,ref,client_id,client_name,montant,montant_ttc,date,echeance,statut,jours_retard,projet,agence,societe,responsable_id,type_facture,reste_a_payer,date_paiement,marche_id,affaire_id,apporteur_affaire,architecte,akuiteo_id,adresse,ville,code_postal,type_prestation';
+    const DEVIS_LITE = 'id,ref,client_id,client_name,sujet,montant,montant_ttc,date,statut,projet,agence,societe,responsable_id,commercial_id,probabilite,marche_id,affaire_id,apporteur_affaire,architecte,gros_oeuvre,akuiteo_id,adresse,ville,code_postal,type_prestation';
+    const CMD_LITE = 'id,ref,client_id,client_name,nom,montant,montant_ttc,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id,marche_id,affaire_id,apporteur_affaire,architecte,gros_oeuvre,akuiteo_id,adresse,ville,code_postal,surface_facturee,type_prestation';
+    const FACT_LITE = 'id,ref,client_id,client_name,montant,montant_ttc,date,echeance,statut,jours_retard,projet,agence,societe,responsable_id,type_facture,reste_a_payer,date_paiement,marche_id,affaire_id,apporteur_affaire,architecte,gros_oeuvre,akuiteo_id,adresse,ville,code_postal,type_prestation';
     const MARCHE_LITE = 'id,nom,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,adresse,code_postal,ville,lat,lng,nb_affaires,responsable_id';
     const AFFAIRE_LITE = 'id,nom,marche_id,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,code_projet,apporteur_affaire,architecte,responsable,adresse,ville,code_postal,departement,region';
 
@@ -13323,9 +13323,11 @@ function renderAffaireDetail() {
       detailRow('Nom', a.nom),
       detailRow('Code projet', a.code_projet),
       detailRow('Société', a.client_name ? '<a href="#" onclick="showClient(&#39;'+a.client_id+'&#39;);return false" style="color:var(--accent)">'+a.client_name+'</a>' : null),
+      detailRow('Commercial client facturé', clientCommercialLabel(a)),
       detailRow('Apporteur d\'affaire', a.apporteur_affaire),
       detailRow('Commercial apporteur', apporteurCommercialLabel(a.apporteur_affaire)),
       detailRow('Architecte', a.architecte),
+      detailRow('Commercial architecte', apporteurCommercialLabel(a.architecte)),
       detailRow('Responsable', a.responsable),
       detailRow('Marché', marche ? '<a href="#" onclick="showMarcheDetail(&#39;'+marche.id+'&#39;);return false" style="color:var(--accent)">'+( marche.ref||'')+' - '+(marche.nom||'')+'</a>' : '—'),
       detailRow('Statut', marcheStatutBadge(a.statut)),
@@ -17717,10 +17719,8 @@ function _ensureDocsCommercial() {
   (DB.factures || []).forEach(apply);
   (DB.affaires || []).forEach(apply);
 }
-// Libellé du/des commercial(aux) de la société apporteur (null si introuvable)
-function apporteurCommercialLabel(apporteur) {
-  if (!apporteur || !_apporteurCommMap) return null;
-  const e = _apporteurCommMap[_normApporteurName(apporteur)];
+// Formate le/les commercial(aux) Novam/GPH (+ resp. site) d'un enregistrement société
+function _fmtCommRec(e) {
   if (!e) return null;
   let resp = e.resp;
   if (!resp && e.siren && _apporteurSiegeResp) resp = _apporteurSiegeResp[e.siren] || null; // repli sur le siège
@@ -17729,6 +17729,15 @@ function apporteurCommercialLabel(apporteur) {
   if (e.gph && e.gph !== e.novam) parts.push('GPH : ' + e.gph);
   if (resp) parts.push('Resp. site : ' + resp);
   return parts.length ? parts.join('<br>') : null;
+}
+// Commercial(aux) d'une société par SON NOM (apporteur, architecte, gros-œuvre…)
+function apporteurCommercialLabel(nom) {
+  if (!nom || !_apporteurCommMap) return null;
+  return _fmtCommRec(_apporteurCommMap[_normApporteurName(nom)]);
+}
+// Commercial(aux) du CLIENT FACTURÉ d'un document (par client_id, repli sur le nom)
+function clientCommercialLabel(doc) {
+  return _fmtCommRec(_clientCommForDoc(doc));
 }
 
 function detailRow(label, value) {
@@ -17868,9 +17877,14 @@ async function showDevisDetail(id) {
       ${detailSection('Organisation', [
         detailRow('Marché', d.marche_id ? (() => { const m = DB.marches.find(x=>x.id===d.marche_id); return m ? '<a href="#" onclick="showMarcheDetail(&#39;'+m.id+'&#39;);return false" style="color:var(--accent)">'+(m.ref||'')+' - '+(m.nom||'')+'</a>' : d.marche_id; })() : null),
         detailRow('Affaire', d.affaire_id ? (() => { const a = DB.affaires.find(x=>x.id===d.affaire_id); return a ? '<a href="#" onclick="showAffaireDetail(&#39;'+a.id+'&#39;);return false" style="color:var(--accent)">'+(a.ref||'')+' - '+(a.nom||'')+'</a>' : d.affaire_id; })() : null),
+        detailRow('Client facturé', d.client_name),
+        detailRow('Commercial client facturé', clientCommercialLabel(d)),
         detailRow('Apporteur d\'affaire', d.apporteur_affaire),
         detailRow('Commercial apporteur', apporteurCommercialLabel(d.apporteur_affaire)),
         detailRow('Architecte', d.architecte),
+        detailRow('Commercial architecte', apporteurCommercialLabel(d.architecte)),
+        detailRow('Gros-œuvre', d.gros_oeuvre),
+        detailRow('Commercial gros-œuvre', apporteurCommercialLabel(d.gros_oeuvre)),
         detailRow('Projet', d.projet),
         detailRow('Agence', d.agence),
         detailRow('Responsable', resolveManagerName(d.responsable_id)),
@@ -18065,9 +18079,14 @@ async function showCommandeDetail(id) {
       ${detailSection('Organisation', [
         detailRow('Marché', c.marche_id ? (() => { const m = DB.marches.find(x=>x.id===c.marche_id); return m ? '<a href="#" onclick="showMarcheDetail(&#39;'+m.id+'&#39;);return false" style="color:var(--accent)">'+(m.ref||'')+' - '+(m.nom||'')+'</a>' : c.marche_id; })() : null),
         detailRow('Affaire', c.affaire_id ? (() => { const a = DB.affaires.find(x=>x.id===c.affaire_id); return a ? '<a href="#" onclick="showAffaireDetail(&#39;'+a.id+'&#39;);return false" style="color:var(--accent)">'+(a.ref||'')+' - '+(a.nom||'')+'</a>' : c.affaire_id; })() : null),
+        detailRow('Client facturé', c.client_name),
+        detailRow('Commercial client facturé', clientCommercialLabel(c)),
         detailRow('Apporteur d\'affaire', c.apporteur_affaire),
         detailRow('Commercial apporteur', apporteurCommercialLabel(c.apporteur_affaire)),
         detailRow('Architecte', c.architecte),
+        detailRow('Commercial architecte', apporteurCommercialLabel(c.architecte)),
+        detailRow('Gros-œuvre', c.gros_oeuvre),
+        detailRow('Commercial gros-œuvre', apporteurCommercialLabel(c.gros_oeuvre)),
         detailRow('Projet', c.projet),
         detailRow('Agence', c.agence),
         detailRow('Responsable', resolveManagerName(c.responsable_id)),
@@ -18582,9 +18601,14 @@ async function showFactureDetail(id) {
       ${detailSection('Organisation', [
         detailRow('Marché', f.marche_id ? (() => { const m = DB.marches.find(x=>x.id===f.marche_id); return m ? '<a href="#" onclick="showMarcheDetail(&#39;'+m.id+'&#39;);return false" style="color:var(--accent)">'+(m.ref||'')+' - '+(m.nom||'')+'</a>' : f.marche_id; })() : null),
         detailRow('Affaire', f.affaire_id ? (() => { const a = DB.affaires.find(x=>x.id===f.affaire_id); return a ? '<a href="#" onclick="showAffaireDetail(&#39;'+a.id+'&#39;);return false" style="color:var(--accent)">'+(a.ref||'')+' - '+(a.nom||'')+'</a>' : f.affaire_id; })() : null),
+        detailRow('Client facturé', f.client_name),
+        detailRow('Commercial client facturé', clientCommercialLabel(f)),
         detailRow('Apporteur d\'affaire', f.apporteur_affaire),
         detailRow('Commercial apporteur', apporteurCommercialLabel(f.apporteur_affaire)),
         detailRow('Architecte', f.architecte),
+        detailRow('Commercial architecte', apporteurCommercialLabel(f.architecte)),
+        detailRow('Gros-œuvre', f.gros_oeuvre),
+        detailRow('Commercial gros-œuvre', apporteurCommercialLabel(f.gros_oeuvre)),
         detailRow('Projet', f.projet),
         detailRow('Agence', f.agence),
         detailRow('Mode de paiement', f.mode_paiement === 'BANK_TRANSFER' ? 'Virement bancaire' : f.mode_paiement === 'CHECK' ? 'Chèque' : f.mode_paiement === 'CASH' ? 'Espèces' : f.mode_paiement),
