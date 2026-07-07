@@ -29865,21 +29865,31 @@ async function doLogout() {
 // Rechargement DÉBOUNCÉ et suspendu pendant les synchros : sinon chaque ligne modifiée
 // (des milliers pendant une sync) relance tout loadDB() → timeouts Postgres + ERR_INSUFFICIENT_RESOURCES.
 let _syncInProgress = false;
-let _rtTimer = null, _rtReloading = false;
+let _rtTimer = null, _rtReloading = false, _rtLastReload = 0;
 const _rtPending = new Set();
+const RT_DEBOUNCE = 15000;   // attendre l'accalmie avant de recharger
+const RT_MIN_INTERVAL = 60000; // au plus un rechargement / minute
 function _scheduleRealtimeReload(table) {
   _rtPending.add(table);
   if (_syncInProgress || _rtReloading) return; // la synchro recharge elle-même à la fin ; évite l'empilement
   if (_rtTimer) clearTimeout(_rtTimer);
   _rtTimer = setTimeout(async () => {
     _rtTimer = null;
-    if (_syncInProgress) return;               // encore en sync → on laissera le prochain événement replanifier
+    if (_syncInProgress) return;                 // encore en sync → un prochain événement replanifiera
+    const since = Date.now() - _rtLastReload;
+    if (since < RT_MIN_INTERVAL) { _rtTimer = setTimeout(() => _scheduleRealtimeReload(table), RT_MIN_INTERVAL - since); return; }
     _rtPending.clear();
     _rtReloading = true;
-    try { await loadDB(); renderPage(currentPage); }
-    catch (e) { console.warn('[Realtime] reload:', e.message); }
+    try {
+      await loadDB();
+      _rtLastReload = Date.now();
+      // IMPORTANT : NE PAS ré-afficher la page en cours (fiche/formulaire/détail) → on ne perd plus le contexte.
+      // Les données fraîches apparaîtront à la prochaine navigation ; on met seulement à jour les badges.
+      try { updateSyncLabel(); } catch (e) {}
+      try { _updateOpportunitesBadge && _updateOpportunitesBadge(); } catch (e) {}
+    } catch (e) { console.warn('[Realtime] reload:', e.message); }
     finally { _rtReloading = false; }
-  }, 5000);
+  }, RT_DEBOUNCE);
 }
 function initRealtime() {
   const tables = ['clients','devis','commandes','factures','reports','notifications'];
