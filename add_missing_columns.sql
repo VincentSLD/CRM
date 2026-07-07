@@ -467,3 +467,13 @@ CREATE INDEX IF NOT EXISTS idx_factures_client_id ON factures (client_id);
 CREATE INDEX IF NOT EXISTS idx_affaires_marche_id ON affaires (marche_id);
 
 ANALYZE devis; ANALYZE commandes; ANALYZE factures; ANALYZE marches; ANALYZE affaires; ANALYZE reports; ANALYZE clients;
+
+-- ═══ Codes compte Akuiteo des documents (données personnalisées) ═══
+-- Code AA (1-alpha09) = code compte apporteur d'affaire ; Code GO (1-alpha11) = code compte gros-œuvre.
+-- Permettent de résoudre le commercial par code exact (clients.code) plutôt que par nom.
+ALTER TABLE devis     ADD COLUMN IF NOT EXISTS apporteur_code  TEXT;
+ALTER TABLE devis     ADD COLUMN IF NOT EXISTS gros_oeuvre_code TEXT;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS apporteur_code  TEXT;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS gros_oeuvre_code TEXT;
+ALTER TABLE factures  ADD COLUMN IF NOT EXISTS apporteur_code  TEXT;
+ALTER TABLE factures  ADD COLUMN IF NOT EXISTS gros_oeuvre_code TEXT;

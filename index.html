@@ -3499,9 +3499,9 @@ async function loadDB() {
     }
 
     // Colonnes minimales pour agrégation + affichage liste
-    const DEVIS_LITE = 'id,ref,client_id,client_name,sujet,montant,montant_ttc,date,statut,projet,agence,societe,responsable_id,commercial_id,probabilite,marche_id,affaire_id,apporteur_affaire,architecte,gros_oeuvre,akuiteo_id,adresse,ville,code_postal,type_prestation';
-    const CMD_LITE = 'id,ref,client_id,client_name,nom,montant,montant_ttc,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id,marche_id,affaire_id,apporteur_affaire,architecte,gros_oeuvre,akuiteo_id,adresse,ville,code_postal,surface_facturee,type_prestation';
-    const FACT_LITE = 'id,ref,client_id,client_name,montant,montant_ttc,date,echeance,statut,jours_retard,projet,agence,societe,responsable_id,type_facture,reste_a_payer,date_paiement,marche_id,affaire_id,apporteur_affaire,architecte,gros_oeuvre,akuiteo_id,adresse,ville,code_postal,type_prestation';
+    const DEVIS_LITE = 'id,ref,client_id,client_name,sujet,montant,montant_ttc,date,statut,projet,agence,societe,responsable_id,commercial_id,probabilite,marche_id,affaire_id,apporteur_affaire,architecte,gros_oeuvre,apporteur_code,gros_oeuvre_code,akuiteo_id,adresse,ville,code_postal,type_prestation';
+    const CMD_LITE = 'id,ref,client_id,client_name,nom,montant,montant_ttc,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id,marche_id,affaire_id,apporteur_affaire,architecte,gros_oeuvre,apporteur_code,gros_oeuvre_code,akuiteo_id,adresse,ville,code_postal,surface_facturee,type_prestation';
+    const FACT_LITE = 'id,ref,client_id,client_name,montant,montant_ttc,date,echeance,statut,jours_retard,projet,agence,societe,responsable_id,type_facture,reste_a_payer,date_paiement,marche_id,affaire_id,apporteur_affaire,architecte,gros_oeuvre,apporteur_code,gros_oeuvre_code,akuiteo_id,adresse,ville,code_postal,type_prestation';
     const MARCHE_LITE = 'id,nom,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,adresse,code_postal,ville,lat,lng,nb_affaires,responsable_id';
     const AFFAIRE_LITE = 'id,nom,marche_id,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,code_projet,apporteur_affaire,architecte,responsable,adresse,ville,code_postal,departement,region';
 
@@ -17748,6 +17748,12 @@ function apporteurCommercialLabel(nom) {
   if (!nom || !_apporteurCommMap) return null;
   return _fmtCommRec(_apporteurCommMap[_normApporteurName(nom)]);
 }
+// Commercial d'un rôle en privilégiant le CODE compte Akuiteo (exact), repli sur le nom
+function roleCommLabel(code, nom) {
+  let rec = _commByCode(code);
+  if (!rec && nom && _apporteurCommMap) rec = _apporteurCommMap[_normApporteurName(nom)] || null;
+  return _fmtCommRec(rec);
+}
 // Commercial(aux) du CLIENT FACTURÉ d'un document (par client_id, repli sur le nom)
 function clientCommercialLabel(doc) {
   return _fmtCommRec(_clientCommForDoc(doc));
@@ -17910,11 +17916,11 @@ async function showDevisDetail(id) {
         detailRow('Client facturé', d.client_name),
         detailRow('Commercial client facturé', commLine(d.client_name, clientCommercialLabel(d))),
         detailRow('Apporteur d\'affaire', d.apporteur_affaire),
-        detailRow('Commercial apporteur', commLine(d.apporteur_affaire, apporteurCommercialLabel(d.apporteur_affaire))),
+        detailRow('Commercial apporteur', commLine(d.apporteur_affaire || d.apporteur_code, roleCommLabel(d.apporteur_code, d.apporteur_affaire))),
         detailRow('Architecte', d.architecte),
         detailRow('Commercial architecte', commLine(d.architecte, apporteurCommercialLabel(d.architecte))),
         detailRow('Gros-œuvre', d.gros_oeuvre),
-        detailRow('Commercial gros-œuvre', commLine(d.gros_oeuvre, apporteurCommercialLabel(d.gros_oeuvre))),
+        detailRow('Commercial gros-œuvre', commLine(d.gros_oeuvre || d.gros_oeuvre_code, roleCommLabel(d.gros_oeuvre_code, d.gros_oeuvre))),
         detailRow('Projet', d.projet),
         detailRow('Agence', d.agence),
         detailRow('Responsable', resolveManagerName(d.responsable_id)),
@@ -18112,11 +18118,11 @@ async function showCommandeDetail(id) {
         detailRow('Client facturé', c.client_name),
         detailRow('Commercial client facturé', commLine(c.client_name, clientCommercialLabel(c))),
         detailRow('Apporteur d\'affaire', c.apporteur_affaire),
-        detailRow('Commercial apporteur', commLine(c.apporteur_affaire, apporteurCommercialLabel(c.apporteur_affaire))),
+        detailRow('Commercial apporteur', commLine(c.apporteur_affaire || c.apporteur_code, roleCommLabel(c.apporteur_code, c.apporteur_affaire))),
         detailRow('Architecte', c.architecte),
         detailRow('Commercial architecte', commLine(c.architecte, apporteurCommercialLabel(c.architecte))),
         detailRow('Gros-œuvre', c.gros_oeuvre),
-        detailRow('Commercial gros-œuvre', commLine(c.gros_oeuvre, apporteurCommercialLabel(c.gros_oeuvre))),
+        detailRow('Commercial gros-œuvre', commLine(c.gros_oeuvre || c.gros_oeuvre_code, roleCommLabel(c.gros_oeuvre_code, c.gros_oeuvre))),
         detailRow('Projet', c.projet),
         detailRow('Agence', c.agence),
         detailRow('Responsable', resolveManagerName(c.responsable_id)),
@@ -18634,11 +18640,11 @@ async function showFactureDetail(id) {
         detailRow('Client facturé', f.client_name),
         detailRow('Commercial client facturé', commLine(f.client_name, clientCommercialLabel(f))),
         detailRow('Apporteur d\'affaire', f.apporteur_affaire),
-        detailRow('Commercial apporteur', commLine(f.apporteur_affaire, apporteurCommercialLabel(f.apporteur_affaire))),
+        detailRow('Commercial apporteur', commLine(f.apporteur_affaire || f.apporteur_code, roleCommLabel(f.apporteur_code, f.apporteur_affaire))),
         detailRow('Architecte', f.architecte),
         detailRow('Commercial architecte', commLine(f.architecte, apporteurCommercialLabel(f.architecte))),
         detailRow('Gros-œuvre', f.gros_oeuvre),
-        detailRow('Commercial gros-œuvre', commLine(f.gros_oeuvre, apporteurCommercialLabel(f.gros_oeuvre))),
+        detailRow('Commercial gros-œuvre', commLine(f.gros_oeuvre || f.gros_oeuvre_code, roleCommLabel(f.gros_oeuvre_code, f.gros_oeuvre))),
         detailRow('Projet', f.projet),
         detailRow('Agence', f.agence),
         detailRow('Mode de paiement', f.mode_paiement === 'BANK_TRANSFER' ? 'Virement bancaire' : f.mode_paiement === 'CHECK' ? 'Chèque' : f.mode_paiement === 'CASH' ? 'Espèces' : f.mode_paiement),
@@ -26603,6 +26609,18 @@ async function _akSearchDocs(path, dayFrom) {
 function _d10(v) { return v ? String(v).substring(0, 10) : null; }
 function _marcheOf(pid) { const parts = String(pid || '').split('.'); const code = parts.length >= 2 ? parts.slice(0, 2).join('.') : String(pid || ''); return { code, id: 'akm_' + code.replace(/[^a-zA-Z0-9.]/g, '_') }; }
 function _affaireIdOf(pid) { return 'aka_' + String(pid || '').replace(/[^a-zA-Z0-9.]/g, '_'); }
+// Champs issus des données personnalisées d'un document (n'inclut que les clés non vides,
+// pour ne pas écraser une valeur existante en Supabase lors d'un upsert par conflit).
+//  1-alpha06 = Type de Mission ; 1-alpha12 = Gros Oeuvre (nom) ; 1-alpha09 = Code AA (code compte apporteur) ; 1-alpha11 = Code GO (code compte gros-œuvre)
+function _docCd(cd) {
+  const out = {};
+  const g = k => (cd && cd[k] && cd[k].value != null && String(cd[k].value).trim()) ? String(cd[k].value).trim() : null;
+  const tp = g('1-alpha06'); if (tp) out.type_prestation = tp;
+  const go = g('1-alpha12'); if (go) out.gros_oeuvre = go;
+  const ac = g('1-alpha09'); if (ac) out.apporteur_code = ac;
+  const gc = g('1-alpha11'); if (gc) out.gros_oeuvre_code = gc;
+  return out;
+}
 
 async function syncAkuiteoQuick() {
   showSyncLoading(true);
@@ -26900,9 +26918,8 @@ async function syncAkuiteoQuick() {
           responsable_id: o.managerId || null, commercial_id: o.salesManagerId || null, devise: o.currencyCode || 'EUR', reference1: o.reference1 || null, devis_origine: o.quotationId || null,
           date_client: _d10(o.customerDate), date_validation: _d10(o.validationDate), nb_lignes: Array.isArray(o.lines) ? o.lines.length : 0, surface_facturee: surface, description: o.description || null,
           custom_data: (o.customData && Object.keys(o.customData).length > 0) ? o.customData : null,
-          type_prestation: (o.customData && o.customData['1-alpha06'] && o.customData['1-alpha06'].value) || null,
-          gros_oeuvre: (o.customData && o.customData['1-alpha12'] && o.customData['1-alpha12'].value) || null, ..._docLink(pid) };
-        if (!row.custom_data) delete row.custom_data; if (!row.type_prestation) delete row.type_prestation; if (!row.gros_oeuvre) delete row.gros_oeuvre;
+          ..._docCd(o.customData), ..._docLink(pid) };
+        if (!row.custom_data) delete row.custom_data;
         return row;
       });
       await _sbUpsert('commandes', rows, 'id', 200);
@@ -27271,13 +27288,10 @@ async function syncAkuiteo() {
         date_signature_reelle: q.actualSignatureDate ? q.actualSignatureDate.substring(0, 10) : null,
         nb_lignes: Array.isArray(q.lines) ? q.lines.length : 0,
         custom_data: (q.customData && Object.keys(q.customData).length > 0) ? q.customData : null,
-        type_prestation: (q.customData && q.customData['1-alpha06'] && q.customData['1-alpha06'].value) || null,
-        gros_oeuvre: (q.customData && q.customData['1-alpha12'] && q.customData['1-alpha12'].value) || null,
+        ..._docCd(q.customData),
       };
-      // Don't overwrite custom_data/type_prestation/gros_oeuvre if null — preserve existing value in Supabase
+      // Don't overwrite custom_data if null — preserve existing value in Supabase (_docCd n'inclut que le non-vide)
       if (!row.custom_data) delete row.custom_data;
-      if (!row.type_prestation) delete row.type_prestation;
-      if (!row.gros_oeuvre) delete row.gros_oeuvre;
       return row;
     });
     await _sbUpsert('devis', dBatchAll, 'id', 200);
@@ -27311,13 +27325,10 @@ async function syncAkuiteo() {
         devise: o.currencyCode || 'EUR', nb_lignes: Array.isArray(o.lines) ? o.lines.length : 0,
         surface_facturee: Array.isArray(o.lines) ? o.lines.reduce((s, l) => s + Number(l.quantity || 0), 0) : null,
         custom_data: (o.customData && Object.keys(o.customData).length > 0) ? o.customData : null,
-        type_prestation: (o.customData && o.customData['1-alpha06'] && o.customData['1-alpha06'].value) || null,
-        gros_oeuvre: (o.customData && o.customData['1-alpha12'] && o.customData['1-alpha12'].value) || null,
+        ..._docCd(o.customData),
       };
-      // Don't overwrite custom_data/type_prestation/gros_oeuvre if null — preserve existing value in Supabase
+      // Don't overwrite custom_data if null — preserve existing value in Supabase (_docCd n'inclut que le non-vide)
       if (!row.custom_data) delete row.custom_data;
-      if (!row.type_prestation) delete row.type_prestation;
-      if (!row.gros_oeuvre) delete row.gros_oeuvre;
       return row;
     });
     await _sbUpsert('commandes', cBatchAll, 'id', 200);
@@ -27350,13 +27361,10 @@ async function syncAkuiteo() {
         responsable_id: f.managerId || null, devise: f.currencyCode || 'EUR',
         nb_lignes: Array.isArray(f.lines) ? f.lines.length : 0, reference1: f.reference1 || null,
         custom_data: (f.customData && Object.keys(f.customData).length > 0) ? f.customData : null,
-        type_prestation: (f.customData && f.customData['1-alpha06'] && f.customData['1-alpha06'].value) || null,
-        gros_oeuvre: (f.customData && f.customData['1-alpha12'] && f.customData['1-alpha12'].value) || null,
+        ..._docCd(f.customData),
       };
-      // Don't overwrite custom_data/type_prestation/gros_oeuvre if null — preserve existing value in Supabase
+      // Don't overwrite custom_data if null — preserve existing value in Supabase (_docCd n'inclut que le non-vide)
       if (!row.custom_data) delete row.custom_data;
-      if (!row.type_prestation) delete row.type_prestation;
-      if (!row.gros_oeuvre) delete row.gros_oeuvre;
       return row;
     });
     await _sbUpsert('factures', fBatchAll, 'id', 200);
