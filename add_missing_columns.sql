@@ -516,3 +516,7 @@ ALTER TABLE sollicitations ADD COLUMN IF NOT EXISTS contact_id TEXT;
 ALTER TABLE sollicitations ADD COLUMN IF NOT EXISTS contact_nom TEXT;
 ALTER TABLE sollicitations ADD COLUMN IF NOT EXISTS contact_email TEXT;
 CREATE INDEX IF NOT EXISTS idx_sollic_assigne ON sollicitations(assigne_email);
+
+-- ═══ Géolocalisation des marchés (point placé sur la carte ; synchro données perso Akuiteo Latitude/Longitude) ═══
+ALTER TABLE marches ADD COLUMN IF NOT EXISTS lat NUMERIC;
+ALTER TABLE marches ADD COLUMN IF NOT EXISTS lng NUMERIC;
