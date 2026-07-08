@@ -6867,7 +6867,7 @@ function renderTachesCard(opts) {
 //  SOLLICITATIONS : lier des comptes clients/prospects à une opportunité + suivi
 // ═══════════════════════════════════════════════════════════
 let _sollic = [], _sollicLoaded = false;
-let _sollicFStatut = '', _sollicSearch = '', _sollicMine = false, _sollicSel = {}, _sollicEditReturn = '';
+let _sollicFStatut = '', _sollicSearch = '', _sollicMine = false, _sollicSel = {}, _sollicEditReturn = '', _sollicContacts = [];
 const SOLLIC_STATUTS = {
   a_solliciter: ['À solliciter', '#f59e0b'],
   sollicite:    ['Sollicité', '#4f8ff7'],
@@ -6993,8 +6993,8 @@ function sollicModalOpen(id, prefill) {
   const pf = prefill || {};
   _sollicEditReturn = (currentPage && currentPage !== 'sollic-edit') ? currentPage : 'sollicitations';
   _sollicSel = s
-    ? { id: s.id, client_id: s.client_id, client_name: s.client_name, opportunite_id: s.opportunite_id, opportunite_nom: s.opportunite_nom, assigne_id: s.assigne_id || null }
-    : { id: null, client_id: pf.client_id || null, client_name: pf.client_name || null, opportunite_id: pf.opportunite_id || null, opportunite_nom: pf.opportunite_nom || null, assigne_id: null };
+    ? { id: s.id, client_id: s.client_id, client_name: s.client_name, opportunite_id: s.opportunite_id, opportunite_nom: s.opportunite_nom, assigne_id: s.assigne_id || null, contact_id: s.contact_id || null, contact_nom: s.contact_nom || null, contact_email: s.contact_email || null }
+    : { id: null, client_id: pf.client_id || null, client_name: pf.client_name || null, opportunite_id: pf.opportunite_id || null, opportunite_nom: pf.opportunite_nom || null, assigne_id: null, contact_id: null, contact_nom: null, contact_email: null };
   if (!s) { const def = _sollicDefaultAssigne(_sollicSel.opportunite_id); _sollicSel.assigne_id = def ? def.id : null; }
   currentPage = 'sollic-edit';
   const pt = document.getElementById('pageTitle'); if (pt) pt.textContent = id ? 'Modifier la sollicitation' : 'Nouvelle sollicitation';
@@ -7006,6 +7006,28 @@ function sollicPickOpp(id) {
   // Met à jour l'assigné par défaut (responsable de l'opportunité) tant que la sollicitation est nouvelle.
   // On ne remplit PAS le compte depuis l'opportunité : le compte sollicité est choisi indépendamment.
   if (!_sollicSel.id) { const def = _sollicDefaultAssigne(id); if (def) { const sel = document.getElementById('sol-assigne'); if (sel) sel.value = def.id; } }
+}
+function sollicPickContact(cid) {
+  const c = (_sollicContacts || []).find(x => String(x.id) === String(cid));
+  _sollicSel.contact_id = c ? c.id : null;
+  _sollicSel.contact_nom = c ? (((c.prenom || '') + ' ' + (c.nom || '')).trim() || null) : null;
+  _sollicSel.contact_email = c ? (c.email || c.email2 || null) : null;
+}
+// Charge les contacts de la société sélectionnée et remplit le select #sol-contact
+async function sollicLoadContacts() {
+  const sel = document.getElementById('sol-contact'); if (!sel) return;
+  if (!_sollicSel.client_id) { _sollicContacts = []; sel.innerHTML = '<option value="">— Choisir un compte d\'abord —</option>'; return; }
+  sel.innerHTML = '<option value="">— Chargement… —</option>';
+  try {
+    const { data } = await sb.from('contacts').select('id,nom,prenom,email,email2,fonction').eq('client_id', _sollicSel.client_id).order('nom').limit(200);
+    _sollicContacts = data || [];
+  } catch (e) { _sollicContacts = []; }
+  const opts = ['<option value="">— Aucun / à préciser —</option>'].concat(_sollicContacts.map(c => {
+    const nm = ((c.prenom || '') + ' ' + (c.nom || '')).trim() || 'Contact';
+    const em = c.email || c.email2 || '';
+    return `<option value="${c.id}"${String(_sollicSel.contact_id) === String(c.id) ? ' selected' : ''}>${cmdEsc(nm)}${c.fonction ? ' (' + cmdEsc(c.fonction) + ')' : ''}${em ? ' — ' + cmdEsc(em) : ' — (pas d\'email)'}</option>`;
+  }));
+  sel.innerHTML = opts.join('');
 }
 function renderSollicEditPage() {
   const id = _sollicSel.id;
@@ -7019,6 +7041,8 @@ function renderSollicEditPage() {
       <input type="text" id="sol-client-search" placeholder="Rechercher une société..." autocomplete="off" oninput="sollicSearchClient(this.value)" onfocus="sollicSearchClient(this.value)" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card,#fff);color:var(--t1)">
       <div id="sol-client-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card,#fff);border:1px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.2)"></div>
     </div>
+    <div class="fg"><label class="fl">Contact (interlocuteur)</label><select class="fi" id="sol-contact" onchange="sollicPickContact(this.value)"><option value="">— Chargement… —</option></select>
+      <div style="font-size:11px;color:var(--t3);margin-top:3px">Contact de la société sollicitée — servira de destinataire par défaut du mail.</div></div>
     <div class="fg"><label class="fl">Opportunité</label><select class="fi" id="sol-opp" onchange="sollicPickOpp(this.value)">${_sollicOppOptions()}</select></div>
     <div class="fg"><label class="fl">Assigné à *</label><select class="fi" id="sol-assigne">${comm.map(c => `<option value="${c.id}"${String(_sollicSel.assigne_id) === String(c.id) ? ' selected' : ''}>${cmdEsc(fmtCommercialName(c.nom || c.email || ''))}${c.email ? '' : ' (sans email)'}</option>`).join('')}</select>
       <div style="font-size:11px;color:var(--t3);margin-top:3px">Par défaut le responsable de l'opportunité. Un rappel email lui sera envoyé à la date « À faire avant ».</div></div>
@@ -7050,7 +7074,7 @@ async function sollicSearchClient(q) {
   dd.innerHTML = data.length ? data.slice(0, 40).map(c => `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="sollicSelectClient('${c.id}','${(c.name || '').replace(/'/g, "&#39;")}')">${cmdEsc(c.name)}${c.city ? ' <span style="color:var(--t3);font-size:11px">' + cmdEsc(c.city) + '</span>' : ''}</div>`).join('') : '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucune société</div>';
   dd.style.display = 'block';
 }
-function sollicSelectClient(id, name) { _sollicSel.client_id = id; _sollicSel.client_name = name; const dd = document.getElementById('sol-client-dd'); if (dd) dd.style.display = 'none'; const inp = document.getElementById('sol-client-search'); if (inp) inp.value = ''; sollicRenderClientChip(); }
+function sollicSelectClient(id, name) { _sollicSel.client_id = id; _sollicSel.client_name = name; _sollicSel.contact_id = null; _sollicSel.contact_nom = null; _sollicSel.contact_email = null; const dd = document.getElementById('sol-client-dd'); if (dd) dd.style.display = 'none'; const inp = document.getElementById('sol-client-search'); if (inp) inp.value = ''; sollicRenderClientChip(); sollicLoadContacts(); }
 function sollicRenderClientChip() { const el = document.getElementById('sol-client-chip'); if (!el) return; el.innerHTML = _sollicSel.client_id ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#6366f122;color:#6366f1;border:1px solid #6366f144">${cmdEsc(_sollicSel.client_name || '')}</span>` : ''; }
 // Statut clôturant une sollicitation (→ tâche To Do marquée terminée)
 function _sollicTerminal(st) { return st === 'converti' || st === 'sans_suite'; }
@@ -7085,6 +7109,7 @@ async function sollicSave() {
   const relance = document.getElementById('sol-relance')?.value || null;
   const row = {
     client_id: _sollicSel.client_id, client_name: _sollicSel.client_name,
+    contact_id: _sollicSel.contact_id || null, contact_nom: _sollicSel.contact_nom || null, contact_email: _sollicSel.contact_email || null,
     opportunite_id: oppId, opportunite_nom: opp ? opp.nom : (_sollicSel.opportunite_nom || null),
     assigne_id: assigne ? assigne.id : null, assigne_nom: assigne ? assigne.nom : null, assigne_email: assigne ? assigne.email : null,
     statut: document.getElementById('sol-statut')?.value || 'a_solliciter',
@@ -7153,7 +7178,7 @@ async function sollicMailOpen(id) {
     try { const { data } = await sb.from('clients').select('email').eq('id', s.client_id).maybeSingle(); societeEmail = (data && data.email) || ''; } catch (e) {}
   }
   const firstWithEmail = contacts.find(c => c.email || c.email2);
-  const toEmail = s.email_destinataire || (firstWithEmail ? (firstWithEmail.email || firstWithEmail.email2) : '') || societeEmail || '';
+  const toEmail = s.email_destinataire || s.contact_email || (firstWithEmail ? (firstWithEmail.email || firstWithEmail.email2) : '') || societeEmail || '';
   const rowStyle = 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px';
   const addBtn = em => `<button class="btn" style="font-size:11px;padding:2px 8px;white-space:nowrap" onclick="sollicMailAddDest('${String(em).replace(/'/g, "&#39;")}')">+ Ajouter</button>`;
   let recipRows = '';
@@ -7191,6 +7216,7 @@ async function sollicMailGen(id) {
     const r = await fetch('/api/sollicitation-mail', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
         client_name: s.client_name, opportunite_nom: s.opportunite_nom || (o && o.nom) || '',
+        contact_nom: s.contact_nom || '',
         departement: (o && o.chantier_dept) || '', adresse: (o && o.chantier_adresse) || '',
         commercial_nom: currentCommercial ? fmtCommercialName(currentCommercial.nom || '') : '', commercial_email: currentCommercial ? currentCommercial.email : '', commercial_tel: currentCommercial ? currentCommercial.telephone : '',
       })
@@ -9155,7 +9181,7 @@ function renderPage(page) {
   if (page === 'taches' && !_tachesLoaded) { loadTaches().then(() => { if (currentPage === 'taches') renderPage('taches'); }); }
   if (page === 'sollicitations') { if (!_oppsLoaded) loadOpportunites().catch(() => {}); if (!_sollicLoaded) loadSollicitations().then(() => { if (currentPage === 'sollicitations') renderPage('sollicitations'); }); }
   if (page === 'tache-edit') { setTimeout(() => { tacheRenderClientChip(); tacheRenderAffaireOptions(); tacheRenderOppOptions(); if (!_oppsLoaded) loadOpportunites().then(() => tacheRenderOppOptions()); }, 30); }
-  if (page === 'sollic-edit') { setTimeout(() => { sollicRenderClientChip(); if (!_oppsLoaded) loadOpportunites().then(() => { const sel = document.getElementById('sol-opp'); if (sel) sel.innerHTML = _sollicOppOptions(); }); }, 30); }
+  if (page === 'sollic-edit') { setTimeout(() => { sollicRenderClientChip(); sollicLoadContacts(); if (!_oppsLoaded) loadOpportunites().then(() => { const sel = document.getElementById('sol-opp'); if (sel) sel.innerHTML = _sollicOppOptions(); }); }, 30); }
   if (page === 'opportunites' && !_oppsLoaded) { loadOpportunites().then(() => { if (currentPage === 'opportunites') renderPage('opportunites'); }); }
   if (page === 'opportunite-analyse') { if (!_oppsLoaded) { loadOpportunites().then(() => { if (currentPage === 'opportunite-analyse') renderPage('opportunite-analyse'); }); } else { setTimeout(_oppAnalyseCharts, 40); } }
 }
