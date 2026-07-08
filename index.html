@@ -6952,15 +6952,17 @@ function renderSollicCard(opts) {
   const addBtn = byOpp
     ? `<button class="btn btn-sm" onclick="sollicModalOpen(null,{opportunite_id:'${opts.opportunite_id}',opportunite_nom:'${(opts.opportunite_nom || '').replace(/'/g, "\\'")}'})">+ Solliciter un compte</button>`
     : `<button class="btn btn-sm" onclick="sollicModalOpen(null,{client_id:'${opts.client_id}',client_name:'${(opts.client_name || '').replace(/'/g, "\\'")}'})">+ Sollicitation</button>`;
-  const rows = list.length ? '<div class="table-wrap"><table><thead><tr>' + (byOpp ? '<th>Compte</th>' : '<th>Opportunité</th>') + '<th>Statut</th><th>Mail</th><th></th></tr></thead><tbody>' +
-    list.map(s => `<tr>
+  const rows = list.length ? '<div class="table-wrap"><table><thead><tr>' + (byOpp ? '<th>Compte</th>' : '<th>Opportunité</th>') + '<th>Statut</th><th>Assigné</th><th>À faire avant</th><th>Mail</th><th></th></tr></thead><tbody>' +
+    list.map(s => { const enRetard = s.date_relance && !_sollicTerminal(s.statut) && String(s.date_relance).slice(0, 10) < new Date().toISOString().slice(0, 10); return `<tr>
       <td style="padding:6px 8px;font-size:12px">${byOpp
         ? (s.client_id ? '<a href="#" onclick="showClient(\'' + s.client_id + '\');return false" style="color:var(--accent);text-decoration:none">' + cmdEsc(s.client_name || '') + '</a>' : cmdEsc(s.client_name || '—'))
         : (s.opportunite_id ? '<a href="#" onclick="oppDetail(\'' + s.opportunite_id + '\');return false" style="color:var(--accent);text-decoration:none">' + cmdEsc(s.opportunite_nom || '') + '</a>' : cmdEsc(s.opportunite_nom || '—'))}</td>
       <td style="padding:6px 8px">${_sollicBadge(s.statut)}</td>
+      <td style="padding:6px 8px;font-size:12px">${cmdEsc(fmtCommercialName(s.assigne_nom || '') || '—')}</td>
+      <td style="padding:6px 8px;font-size:12px;white-space:nowrap${enRetard ? ';color:var(--red);font-weight:600' : ''}">${s.date_relance ? fmtDateFR(String(s.date_relance).slice(0, 10)) + (enRetard ? ' ⚠' : '') : '<span style="color:var(--t3)">—</span>'}</td>
       <td style="padding:6px 8px;font-size:11px;white-space:nowrap">${s.email_envoye ? '✅' : '<span style="color:var(--t3)">—</span>'}</td>
       <td style="padding:6px 8px;white-space:nowrap"><button class="btn" style="font-size:11px;padding:2px 6px" title="Mail" onclick="sollicMailOpen(${s.id})">✉️</button><button class="btn" style="font-size:11px;padding:2px 6px" title="Modifier" onclick="sollicModalOpen(${s.id})">✎</button></td>
-    </tr>`).join('') + '</tbody></table></div>'
+    </tr>`; }).join('') + '</tbody></table></div>'
     : '<div style="padding:14px;text-align:center;color:var(--t3);font-size:13px">Aucune sollicitation</div>';
   return `<div class="card" style="margin-top:16px"><div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">🤝 Sollicitations (${list.length})</div>${addBtn}</div>
     <div class="card-body" style="padding:0">${rows}</div></div>`;
@@ -7135,17 +7137,38 @@ async function deleteSollic(id) {
   renderPage(currentPage);
 }
 // ─── Génération + envoi du mail de sollicitation ───
+function sollicMailAddDest(email) {
+  if (!email) return;
+  const inp = document.getElementById('sm-to'); if (!inp) return;
+  const cur = inp.value.split(/[,;]+/).map(x => x.trim()).filter(Boolean);
+  if (!cur.some(x => x.toLowerCase() === email.toLowerCase())) cur.push(email);
+  inp.value = cur.join(', ');
+}
 async function sollicMailOpen(id) {
   const s = (_sollic || []).find(x => String(x.id) === String(id)); if (!s) { toast('Sollicitation introuvable', 'error'); return; }
-  let toEmail = s.email_destinataire || '';
-  if (!toEmail && s.client_id) { try { const { data } = await sb.from('contacts').select('email,email2').eq('client_id', s.client_id).limit(20); const c = (data || []).find(x => x.email || x.email2); if (c) toEmail = c.email || c.email2 || ''; } catch (e) {} }
+  // Contacts de la société (avec email) + email de la société → choix du/des destinataire(s)
+  let contacts = [], societeEmail = '';
+  if (s.client_id) {
+    try { const { data } = await sb.from('contacts').select('nom,prenom,email,email2,fonction').eq('client_id', s.client_id).limit(50); contacts = (data || []).filter(c => c.email || c.email2); } catch (e) {}
+    try { const { data } = await sb.from('clients').select('email').eq('id', s.client_id).maybeSingle(); societeEmail = (data && data.email) || ''; } catch (e) {}
+  }
+  const toEmail = s.email_destinataire || (contacts[0] ? (contacts[0].email || contacts[0].email2) : '') || '';
+  const pickOpts = [
+    societeEmail ? `<option value="${cmdEsc(societeEmail)}">Société — ${cmdEsc(societeEmail)}</option>` : '',
+    ...contacts.map(c => { const em = c.email || c.email2; const nm = ((c.prenom || '') + ' ' + (c.nom || '')).trim() || em; return `<option value="${cmdEsc(em)}">${cmdEsc(nm)}${c.fonction ? ' (' + cmdEsc(c.fonction) + ')' : ''} — ${cmdEsc(em)}</option>`; })
+  ].filter(Boolean).join('');
   const body = `
     <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
       <div style="font-size:16px;font-weight:700">✉️ Mail de sollicitation — ${cmdEsc(s.client_name || '')}</div>
       <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
     </div>
     <div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
-      <div><label class="fl">Destinataire *</label><input type="email" id="sm-to" class="fi" value="${cmdEsc(toEmail)}" placeholder="prenom.nom@societe.fr"></div>
+      <div><label class="fl">Destinataire(s) *</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" id="sm-to" class="fi" style="flex:1" value="${cmdEsc(toEmail)}" placeholder="prenom.nom@societe.fr">
+          ${pickOpts ? `<select onchange="sollicMailAddDest(this.value);this.selectedIndex=0" class="fi" style="max-width:240px"><option value="">+ Société / contact…</option>${pickOpts}</select>` : ''}
+        </div>
+        <div style="font-size:11px;color:var(--t3);margin-top:3px">Ajoutez société et/ou contacts ; séparez plusieurs destinataires par une virgule.</div></div>
       <div><label class="fl">Objet</label><input type="text" id="sm-obj" class="fi" value=""></div>
       <div><label class="fl">Message</label><textarea id="sm-body" class="fi" rows="9" style="resize:vertical;font-family:inherit"></textarea>
         <div style="font-size:11px;color:var(--t3);margin-top:3px">Relisez et ajustez. Envoi depuis votre boîte Microsoft.</div></div>
@@ -7180,15 +7203,16 @@ async function sollicMailGen(id) {
 }
 async function sollicMailSend(id) {
   const s = (_sollic || []).find(x => String(x.id) === String(id)); if (!s) return;
-  const to = (document.getElementById('sm-to')?.value || '').trim();
+  const toArr = (document.getElementById('sm-to')?.value || '').split(/[,;]+/).map(x => x.trim()).filter(Boolean);
   const subject = (document.getElementById('sm-obj')?.value || '').trim();
   const text = (document.getElementById('sm-body')?.value || '').trim();
-  if (!to) { toast('Destinataire manquant', 'error'); return; }
+  if (!toArr.length) { toast('Destinataire manquant', 'error'); return; }
   if (!subject) { toast('Objet manquant', 'error'); return; }
+  const to = toArr.join(', ');
   const st = document.getElementById('sm-status'); if (st) st.textContent = 'Envoi en cours…';
   const html = '<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;line-height:1.5">' + cmdEsc(text).replace(/\n/g, '<br>') + '</div>';
   try {
-    await _nlSendMail(to, subject, html);
+    await _nlSendMail(toArr, subject, html);
     await sb.from('sollicitations').update({ email_envoye: true, email_date: new Date().toISOString(), email_objet: subject, email_destinataire: to, statut: s.statut === 'a_solliciter' ? 'sollicite' : s.statut, date_sollicitation: s.date_sollicitation || new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', id);
     document.querySelector('.nl-overlay')?.remove();
     toast('Mail envoyé à ' + to, 'success');
