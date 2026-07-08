@@ -9182,6 +9182,7 @@ function renderPage(page) {
   if (page === 'taches' && !_tachesLoaded) { loadTaches().then(() => { if (currentPage === 'taches') renderPage('taches'); }); }
   if (page === 'sollicitations') { if (!_oppsLoaded) loadOpportunites().catch(() => {}); if (!_sollicLoaded) loadSollicitations().then(() => { if (currentPage === 'sollicitations') renderPage('sollicitations'); }); }
   if (page === 'tache-edit') { setTimeout(() => { tacheRenderClientChip(); tacheRenderAffaireOptions(); tacheRenderOppOptions(); if (!_oppsLoaded) loadOpportunites().then(() => tacheRenderOppOptions()); }, 30); }
+  if (page === 'marche-detail') setTimeout(_mmInitMap, 60);
   if (page === 'sollic-edit') { setTimeout(() => { sollicRenderClientChip(); sollicLoadContacts(); if (!_oppsLoaded) loadOpportunites().then(() => { const sel = document.getElementById('sol-opp'); if (sel) sel.innerHTML = _sollicOppOptions(); }); }, 30); }
   if (page === 'opportunites' && !_oppsLoaded) { loadOpportunites().then(() => { if (currentPage === 'opportunites') renderPage('opportunites'); }); }
   if (page === 'opportunite-analyse') { if (!_oppsLoaded) { loadOpportunites().then(() => { if (currentPage === 'opportunite-analyse') renderPage('opportunite-analyse'); }); } else { setTimeout(_oppAnalyseCharts, 40); } }
@@ -13410,17 +13411,78 @@ async function initMarchesMap() {
   }
 }
 
+// ─ Géolocalisation d'un marché (point sur carte + cadastre) dans la fiche marché ─
+let _mmLat = null, _mmLng = null, _mmMap = null, _mmMarker = null;
+function _mmInitMap() {
+  const el = document.getElementById('mm-map'); if (!el || !window.L) return;
+  if (_mmMap) { try { _mmMap.remove(); } catch (e) {} _mmMap = null; _mmMarker = null; }
+  const lat = _mmLat, lng = _mmLng;
+  _mmMap = L.map('mm-map', { zoomControl: true }).setView((lat && lng) ? [lat, lng] : [46.8, 2.5], (lat && lng) ? 15 : 6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(_mmMap);
+  L.tileLayer.wms('https://data.geopf.fr/wms-r/wms', { layers: 'CADASTRALPARCELS.PARCELLAIRE_EXPRESS', format: 'image/png', transparent: true, version: '1.3.0', zIndex: 450 }).addTo(_mmMap);
+  if (lat && lng) _mmSetMarker(lat, lng);
+  _mmMap.on('click', e => _mmSet(e.latlng.lat, e.latlng.lng));
+  setTimeout(() => { try { _mmMap.invalidateSize(); } catch (e) {} }, 150);
+}
+function _mmSetMarker(lat, lng) {
+  if (_mmMarker) { _mmMarker.setLatLng([lat, lng]); return; }
+  _mmMarker = L.marker([lat, lng], { draggable: true }).addTo(_mmMap);
+  _mmMarker.on('dragend', e => { const p = e.target.getLatLng(); _mmSet(p.lat, p.lng); });
+}
+function _mmSet(lat, lng) {
+  _mmLat = lat; _mmLng = lng;
+  if (_mmMap) _mmSetMarker(lat, lng);
+  const c = document.getElementById('mm-coords'); if (c) c.textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
+}
+function _mmSearch() {
+  const q = (document.getElementById('mm-search')?.value || '').trim(); if (!q || !_mmMap) return;
+  fetch('https://api-adresse.data.gouv.fr/search/?limit=1&q=' + encodeURIComponent(q)).then(r => r.json()).then(j => {
+    const f = j && j.features && j.features[0];
+    if (f && f.geometry && f.geometry.coordinates) { const [lo, la] = f.geometry.coordinates; _mmMap.setView([la, lo], 17); }
+    else toast('Adresse introuvable', 'info');
+  }).catch(() => toast('Recherche d\'adresse indisponible', 'error'));
+}
+function _mmClear() {
+  _mmLat = null; _mmLng = null;
+  if (_mmMarker && _mmMap) { try { _mmMap.removeLayer(_mmMarker); } catch (e) {} _mmMarker = null; }
+  const c = document.getElementById('mm-coords'); if (c) c.textContent = 'aucune';
+}
+async function marcheSaveGeo() {
+  const m = DB.marches.find(x => x.id === currentMarcheId); if (!m) return;
+  const { error } = await sb.from('marches').update({ lat: _mmLat, lng: _mmLng }).eq('id', m.id);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  m.lat = _mmLat; m.lng = _mmLng;
+  toast('Localisation enregistrée', 'success');
+  if (_mmLat != null && _mmLng != null) marchePushGeoToAkuiteo(m).catch(() => {}); // synchro Akuiteo (non bloquant)
+}
+// Écrit Latitude/Longitude dans les données personnalisées des projets Akuiteo rattachés au marché (best-effort)
+async function marchePushGeoToAkuiteo(m) {
+  const pids = (DB.affaires || []).filter(a => a.marche_id === m.id && a.akuiteo_id).map(a => String(a.akuiteo_id));
+  if (!pids.length) return;
+  let latKey = null, lngKey = null, latType = 'NUMBER', lngType = 'NUMBER';
+  for (const pid of pids) {
+    try { const proj = await akuiteoFetch('POST', `/projectmanagement/projects/${pid}/read`, { options: ['CUSTOM_DATA'] }); const g = _projGeoFromCd(proj && proj.customData); if (g.latKey && g.lngKey) { latKey = g.latKey; lngKey = g.lngKey; latType = g.latType; lngType = g.lngType; break; } } catch (e) {}
+  }
+  if (!latKey || !lngKey) { toast('GPS enregistré dans le CRM (champs Latitude/Longitude introuvables dans Akuiteo)', 'warning'); return; }
+  const customData = { [latKey]: { type: latType, value: _mmLat }, [lngKey]: { type: lngType, value: _mmLng } };
+  try {
+    await akuiteoFetch('POST', '/projectmanagement/projects/custom-data/batch-update', { ids: pids, customData }, { accept: 'text/plain' });
+    toast('Coordonnées synchronisées vers Akuiteo', 'success');
+  } catch (e) { toast('GPS enregistré dans le CRM (synchro Akuiteo à valider)', 'warning'); console.warn('marchePushGeoToAkuiteo:', e.message); }
+}
 function showMarcheDetail(id) {
   currentMarcheId = id;
   currentPage = 'marche-detail';
   const m = DB.marches.find(x => x.id === id);
   if (m) document.getElementById('pageTitle').textContent = 'Marché ' + (m.ref || m.nom || id);
   document.getElementById('contentArea').innerHTML = '<div class="page active">' + renderMarcheDetail() + '</div>';
+  setTimeout(_mmInitMap, 60);
 }
 
 function renderMarcheDetail() {
   const m = DB.marches.find(x => x.id === currentMarcheId);
   if (!m) return '<p>Marché non trouvé</p>';
+  _mmLat = (m.lat != null ? Number(m.lat) : null); _mmLng = (m.lng != null ? Number(m.lng) : null);
   const affaires = DB.affaires.filter(a => a.marche_id === m.id);
   const allDevis = DB.devis.filter(d => d.marche_id === m.id);
   const allCmd = DB.commandes.filter(c => c.marche_id === m.id);
@@ -13466,6 +13528,19 @@ function renderMarcheDetail() {
       detailRow('Devise', m.devise),
     ])}
     ${(() => { const addr = affaires.find(a => a.adresse || a.ville || a.code_postal); return addr ? detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region)]) : ''; })()}
+  </div>
+
+  <div class="card" style="margin-bottom:20px"><div class="card-header"><div class="card-title">📍 Localisation du marché</div></div>
+    <div class="card-body">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+        <input id="mm-search" placeholder="Rechercher une adresse pour centrer la carte…" style="flex:1;min-width:220px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter'){event.preventDefault();_mmSearch()}">
+        <button class="btn" onclick="_mmSearch()">🔍 Centrer</button>
+        <button class="btn" onclick="_mmClear()">Effacer</button>
+        <button class="btn btn-primary" onclick="marcheSaveGeo()">💾 Enregistrer</button>
+      </div>
+      <div style="font-size:11px;color:var(--t3);margin-bottom:6px">Cliquez sur la carte pour placer le marché (le cadastre est affiché). Coordonnées : <strong id="mm-coords">${(m.lat != null && m.lng != null) ? (Number(m.lat).toFixed(5) + ', ' + Number(m.lng).toFixed(5)) : 'aucune'}</strong></div>
+      <div id="mm-map" style="height:340px;border:1px solid var(--border);border-radius:8px"></div>
+    </div>
   </div>
 
   <h3 style="font-size:14px;margin-bottom:10px;color:var(--t1)">Affaires (${affaires.length})</h3>
@@ -27017,6 +27092,20 @@ function _docCd(cd) {
   const gc = g('1-alpha11'); if (gc) out.gros_oeuvre_code = gc;
   return out;
 }
+// Latitude / Longitude d'un projet Akuiteo depuis ses données personnalisées (repérées par NOM),
+// avec les clés + types (utile pour la synchro retour). Ex. Akuiteo : champs « Latitude », « Longitude ».
+function _projGeoFromCd(cd) {
+  const out = { lat: null, lng: null, latKey: null, lngKey: null, latType: 'NUMBER', lngType: 'NUMBER' };
+  if (!cd || typeof cd !== 'object') return out;
+  for (const k in cd) {
+    const v = cd[k]; if (!v || typeof v !== 'object' || !('value' in v)) continue;
+    const nm = String(v.name || '').toLowerCase();
+    const n = Number(v.value);
+    if (!out.latKey && nm.includes('latitude')) { out.latKey = k; out.latType = v.type || 'NUMBER'; if (v.value != null && v.value !== '' && isFinite(n)) out.lat = n; }
+    else if (!out.lngKey && nm.includes('longitude')) { out.lngKey = k; out.lngType = v.type || 'NUMBER'; if (v.value != null && v.value !== '' && isFinite(n)) out.lng = n; }
+  }
+  return out;
+}
 
 async function syncAkuiteoQuick() {
   showSyncLoading(true);
@@ -27265,8 +27354,8 @@ async function syncAkuiteoQuick() {
       await _syncMapLimit(pidList, 6, async pid => {
         if ((_enrDone++ % 50) === 0) setSyncText(`Sync du dernier mois — Enrichissement projets ${_enrDone}/${pidList.length}...`);
         try {
-          const proj = await _akRetry('POST', `/projectmanagement/projects/${pid}/read`, { options: ['PROJECT_SUB_CATEGORY', 'PROJECT_SUB_CATEGORY_LEVEL2', 'MANAGER', 'ADDRESS'] });
-          if (proj) { const a = proj.address || null; enrich[pid] = { name: proj.name || null, apporteur: proj.projectSubCategoryLevel2?.name || null, architecte: proj.projectSubCategory?.name || null, responsable: proj.manager ? [proj.manager.name, proj.manager.firstName].filter(Boolean).join(' ') : null, adresse: a?.line1 || null, ville: a?.city || null, code_postal: a?.postalCode || null }; }
+          const proj = await _akRetry('POST', `/projectmanagement/projects/${pid}/read`, { options: ['PROJECT_SUB_CATEGORY', 'PROJECT_SUB_CATEGORY_LEVEL2', 'MANAGER', 'ADDRESS', 'CUSTOM_DATA'] });
+          if (proj) { const a = proj.address || null; const g = _projGeoFromCd(proj.customData); enrich[pid] = { name: proj.name || null, apporteur: proj.projectSubCategoryLevel2?.name || null, architecte: proj.projectSubCategory?.name || null, responsable: proj.manager ? [proj.manager.name, proj.manager.firstName].filter(Boolean).join(' ') : null, adresse: a?.line1 || null, ville: a?.city || null, code_postal: a?.postalCode || null, lat: g.lat, lng: g.lng }; }
         } catch (e) {}
       });
       const marchesMap = {}, affaireRows = [];
@@ -27277,6 +27366,8 @@ async function syncAkuiteoQuick() {
         const pCreated = _d10(nb.date) || new Date().toISOString().slice(0, 10);
         if (!marchesMap[marcheCode]) marchesMap[marcheCode] = { id: marcheId, akuiteo_id: marcheCode, ref: marcheCode, nom: en.name || ('Marché ' + marcheCode), client_id: crmClient?.id || null, client_name: crmClient?.name || '', agence: nb.agence || '', statut: 'en_cours', nb_affaires: 0, date_debut: pCreated, adresse: en.adresse || null, code_postal: en.code_postal || null, ville: en.ville || null, _recent: !!en.name };
         marchesMap[marcheCode].nb_affaires++;
+        // Coordonnées GPS depuis les données perso Akuiteo (Latitude/Longitude) — premier projet qui en a
+        if (marchesMap[marcheCode].lat == null && en.lat != null && en.lng != null) { marchesMap[marcheCode].lat = en.lat; marchesMap[marcheCode].lng = en.lng; }
         const affId = _affaireIdOf(pid);
         if (enrich[pid] || !existAffSet.has(affId)) affaireRows.push({ id: affId, akuiteo_id: pid, ref: pid, nom: en.name || ('Affaire ' + pid), marche_id: marcheId, client_id: crmClient?.id || null, client_name: crmClient?.name || '', agence: nb.agence || '', statut: 'en_cours', code_projet: pid, date_debut: pCreated, apporteur_affaire: en.apporteur || null, architecte: en.architecte || null, responsable: en.responsable || null, adresse: en.adresse || null, ville: en.ville || null, code_postal: en.code_postal || null });
       }
@@ -27823,13 +27914,15 @@ async function syncAkuiteo() {
       const projectPids = Object.keys(affairesByProject);
       await _syncMapLimit(projectPids, 6, async pid => {
           try {
-            const proj = await _akRetry('POST', `/projectmanagement/projects/${pid}/read`, { options: ['PROJECT_SUB_CATEGORY', 'PROJECT_SUB_CATEGORY_LEVEL2', 'MANAGER', 'ADDRESS'] });
+            const proj = await _akRetry('POST', `/projectmanagement/projects/${pid}/read`, { options: ['PROJECT_SUB_CATEGORY', 'PROJECT_SUB_CATEGORY_LEVEL2', 'MANAGER', 'ADDRESS', 'CUSTOM_DATA'] });
             if (proj) {
               const a = affairesByProject[pid];
               if (proj.name) a.nom = proj.name;
               if (proj.projectSubCategoryLevel2?.name) a.apporteur = proj.projectSubCategoryLevel2.name;
               if (proj.projectSubCategory?.name) a.architecte = proj.projectSubCategory.name;
               if (proj.manager?.name) a.responsable = [proj.manager.name, proj.manager.firstName].filter(Boolean).join(' ');
+              // Coordonnées GPS depuis les données perso Akuiteo (Latitude/Longitude)
+              const g = _projGeoFromCd(proj.customData); if (g.lat != null && g.lng != null) { a.lat = g.lat; a.lng = g.lng; }
               // Adresse du site depuis le projet (option ADDRESS)
               const addr = proj.address || null;
               if (addr && (addr.line1 || addr.city || addr.postalCode)) {
@@ -27842,6 +27935,11 @@ async function syncAkuiteo() {
             }
           } catch (e) { /* ignore */ }
       });
+      // Propager la géoloc (données perso Akuiteo Latitude/Longitude) aux marchés — UPDATE partiel
+      const _marcheGeo = {};
+      for (const [pid, aff] of Object.entries(affairesByProject)) { const mId = projectToMarche[pid]; if (mId && aff.lat != null && aff.lng != null && !_marcheGeo[mId]) _marcheGeo[mId] = { id: mId, lat: aff.lat, lng: aff.lng }; }
+      const _geoRows = Object.values(_marcheGeo);
+      if (_geoRows.length) await _sbUpdateMany('marches', _geoRows, 'id');
       // Upsert affaires
       const affairesBatch = [];
       for (const [pid, aff] of Object.entries(affairesByProject)) {
