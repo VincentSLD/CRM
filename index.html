@@ -6887,7 +6887,8 @@ async function loadSollicitations() {
 }
 function _updateSollicBadge() {
   const el = document.getElementById('navBadgeSollic'); if (!el) return;
-  const n = (_sollic || []).filter(s => s.statut === 'a_solliciter').length;
+  // Sollicitations actives (non clôturées : ni converti, ni sans suite) — de tout le monde
+  const n = (_sollic || []).filter(s => !_sollicTerminal(s.statut)).length;
   if (n > 0) { el.textContent = n; el.style.display = ''; } else { el.style.display = 'none'; }
 }
 function _sollicFiltered() {
