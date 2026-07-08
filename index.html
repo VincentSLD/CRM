@@ -6966,10 +6966,11 @@ function renderSollicCard(opts) {
     <div class="card-body" style="padding:0">${rows}</div></div>`;
 }
 function _sollicOppOptions() {
-  const cid = _sollicSel.client_id;
-  const list = (cid ? (_opps || []).filter(o => o.client_id === cid) : (_opps || [])).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
+  // La liste des opportunités ne dépend PAS du compte sollicité : on sollicite un compte
+  // pour une opportunité qui appartient à SON propre client. On liste donc toutes les opportunités.
+  const list = (_opps || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
   return '<option value="">— Aucune —</option>' + list.map(o => {
-    const lbl = (o.nom || '') + (o.client_name && !cid ? ' — ' + o.client_name : '');
+    const lbl = (o.nom || '') + (o.client_name ? ' — ' + o.client_name : '');
     return `<option value="${o.akuiteo_id}"${_sollicSel.opportunite_id === o.akuiteo_id ? ' selected' : ''}>${cmdEsc(lbl)}</option>`;
   }).join('');
 }
@@ -7000,8 +7001,9 @@ function sollicModalOpen(id, prefill) {
 function sollicEditCancel() { currentPage = _sollicEditReturn || 'sollicitations'; renderPage(currentPage); }
 function sollicPickOpp(id) {
   _sollicSel.opportunite_id = id || null;
+  // Met à jour l'assigné par défaut (responsable de l'opportunité) tant que la sollicitation est nouvelle.
+  // On ne remplit PAS le compte depuis l'opportunité : le compte sollicité est choisi indépendamment.
   if (!_sollicSel.id) { const def = _sollicDefaultAssigne(id); if (def) { const sel = document.getElementById('sol-assigne'); if (sel) sel.value = def.id; } }
-  if (id && !_sollicSel.client_id) { const o = (_opps || []).find(x => x.akuiteo_id === id); if (o && o.client_id) { _sollicSel.client_id = o.client_id; _sollicSel.client_name = o.client_name || null; sollicRenderClientChip(); } }
 }
 function renderSollicEditPage() {
   const id = _sollicSel.id;
@@ -7046,7 +7048,7 @@ async function sollicSearchClient(q) {
   dd.innerHTML = data.length ? data.slice(0, 40).map(c => `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="sollicSelectClient('${c.id}','${(c.name || '').replace(/'/g, "&#39;")}')">${cmdEsc(c.name)}${c.city ? ' <span style="color:var(--t3);font-size:11px">' + cmdEsc(c.city) + '</span>' : ''}</div>`).join('') : '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucune société</div>';
   dd.style.display = 'block';
 }
-function sollicSelectClient(id, name) { _sollicSel.client_id = id; _sollicSel.client_name = name; const dd = document.getElementById('sol-client-dd'); if (dd) dd.style.display = 'none'; const inp = document.getElementById('sol-client-search'); if (inp) inp.value = ''; sollicRenderClientChip(); const sel = document.getElementById('sol-opp'); if (sel) sel.innerHTML = _sollicOppOptions(); }
+function sollicSelectClient(id, name) { _sollicSel.client_id = id; _sollicSel.client_name = name; const dd = document.getElementById('sol-client-dd'); if (dd) dd.style.display = 'none'; const inp = document.getElementById('sol-client-search'); if (inp) inp.value = ''; sollicRenderClientChip(); }
 function sollicRenderClientChip() { const el = document.getElementById('sol-client-chip'); if (!el) return; el.innerHTML = _sollicSel.client_id ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#6366f122;color:#6366f1;border:1px solid #6366f144">${cmdEsc(_sollicSel.client_name || '')}</span>` : ''; }
 async function sollicSave() {
   if (!_sollicSel.client_id) { toast('Sélectionnez un compte', 'error'); return; }
