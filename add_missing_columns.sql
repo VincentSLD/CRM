@@ -477,3 +477,30 @@ ALTER TABLE commandes ADD COLUMN IF NOT EXISTS apporteur_code  TEXT;
 ALTER TABLE commandes ADD COLUMN IF NOT EXISTS gros_oeuvre_code TEXT;
 ALTER TABLE factures  ADD COLUMN IF NOT EXISTS apporteur_code  TEXT;
 ALTER TABLE factures  ADD COLUMN IF NOT EXISTS gros_oeuvre_code TEXT;
+
+-- ═══ Sollicitations : lier des comptes clients/prospects à une opportunité + suivi ═══
+-- Une opportunité → plusieurs comptes sollicités ; un compte → plusieurs sollicitations.
+CREATE TABLE IF NOT EXISTS sollicitations (
+  id BIGSERIAL PRIMARY KEY,
+  opportunite_id TEXT,
+  opportunite_nom TEXT,
+  client_id TEXT,
+  client_name TEXT,
+  statut TEXT DEFAULT 'a_solliciter',   -- a_solliciter | sollicite | interesse | sans_suite | converti
+  commentaire TEXT,
+  createur_id TEXT, createur_nom TEXT, createur_email TEXT,
+  date_sollicitation TIMESTAMPTZ,
+  date_relance TIMESTAMPTZ,
+  email_envoye BOOLEAN DEFAULT FALSE,
+  email_date TIMESTAMPTZ,
+  email_objet TEXT,
+  email_destinataire TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE sollicitations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "sollicitations_all" ON sollicitations;
+CREATE POLICY "sollicitations_all" ON sollicitations FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE INDEX IF NOT EXISTS idx_sollic_opportunite ON sollicitations(opportunite_id);
+CREATE INDEX IF NOT EXISTS idx_sollic_client ON sollicitations(client_id);
+CREATE INDEX IF NOT EXISTS idx_sollic_statut ON sollicitations(statut);

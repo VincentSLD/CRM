@@ -1828,6 +1828,10 @@ tbody tr:last-child td { border-bottom: none; }
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
         Tâches <span class="nav-badge" id="navBadgeTaches" style="display:none;background:var(--accent)"></span>
       </div>
+      <div class="nav-item" data-page="sollicitations" onclick="go('sollicitations')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Sollicitations <span class="nav-badge" id="navBadgeSollic" style="display:none;background:var(--accent)"></span>
+      </div>
       <div class="nav-item" data-page="campagnes" onclick="go('campagnes')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M2 10l3 3"/><path d="M22 10l-3 3"/></svg>
         Campagnes
@@ -3657,6 +3661,7 @@ async function loadDB() {
       // Compteurs du menu : tâches + opportunités (non bloquant)
       if (!_tachesLoaded) loadTaches().catch(() => {});
       if (!_oppsLoaded) loadOpportunites().catch(() => {});
+      if (!_sollicLoaded) loadSollicitations().catch(() => {});
     })();
 
     return true;
@@ -4363,7 +4368,7 @@ function go(page) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
   const titles = {dashboard:'Tableau de bord',analyse:'Analyse / KPI',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing','marches-publics':'Veille marchés publics','procedures-coll':'Veille procédures collectives (BODACC)',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
-    cr:'Comptes-rendus',taches:'Tâches commerciales',opportunites:'Opportunités',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
+    cr:'Comptes-rendus',taches:'Tâches commerciales',sollicitations:'Sollicitations',opportunites:'Opportunités',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'",'mode-emploi':"Mode d'emploi",'cahier-charges':'Cahier des charges','veille-regar':'Carte des opportunités',newsletter:'Infolettre hebdomadaire'};
   document.getElementById('pageTitle').textContent = titles[page]||page;
   renderPage(page);
@@ -6859,6 +6864,269 @@ function renderTachesCard(opts) {
 }
 
 // ═══════════════════════════════════════════════════════════
+//  SOLLICITATIONS : lier des comptes clients/prospects à une opportunité + suivi
+// ═══════════════════════════════════════════════════════════
+let _sollic = [], _sollicLoaded = false;
+let _sollicFStatut = '', _sollicSearch = '', _sollicMine = false, _sollicSel = {};
+const SOLLIC_STATUTS = {
+  a_solliciter: ['À solliciter', '#f59e0b'],
+  sollicite:    ['Sollicité', '#4f8ff7'],
+  interesse:    ['Intéressé', '#10b981'],
+  sans_suite:   ['Sans suite / Refusé', '#ef4444'],
+  converti:     ['Converti', '#8b5cf6'],
+};
+function _sollicBadge(s) { const [l, c] = SOLLIC_STATUTS[s] || [s || '—', '#6b7280']; return `<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;background:${c}22;color:${c}">${l}</span>`; }
+async function loadSollicitations() {
+  try {
+    const { data, error } = await sb.from('sollicitations').select('*').order('updated_at', { ascending: false });
+    if (error) throw error;
+    _sollic = data || [];
+  } catch (e) { _sollic = []; console.warn('loadSollicitations', e.message); }
+  _sollicLoaded = true;
+  _updateSollicBadge();
+}
+function _updateSollicBadge() {
+  const el = document.getElementById('navBadgeSollic'); if (!el) return;
+  const n = (_sollic || []).filter(s => s.statut === 'a_solliciter').length;
+  if (n > 0) { el.textContent = n; el.style.display = ''; } else { el.style.display = 'none'; }
+}
+function _sollicFiltered() {
+  const myEmail = (currentCommercial && currentCommercial.email) || '';
+  const ql = (_sollicSearch || '').trim().toLowerCase();
+  return (_sollic || []).filter(s => {
+    if (_sollicMine && s.createur_email !== myEmail) return false;
+    if (_sollicFStatut && s.statut !== _sollicFStatut) return false;
+    if (ql && !((s.client_name || '') + ' ' + (s.opportunite_nom || '')).toLowerCase().includes(ql)) return false;
+    return true;
+  });
+}
+function renderSollicitations() {
+  if (!_sollicLoaded) { loadSollicitations().then(() => { if (currentPage === 'sollicitations') renderPage('sollicitations'); }); return '<div style="text-align:center;padding:40px;color:var(--t3)">Chargement des sollicitations…</div>'; }
+  const rows = _sollicFiltered();
+  return `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="sollicModalOpen()">+ Nouvelle sollicitation</button>
+      <span style="font-size:13px;color:var(--t2)">${rows.length} sollicitation(s)</span>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <input type="text" placeholder="Rechercher (client, opportunité)…" value="${cmdEsc(_sollicSearch)}" oninput="_sollicSearch=this.value;clearTimeout(window._sollicT);window._sollicT=setTimeout(()=>renderPage('sollicitations'),250)" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:4px 8px;border:1px solid ${_sollicMine ? '#f59e0b' : 'var(--border)'};border-radius:6px"><input type="checkbox" ${_sollicMine ? 'checked' : ''} onchange="_sollicMine=this.checked;renderPage('sollicitations')"> Les miennes</label>
+      <select onchange="_sollicFStatut=this.value;renderPage('sollicitations')" style="padding:5px 8px;border:1px solid ${_sollicFStatut ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+        <option value="">— Statut —</option>${Object.entries(SOLLIC_STATUTS).map(([k, v]) => `<option value="${k}"${_sollicFStatut === k ? ' selected' : ''}>${v[0]}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+  ${window.innerWidth <= 768 ? _sollicMobile(rows) : `<div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
+    <table><thead><tr><th>Compte</th><th>Opportunité</th><th>Statut</th><th>Mail</th><th>Créée par</th><th>MàJ</th><th>Actions</th></tr></thead>
+    <tbody>${rows.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--t3)">Aucune sollicitation</td></tr>' : rows.map(s => _sollicRow(s)).join('')}</tbody></table></div></div></div>`}`;
+}
+function _sollicRow(s) {
+  return `<tr style="border-bottom:1px solid var(--border)">
+    <td style="padding:6px 8px;font-size:13px">${s.client_id ? '<a href="#" onclick="showClient(\'' + s.client_id + '\');return false" style="color:var(--accent);text-decoration:none">' + cmdEsc(s.client_name || 'Client') + '</a>' : cmdEsc(s.client_name || '—')}</td>
+    <td style="padding:6px 8px;font-size:12px">${s.opportunite_id ? '🎯 <a href="#" onclick="oppDetail(\'' + s.opportunite_id + '\');return false" style="color:var(--t2);text-decoration:none">' + cmdEsc(s.opportunite_nom || 'Opportunité') + '</a>' : '<span style="color:var(--t3)">—</span>'}</td>
+    <td style="padding:6px 8px"><select onchange="setSollicStatut(${s.id},this.value)" style="font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:6px;background:var(--card,#fff);color:var(--t1)">${Object.entries(SOLLIC_STATUTS).map(([k, v]) => `<option value="${k}"${s.statut === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></td>
+    <td style="padding:6px 8px;font-size:11px;white-space:nowrap">${s.email_envoye ? '✅ ' + (s.email_date ? fmtDateFR(String(s.email_date).slice(0, 10)) : '') : '<span style="color:var(--t3)">—</span>'}</td>
+    <td style="padding:6px 8px;font-size:12px">${cmdEsc(fmtCommercialName(s.createur_nom || '') || '—')}</td>
+    <td style="padding:6px 8px;font-size:11px;white-space:nowrap;color:var(--t3)">${s.updated_at ? fmtDateFR(String(s.updated_at).slice(0, 10)) : ''}</td>
+    <td style="padding:6px 8px;white-space:nowrap">
+      <button class="btn" style="font-size:11px;padding:2px 6px" title="Générer un mail" onclick="sollicMailOpen(${s.id})">✉️</button>
+      <button class="btn" style="font-size:11px;padding:2px 6px" title="Modifier" onclick="sollicModalOpen(${s.id})">✎</button>
+      <button class="btn" style="font-size:11px;padding:2px 6px;color:var(--red)" title="Supprimer" onclick="deleteSollic(${s.id})">🗑</button>
+    </td></tr>`;
+}
+function _sollicMobile(rows) {
+  if (!rows.length) return '<div style="text-align:center;padding:30px;color:var(--t3)">Aucune sollicitation</div>';
+  return rows.map(s => `<div class="card" style="margin-bottom:8px"><div class="card-body" style="padding:12px">
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><strong style="font-size:14px">${cmdEsc(s.client_name || '—')}</strong>${_sollicBadge(s.statut)}</div>
+    ${s.opportunite_nom ? '<div style="font-size:12px;color:var(--t2);margin-top:3px">🎯 ' + cmdEsc(s.opportunite_nom) + '</div>' : ''}
+    <div style="display:flex;gap:6px;margin-top:8px"><button class="btn" style="font-size:11px" onclick="sollicMailOpen(${s.id})">✉️ Mail</button><button class="btn" style="font-size:11px" onclick="sollicModalOpen(${s.id})">✎</button><button class="btn" style="font-size:11px;color:var(--red)" onclick="deleteSollic(${s.id})">🗑</button></div>
+  </div></div>`).join('');
+}
+// Carte réutilisable (fiche opportunité → comptes sollicités ; fiche client → opportunités liées)
+function renderSollicCard(opts) {
+  if (!_sollicLoaded) { loadSollicitations().then(() => { if (['opportunite-detail', 'client-detail'].includes(currentPage)) renderPage(currentPage); }); }
+  const byOpp = !!opts.opportunite_id;
+  const list = (_sollic || []).filter(s => byOpp ? s.opportunite_id === opts.opportunite_id : s.client_id === opts.client_id);
+  const addBtn = byOpp
+    ? `<button class="btn btn-sm" onclick="sollicModalOpen(null,{opportunite_id:'${opts.opportunite_id}',opportunite_nom:'${(opts.opportunite_nom || '').replace(/'/g, "\\'")}'})">+ Solliciter un compte</button>`
+    : `<button class="btn btn-sm" onclick="sollicModalOpen(null,{client_id:'${opts.client_id}',client_name:'${(opts.client_name || '').replace(/'/g, "\\'")}'})">+ Sollicitation</button>`;
+  const rows = list.length ? '<div class="table-wrap"><table><thead><tr>' + (byOpp ? '<th>Compte</th>' : '<th>Opportunité</th>') + '<th>Statut</th><th>Mail</th><th></th></tr></thead><tbody>' +
+    list.map(s => `<tr>
+      <td style="padding:6px 8px;font-size:12px">${byOpp
+        ? (s.client_id ? '<a href="#" onclick="showClient(\'' + s.client_id + '\');return false" style="color:var(--accent);text-decoration:none">' + cmdEsc(s.client_name || '') + '</a>' : cmdEsc(s.client_name || '—'))
+        : (s.opportunite_id ? '<a href="#" onclick="oppDetail(\'' + s.opportunite_id + '\');return false" style="color:var(--accent);text-decoration:none">' + cmdEsc(s.opportunite_nom || '') + '</a>' : cmdEsc(s.opportunite_nom || '—'))}</td>
+      <td style="padding:6px 8px">${_sollicBadge(s.statut)}</td>
+      <td style="padding:6px 8px;font-size:11px;white-space:nowrap">${s.email_envoye ? '✅' : '<span style="color:var(--t3)">—</span>'}</td>
+      <td style="padding:6px 8px;white-space:nowrap"><button class="btn" style="font-size:11px;padding:2px 6px" title="Mail" onclick="sollicMailOpen(${s.id})">✉️</button><button class="btn" style="font-size:11px;padding:2px 6px" title="Modifier" onclick="sollicModalOpen(${s.id})">✎</button></td>
+    </tr>`).join('') + '</tbody></table></div>'
+    : '<div style="padding:14px;text-align:center;color:var(--t3);font-size:13px">Aucune sollicitation</div>';
+  return `<div class="card" style="margin-top:16px"><div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">🤝 Sollicitations (${list.length})</div>${addBtn}</div>
+    <div class="card-body" style="padding:0">${rows}</div></div>`;
+}
+function _sollicOppOptions() {
+  const cid = _sollicSel.client_id;
+  const list = (cid ? (_opps || []).filter(o => o.client_id === cid) : (_opps || [])).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
+  return '<option value="">— Aucune —</option>' + list.map(o => {
+    const lbl = (o.nom || '') + (o.client_name && !cid ? ' — ' + o.client_name : '');
+    return `<option value="${o.akuiteo_id}"${_sollicSel.opportunite_id === o.akuiteo_id ? ' selected' : ''}>${cmdEsc(lbl)}</option>`;
+  }).join('');
+}
+function sollicModalOpen(id, prefill) {
+  const s = id ? (_sollic || []).find(x => String(x.id) === String(id)) : null;
+  const pf = prefill || {};
+  _sollicSel = s
+    ? { id: s.id, client_id: s.client_id, client_name: s.client_name, opportunite_id: s.opportunite_id, opportunite_nom: s.opportunite_nom }
+    : { id: null, client_id: pf.client_id || null, client_name: pf.client_name || null, opportunite_id: pf.opportunite_id || null, opportunite_nom: pf.opportunite_nom || null };
+  const fixedOpp = !!(pf.opportunite_id) && !id;
+  const statut = s ? s.statut : 'a_solliciter';
+  const body = `
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:16px;font-weight:700">${id ? 'Modifier la sollicitation' : 'Nouvelle sollicitation'}</div>
+      <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
+    </div>
+    <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">
+      <div style="position:relative"><label class="fl">Compte sollicité *</label>
+        <div id="sol-client-chip" style="margin:4px 0"></div>
+        ${_sollicSel.client_id ? '' : `<input type="text" id="sol-client-search" placeholder="Rechercher une société…" autocomplete="off" oninput="sollicSearchClient(this.value)" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card,#fff);color:var(--t1)">
+        <div id="sol-client-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card,#fff);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.2)"></div>`}
+      </div>
+      <div><label class="fl">Opportunité</label>
+        ${fixedOpp ? `<div style="font-size:13px;padding:6px 0">🎯 ${cmdEsc(_sollicSel.opportunite_nom || '')}</div>` : `<select id="sol-opp" class="fi">${_sollicOppOptions()}</select>`}
+      </div>
+      <div><label class="fl">Statut</label><select id="sol-statut" class="fi">${Object.entries(SOLLIC_STATUTS).map(([k, v]) => `<option value="${k}"${statut === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></div>
+      <div><label class="fl">Commentaire</label><textarea id="sol-comment" class="fi" rows="3" style="resize:vertical">${s ? cmdEsc(s.commentaire || '') : ''}</textarea></div>
+      <div><label class="fl">Relance prévue</label><input type="date" id="sol-relance" class="fi" value="${s && s.date_relance ? String(s.date_relance).slice(0, 10) : ''}"></div>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn" onclick="this.closest('.nl-overlay').remove()">Annuler</button>
+      <button class="btn btn-primary" onclick="sollicSave()">💾 Enregistrer</button>
+    </div>`;
+  _nlOverlay(body, 540);
+  sollicRenderClientChip();
+}
+async function sollicSearchClient(q) {
+  const dd = document.getElementById('sol-client-dd'); if (!dd) return;
+  const ql = (q || '').trim(); if (ql.length < 1) { dd.style.display = 'none'; return; }
+  const words = ql.split(/\s+/).filter(Boolean);
+  let query = sb.from('clients').select('id,name,city');
+  for (const w of words) { const pat = '%' + w.replace(/[%,]/g, '') + '%'; query = query.or(`name.ilike.${pat},code.ilike.${pat}`); }
+  let { data } = await query.order('name').limit(40);
+  if (!data || !data.length) { let q2 = sb.from('clients').select('id,name,city'); for (const w of words) q2 = q2.or(_looseIlikeOr(['name', 'code'], w)); const r2 = await q2.order('name').limit(40); data = r2.data || []; }
+  data = (data || []).slice().sort((a, b) => _searchScore(ql, b.name) - _searchScore(ql, a.name));
+  dd.innerHTML = data.length ? data.slice(0, 40).map(c => `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="sollicSelectClient('${c.id}','${(c.name || '').replace(/'/g, "&#39;")}')">${cmdEsc(c.name)}${c.city ? ' <span style="color:var(--t3);font-size:11px">' + cmdEsc(c.city) + '</span>' : ''}</div>`).join('') : '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucune société</div>';
+  dd.style.display = 'block';
+}
+function sollicSelectClient(id, name) { _sollicSel.client_id = id; _sollicSel.client_name = name; const dd = document.getElementById('sol-client-dd'); if (dd) dd.style.display = 'none'; const inp = document.getElementById('sol-client-search'); if (inp) inp.value = ''; sollicRenderClientChip(); const sel = document.getElementById('sol-opp'); if (sel) sel.innerHTML = _sollicOppOptions(); }
+function sollicRenderClientChip() { const el = document.getElementById('sol-client-chip'); if (!el) return; el.innerHTML = _sollicSel.client_id ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#6366f122;color:#6366f1;border:1px solid #6366f144">${cmdEsc(_sollicSel.client_name || '')}</span>` : ''; }
+async function sollicSave() {
+  if (!_sollicSel.client_id) { toast('Sélectionnez un compte', 'error'); return; }
+  const oppSel = document.getElementById('sol-opp');
+  const oppId = oppSel ? (oppSel.value || null) : (_sollicSel.opportunite_id || null);
+  const opp = oppId ? (_opps || []).find(o => o.akuiteo_id === oppId) : null;
+  const relance = document.getElementById('sol-relance')?.value || null;
+  const row = {
+    client_id: _sollicSel.client_id, client_name: _sollicSel.client_name,
+    opportunite_id: oppId, opportunite_nom: opp ? opp.nom : (_sollicSel.opportunite_nom || null),
+    statut: document.getElementById('sol-statut')?.value || 'a_solliciter',
+    commentaire: document.getElementById('sol-comment')?.value.trim() || null,
+    date_relance: relance || null,
+    updated_at: new Date().toISOString(),
+  };
+  let err;
+  if (_sollicSel.id) { const { error } = await sb.from('sollicitations').update(row).eq('id', _sollicSel.id); err = error; }
+  else {
+    row.createur_id = currentCommercial ? currentCommercial.id : null;
+    row.createur_nom = currentCommercial ? currentCommercial.nom : null;
+    row.createur_email = currentCommercial ? currentCommercial.email : null;
+    row.date_sollicitation = new Date().toISOString();
+    const { error } = await sb.from('sollicitations').insert(row); err = error;
+  }
+  if (err) { toast('Erreur: ' + err.message, 'error'); return; }
+  document.querySelector('.nl-overlay')?.remove();
+  toast('Sollicitation enregistrée', 'success');
+  await loadSollicitations();
+  renderPage(currentPage);
+}
+async function setSollicStatut(id, statut) {
+  const { error } = await sb.from('sollicitations').update({ statut, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  const s = (_sollic || []).find(x => String(x.id) === String(id)); if (s) { s.statut = statut; s.updated_at = new Date().toISOString(); }
+  _updateSollicBadge();
+  toast('Statut mis à jour', 'success');
+}
+async function deleteSollic(id) {
+  if (!confirm('Supprimer cette sollicitation ?')) return;
+  const { error } = await sb.from('sollicitations').delete().eq('id', id);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  toast('Sollicitation supprimée', 'success');
+  await loadSollicitations();
+  renderPage(currentPage);
+}
+// ─── Génération + envoi du mail de sollicitation ───
+async function sollicMailOpen(id) {
+  const s = (_sollic || []).find(x => String(x.id) === String(id)); if (!s) { toast('Sollicitation introuvable', 'error'); return; }
+  let toEmail = s.email_destinataire || '';
+  if (!toEmail && s.client_id) { try { const { data } = await sb.from('contacts').select('email,email2').eq('client_id', s.client_id).limit(20); const c = (data || []).find(x => x.email || x.email2); if (c) toEmail = c.email || c.email2 || ''; } catch (e) {} }
+  const body = `
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:16px;font-weight:700">✉️ Mail de sollicitation — ${cmdEsc(s.client_name || '')}</div>
+      <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
+    </div>
+    <div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+      <div><label class="fl">Destinataire *</label><input type="email" id="sm-to" class="fi" value="${cmdEsc(toEmail)}" placeholder="prenom.nom@societe.fr"></div>
+      <div><label class="fl">Objet</label><input type="text" id="sm-obj" class="fi" value=""></div>
+      <div><label class="fl">Message</label><textarea id="sm-body" class="fi" rows="9" style="resize:vertical;font-family:inherit"></textarea>
+        <div style="font-size:11px;color:var(--t3);margin-top:3px">Relisez et ajustez. Envoi depuis votre boîte Microsoft.</div></div>
+      <div id="sm-status" style="font-size:12px;color:var(--t3)"></div>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="sollicMailGen(${s.id})">🪄 (Re)générer avec l'IA</button>
+      <div style="display:flex;gap:8px"><button class="btn" onclick="this.closest('.nl-overlay').remove()">Annuler</button>
+      <button class="btn btn-primary" onclick="sollicMailSend(${s.id})">📤 Envoyer</button></div>
+    </div>`;
+  _nlOverlay(body, 620);
+  sollicMailGen(s.id);
+}
+async function sollicMailGen(id) {
+  const s = (_sollic || []).find(x => String(x.id) === String(id)); if (!s) return;
+  const o = s.opportunite_id ? (_opps || []).find(x => x.akuiteo_id === s.opportunite_id) : null;
+  const st = document.getElementById('sm-status'); if (st) st.textContent = 'Génération du brouillon par l\'IA…';
+  try {
+    const r = await fetch('/api/sollicitation-mail', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        client_name: s.client_name, opportunite_nom: s.opportunite_nom || (o && o.nom) || '',
+        departement: (o && o.chantier_dept) || '', adresse: (o && o.chantier_adresse) || '',
+        commercial_nom: currentCommercial ? fmtCommercialName(currentCommercial.nom || '') : '', commercial_email: currentCommercial ? currentCommercial.email : '', commercial_tel: currentCommercial ? currentCommercial.telephone : '',
+      })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || ('erreur ' + r.status));
+    const obj = document.getElementById('sm-obj'); if (obj) obj.value = j.objet || '';
+    const bd = document.getElementById('sm-body'); if (bd) bd.value = (j.corps || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>\s*<p>/gi, '\n\n').replace(/<\/?p>/gi, '').replace(/&nbsp;/gi, ' ').trim();
+    if (st) st.textContent = 'Brouillon généré — relisez et ajustez avant envoi.';
+  } catch (e) { if (st) st.textContent = 'Échec de génération : ' + e.message; }
+}
+async function sollicMailSend(id) {
+  const s = (_sollic || []).find(x => String(x.id) === String(id)); if (!s) return;
+  const to = (document.getElementById('sm-to')?.value || '').trim();
+  const subject = (document.getElementById('sm-obj')?.value || '').trim();
+  const text = (document.getElementById('sm-body')?.value || '').trim();
+  if (!to) { toast('Destinataire manquant', 'error'); return; }
+  if (!subject) { toast('Objet manquant', 'error'); return; }
+  const st = document.getElementById('sm-status'); if (st) st.textContent = 'Envoi en cours…';
+  const html = '<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;line-height:1.5">' + cmdEsc(text).replace(/\n/g, '<br>') + '</div>';
+  try {
+    await _nlSendMail(to, subject, html);
+    await sb.from('sollicitations').update({ email_envoye: true, email_date: new Date().toISOString(), email_objet: subject, email_destinataire: to, statut: s.statut === 'a_solliciter' ? 'sollicite' : s.statut, date_sollicitation: s.date_sollicitation || new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', id);
+    document.querySelector('.nl-overlay')?.remove();
+    toast('Mail envoyé à ' + to, 'success');
+    await loadSollicitations();
+    renderPage(currentPage);
+  } catch (e) { if (st) st.textContent = 'Échec envoi : ' + e.message; toast('Échec envoi : ' + e.message, 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════
 //  OPPORTUNITÉS (reprises depuis Akuiteo CRM)
 // ═══════════════════════════════════════════════════════════
 let _opps = [], _oppsLoaded = false, _oppView = 'pipeline';
@@ -8485,7 +8753,7 @@ function renderOppDetailPage() {
     </div>
     <div style="display:grid;grid-template-columns:${window.innerWidth <= 768 ? '1fr' : 'minmax(0,1fr) minmax(0,1.7fr)'};gap:16px;align-items:start">
       <div class="card"><div class="card-header"><div class="card-title">Détails de l'opportunité</div></div><div class="card-body">${info}</div></div>
-      <div>${_oppTachesCard(o.akuiteo_id, o.client_id, o.client_name, o.nom)}${_oppCRCard(o.akuiteo_id)}</div>
+      <div>${_oppTachesCard(o.akuiteo_id, o.client_id, o.client_name, o.nom)}${renderSollicCard({ opportunite_id: o.akuiteo_id, opportunite_nom: o.nom, client_id: o.client_id, client_name: o.client_name })}${_oppCRCard(o.akuiteo_id)}</div>
     </div>`;
 }
 
@@ -8694,6 +8962,7 @@ function renderPage(page) {
     clients: renderClients,
     contacts: renderContacts,
     taches: renderTaches,
+    sollicitations: renderSollicitations,
     'tache-edit': renderTacheEditPage,
     opportunites: renderOpportunites,
     'opportunite-detail': renderOppDetailPage,
@@ -8787,6 +9056,7 @@ function renderPage(page) {
   if (page === 'cr' && crViewMode === 'send') setTimeout(loadSendGroups, 50);
   if (page === 'ged') setTimeout(() => { gedLoadStats(); gedRenderChat(); }, 50);
   if (page === 'taches' && !_tachesLoaded) { loadTaches().then(() => { if (currentPage === 'taches') renderPage('taches'); }); }
+  if (page === 'sollicitations') { if (!_oppsLoaded) loadOpportunites().catch(() => {}); if (!_sollicLoaded) loadSollicitations().then(() => { if (currentPage === 'sollicitations') renderPage('sollicitations'); }); }
   if (page === 'tache-edit') { setTimeout(() => { tacheRenderClientChip(); tacheRenderAffaireOptions(); tacheRenderOppOptions(); if (!_oppsLoaded) loadOpportunites().then(() => tacheRenderOppOptions()); }, 30); }
   if (page === 'opportunites' && !_oppsLoaded) { loadOpportunites().then(() => { if (currentPage === 'opportunites') renderPage('opportunites'); }); }
   if (page === 'opportunite-analyse') { if (!_oppsLoaded) { loadOpportunites().then(() => { if (currentPage === 'opportunite-analyse') renderPage('opportunite-analyse'); }); } else { setTimeout(_oppAnalyseCharts, 40); } }
@@ -12346,6 +12616,7 @@ function renderClientDetail() {
   </div>
   ${renderOppsCard(c.id)}
   ${renderTachesCard({ client_id: c.id, client_name: c.name })}
+  ${renderSollicCard({ client_id: c.id, client_name: c.name })}
   <div class="card" style="margin-bottom:16px">
     <div class="card-header">
       <div class="card-title">Analyse CA facturé</div>
