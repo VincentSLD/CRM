@@ -7146,17 +7146,20 @@ function sollicMailAddDest(email) {
 }
 async function sollicMailOpen(id) {
   const s = (_sollic || []).find(x => String(x.id) === String(id)); if (!s) { toast('Sollicitation introuvable', 'error'); return; }
-  // Contacts de la société (avec email) + email de la société → choix du/des destinataire(s)
+  // Contacts de la société + email de la société → panneau de choix du/des destinataire(s)
   let contacts = [], societeEmail = '';
   if (s.client_id) {
-    try { const { data } = await sb.from('contacts').select('nom,prenom,email,email2,fonction').eq('client_id', s.client_id).limit(50); contacts = (data || []).filter(c => c.email || c.email2); } catch (e) {}
+    try { const { data } = await sb.from('contacts').select('nom,prenom,email,email2,fonction').eq('client_id', s.client_id).order('nom').limit(100); contacts = data || []; } catch (e) {}
     try { const { data } = await sb.from('clients').select('email').eq('id', s.client_id).maybeSingle(); societeEmail = (data && data.email) || ''; } catch (e) {}
   }
-  const toEmail = s.email_destinataire || (contacts[0] ? (contacts[0].email || contacts[0].email2) : '') || '';
-  const pickOpts = [
-    societeEmail ? `<option value="${cmdEsc(societeEmail)}">Société — ${cmdEsc(societeEmail)}</option>` : '',
-    ...contacts.map(c => { const em = c.email || c.email2; const nm = ((c.prenom || '') + ' ' + (c.nom || '')).trim() || em; return `<option value="${cmdEsc(em)}">${cmdEsc(nm)}${c.fonction ? ' (' + cmdEsc(c.fonction) + ')' : ''} — ${cmdEsc(em)}</option>`; })
-  ].filter(Boolean).join('');
+  const firstWithEmail = contacts.find(c => c.email || c.email2);
+  const toEmail = s.email_destinataire || (firstWithEmail ? (firstWithEmail.email || firstWithEmail.email2) : '') || societeEmail || '';
+  const rowStyle = 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px';
+  const addBtn = em => `<button class="btn" style="font-size:11px;padding:2px 8px;white-space:nowrap" onclick="sollicMailAddDest('${String(em).replace(/'/g, "&#39;")}')">+ Ajouter</button>`;
+  let recipRows = '';
+  if (societeEmail) recipRows += `<div style="${rowStyle}"><span>🏢 <b>Société</b> — ${cmdEsc(societeEmail)}</span>${addBtn(societeEmail)}</div>`;
+  recipRows += contacts.map(c => { const em = c.email || c.email2 || ''; const nm = ((c.prenom || '') + ' ' + (c.nom || '')).trim() || 'Contact'; return `<div style="${rowStyle}"><span>👤 ${cmdEsc(nm)}${c.fonction ? ' <span style="color:var(--t3)">(' + cmdEsc(c.fonction) + ')</span>' : ''}${em ? ' — ' + cmdEsc(em) : ' <span style="color:var(--t3)">(pas d\'email)</span>'}</span>${em ? addBtn(em) : ''}</div>`; }).join('');
+  if (!recipRows) recipRows = '<div style="padding:10px;color:var(--t3);font-size:12px">Aucun contact enregistré pour cette société — saisissez l\'adresse manuellement.</div>';
   const body = `
     <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
       <div style="font-size:16px;font-weight:700">✉️ Mail de sollicitation — ${cmdEsc(s.client_name || '')}</div>
@@ -7164,11 +7167,9 @@ async function sollicMailOpen(id) {
     </div>
     <div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
       <div><label class="fl">Destinataire(s) *</label>
-        <div style="display:flex;gap:6px;align-items:center">
-          <input type="text" id="sm-to" class="fi" style="flex:1" value="${cmdEsc(toEmail)}" placeholder="prenom.nom@societe.fr">
-          ${pickOpts ? `<select onchange="sollicMailAddDest(this.value);this.selectedIndex=0" class="fi" style="max-width:240px"><option value="">+ Société / contact…</option>${pickOpts}</select>` : ''}
-        </div>
-        <div style="font-size:11px;color:var(--t3);margin-top:3px">Ajoutez société et/ou contacts ; séparez plusieurs destinataires par une virgule.</div></div>
+        <input type="text" id="sm-to" class="fi" value="${cmdEsc(toEmail)}" placeholder="prenom.nom@societe.fr">
+        <div style="font-size:11px;color:var(--t3);margin:3px 0 6px">Cliquez « + Ajouter » ci-dessous pour ajouter la société ou un contact ; séparez plusieurs adresses par une virgule.</div>
+        <div style="border:1px solid var(--border);border-radius:8px;max-height:170px;overflow:auto">${recipRows}</div></div>
       <div><label class="fl">Objet</label><input type="text" id="sm-obj" class="fi" value=""></div>
       <div><label class="fl">Message</label><textarea id="sm-body" class="fi" rows="9" style="resize:vertical;font-family:inherit"></textarea>
         <div style="font-size:11px;color:var(--t3);margin-top:3px">Relisez et ajustez. Envoi depuis votre boîte Microsoft.</div></div>
