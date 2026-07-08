@@ -13844,6 +13844,7 @@ function renderAffaireDetail() {
       detailRow('Commercial architecte', commLine(a.architecte, apporteurCommercialLabel(a.architecte))),
       detailRow('Responsable', a.responsable),
       detailRow('Marché', marche ? '<a href="#" onclick="showMarcheDetail(&#39;'+marche.id+'&#39;);return false" style="color:var(--accent)">'+( marche.ref||'')+' - '+(marche.nom||'')+'</a>' : '—'),
+      _gpsRowFor(a),
       detailRow('Statut', marcheStatutBadge(a.statut)),
     ])}
     ${detailSection('Dates & Montants', [
@@ -18273,6 +18274,17 @@ function clientCommercialLabel(doc) {
 // Ligne « Commercial … » : affichée dès que le rôle (société) est renseigné, « Non attribué » si aucun commercial trouvé
 const _NON_ATTR = '<span style="color:var(--t3)">Non attribué</span>';
 function commLine(roleVal, label) { return roleVal ? (label || _NON_ATTR) : null; }
+// Ligne « Position GPS » héritée du marché lié (marche_id) — coordonnées + liens carte / Tendances Sol / Enquête Sol
+function _gpsRowFor(x) {
+  const m = x && x.marche_id ? (DB.marches || []).find(mm => mm.id === x.marche_id) : null;
+  if (!m || m.lat == null || m.lng == null) return '';
+  const lat = Number(m.lat), lng = Number(m.lng);
+  const val = `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+    + ` <a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" rel="noopener" style="color:var(--accent);margin-left:6px">🗺 carte</a>`
+    + ` <a href="https://geocarto.vercel.app/eds-map.html?lat=${lat}&lng=${lng}&lon=${lng}" target="_blank" rel="noopener" style="color:var(--accent);margin-left:6px">🌍 Tendances Sol</a>`
+    + ` <a href="https://geocarto.vercel.app/?lat=${lat}&lng=${lng}&lon=${lng}" target="_blank" rel="noopener" style="color:var(--accent);margin-left:6px">🔎 Enquête Sol</a>`;
+  return detailRow('Position GPS (marché)', val);
+}
 
 function detailRow(label, value) {
   if (value === null || value === undefined || value === '') return '';
@@ -18424,6 +18436,7 @@ async function showDevisDetail(id) {
       })()}
       ${detailSection('Organisation', [
         detailRow('Marché', d.marche_id ? (() => { const m = DB.marches.find(x=>x.id===d.marche_id); return m ? '<a href="#" onclick="showMarcheDetail(&#39;'+m.id+'&#39;);return false" style="color:var(--accent)">'+(m.ref||'')+' - '+(m.nom||'')+'</a>' : d.marche_id; })() : null),
+        _gpsRowFor(d),
         detailRow('Affaire', d.affaire_id ? (() => { const a = DB.affaires.find(x=>x.id===d.affaire_id); return a ? '<a href="#" onclick="showAffaireDetail(&#39;'+a.id+'&#39;);return false" style="color:var(--accent)">'+(a.ref||'')+' - '+(a.nom||'')+'</a>' : d.affaire_id; })() : null),
         detailRow('Client facturé', d.client_name),
         detailRow('Commercial client facturé', commLine(d.client_name, clientCommercialLabel(d))),
@@ -18626,6 +18639,7 @@ async function showCommandeDetail(id) {
       ])}
       ${detailSection('Organisation', [
         detailRow('Marché', c.marche_id ? (() => { const m = DB.marches.find(x=>x.id===c.marche_id); return m ? '<a href="#" onclick="showMarcheDetail(&#39;'+m.id+'&#39;);return false" style="color:var(--accent)">'+(m.ref||'')+' - '+(m.nom||'')+'</a>' : c.marche_id; })() : null),
+        _gpsRowFor(c),
         detailRow('Affaire', c.affaire_id ? (() => { const a = DB.affaires.find(x=>x.id===c.affaire_id); return a ? '<a href="#" onclick="showAffaireDetail(&#39;'+a.id+'&#39;);return false" style="color:var(--accent)">'+(a.ref||'')+' - '+(a.nom||'')+'</a>' : c.affaire_id; })() : null),
         detailRow('Client facturé', c.client_name),
         detailRow('Commercial client facturé', commLine(c.client_name, clientCommercialLabel(c))),
@@ -19148,6 +19162,7 @@ async function showFactureDetail(id) {
       ])}
       ${detailSection('Organisation', [
         detailRow('Marché', f.marche_id ? (() => { const m = DB.marches.find(x=>x.id===f.marche_id); return m ? '<a href="#" onclick="showMarcheDetail(&#39;'+m.id+'&#39;);return false" style="color:var(--accent)">'+(m.ref||'')+' - '+(m.nom||'')+'</a>' : f.marche_id; })() : null),
+        _gpsRowFor(f),
         detailRow('Affaire', f.affaire_id ? (() => { const a = DB.affaires.find(x=>x.id===f.affaire_id); return a ? '<a href="#" onclick="showAffaireDetail(&#39;'+a.id+'&#39;);return false" style="color:var(--accent)">'+(a.ref||'')+' - '+(a.nom||'')+'</a>' : f.affaire_id; })() : null),
         detailRow('Client facturé', f.client_name),
         detailRow('Commercial client facturé', commLine(f.client_name, clientCommercialLabel(f))),
