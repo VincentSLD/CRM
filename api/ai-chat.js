@@ -789,8 +789,13 @@ export default async function handler(req, res) {
   const { question, history, userProfile, stream, glossary, docScope } = req.body || {};
   if (!question) return res.status(400).json({ error: 'Missing question' });
 
-  let systemPrompt = buildSystemPrompt(userProfile, glossary);
-  if (docScope) systemPrompt += `\n\nCONTEXTE DOCUMENTAIRE : l'utilisateur vient d'indexer le dossier « ${String(docScope).slice(0, 120)} ». Pour toute question portant sur des documents/rapports, utilise EN PRIORITÉ l'outil search_documents ; tu peux passer dossier="${String(docScope).slice(0, 120)}" pour cibler précisément ce dossier. Réponds à partir des passages retournés et cite les documents.`;
+  const baseSystem = buildSystemPrompt(userProfile, glossary);
+  // Prompt caching : le préfixe stable (outils + prompt système) est mis en cache (cache_control).
+  //  → itérations d'un même échange (boucle tool_use) et questions suivantes dans la fenêtre de 5 min
+  //    relisent ce préfixe à ~0,1× au lieu du plein tarif d'entrée. Le hint documentaire (volatil,
+  //    dépend de docScope) est placé APRÈS le point de césure pour ne pas invalider le cache.
+  const systemBlocks = [{ type: 'text', text: baseSystem, cache_control: { type: 'ephemeral' } }];
+  if (docScope) systemBlocks.push({ type: 'text', text: `CONTEXTE DOCUMENTAIRE : l'utilisateur vient d'indexer le dossier « ${String(docScope).slice(0, 120)} ». Pour toute question portant sur des documents/rapports, utilise EN PRIORITÉ l'outil search_documents ; tu peux passer dossier="${String(docScope).slice(0, 120)}" pour cibler précisément ce dossier. Réponds à partir des passages retournés et cite les documents.` });
 
   // ─── MODE SSE STREAMING ───
   if (stream) {
@@ -815,11 +820,11 @@ export default async function handler(req, res) {
         const data = await callClaude(ANTHROPIC_KEY, {
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 2048,
-          system: systemPrompt,
+          system: systemBlocks,
           tools: TOOLS,
           messages
         });
-        usageIn += data.usage?.input_tokens || 0; usageOut += data.usage?.output_tokens || 0;
+        { const u = data.usage || {}; usageIn += (u.input_tokens || 0) + Math.round((u.cache_creation_input_tokens || 0) * 1.25 + (u.cache_read_input_tokens || 0) * 0.1); usageOut += u.output_tokens || 0; }
 
         if (data.stop_reason === 'tool_use') {
           const toolUses = data.content.filter(c => c.type === 'tool_use');
@@ -867,11 +872,11 @@ export default async function handler(req, res) {
       const data = await callClaude(ANTHROPIC_KEY, {
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 2048,
-        system: systemPrompt,
+        system: systemBlocks,
         tools: TOOLS,
         messages
       });
-      usageIn += data.usage?.input_tokens || 0; usageOut += data.usage?.output_tokens || 0;
+      { const u = data.usage || {}; usageIn += (u.input_tokens || 0) + Math.round((u.cache_creation_input_tokens || 0) * 1.25 + (u.cache_read_input_tokens || 0) * 0.1); usageOut += u.output_tokens || 0; }
 
       if (data.stop_reason === 'tool_use') {
         const toolUses = data.content.filter(c => c.type === 'tool_use');
