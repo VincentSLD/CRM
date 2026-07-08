@@ -510,4 +510,5 @@ ALTER TABLE sollicitations ADD COLUMN IF NOT EXISTS assigne_nom TEXT;
 ALTER TABLE sollicitations ADD COLUMN IF NOT EXISTS assigne_email TEXT;
 ALTER TABLE sollicitations ADD COLUMN IF NOT EXISTS rappel_envoye BOOLEAN DEFAULT FALSE;
 ALTER TABLE sollicitations ADD COLUMN IF NOT EXISTS rappel_date TIMESTAMPTZ;
+ALTER TABLE sollicitations ADD COLUMN IF NOT EXISTS todo_task_id TEXT;  -- id de la tâche Microsoft To Do (visible dans Outlook)
 CREATE INDEX IF NOT EXISTS idx_sollic_assigne ON sollicitations(assigne_email);

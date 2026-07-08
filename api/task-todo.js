@@ -49,7 +49,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   if (!CLIENT_ID || !CLIENT_SECRET) return res.status(500).json({ error: 'AZURE_CLIENT_ID / AZURE_CLIENT_SECRET non configurés' });
 
-  const { action = 'create', assigneeEmail, assignerEmail, assignerName, title, body, dueDateTime, todoTaskId, emailHtml, importance } = req.body || {};
+  const { action = 'create', assigneeEmail, assignerEmail, assignerName, title, body, dueDateTime, todoTaskId, emailHtml, importance, subject } = req.body || {};
   if (!assigneeEmail) return res.status(400).json({ error: 'assigneeEmail manquant' });
 
   try {
@@ -84,7 +84,7 @@ export default async function handler(req, res) {
     try {
       await graph(token, 'POST', `/users/${encodeURIComponent(sender)}/sendMail`, {
         message: {
-          subject: 'Nouvelle tâche commerciale : ' + title,
+          subject: subject || ('Nouvelle tâche commerciale : ' + title),
           body: { contentType: 'HTML', content: emailHtml || ('<p>Une tâche vous a été assignée' + (assignerName ? ' par ' + assignerName : '') + ' :</p><p><b>' + title + '</b></p>' + (body ? '<p>' + String(body).replace(/\n/g, '<br>') + '</p>' : '') + (dueDateTime ? '<p>Échéance : ' + dueDateTime.replace('T', ' ') + '</p>' : '')) },
           toRecipients: [{ emailAddress: { address: assigneeEmail } }]
         },

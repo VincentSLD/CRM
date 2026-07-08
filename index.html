@@ -7050,6 +7050,30 @@ async function sollicSearchClient(q) {
 }
 function sollicSelectClient(id, name) { _sollicSel.client_id = id; _sollicSel.client_name = name; const dd = document.getElementById('sol-client-dd'); if (dd) dd.style.display = 'none'; const inp = document.getElementById('sol-client-search'); if (inp) inp.value = ''; sollicRenderClientChip(); }
 function sollicRenderClientChip() { const el = document.getElementById('sol-client-chip'); if (!el) return; el.innerHTML = _sollicSel.client_id ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#6366f122;color:#6366f1;border:1px solid #6366f144">${cmdEsc(_sollicSel.client_name || '')}</span>` : ''; }
+// Statut clôturant une sollicitation (→ tâche To Do marquée terminée)
+function _sollicTerminal(st) { return st === 'converti' || st === 'sans_suite'; }
+function _sollicTodoComplete(email, todoTaskId) { if (!email || !todoTaskId) return; try { fetch('/api/task-todo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'complete', assigneeEmail: email, todoTaskId }) }).then(() => {}, () => {}); } catch (e) {} }
+// Pousse la sollicitation dans Microsoft To Do de l'assigné (visible dans Outlook) + email de notification
+async function pushSollicToTodo(s) {
+  try {
+    const ctx = [
+      s.client_name ? 'Compte à solliciter : ' + s.client_name : '',
+      s.opportunite_nom ? 'Opportunité : ' + s.opportunite_nom : '',
+      'Statut : ' + ((SOLLIC_STATUTS[s.statut] || [])[0] || s.statut),
+      s.commentaire || '',
+    ].filter(Boolean).join('\n');
+    const dueLocal = s.date_relance ? (function () { const d = new Date(s.date_relance); const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T09:00:00`; })() : null;
+    const title = 'Sollicitation : ' + (s.client_name || '') + (s.opportunite_nom ? ' — ' + s.opportunite_nom : '');
+    const r = await fetch('/api/task-todo', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'create', subject: 'Nouvelle sollicitation : ' + (s.client_name || ''), assigneeEmail: s.assigne_email, assignerEmail: (currentCommercial && currentCommercial.email) || null, assignerName: (currentCommercial && currentCommercial.nom) || null, title, body: ctx, dueDateTime: dueLocal, importance: 'normal' })
+    });
+    const o = await r.json().catch(() => ({}));
+    if (!r.ok) { toast('Sollicitation créée (To Do non synchronisé : ' + (o.error || r.status) + ')', 'warning'); return; }
+    if (o.todoTaskId) await sb.from('sollicitations').update({ todo_task_id: o.todoTaskId }).eq('id', s.id);
+    toast('Assigné notifié (Microsoft To Do + email)', 'success');
+  } catch (e) { toast('Sollicitation créée (notification Microsoft indisponible)', 'warning'); }
+}
 async function sollicSave() {
   if (!_sollicSel.client_id) { toast('Sélectionnez un compte', 'error'); return; }
   const id = document.getElementById('sol-id')?.value || '';
@@ -7068,32 +7092,44 @@ async function sollicSave() {
   };
   const prev = id ? (_sollic || []).find(x => String(x.id) === String(id)) : null;
   if (prev && (prev.date_relance || null) !== (relance || null)) row.rappel_envoye = false; // réarmer le rappel si la date change
-  let err;
-  if (id) { const { error } = await sb.from('sollicitations').update(row).eq('id', id); err = error; }
+  let saved, err;
+  if (id) { const { data, error } = await sb.from('sollicitations').update(row).eq('id', id).select().single(); err = error; saved = data; }
   else {
     row.createur_id = currentCommercial ? currentCommercial.id : null;
     row.createur_nom = currentCommercial ? currentCommercial.nom : null;
     row.createur_email = currentCommercial ? currentCommercial.email : null;
     row.date_sollicitation = new Date().toISOString();
-    const { error } = await sb.from('sollicitations').insert(row); err = error;
+    const { data, error } = await sb.from('sollicitations').insert(row).select().single(); err = error; saved = data;
   }
   if (err) { toast('Erreur: ' + err.message, 'error'); return; }
   toast('Sollicitation enregistrée', 'success');
+  // Synchro Microsoft To Do (comme les tâches) : créer chez l'assigné si nouveau/changé et non clôturée ; sinon compléter si clôturée
+  if (saved) {
+    const assigneeChanged = !prev || (prev.assigne_email || null) !== (saved.assigne_email || null);
+    if (saved.assigne_email && assigneeChanged && !_sollicTerminal(saved.statut)) { saved.todo_task_id = saved.todo_task_id || (prev && prev.todo_task_id) || null; pushSollicToTodo(saved); }
+    else if (_sollicTerminal(saved.statut)) { _sollicTodoComplete(saved.assigne_email, saved.todo_task_id || (prev && prev.todo_task_id)); }
+  }
   await loadSollicitations();
   const back = (currentPage === 'sollic-edit') ? (_sollicEditReturn || 'sollicitations') : currentPage;
   currentPage = back; renderPage(back);
 }
 async function setSollicStatut(id, statut) {
+  const s = (_sollic || []).find(x => String(x.id) === String(id));
   const { error } = await sb.from('sollicitations').update({ statut, updated_at: new Date().toISOString() }).eq('id', id);
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
-  const s = (_sollic || []).find(x => String(x.id) === String(id)); if (s) { s.statut = statut; s.updated_at = new Date().toISOString(); }
+  if (s) { s.statut = statut; s.updated_at = new Date().toISOString(); }
+  // Refléter la clôture dans To Do
+  if (s && _sollicTerminal(statut) && s.todo_task_id && s.assigne_email) _sollicTodoComplete(s.assigne_email, s.todo_task_id);
   _updateSollicBadge();
   toast('Statut mis à jour', 'success');
 }
 async function deleteSollic(id) {
   if (!confirm('Supprimer cette sollicitation ?')) return;
+  const s = (_sollic || []).find(x => String(x.id) === String(id));
   const { error } = await sb.from('sollicitations').delete().eq('id', id);
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  // Supprimer aussi la tâche Microsoft To Do associée (chez l'assigné)
+  if (s && s.todo_task_id && s.assigne_email) { try { fetch('/api/task-todo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', assigneeEmail: s.assigne_email, todoTaskId: s.todo_task_id }) }).then(() => {}, () => {}); } catch (e) {} }
   toast('Sollicitation supprimée', 'success');
   await loadSollicitations();
   renderPage(currentPage);
