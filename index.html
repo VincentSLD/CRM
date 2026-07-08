@@ -13412,7 +13412,7 @@ async function initMarchesMap() {
 }
 
 // ─ Géolocalisation d'un marché (point sur carte + cadastre) dans la fiche marché ─
-let _mmLat = null, _mmLng = null, _mmMap = null, _mmMarker = null;
+let _mmLat = null, _mmLng = null, _mmMap = null, _mmMarker = null, _mmAddr = '';
 function _mmInitMap() {
   const el = document.getElementById('mm-map'); if (!el || !window.L) return;
   if (_mmMap) { try { _mmMap.remove(); } catch (e) {} _mmMap = null; _mmMarker = null; }
@@ -13421,8 +13421,23 @@ function _mmInitMap() {
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(_mmMap);
   L.tileLayer.wms('https://data.geopf.fr/wms-r/wms', { layers: 'CADASTRALPARCELS.PARCELLAIRE_EXPRESS', format: 'image/png', transparent: true, version: '1.3.0', zIndex: 450 }).addTo(_mmMap);
   if (lat && lng) _mmSetMarker(lat, lng);
+  else if (_mmAddr) {
+    // Par défaut : géocoder l'adresse du site (BAN) pour centrer et placer un point de départ
+    fetch('https://api-adresse.data.gouv.fr/search/?limit=1&q=' + encodeURIComponent(_mmAddr)).then(r => r.json()).then(j => {
+      const f = j && j.features && j.features[0];
+      if (f && f.geometry && f.geometry.coordinates && !_mmLat) { const [lo, la] = f.geometry.coordinates; _mmMap.setView([la, lo], 16); _mmSet(la, lo); }
+    }).catch(() => {});
+  }
   _mmMap.on('click', e => _mmSet(e.latlng.lat, e.latlng.lng));
   setTimeout(() => { try { _mmMap.invalidateSize(); } catch (e) {} }, 150);
+}
+// Ouvre geocarto (Tendances/Enquête Sol) centré sur le point GPS du marché
+function marcheOpenGeocarto(which) {
+  const lat = _mmLat, lng = _mmLng;
+  if (lat == null || lng == null) { toast('Placez d\'abord le marché sur la carte', 'info'); return; }
+  const base = which === 'tendances' ? 'https://geocarto.vercel.app/eds-map.html' : 'https://geocarto.vercel.app/';
+  const url = base + '?lat=' + encodeURIComponent(lat) + '&lng=' + encodeURIComponent(lng) + '&lon=' + encodeURIComponent(lng);
+  window.open(url, '_blank', 'noopener');
 }
 function _mmSetMarker(lat, lng) {
   if (_mmMarker) { _mmMarker.setLatLng([lat, lng]); return; }
@@ -13484,6 +13499,9 @@ function renderMarcheDetail() {
   if (!m) return '<p>Marché non trouvé</p>';
   _mmLat = (m.lat != null ? Number(m.lat) : null); _mmLng = (m.lng != null ? Number(m.lng) : null);
   const affaires = DB.affaires.filter(a => a.marche_id === m.id);
+  // Adresse du site par défaut (Adresse, Code Postal, Ville) — marché puis 1re affaire renseignée
+  const _addrAff = affaires.find(a => a.adresse || a.ville || a.code_postal) || {};
+  _mmAddr = [m.adresse || _addrAff.adresse, m.code_postal || _addrAff.code_postal, m.ville || _addrAff.ville].filter(Boolean).join(' ');
   const allDevis = DB.devis.filter(d => d.marche_id === m.id);
   const allCmd = DB.commandes.filter(c => c.marche_id === m.id);
   const allFact = DB.factures.filter(f => f.marche_id === m.id);
@@ -13530,15 +13548,19 @@ function renderMarcheDetail() {
     ${(() => { const addr = affaires.find(a => a.adresse || a.ville || a.code_postal); return addr ? detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region)]) : ''; })()}
   </div>
 
-  <div class="card" style="margin-bottom:20px"><div class="card-header"><div class="card-title">📍 Localisation du marché</div></div>
+  <div class="card" style="margin-bottom:20px"><div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">📍 Localisation du marché</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="marcheOpenGeocarto('tendances')" title="Ouvrir Tendances Sol au point du marché">🌍 Tendances Sol</button>
+      <button class="btn btn-sm" onclick="marcheOpenGeocarto('enquete')" title="Ouvrir Enquête Sol au point du marché">🔎 Enquête Sol</button>
+    </div></div>
     <div class="card-body">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
-        <input id="mm-search" placeholder="Rechercher une adresse pour centrer la carte…" style="flex:1;min-width:220px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter'){event.preventDefault();_mmSearch()}">
+        <input id="mm-search" placeholder="Rechercher une adresse pour centrer la carte…" value="${cmdEsc(_mmAddr || '')}" style="flex:1;min-width:220px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter'){event.preventDefault();_mmSearch()}">
         <button class="btn" onclick="_mmSearch()">🔍 Centrer</button>
         <button class="btn" onclick="_mmClear()">Effacer</button>
         <button class="btn btn-primary" onclick="marcheSaveGeo()">💾 Enregistrer</button>
       </div>
-      <div style="font-size:11px;color:var(--t3);margin-bottom:6px">Cliquez sur la carte pour placer le marché (le cadastre est affiché). Coordonnées : <strong id="mm-coords">${(m.lat != null && m.lng != null) ? (Number(m.lat).toFixed(5) + ', ' + Number(m.lng).toFixed(5)) : 'aucune'}</strong></div>
+      <div style="font-size:11px;color:var(--t3);margin-bottom:6px">Point par défaut : l'adresse du site${_mmAddr ? ' (' + cmdEsc(_mmAddr) + ')' : ''}. Cliquez sur la carte pour ajuster (cadastre affiché). Coordonnées : <strong id="mm-coords">${(m.lat != null && m.lng != null) ? (Number(m.lat).toFixed(5) + ', ' + Number(m.lng).toFixed(5)) : 'aucune'}</strong></div>
       <div id="mm-map" style="height:340px;border:1px solid var(--border);border-radius:8px"></div>
     </div>
   </div>
