@@ -6867,7 +6867,7 @@ function renderTachesCard(opts) {
 //  SOLLICITATIONS : lier des comptes clients/prospects à une opportunité + suivi
 // ═══════════════════════════════════════════════════════════
 let _sollic = [], _sollicLoaded = false;
-let _sollicFStatut = '', _sollicSearch = '', _sollicMine = false, _sollicSel = {};
+let _sollicFStatut = '', _sollicSearch = '', _sollicMine = false, _sollicSel = {}, _sollicEditReturn = '';
 const SOLLIC_STATUTS = {
   a_solliciter: ['À solliciter', '#f59e0b'],
   sollicite:    ['Sollicité', '#4f8ff7'],
@@ -6918,8 +6918,8 @@ function renderSollicitations() {
     </div>
   </div>
   ${window.innerWidth <= 768 ? _sollicMobile(rows) : `<div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Compte</th><th>Opportunité</th><th>Statut</th><th>Mail</th><th>Créée par</th><th>MàJ</th><th>Actions</th></tr></thead>
-    <tbody>${rows.length === 0 ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--t3)">Aucune sollicitation</td></tr>' : rows.map(s => _sollicRow(s)).join('')}</tbody></table></div></div></div>`}`;
+    <table><thead><tr><th>Compte</th><th>Opportunité</th><th>Statut</th><th>Mail</th><th>Assigné</th><th>Créée par</th><th>MàJ</th><th>Actions</th></tr></thead>
+    <tbody>${rows.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--t3)">Aucune sollicitation</td></tr>' : rows.map(s => _sollicRow(s)).join('')}</tbody></table></div></div></div>`}`;
 }
 function _sollicRow(s) {
   return `<tr style="border-bottom:1px solid var(--border)">
@@ -6927,6 +6927,7 @@ function _sollicRow(s) {
     <td style="padding:6px 8px;font-size:12px">${s.opportunite_id ? '🎯 <a href="#" onclick="oppDetail(\'' + s.opportunite_id + '\');return false" style="color:var(--t2);text-decoration:none">' + cmdEsc(s.opportunite_nom || 'Opportunité') + '</a>' : '<span style="color:var(--t3)">—</span>'}</td>
     <td style="padding:6px 8px"><select onchange="setSollicStatut(${s.id},this.value)" style="font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:6px;background:var(--card,#fff);color:var(--t1)">${Object.entries(SOLLIC_STATUTS).map(([k, v]) => `<option value="${k}"${s.statut === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></td>
     <td style="padding:6px 8px;font-size:11px;white-space:nowrap">${s.email_envoye ? '✅ ' + (s.email_date ? fmtDateFR(String(s.email_date).slice(0, 10)) : '') : '<span style="color:var(--t3)">—</span>'}</td>
+    <td style="padding:6px 8px;font-size:12px">${cmdEsc(fmtCommercialName(s.assigne_nom || '') || '—')}</td>
     <td style="padding:6px 8px;font-size:12px">${cmdEsc(fmtCommercialName(s.createur_nom || '') || '—')}</td>
     <td style="padding:6px 8px;font-size:11px;white-space:nowrap;color:var(--t3)">${s.updated_at ? fmtDateFR(String(s.updated_at).slice(0, 10)) : ''}</td>
     <td style="padding:6px 8px;white-space:nowrap">
@@ -6972,38 +6973,66 @@ function _sollicOppOptions() {
     return `<option value="${o.akuiteo_id}"${_sollicSel.opportunite_id === o.akuiteo_id ? ' selected' : ''}>${cmdEsc(lbl)}</option>`;
   }).join('');
 }
+// Commercial par défaut d'une sollicitation : le responsable de l'opportunité, sinon l'utilisateur courant
+function _sollicDefaultAssigne(oppId) {
+  const norm = s => (s || '').toString().toLowerCase().replace(/\s+/g, ' ').trim();
+  const o = oppId ? (_opps || []).find(x => x.akuiteo_id === oppId) : null;
+  if (o && o.responsable) {
+    const t1 = norm(o.responsable), t2 = norm(fmtCommercialName(o.responsable));
+    const m = (DB.commerciaux || []).find(c => { const n1 = norm(c.nom), n2 = norm(fmtCommercialName(c.nom || '')); return n1 === t1 || n2 === t2 || n1 === t2 || n2 === t1; });
+    if (m) return m;
+  }
+  return currentCommercial ? ((DB.commerciaux || []).find(c => String(c.id) === String(currentCommercial.id)) || currentCommercial) : null;
+}
+// Ouvre le formulaire de sollicitation en pleine page (comme l'édition de tâche)
 function sollicModalOpen(id, prefill) {
   const s = id ? (_sollic || []).find(x => String(x.id) === String(id)) : null;
   const pf = prefill || {};
+  _sollicEditReturn = (currentPage && currentPage !== 'sollic-edit') ? currentPage : 'sollicitations';
   _sollicSel = s
-    ? { id: s.id, client_id: s.client_id, client_name: s.client_name, opportunite_id: s.opportunite_id, opportunite_nom: s.opportunite_nom }
-    : { id: null, client_id: pf.client_id || null, client_name: pf.client_name || null, opportunite_id: pf.opportunite_id || null, opportunite_nom: pf.opportunite_nom || null };
-  const fixedOpp = !!(pf.opportunite_id) && !id;
+    ? { id: s.id, client_id: s.client_id, client_name: s.client_name, opportunite_id: s.opportunite_id, opportunite_nom: s.opportunite_nom, assigne_id: s.assigne_id || null }
+    : { id: null, client_id: pf.client_id || null, client_name: pf.client_name || null, opportunite_id: pf.opportunite_id || null, opportunite_nom: pf.opportunite_nom || null, assigne_id: null };
+  if (!s) { const def = _sollicDefaultAssigne(_sollicSel.opportunite_id); _sollicSel.assigne_id = def ? def.id : null; }
+  currentPage = 'sollic-edit';
+  const pt = document.getElementById('pageTitle'); if (pt) pt.textContent = id ? 'Modifier la sollicitation' : 'Nouvelle sollicitation';
+  renderPage('sollic-edit');
+}
+function sollicEditCancel() { currentPage = _sollicEditReturn || 'sollicitations'; renderPage(currentPage); }
+function sollicPickOpp(id) {
+  _sollicSel.opportunite_id = id || null;
+  if (!_sollicSel.id) { const def = _sollicDefaultAssigne(id); if (def) { const sel = document.getElementById('sol-assigne'); if (sel) sel.value = def.id; } }
+  if (id && !_sollicSel.client_id) { const o = (_opps || []).find(x => x.akuiteo_id === id); if (o && o.client_id) { _sollicSel.client_id = o.client_id; _sollicSel.client_name = o.client_name || null; sollicRenderClientChip(); } }
+}
+function renderSollicEditPage() {
+  const id = _sollicSel.id;
+  const s = id ? (_sollic || []).find(x => String(x.id) === String(id)) : null;
+  const comm = (DB.commerciaux || []).slice().sort((a, b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
   const statut = s ? s.statut : 'a_solliciter';
   const body = `
-    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-      <div style="font-size:16px;font-weight:700">${id ? 'Modifier la sollicitation' : 'Nouvelle sollicitation'}</div>
-      <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
+    <input type="hidden" id="sol-id" value="${id || ''}">
+    <div class="fg" style="position:relative"><label class="fl">Compte sollicité *</label>
+      <div id="sol-client-chip" style="margin-bottom:4px"></div>
+      <input type="text" id="sol-client-search" placeholder="Rechercher une société..." autocomplete="off" oninput="sollicSearchClient(this.value)" onfocus="sollicSearchClient(this.value)" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card,#fff);color:var(--t1)">
+      <div id="sol-client-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card,#fff);border:1px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.2)"></div>
     </div>
-    <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">
-      <div style="position:relative"><label class="fl">Compte sollicité *</label>
-        <div id="sol-client-chip" style="margin:4px 0"></div>
-        ${_sollicSel.client_id ? '' : `<input type="text" id="sol-client-search" placeholder="Rechercher une société…" autocomplete="off" oninput="sollicSearchClient(this.value)" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card,#fff);color:var(--t1)">
-        <div id="sol-client-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card,#fff);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.2)"></div>`}
-      </div>
-      <div><label class="fl">Opportunité</label>
-        ${fixedOpp ? `<div style="font-size:13px;padding:6px 0">🎯 ${cmdEsc(_sollicSel.opportunite_nom || '')}</div>` : `<select id="sol-opp" class="fi">${_sollicOppOptions()}</select>`}
-      </div>
-      <div><label class="fl">Statut</label><select id="sol-statut" class="fi">${Object.entries(SOLLIC_STATUTS).map(([k, v]) => `<option value="${k}"${statut === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></div>
-      <div><label class="fl">Commentaire</label><textarea id="sol-comment" class="fi" rows="3" style="resize:vertical">${s ? cmdEsc(s.commentaire || '') : ''}</textarea></div>
-      <div><label class="fl">Relance prévue</label><input type="date" id="sol-relance" class="fi" value="${s && s.date_relance ? String(s.date_relance).slice(0, 10) : ''}"></div>
+    <div class="fg"><label class="fl">Opportunité</label><select class="fi" id="sol-opp" onchange="sollicPickOpp(this.value)">${_sollicOppOptions()}</select></div>
+    <div class="fg"><label class="fl">Assigné à *</label><select class="fi" id="sol-assigne">${comm.map(c => `<option value="${c.id}"${String(_sollicSel.assigne_id) === String(c.id) ? ' selected' : ''}>${cmdEsc(fmtCommercialName(c.nom || c.email || ''))}${c.email ? '' : ' (sans email)'}</option>`).join('')}</select>
+      <div style="font-size:11px;color:var(--t3);margin-top:3px">Par défaut le responsable de l'opportunité. Un rappel email lui sera envoyé à la date « À faire avant ».</div></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div class="fg" style="flex:1;min-width:150px"><label class="fl">Statut</label><select class="fi" id="sol-statut">${Object.entries(SOLLIC_STATUTS).map(([k, v]) => `<option value="${k}"${statut === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></div>
+      <div class="fg" style="flex:1;min-width:150px"><label class="fl">À faire avant</label><input type="date" class="fi" id="sol-relance" value="${s && s.date_relance ? String(s.date_relance).slice(0, 10) : ''}"></div>
     </div>
-    <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
-      <button class="btn" onclick="this.closest('.nl-overlay').remove()">Annuler</button>
+    <div class="fg"><label class="fl">Commentaire</label><textarea class="fi" id="sol-comment" rows="4" style="resize:vertical">${s ? cmdEsc(s.commentaire || '') : ''}</textarea></div>`;
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px"><button class="btn" onclick="sollicEditCancel()">← Annuler</button><h2 style="margin:0;font-size:20px">${id ? 'Modifier la sollicitation' : 'Nouvelle sollicitation'}</h2></div>
+      <button class="btn btn-primary" onclick="sollicSave()">💾 Enregistrer</button>
+    </div>
+    <div class="card" style="max-width:680px"><div class="card-body">${body}</div></div>
+    <div style="max-width:680px;display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+      <button class="btn" onclick="sollicEditCancel()">Annuler</button>
       <button class="btn btn-primary" onclick="sollicSave()">💾 Enregistrer</button>
     </div>`;
-  _nlOverlay(body, 540);
-  sollicRenderClientChip();
 }
 async function sollicSearchClient(q) {
   const dd = document.getElementById('sol-client-dd'); if (!dd) return;
@@ -7021,20 +7050,24 @@ function sollicSelectClient(id, name) { _sollicSel.client_id = id; _sollicSel.cl
 function sollicRenderClientChip() { const el = document.getElementById('sol-client-chip'); if (!el) return; el.innerHTML = _sollicSel.client_id ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#6366f122;color:#6366f1;border:1px solid #6366f144">${cmdEsc(_sollicSel.client_name || '')}</span>` : ''; }
 async function sollicSave() {
   if (!_sollicSel.client_id) { toast('Sélectionnez un compte', 'error'); return; }
-  const oppSel = document.getElementById('sol-opp');
-  const oppId = oppSel ? (oppSel.value || null) : (_sollicSel.opportunite_id || null);
+  const id = document.getElementById('sol-id')?.value || '';
+  const oppId = document.getElementById('sol-opp')?.value || null;
   const opp = oppId ? (_opps || []).find(o => o.akuiteo_id === oppId) : null;
+  const assigne = (DB.commerciaux || []).find(c => String(c.id) === String(document.getElementById('sol-assigne')?.value || ''));
   const relance = document.getElementById('sol-relance')?.value || null;
   const row = {
     client_id: _sollicSel.client_id, client_name: _sollicSel.client_name,
     opportunite_id: oppId, opportunite_nom: opp ? opp.nom : (_sollicSel.opportunite_nom || null),
+    assigne_id: assigne ? assigne.id : null, assigne_nom: assigne ? assigne.nom : null, assigne_email: assigne ? assigne.email : null,
     statut: document.getElementById('sol-statut')?.value || 'a_solliciter',
     commentaire: document.getElementById('sol-comment')?.value.trim() || null,
     date_relance: relance || null,
     updated_at: new Date().toISOString(),
   };
+  const prev = id ? (_sollic || []).find(x => String(x.id) === String(id)) : null;
+  if (prev && (prev.date_relance || null) !== (relance || null)) row.rappel_envoye = false; // réarmer le rappel si la date change
   let err;
-  if (_sollicSel.id) { const { error } = await sb.from('sollicitations').update(row).eq('id', _sollicSel.id); err = error; }
+  if (id) { const { error } = await sb.from('sollicitations').update(row).eq('id', id); err = error; }
   else {
     row.createur_id = currentCommercial ? currentCommercial.id : null;
     row.createur_nom = currentCommercial ? currentCommercial.nom : null;
@@ -7043,10 +7076,10 @@ async function sollicSave() {
     const { error } = await sb.from('sollicitations').insert(row); err = error;
   }
   if (err) { toast('Erreur: ' + err.message, 'error'); return; }
-  document.querySelector('.nl-overlay')?.remove();
   toast('Sollicitation enregistrée', 'success');
   await loadSollicitations();
-  renderPage(currentPage);
+  const back = (currentPage === 'sollic-edit') ? (_sollicEditReturn || 'sollicitations') : currentPage;
+  currentPage = back; renderPage(back);
 }
 async function setSollicStatut(id, statut) {
   const { error } = await sb.from('sollicitations').update({ statut, updated_at: new Date().toISOString() }).eq('id', id);
@@ -8963,6 +8996,7 @@ function renderPage(page) {
     contacts: renderContacts,
     taches: renderTaches,
     sollicitations: renderSollicitations,
+    'sollic-edit': renderSollicEditPage,
     'tache-edit': renderTacheEditPage,
     opportunites: renderOpportunites,
     'opportunite-detail': renderOppDetailPage,
@@ -9058,6 +9092,7 @@ function renderPage(page) {
   if (page === 'taches' && !_tachesLoaded) { loadTaches().then(() => { if (currentPage === 'taches') renderPage('taches'); }); }
   if (page === 'sollicitations') { if (!_oppsLoaded) loadOpportunites().catch(() => {}); if (!_sollicLoaded) loadSollicitations().then(() => { if (currentPage === 'sollicitations') renderPage('sollicitations'); }); }
   if (page === 'tache-edit') { setTimeout(() => { tacheRenderClientChip(); tacheRenderAffaireOptions(); tacheRenderOppOptions(); if (!_oppsLoaded) loadOpportunites().then(() => tacheRenderOppOptions()); }, 30); }
+  if (page === 'sollic-edit') { setTimeout(() => { sollicRenderClientChip(); if (!_oppsLoaded) loadOpportunites().then(() => { const sel = document.getElementById('sol-opp'); if (sel) sel.innerHTML = _sollicOppOptions(); }); }, 30); }
   if (page === 'opportunites' && !_oppsLoaded) { loadOpportunites().then(() => { if (currentPage === 'opportunites') renderPage('opportunites'); }); }
   if (page === 'opportunite-analyse') { if (!_oppsLoaded) { loadOpportunites().then(() => { if (currentPage === 'opportunite-analyse') renderPage('opportunite-analyse'); }); } else { setTimeout(_oppAnalyseCharts, 40); } }
 }

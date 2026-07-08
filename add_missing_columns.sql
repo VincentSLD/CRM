@@ -504,3 +504,10 @@ CREATE POLICY "sollicitations_all" ON sollicitations FOR ALL TO authenticated US
 CREATE INDEX IF NOT EXISTS idx_sollic_opportunite ON sollicitations(opportunite_id);
 CREATE INDEX IF NOT EXISTS idx_sollic_client ON sollicitations(client_id);
 CREATE INDEX IF NOT EXISTS idx_sollic_statut ON sollicitations(statut);
+-- Assigné (défaut = responsable de l'opportunité) + rappel email automatique à la date « À faire avant »
+ALTER TABLE sollicitations ADD COLUMN IF NOT EXISTS assigne_id TEXT;
+ALTER TABLE sollicitations ADD COLUMN IF NOT EXISTS assigne_nom TEXT;
+ALTER TABLE sollicitations ADD COLUMN IF NOT EXISTS assigne_email TEXT;
+ALTER TABLE sollicitations ADD COLUMN IF NOT EXISTS rappel_envoye BOOLEAN DEFAULT FALSE;
+ALTER TABLE sollicitations ADD COLUMN IF NOT EXISTS rappel_date TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_sollic_assigne ON sollicitations(assigne_email);
