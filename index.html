@@ -13545,7 +13545,7 @@ function renderMarcheDetail() {
       detailRow('Montant TTC', fmt(m.montant_ttc)),
       detailRow('Devise', m.devise),
     ])}
-    ${(() => { const addr = affaires.find(a => a.adresse || a.ville || a.code_postal); return addr ? detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region)]) : ''; })()}
+    ${(() => { const addr = affaires.find(a => a.adresse || a.ville || a.code_postal) || {}; const hasGps = (m.lat != null && m.lng != null); if (!addr.adresse && !addr.ville && !addr.code_postal && !hasGps) return ''; return detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region), detailRow('Latitude', m.lat != null ? Number(m.lat).toFixed(6) : '—'), detailRow('Longitude', m.lng != null ? Number(m.lng).toFixed(6) : '—')]); })()}
   </div>
 
   <div class="card" style="margin-bottom:20px"><div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">📍 Localisation du marché</div>
