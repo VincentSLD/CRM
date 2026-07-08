@@ -6522,8 +6522,8 @@ async function loadTaches() {
 }
 function _updateTachesBadge() {
   const el = document.getElementById('navBadgeTaches'); if (!el) return;
-  const myEmail = (currentCommercial && currentCommercial.email) || '';
-  const n = _taches.filter(t => (t.statut === 'a_faire' || t.statut === 'en_cours') && t.assigne_email === myEmail).length;
+  // Toutes les tâches actives (à faire / en cours), de tout le monde
+  const n = _taches.filter(t => t.statut === 'a_faire' || t.statut === 'en_cours').length;
   if (n > 0) { el.textContent = n; el.style.display = ''; } else { el.style.display = 'none'; }
 }
 
