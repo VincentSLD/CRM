@@ -13518,10 +13518,18 @@ function _mmSet(lat, lng) {
   _mmCertifie = false; _mmUpdateCertifUi();
 }
 function _mmToggleCertif(checked) { _mmCertifie = !!checked; _mmUpdateCertifUi(); }
+function _mmCertifLabel(certified) {
+  return certified
+    ? '<span style="color:var(--green,#16a34a);font-weight:600">✓ Certifiée conforme</span>'
+    : '<span style="color:#d97706;font-weight:600">⚠ Non certifiée (à vérifier)</span>';
+}
 function _mmUpdateCertifUi() {
   const cb = document.getElementById('mm-certif'); if (cb) cb.checked = _mmCertifie;
+  const hasPt = (_mmLat != null && _mmLng != null);
+  // Indicateur du bloc « Adresse du site » (rafraîchi en direct à la coche)
+  const a = document.getElementById('mm-certif-addr'); if (a) a.innerHTML = hasPt ? _mmCertifLabel(_mmCertifie) : '—';
   const h = document.getElementById('mm-certif-hint'); if (!h) return;
-  if (_mmLat == null || _mmLng == null) { h.innerHTML = ''; return; }
+  if (!hasPt) { h.innerHTML = ''; return; }
   h.innerHTML = _mmCertifie
     ? '<span style="color:var(--green,#16a34a)">✓ Position <strong>certifiée conforme</strong> — validée manuellement.</span>'
     : '<span style="color:#d97706">⚠ Position <strong>non certifiée</strong> : elle peut provenir de l\'adresse du site (sans n° de rue) et être imprécise. Vérifiez sur la carte, ajustez si besoin, puis cochez « Certifié conforme ».</span>';
@@ -13630,7 +13638,7 @@ function renderMarcheDetail() {
       detailRow('Montant TTC', fmt(m.montant_ttc)),
       detailRow('Devise', m.devise),
     ])}
-    ${(() => { const addr = affaires.find(a => a.adresse || a.ville || a.code_postal) || {}; const hasGps = (m.lat != null && m.lng != null); if (!addr.adresse && !addr.ville && !addr.code_postal && !hasGps) return ''; return detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region), detailRow('Latitude', m.lat != null ? Number(m.lat).toFixed(6) : '—'), detailRow('Longitude', m.lng != null ? Number(m.lng).toFixed(6) : '—'), (hasGps ? detailRow('Position GPS', m.gps_certifie ? '<span style="color:var(--green,#16a34a);font-weight:600">✓ Certifiée conforme</span>' : '<span style="color:#d97706;font-weight:600">⚠ Non certifiée (à vérifier)</span>') : '')]); })()}
+    ${(() => { const addr = affaires.find(a => a.adresse || a.ville || a.code_postal) || {}; const hasGps = (m.lat != null && m.lng != null); if (!addr.adresse && !addr.ville && !addr.code_postal && !hasGps) return ''; return detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region), detailRow('Latitude', m.lat != null ? Number(m.lat).toFixed(6) : '—'), detailRow('Longitude', m.lng != null ? Number(m.lng).toFixed(6) : '—'), detailRow('Position GPS', '<span id="mm-certif-addr">' + (hasGps ? _mmCertifLabel(!!m.gps_certifie) : '—') + '</span>')]); })()}
   </div>
 
   <div class="card" style="margin-bottom:20px"><div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">📍 Localisation du marché</div>
