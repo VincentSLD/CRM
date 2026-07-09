@@ -8809,6 +8809,51 @@ function _oppCRCard(akId) {
     <button class="btn btn-sm" onclick="oppCreerCR('${akId}')">+ CR</button></div>
     <div class="card-body" style="padding:0">${rows}</div></div>`;
 }
+// Frise chronologique de l'opportunité : création + CR + tâches + sollicitations + gagnée/perdue (création en haut)
+function _oppTimeline(o) {
+  const akId = o.akuiteo_id;
+  const ev = [];
+  const who = n => n ? cmdEsc(fmtCommercialName(n)) : '';
+  const push = (date, icon, color, title, meta, onclick) => { if (!date) return; ev.push({ d: String(date), icon, color, title, meta: meta || '', onclick: onclick || '' }); };
+  // Création
+  push(o.date_creation || o.date_signature, '🎯', '#4f8ff7', 'Opportunité créée', o.responsable ? 'par ' + who(o.responsable) : '');
+  // Comptes-rendus liés
+  (DB.reports || []).filter(r => r.opportunite_id === akId).forEach(r => {
+    const actor = crGetRedacteurNom(r);
+    const meta = [actor ? 'par ' + who(actor) : '', r.client_name ? '— ' + cmdEsc(r.client_name) : ''].filter(Boolean).join(' ');
+    push(r.date_raw || r.created_at, '📝', '#8b5cf6', 'CR « ' + cmdEsc(r.titre || 'Sans titre') + ' »' + (r.type_cr ? ' <span style="color:var(--t3)">(' + cmdEsc(_CR_TYPE_LBL[r.type_cr] || r.type_cr) + ')</span>' : ''), meta, "openCRDetail('" + r.id + "')");
+  });
+  // Tâches liées (créée + terminée)
+  (_taches || []).filter(t => t.opportunite_id === akId).forEach(t => {
+    const meta = [t.createur_nom ? 'par ' + who(t.createur_nom) : '', t.assigne_nom ? '→ ' + who(t.assigne_nom) : '', t.echeance ? 'éch. ' + fmtDateFR(String(t.echeance).slice(0, 10)) : '', (TACHE_STATUTS[t.statut] || [])[0] || ''].filter(Boolean).join(' · ');
+    push(t.created_at, '✅', '#f59e0b', 'Tâche « ' + cmdEsc(t.titre || '') + ' » créée', meta, 'tacheModalOpen(' + t.id + ')');
+    if (t.statut === 'terminee' && t.done_at) push(t.done_at, '☑️', '#10b981', 'Tâche « ' + cmdEsc(t.titre || '') + ' » terminée', t.assigne_nom ? 'par ' + who(t.assigne_nom) : '', 'tacheModalOpen(' + t.id + ')');
+  });
+  // Sollicitations liées (créée + mail envoyé)
+  (_sollic || []).filter(s => s.opportunite_id === akId).forEach(s => {
+    const meta = [s.createur_nom ? 'par ' + who(s.createur_nom) : '', s.assigne_nom ? '→ ' + who(s.assigne_nom) : '', (SOLLIC_STATUTS[s.statut] || [])[0] || ''].filter(Boolean).join(' · ');
+    push(s.date_sollicitation || s.created_at, '🤝', '#6366f1', 'Sollicitation ' + cmdEsc(s.client_name || ''), meta, 'sollicModalOpen(' + s.id + ')');
+    if (s.email_envoye && s.email_date) push(s.email_date, '✉️', '#0ea5e9', 'Mail de sollicitation envoyé' + (s.email_destinataire ? ' à ' + cmdEsc(s.email_destinataire) : ''), s.client_name ? cmdEsc(s.client_name) : '', 'sollicMailOpen(' + s.id + ')');
+  });
+  // Issue
+  if (o.statut === 'WON') push(o.date_signature || o.updated_at, '🏆', '#10b981', 'Opportunité gagnée', '');
+  if (o.statut === 'LOST') push(o.updated_at, '🚫', '#ef4444', 'Opportunité perdue', '');
+  if (!ev.length) return '';
+  ev.sort((a, b) => a.d.localeCompare(b.d)); // création en haut
+  const items = ev.map((e, i) => { const last = i === ev.length - 1; return `<div style="display:flex;gap:12px">
+      <div style="flex:0 0 72px;text-align:right;font-size:11px;color:var(--t3);padding-top:3px">${fmtDateFR(String(e.d).slice(0, 10))}</div>
+      <div style="flex:0 0 22px;display:flex;flex-direction:column;align-items:center">
+        <div style="width:22px;height:22px;border-radius:50%;background:${e.color}22;border:2px solid ${e.color};display:flex;align-items:center;justify-content:center;font-size:11px">${e.icon}</div>
+        ${last ? '' : '<div style="flex:1;width:2px;background:var(--border);margin:2px 0"></div>'}
+      </div>
+      <div style="flex:1;padding-bottom:${last ? '0' : '16px'}${e.onclick ? ';cursor:pointer' : ''}"${e.onclick ? ' onclick="' + e.onclick + '"' : ''}>
+        <div style="font-size:13px;font-weight:500">${e.title}</div>
+        ${e.meta ? '<div style="font-size:11px;color:var(--t3);margin-top:2px">' + e.meta + '</div>' : ''}
+      </div>
+    </div>`; }).join('');
+  return `<div class="card" style="margin-top:16px"><div class="card-header"><div class="card-title">🕒 Frise de l'opportunité (${ev.length})</div></div>
+    <div class="card-body">${items}</div></div>`;
+}
 function renderOppDetailPage() {
   const akId = _currentOppId;
   const o = _opps.find(x => x.akuiteo_id === akId);
@@ -8877,7 +8922,8 @@ function renderOppDetailPage() {
     <div style="display:grid;grid-template-columns:${window.innerWidth <= 768 ? '1fr' : 'minmax(0,1fr) minmax(0,1.7fr)'};gap:16px;align-items:start">
       <div class="card"><div class="card-header"><div class="card-title">Détails de l'opportunité</div></div><div class="card-body">${info}</div></div>
       <div>${_oppTachesCard(o.akuiteo_id, o.client_id, o.client_name, o.nom)}${renderSollicCard({ opportunite_id: o.akuiteo_id, opportunite_nom: o.nom, client_id: o.client_id, client_name: o.client_name })}${_oppCRCard(o.akuiteo_id)}</div>
-    </div>`;
+    </div>
+    ${_oppTimeline(o)}`;
 }
 
 // ═══ ANALYSE DES OPPORTUNITÉS ═══
