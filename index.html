@@ -13431,9 +13431,10 @@ async function initMarchesMap() {
     if (!m.lat || !m.lng) { noCoords++; continue; }
     const nbAff = DB.affaires.filter(a => a.marche_id === m.id).length;
     const color = m.statut === 'termine' ? '#4CAF50' : m.statut === 'suspendu' ? '#FF9800' : m.statut === 'annule' ? '#D94040' : '#f5c518';
+    const certified = !!m.gps_certifie;
     const marker = L.circleMarker([m.lat, m.lng], {
       radius: Math.min(6 + Math.sqrt(Number(m.montant || 0) / 5000), 20),
-      fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.85
+      fillColor: color, color: certified ? '#16a34a' : '#d97706', weight: certified ? 3 : 2, fillOpacity: 0.85, dashArray: certified ? null : '3'
     }).addTo(marchesMap);
     bounds.push([m.lat, m.lng]);
     marker.bindPopup(`
@@ -13445,6 +13446,7 @@ async function initMarchesMap() {
         <div style="font-size:12px;display:flex;justify-content:space-between"><span>Affaires</span><strong>${nbAff}</strong></div>
         <div style="font-size:12px;display:flex;justify-content:space-between"><span>Période</span><span>${m.date_debut ? fmtDateFR(m.date_debut) : '?'} → ${m.date_fin ? fmtDateFR(m.date_fin) : '?'}</span></div>
         <div style="margin-top:6px">${marcheStatutBadge(m.statut)}</div>
+        <div style="font-size:11px;margin-top:6px">${certified ? '<span style="color:#16a34a;font-weight:600">✓ Position certifiée conforme</span>' : '<span style="color:#d97706;font-weight:600">⚠ Position non certifiée (à vérifier)</span>'}</div>
         <button onclick="showMarcheDetail('${m.id}')" style="margin-top:8px;width:100%;padding:6px;border:none;background:#f5c518;color:#000;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px">Voir le marché →</button>
       </div>
     `, { maxWidth: 300 });
@@ -18349,7 +18351,8 @@ function _gpsRowFor(x) {
   const m = x && x.marche_id ? (DB.marches || []).find(mm => mm.id === x.marche_id) : null;
   if (!m || m.lat == null || m.lng == null) return '';
   const lat = Number(m.lat), lng = Number(m.lng);
-  const val = `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+  const certif = m.gps_certifie ? ' <span style="color:var(--green,#16a34a);font-weight:600" title="Position validée manuellement">✓ certifiée</span>' : ' <span style="color:#d97706;font-weight:600" title="Position non validée — peut être imprécise">⚠ à vérifier</span>';
+  const val = `${lat.toFixed(6)}, ${lng.toFixed(6)}${certif}`
     + ` <a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" rel="noopener" style="color:var(--accent);margin-left:6px">🗺 carte</a>`
     + ` <a href="https://geocarto.vercel.app/eds-map.html?lat=${lat}&lng=${lng}&lon=${lng}" target="_blank" rel="noopener" style="color:var(--accent);margin-left:6px">🌍 Tendances Sol</a>`
     + ` <a href="https://geocarto.vercel.app/?lat=${lat}&lng=${lng}&lon=${lng}" target="_blank" rel="noopener" style="color:var(--accent);margin-left:6px">🔎 Enquête Sol</a>`;
