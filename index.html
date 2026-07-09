@@ -8823,15 +8823,21 @@ function _oppTimeline(o) {
     const meta = [actor ? 'par ' + who(actor) : '', r.client_name ? '— ' + cmdEsc(r.client_name) : ''].filter(Boolean).join(' ');
     push(r.date_raw || r.created_at, '📝', '#8b5cf6', 'CR « ' + cmdEsc(r.titre || 'Sans titre') + ' »' + (r.type_cr ? ' <span style="color:var(--t3)">(' + cmdEsc(_CR_TYPE_LBL[r.type_cr] || r.type_cr) + ')</span>' : ''), meta, "openCRDetail('" + r.id + "')");
   });
-  // Tâches liées (créée + terminée)
+  const _todayISO = new Date().toISOString().slice(0, 10);
+  const _echRouge = (dateStr, retard) => `<span style="${retard ? 'color:var(--red);font-weight:600' : ''}">${dateStr}${retard ? ' ⚠' : ''}</span>`;
+  // Tâches liées (créée + terminée) — échéance en rouge si dépassée, badge de statut coloré
   (_taches || []).filter(t => t.opportunite_id === akId).forEach(t => {
-    const meta = [t.createur_nom ? 'par ' + who(t.createur_nom) : '', t.assigne_nom ? '→ ' + who(t.assigne_nom) : '', t.echeance ? 'éch. ' + fmtDateFR(String(t.echeance).slice(0, 10)) : '', (TACHE_STATUTS[t.statut] || [])[0] || ''].filter(Boolean).join(' · ');
+    const retard = _tEnRetard(t);
+    const ech = t.echeance ? _echRouge('éch. ' + fmtDateFR(String(t.echeance).slice(0, 10)), retard) : '';
+    const meta = [t.createur_nom ? 'par ' + who(t.createur_nom) : '', t.assigne_nom ? '→ ' + who(t.assigne_nom) : '', ech, _tStatutBadge(t.statut)].filter(Boolean).join(' · ');
     push(t.created_at, '✅', '#f59e0b', 'Tâche « ' + cmdEsc(t.titre || '') + ' » créée', meta, 'tacheModalOpen(' + t.id + ')');
     if (t.statut === 'terminee' && t.done_at) push(t.done_at, '☑️', '#10b981', 'Tâche « ' + cmdEsc(t.titre || '') + ' » terminée', t.assigne_nom ? 'par ' + who(t.assigne_nom) : '', 'tacheModalOpen(' + t.id + ')');
   });
-  // Sollicitations liées (créée + mail envoyé)
+  // Sollicitations liées (créée + mail envoyé) — « à faire avant » en rouge si dépassé, badge de statut coloré
   (_sollic || []).filter(s => s.opportunite_id === akId).forEach(s => {
-    const meta = [s.createur_nom ? 'par ' + who(s.createur_nom) : '', s.assigne_nom ? '→ ' + who(s.assigne_nom) : '', (SOLLIC_STATUTS[s.statut] || [])[0] || ''].filter(Boolean).join(' · ');
+    const relRetard = s.date_relance && String(s.date_relance).slice(0, 10) < _todayISO && !_sollicTerminal(s.statut);
+    const rel = s.date_relance ? _echRouge('à faire avant ' + fmtDateFR(String(s.date_relance).slice(0, 10)), relRetard) : '';
+    const meta = [s.createur_nom ? 'par ' + who(s.createur_nom) : '', s.assigne_nom ? '→ ' + who(s.assigne_nom) : '', rel, _sollicBadge(s.statut)].filter(Boolean).join(' · ');
     push(s.date_sollicitation || s.created_at, '🤝', '#6366f1', 'Sollicitation ' + cmdEsc(s.client_name || ''), meta, 'sollicModalOpen(' + s.id + ')');
     if (s.email_envoye && s.email_date) push(s.email_date, '✉️', '#0ea5e9', 'Mail de sollicitation envoyé' + (s.email_destinataire ? ' à ' + cmdEsc(s.email_destinataire) : ''), s.client_name ? cmdEsc(s.client_name) : '', 'sollicMailOpen(' + s.id + ')');
   });
@@ -8921,9 +8927,8 @@ function renderOppDetailPage() {
     </div>
     <div style="display:grid;grid-template-columns:${window.innerWidth <= 768 ? '1fr' : 'minmax(0,1fr) minmax(0,1.7fr)'};gap:16px;align-items:start">
       <div class="card"><div class="card-header"><div class="card-title">Détails de l'opportunité</div></div><div class="card-body">${info}</div></div>
-      <div>${_oppTachesCard(o.akuiteo_id, o.client_id, o.client_name, o.nom)}${renderSollicCard({ opportunite_id: o.akuiteo_id, opportunite_nom: o.nom, client_id: o.client_id, client_name: o.client_name })}${_oppCRCard(o.akuiteo_id)}</div>
-    </div>
-    ${_oppTimeline(o)}`;
+      <div>${_oppTachesCard(o.akuiteo_id, o.client_id, o.client_name, o.nom)}${renderSollicCard({ opportunite_id: o.akuiteo_id, opportunite_nom: o.nom, client_id: o.client_id, client_name: o.client_name })}${_oppCRCard(o.akuiteo_id)}${_oppTimeline(o)}</div>
+    </div>`;
 }
 
 // ═══ ANALYSE DES OPPORTUNITÉS ═══
