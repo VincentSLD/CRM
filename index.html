@@ -27134,7 +27134,16 @@ async function _akSearchDocs(path, dayFrom) {
 }
 // Ids déterministes marché/affaire à partir d'un code projet Akuiteo (partagés par les 2 syncs)
 function _d10(v) { return v ? String(v).substring(0, 10) : null; }
-function _marcheOf(pid) { const parts = String(pid || '').split('.'); const code = parts.length >= 2 ? parts.slice(0, 2).join('.') : String(pid || ''); return { code, id: 'akm_' + code.replace(/[^a-zA-Z0-9.]/g, '_') }; }
+// Marché = projectGroup Akuiteo. Le Code Marché (projectGroup.code) = l'ID projet sans le préfixe société :
+//  - ID à préfixe société (SA.12.1945, SO.20.1182, AS.08.0345…) → code = 2 segments suivants (12.1945) ; clé unique = société incluse (évite les collisions inter-sociétés)
+//  - ID numérique (26.0690.01) → code = 2 premiers segments (26.0690)
+function _marcheOf(pid) {
+  const parts = String(pid || '').split('.');
+  let code, keyParts;
+  if (parts.length >= 3 && /^[A-Za-z]+$/.test(parts[0])) { code = parts.slice(1, 3).join('.'); keyParts = parts.slice(0, 3).join('.'); }
+  else { code = parts.length >= 2 ? parts.slice(0, 2).join('.') : String(pid || ''); keyParts = code; }
+  return { code, id: 'akm_' + keyParts.replace(/[^a-zA-Z0-9.]/g, '_') };
+}
 function _affaireIdOf(pid) { return 'aka_' + String(pid || '').replace(/[^a-zA-Z0-9.]/g, '_'); }
 // Champs issus des données personnalisées d'un document (n'inclut que les clés non vides,
 // pour ne pas écraser une valeur existante en Supabase lors d'un upsert par conflit).
@@ -27410,8 +27419,8 @@ async function syncAkuiteoQuick() {
       await _syncMapLimit(pidList, 6, async pid => {
         if ((_enrDone++ % 50) === 0) setSyncText(`Sync du dernier mois — Enrichissement projets ${_enrDone}/${pidList.length}...`);
         try {
-          const proj = await _akRetry('POST', `/projectmanagement/projects/${pid}/read`, { options: ['PROJECT_SUB_CATEGORY', 'PROJECT_SUB_CATEGORY_LEVEL2', 'MANAGER', 'ADDRESS', 'CUSTOM_DATA'] });
-          if (proj) { const a = proj.address || null; const g = _projGeoFromCd(proj.customData); enrich[pid] = { name: proj.name || null, apporteur: proj.projectSubCategoryLevel2?.name || null, architecte: proj.projectSubCategory?.name || null, responsable: proj.manager ? [proj.manager.name, proj.manager.firstName].filter(Boolean).join(' ') : null, adresse: a?.line1 || null, ville: a?.city || null, code_postal: a?.postalCode || null, lat: g.lat, lng: g.lng }; }
+          const proj = await _akRetry('POST', `/projectmanagement/projects/${pid}/read`, { options: ['PROJECT_SUB_CATEGORY', 'PROJECT_SUB_CATEGORY_LEVEL2', 'MANAGER', 'ADDRESS', 'CUSTOM_DATA', 'PROJECT_GROUP'] });
+          if (proj) { const a = proj.address || null; const g = _projGeoFromCd(proj.customData); enrich[pid] = { name: proj.name || null, marcheNom: proj.projectGroup?.name || null, apporteur: proj.projectSubCategoryLevel2?.name || null, architecte: proj.projectSubCategory?.name || null, responsable: proj.manager ? [proj.manager.name, proj.manager.firstName].filter(Boolean).join(' ') : null, adresse: a?.line1 || null, ville: a?.city || null, code_postal: a?.postalCode || null, lat: g.lat, lng: g.lng }; }
         } catch (e) {}
       });
       const marchesMap = {}, affaireRows = [];
@@ -27420,7 +27429,8 @@ async function syncAkuiteoQuick() {
         const crmClient = akCMap[String(nb.customerId || '')];
         const { code: marcheCode, id: marcheId } = _marcheOf(pid);
         const pCreated = _d10(nb.date) || new Date().toISOString().slice(0, 10);
-        if (!marchesMap[marcheCode]) marchesMap[marcheCode] = { id: marcheId, akuiteo_id: marcheCode, ref: marcheCode, nom: en.name || ('Marché ' + marcheCode), client_id: crmClient?.id || null, client_name: crmClient?.name || '', agence: nb.agence || '', statut: 'en_cours', nb_affaires: 0, date_debut: pCreated, adresse: en.adresse || null, code_postal: en.code_postal || null, ville: en.ville || null, _recent: !!en.name };
+        if (!marchesMap[marcheCode]) marchesMap[marcheCode] = { id: marcheId, akuiteo_id: marcheCode, ref: marcheCode, nom: en.marcheNom || en.name || ('Marché ' + marcheCode), client_id: crmClient?.id || null, client_name: crmClient?.name || '', agence: nb.agence || '', statut: 'en_cours', nb_affaires: 0, date_debut: pCreated, adresse: en.adresse || null, code_postal: en.code_postal || null, ville: en.ville || null, _recent: !!en.name };
+        if (en.marcheNom && marchesMap[marcheCode].nom !== en.marcheNom) marchesMap[marcheCode].nom = en.marcheNom; // Nom du marché (projectGroup) prioritaire
         marchesMap[marcheCode].nb_affaires++;
         // Coordonnées GPS depuis les données perso Akuiteo (Latitude/Longitude) — premier projet qui en a
         if (marchesMap[marcheCode].lat == null && en.lat != null && en.lng != null) { marchesMap[marcheCode].lat = en.lat; marchesMap[marcheCode].lng = en.lng; }
@@ -27942,24 +27952,23 @@ async function syncAkuiteo() {
         const dd = doc.date ? doc.date.substring(0, 10) : null;
         if (dd) { if (!a.minDate || dd < a.minDate) a.minDate = dd; if (!a.maxDate || dd > a.maxDate) a.maxDate = dd; }
       }
-      // Regrouper affaires par préfixe marché (ex: "24.0552") → marchés
+      // Regrouper affaires par MARCHÉ Akuiteo (projectGroup) — clé/code via _marcheOf (préfixe société géré)
       const marchesByPrefix = {};
       for (const [pid, aff] of Object.entries(affairesByProject)) {
-        const prefix = getMarchePrefix(pid);
-        if (!marchesByPrefix[prefix]) {
-          marchesByPrefix[prefix] = { prefix, client_id: aff.client_id, client_name: aff.client_name, affaires: [], montant: 0, montant_ttc: 0, minDate: null, maxDate: null, agence: aff.agence };
+        const mo = _marcheOf(pid); const key = mo.id;
+        if (!marchesByPrefix[key]) {
+          marchesByPrefix[key] = { id: mo.id, code: mo.code, client_id: aff.client_id, client_name: aff.client_name, affaires: [], montant: 0, montant_ttc: 0, minDate: null, maxDate: null, agence: aff.agence };
         }
-        const m = marchesByPrefix[prefix]; m.affaires.push(aff); m.montant += aff.montant; m.montant_ttc += aff.montant_ttc;
+        const m = marchesByPrefix[key]; m.affaires.push(aff); m.montant += aff.montant; m.montant_ttc += aff.montant_ttc;
         if (aff.minDate && (!m.minDate || aff.minDate < m.minDate)) m.minDate = aff.minDate;
         if (aff.maxDate && (!m.maxDate || aff.maxDate > m.maxDate)) m.maxDate = aff.maxDate;
       }
-      console.log(`[Akuiteo] Marchés (par préfixe): ${Object.keys(marchesByPrefix).length}, Affaires: ${Object.keys(affairesByProject).length}`);
-      // Upsert marchés
+      console.log(`[Akuiteo] Marchés: ${Object.keys(marchesByPrefix).length}, Affaires: ${Object.keys(affairesByProject).length}`);
+      // Upsert marchés (le Nom du marché = projectGroup.name est appliqué après l'enrichissement)
       const marchesBatch = [];
-      for (const [prefix, mData] of Object.entries(marchesByPrefix)) {
-        const mId = 'akm_' + prefix.replace(/[^a-zA-Z0-9.]/g, '_');
-        marchesBatch.push({ id: mId, akuiteo_id: prefix, ref: prefix, nom: 'Marché ' + prefix, client_id: mData.client_id, client_name: mData.client_name || '', date_debut: mData.minDate, date_fin: mData.maxDate, montant: mData.montant, montant_ttc: mData.montant_ttc, statut: 'en_cours', agence: mData.agence || '', nb_affaires: mData.affaires.length });
-        for (const aff of mData.affaires) { projectToMarche[aff.projectId] = mId; }
+      for (const mData of Object.values(marchesByPrefix)) {
+        marchesBatch.push({ id: mData.id, akuiteo_id: mData.code, ref: mData.code, nom: 'Marché ' + mData.code, client_id: mData.client_id, client_name: mData.client_name || '', date_debut: mData.minDate, date_fin: mData.maxDate, montant: mData.montant, montant_ttc: mData.montant_ttc, statut: 'en_cours', agence: mData.agence || '', nb_affaires: mData.affaires.length });
+        for (const aff of mData.affaires) { projectToMarche[aff.projectId] = mData.id; }
       }
       if (marchesBatch.length > 0) {
         const rM = await _sbUpsert('marches', marchesBatch, 'id', 200);
@@ -27970,10 +27979,11 @@ async function syncAkuiteo() {
       const projectPids = Object.keys(affairesByProject);
       await _syncMapLimit(projectPids, 6, async pid => {
           try {
-            const proj = await _akRetry('POST', `/projectmanagement/projects/${pid}/read`, { options: ['PROJECT_SUB_CATEGORY', 'PROJECT_SUB_CATEGORY_LEVEL2', 'MANAGER', 'ADDRESS', 'CUSTOM_DATA'] });
+            const proj = await _akRetry('POST', `/projectmanagement/projects/${pid}/read`, { options: ['PROJECT_SUB_CATEGORY', 'PROJECT_SUB_CATEGORY_LEVEL2', 'MANAGER', 'ADDRESS', 'CUSTOM_DATA', 'PROJECT_GROUP'] });
             if (proj) {
               const a = affairesByProject[pid];
               if (proj.name) a.nom = proj.name;
+              if (proj.projectGroup?.name) a.marcheNom = proj.projectGroup.name; // Nom du marché (projectGroup)
               if (proj.projectSubCategoryLevel2?.name) a.apporteur = proj.projectSubCategoryLevel2.name;
               if (proj.projectSubCategory?.name) a.architecte = proj.projectSubCategory.name;
               if (proj.manager?.name) a.responsable = [proj.manager.name, proj.manager.firstName].filter(Boolean).join(' ');
@@ -27991,11 +28001,17 @@ async function syncAkuiteo() {
             }
           } catch (e) { /* ignore */ }
       });
-      // Propager la géoloc (données perso Akuiteo Latitude/Longitude) aux marchés — UPDATE partiel
-      const _marcheGeo = {};
-      for (const [pid, aff] of Object.entries(affairesByProject)) { const mId = projectToMarche[pid]; if (mId && aff.lat != null && aff.lng != null && !_marcheGeo[mId]) _marcheGeo[mId] = { id: mId, lat: aff.lat, lng: aff.lng }; }
-      const _geoRows = Object.values(_marcheGeo);
-      if (_geoRows.length) await _sbUpdateMany('marches', _geoRows, 'id');
+      // Propager aux marchés (UPDATE partiel) : géoloc (Latitude/Longitude) + Nom du marché (projectGroup.name)
+      const _marcheUpd = {};
+      for (const [pid, aff] of Object.entries(affairesByProject)) {
+        const mId = projectToMarche[pid]; if (!mId) continue;
+        if (!_marcheUpd[mId]) _marcheUpd[mId] = { id: mId };
+        const u = _marcheUpd[mId];
+        if (u.lat == null && aff.lat != null && aff.lng != null) { u.lat = aff.lat; u.lng = aff.lng; }
+        if (u.nom == null && aff.marcheNom) u.nom = aff.marcheNom;
+      }
+      const _updRows = Object.values(_marcheUpd).filter(u => u.lat != null || u.nom != null);
+      if (_updRows.length) await _sbUpdateMany('marches', _updRows, 'id');
       // Upsert affaires
       const affairesBatch = [];
       for (const [pid, aff] of Object.entries(affairesByProject)) {
@@ -28032,8 +28048,8 @@ async function syncAkuiteo() {
       const customerSitesToFetch = {};
       const marcheDeliverySite = {};
       for (const [pid, info] of Object.entries(projectDeliverySite)) {
-        const prefix = getMarchePrefix(pid);
-        if (!marcheDeliverySite[prefix]) marcheDeliverySite[prefix] = info;
+        const mId = _marcheOf(pid).id;
+        if (!marcheDeliverySite[mId]) marcheDeliverySite[mId] = info;
         if (!customerSitesToFetch[info.customerId]) customerSitesToFetch[info.customerId] = new Set();
         customerSitesToFetch[info.customerId].add(info.deliverySiteId);
       }
@@ -28054,10 +28070,9 @@ async function syncAkuiteo() {
 
       // Mettre à jour les adresses des marchés (upsert chunké + retry)
       const marcheAddrUpdates = [];
-      for (const [prefix, info] of Object.entries(marcheDeliverySite)) {
+      for (const [mId, info] of Object.entries(marcheDeliverySite)) {
         const addr = siteAddresses[info.deliverySiteId];
         if (!addr) continue;
-        const mId = 'akm_' + prefix.replace(/[^a-zA-Z0-9.]/g, '_');
         marcheAddrUpdates.push({ id: mId, adresse: addr.line1, code_postal: addr.postalCode, ville: addr.city });
       }
       await _sbUpdateMany('marches', marcheAddrUpdates);
@@ -29154,7 +29169,7 @@ async function pullAffaireFromAkuiteo(affaireId) {
     // 2. Récupérer le projet Akuiteo
     setSyncText('Récupération projet Akuiteo...');
     let akProject = null;
-    try { akProject = await akuiteoFetch('GET', '/projectmanagement/projects/' + encodeURIComponent(codeProjet)); } catch (e) {}
+    try { akProject = await akuiteoFetch('POST', '/projectmanagement/projects/' + encodeURIComponent(codeProjet) + '/read', { options: ['PROJECT_GROUP', 'ADDRESS', 'CUSTOM_DATA'] }); } catch (e) {}
     if (!akProject || !akProject.id) {
       // Fallback : search
       const list = await akuiteoFetch('POST', '/projectmanagement/projects/search?limit=10', { code: { operator: 'EQUALS', value: codeProjet } }).catch(() => []);
@@ -29164,15 +29179,15 @@ async function pullAffaireFromAkuiteo(affaireId) {
 
     // 3. Mettre à jour l'affaire et le marché
     const crmClient = akCMap[String(akProject.customerId || '')];
-    const codeParts = (akProject.id || '').split('.');
-    const marcheCode = codeParts.length >= 2 ? codeParts.slice(0, 2).join('.') : akProject.id;
-    const marcheId = 'akm_' + marcheCode.replace(/[^a-zA-Z0-9.]/g, '_');
+    const _mo = _marcheOf(akProject.id);
+    const marcheCode = _mo.code;
+    const marcheId = _mo.id;
     const affId = 'aka_' + String(akProject.id).replace(/[^a-zA-Z0-9.]/g, '_');
     const pCreated = akProject.changeTracking?.createdTime ? akProject.changeTracking.createdTime.substring(0, 10) : new Date().toISOString().slice(0, 10);
 
     await sb.from('marches').upsert([{
       id: marcheId, akuiteo_id: marcheCode, ref: marcheCode,
-      nom: akProject.name || ('Marché ' + marcheCode),
+      nom: akProject.projectGroup?.name || akProject.name || ('Marché ' + marcheCode),
       client_id: crmClient?.id || null, client_name: crmClient?.name || '',
       agence: akProject.companyCode || '', statut: 'en_cours', date_debut: pCreated,
     }], { onConflict: 'id' });
