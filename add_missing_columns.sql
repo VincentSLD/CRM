@@ -520,3 +520,18 @@ CREATE INDEX IF NOT EXISTS idx_sollic_assigne ON sollicitations(assigne_email);
 -- ═══ Géolocalisation des marchés (point placé sur la carte ; synchro données perso Akuiteo Latitude/Longitude) ═══
 ALTER TABLE marches ADD COLUMN IF NOT EXISTS lat NUMERIC;
 ALTER TABLE marches ADD COLUMN IF NOT EXISTS lng NUMERIC;
+
+-- ═══ Retirer les clés étrangères marche_id / affaire_id (l'app fait ses jointures côté client) ═══
+-- Ces FK bloquaient la synchro complète (documents upsertés avant les marchés / changement d'ID marché).
+-- Les liens restent assurés par la cohérence des ID (_marcheOf) ; on garde des index simples pour la perf.
+ALTER TABLE devis     DROP CONSTRAINT IF EXISTS devis_marche_id_fkey;
+ALTER TABLE devis     DROP CONSTRAINT IF EXISTS devis_affaire_id_fkey;
+ALTER TABLE commandes DROP CONSTRAINT IF EXISTS commandes_marche_id_fkey;
+ALTER TABLE commandes DROP CONSTRAINT IF EXISTS commandes_affaire_id_fkey;
+ALTER TABLE factures  DROP CONSTRAINT IF EXISTS factures_marche_id_fkey;
+ALTER TABLE factures  DROP CONSTRAINT IF EXISTS factures_affaire_id_fkey;
+ALTER TABLE affaires  DROP CONSTRAINT IF EXISTS affaires_marche_id_fkey;
+CREATE INDEX IF NOT EXISTS idx_devis_marche_id     ON devis (marche_id);
+CREATE INDEX IF NOT EXISTS idx_commandes_marche_id ON commandes (marche_id);
+CREATE INDEX IF NOT EXISTS idx_factures_marche_id  ON factures (marche_id);
+CREATE INDEX IF NOT EXISTS idx_affaires_marche_id2 ON affaires (marche_id);

@@ -27429,11 +27429,12 @@ async function syncAkuiteoQuick() {
         const crmClient = akCMap[String(nb.customerId || '')];
         const { code: marcheCode, id: marcheId } = _marcheOf(pid);
         const pCreated = _d10(nb.date) || new Date().toISOString().slice(0, 10);
-        if (!marchesMap[marcheCode]) marchesMap[marcheCode] = { id: marcheId, akuiteo_id: marcheCode, ref: marcheCode, nom: en.marcheNom || en.name || ('Marché ' + marcheCode), client_id: crmClient?.id || null, client_name: crmClient?.name || '', agence: nb.agence || '', statut: 'en_cours', nb_affaires: 0, date_debut: pCreated, adresse: en.adresse || null, code_postal: en.code_postal || null, ville: en.ville || null, _recent: !!en.name };
-        if (en.marcheNom && marchesMap[marcheCode].nom !== en.marcheNom) marchesMap[marcheCode].nom = en.marcheNom; // Nom du marché (projectGroup) prioritaire
-        marchesMap[marcheCode].nb_affaires++;
+        // Indexé par ID marché (unique, société incluse) — pas par code (deux sociétés peuvent partager le même code)
+        if (!marchesMap[marcheId]) marchesMap[marcheId] = { id: marcheId, akuiteo_id: marcheCode, ref: marcheCode, nom: en.marcheNom || en.name || ('Marché ' + marcheCode), client_id: crmClient?.id || null, client_name: crmClient?.name || '', agence: nb.agence || '', statut: 'en_cours', nb_affaires: 0, date_debut: pCreated, adresse: en.adresse || null, code_postal: en.code_postal || null, ville: en.ville || null, _recent: !!en.name };
+        if (en.marcheNom && marchesMap[marcheId].nom !== en.marcheNom) marchesMap[marcheId].nom = en.marcheNom; // Nom du marché (projectGroup) prioritaire
+        marchesMap[marcheId].nb_affaires++;
         // Coordonnées GPS depuis les données perso Akuiteo (Latitude/Longitude) — premier projet qui en a
-        if (marchesMap[marcheCode].lat == null && en.lat != null && en.lng != null) { marchesMap[marcheCode].lat = en.lat; marchesMap[marcheCode].lng = en.lng; }
+        if (marchesMap[marcheId].lat == null && en.lat != null && en.lng != null) { marchesMap[marcheId].lat = en.lat; marchesMap[marcheId].lng = en.lng; }
         const affId = _affaireIdOf(pid);
         if (enrich[pid] || !existAffSet.has(affId)) affaireRows.push({ id: affId, akuiteo_id: pid, ref: pid, nom: en.name || ('Affaire ' + pid), marche_id: marcheId, client_id: crmClient?.id || null, client_name: crmClient?.name || '', agence: nb.agence || '', statut: 'en_cours', code_projet: pid, date_debut: pCreated, apporteur_affaire: en.apporteur || null, architecte: en.architecte || null, responsable: en.responsable || null, adresse: en.adresse || null, ville: en.ville || null, code_postal: en.code_postal || null });
       }
