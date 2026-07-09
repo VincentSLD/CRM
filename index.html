@@ -8467,11 +8467,12 @@ async function nlSavePrefs() {
     sections,
     updated_at: new Date().toISOString(),
   };
-  try {
-    await sb.from('newsletter_prefs').upsert(row, { onConflict: 'user_id' });
-    _nlPrefs = { ..._nlPrefs, ...row };
-    toast(row.abonne ? 'Abonné ✓ Préférences enregistrées' : 'Préférences enregistrées', 'success');
-  } catch (e) { toast('Erreur enregistrement : ' + e.message, 'error'); }
+  // upsert Supabase ne "throw" pas : on lit l'erreur retournée ET on relit la ligne pour confirmer l'écriture
+  const { data, error } = await sb.from('newsletter_prefs').upsert(row, { onConflict: 'user_id' }).select().maybeSingle();
+  if (error) { console.error('nlSavePrefs', error); toast('Échec de l\'enregistrement : ' + (error.message || error.code || 'inconnu'), 'error'); return; }
+  if (!data) { toast('Enregistrement non confirmé (droits d\'accès ?). Réessayez ou vérifiez la table newsletter_prefs.', 'warning'); return; }
+  _nlPrefs = data;
+  toast(data.abonne ? 'Abonné ✓ Préférences enregistrées' : 'Préférences enregistrées', 'success');
 }
 
 // ─ Agrégation des données de la semaine (côté navigateur) ─
