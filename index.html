@@ -3506,7 +3506,7 @@ async function loadDB() {
     const DEVIS_LITE = 'id,ref,client_id,client_name,sujet,montant,montant_ttc,date,statut,projet,agence,societe,responsable_id,commercial_id,probabilite,marche_id,affaire_id,apporteur_affaire,architecte,gros_oeuvre,apporteur_code,gros_oeuvre_code,akuiteo_id,adresse,ville,code_postal,type_prestation';
     const CMD_LITE = 'id,ref,client_id,client_name,nom,montant,montant_ttc,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id,marche_id,affaire_id,apporteur_affaire,architecte,gros_oeuvre,apporteur_code,gros_oeuvre_code,akuiteo_id,adresse,ville,code_postal,surface_facturee,type_prestation';
     const FACT_LITE = 'id,ref,client_id,client_name,montant,montant_ttc,date,echeance,statut,jours_retard,projet,agence,societe,responsable_id,type_facture,reste_a_payer,date_paiement,marche_id,affaire_id,apporteur_affaire,architecte,gros_oeuvre,apporteur_code,gros_oeuvre_code,akuiteo_id,adresse,ville,code_postal,type_prestation';
-    const MARCHE_LITE = 'id,ref,akuiteo_id,nom,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,adresse,code_postal,ville,lat,lng,nb_affaires,responsable_id';
+    const MARCHE_LITE = 'id,ref,akuiteo_id,nom,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,adresse,code_postal,ville,lat,lng,gps_certifie,nb_affaires,responsable_id';
     const AFFAIRE_LITE = 'id,nom,marche_id,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,code_projet,apporteur_affaire,architecte,responsable,adresse,ville,code_postal,departement,region';
 
     // Filtre : 1 an glissant pour les tables volumineuses
@@ -13463,7 +13463,7 @@ async function initMarchesMap() {
 }
 
 // ─ Géolocalisation d'un marché (point sur carte + cadastre) dans la fiche marché ─
-let _mmLat = null, _mmLng = null, _mmMap = null, _mmMarker = null, _mmAddr = '', _mmLocked = false;
+let _mmLat = null, _mmLng = null, _mmMap = null, _mmMarker = null, _mmAddr = '', _mmLocked = false, _mmCertifie = false;
 function _mmInitMap() {
   const el = document.getElementById('mm-map'); if (!el || !window.L) return;
   if (_mmMap) { try { _mmMap.remove(); } catch (e) {} _mmMap = null; _mmMarker = null; }
@@ -13482,6 +13482,7 @@ function _mmInitMap() {
   _mmMap.on('click', e => { if (_mmLocked) return; _mmSet(e.latlng.lat, e.latlng.lng); });
   setTimeout(() => { try { _mmMap.invalidateSize(); } catch (e) {} }, 150);
   _mmUpdateLockUi();
+  _mmUpdateCertifUi();
 }
 function _mmUpdateLockUi() {
   const b = document.getElementById('mm-lock'); if (b) { b.innerHTML = _mmLocked ? '🔒 Verrouillé' : '🔓 Déverrouillé'; b.classList.toggle('btn-primary', !_mmLocked); }
@@ -13511,6 +13512,17 @@ function _mmSet(lat, lng) {
   _mmLat = lat; _mmLng = lng;
   if (_mmMap) _mmSetMarker(lat, lng);
   const c = document.getElementById('mm-coords'); if (c) c.textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
+  // Le point a bougé → la certification manuelle n'est plus valable, on la réinitialise
+  _mmCertifie = false; _mmUpdateCertifUi();
+}
+function _mmToggleCertif(checked) { _mmCertifie = !!checked; _mmUpdateCertifUi(); }
+function _mmUpdateCertifUi() {
+  const cb = document.getElementById('mm-certif'); if (cb) cb.checked = _mmCertifie;
+  const h = document.getElementById('mm-certif-hint'); if (!h) return;
+  if (_mmLat == null || _mmLng == null) { h.innerHTML = ''; return; }
+  h.innerHTML = _mmCertifie
+    ? '<span style="color:var(--green,#16a34a)">✓ Position <strong>certifiée conforme</strong> — validée manuellement.</span>'
+    : '<span style="color:#d97706">⚠ Position <strong>non certifiée</strong> : elle peut provenir de l\'adresse du site (sans n° de rue) et être imprécise. Vérifiez sur la carte, ajustez si besoin, puis cochez « Certifié conforme ».</span>';
 }
 function _mmSearch() {
   const q = (document.getElementById('mm-search')?.value || '').trim(); if (!q || !_mmMap) return;
@@ -13525,13 +13537,14 @@ function _mmClear() {
   _mmLat = null; _mmLng = null;
   if (_mmMarker && _mmMap) { try { _mmMap.removeLayer(_mmMarker); } catch (e) {} _mmMarker = null; }
   const c = document.getElementById('mm-coords'); if (c) c.textContent = 'aucune';
+  _mmCertifie = false; _mmUpdateCertifUi();
 }
 async function marcheSaveGeo() {
   const m = DB.marches.find(x => x.id === currentMarcheId); if (!m) return;
-  const { error } = await sb.from('marches').update({ lat: _mmLat, lng: _mmLng }).eq('id', m.id);
+  const { error } = await sb.from('marches').update({ lat: _mmLat, lng: _mmLng, gps_certifie: _mmCertifie }).eq('id', m.id);
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
-  m.lat = _mmLat; m.lng = _mmLng;
-  toast('Localisation enregistrée', 'success');
+  m.lat = _mmLat; m.lng = _mmLng; m.gps_certifie = _mmCertifie;
+  toast(_mmCertifie ? 'Localisation enregistrée (certifiée conforme)' : 'Localisation enregistrée — pensez à certifier après vérification', 'success');
   // Re-verrouiller le point après enregistrement
   _mmLocked = (_mmLat != null && _mmLng != null);
   if (_mmMarker && _mmMarker.dragging && _mmLocked) _mmMarker.dragging.disable();
@@ -13567,6 +13580,7 @@ function renderMarcheDetail() {
   if (!m) return '<p>Marché non trouvé</p>';
   _mmLat = (m.lat != null ? Number(m.lat) : null); _mmLng = (m.lng != null ? Number(m.lng) : null);
   _mmLocked = (_mmLat != null && _mmLng != null); // point existant → verrouillé par défaut
+  _mmCertifie = !!m.gps_certifie;
   const affaires = DB.affaires.filter(a => a.marche_id === m.id);
   // Adresse du site par défaut (Adresse, Code Postal, Ville) — marché puis 1re affaire renseignée
   const _addrAff = affaires.find(a => a.adresse || a.ville || a.code_postal) || {};
@@ -13614,7 +13628,7 @@ function renderMarcheDetail() {
       detailRow('Montant TTC', fmt(m.montant_ttc)),
       detailRow('Devise', m.devise),
     ])}
-    ${(() => { const addr = affaires.find(a => a.adresse || a.ville || a.code_postal) || {}; const hasGps = (m.lat != null && m.lng != null); if (!addr.adresse && !addr.ville && !addr.code_postal && !hasGps) return ''; return detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region), detailRow('Latitude', m.lat != null ? Number(m.lat).toFixed(6) : '—'), detailRow('Longitude', m.lng != null ? Number(m.lng).toFixed(6) : '—')]); })()}
+    ${(() => { const addr = affaires.find(a => a.adresse || a.ville || a.code_postal) || {}; const hasGps = (m.lat != null && m.lng != null); if (!addr.adresse && !addr.ville && !addr.code_postal && !hasGps) return ''; return detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region), detailRow('Latitude', m.lat != null ? Number(m.lat).toFixed(6) : '—'), detailRow('Longitude', m.lng != null ? Number(m.lng).toFixed(6) : '—'), (hasGps ? detailRow('Position GPS', m.gps_certifie ? '<span style="color:var(--green,#16a34a);font-weight:600">✓ Certifiée conforme</span>' : '<span style="color:#d97706;font-weight:600">⚠ Non certifiée (à vérifier)</span>') : '')]); })()}
   </div>
 
   <div class="card" style="margin-bottom:20px"><div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">📍 Localisation du marché</div>
@@ -13631,6 +13645,11 @@ function renderMarcheDetail() {
         <button class="btn btn-primary" onclick="marcheSaveGeo()">💾 Enregistrer</button>
       </div>
       <div style="font-size:11px;color:var(--t3);margin-bottom:6px"><span id="mm-lockhint">${_mmLocked ? 'Point verrouillé — cliquez sur 🔒 pour déverrouiller et modifier.' : 'Cliquez sur la carte ou déplacez le marqueur pour ajuster le point.'}</span> Coordonnées : <strong id="mm-coords">${(m.lat != null && m.lng != null) ? (Number(m.lat).toFixed(5) + ', ' + Number(m.lng).toFixed(5)) : 'aucune'}</strong></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-bottom:4px">
+        <input type="checkbox" id="mm-certif" ${_mmCertifie ? 'checked' : ''} onchange="_mmToggleCertif(this.checked)" style="width:16px;height:16px;accent-color:#16a34a">
+        <span>Position <strong>certifiée conforme</strong> (validée manuellement à 100 %)</span>
+      </label>
+      <div id="mm-certif-hint" style="font-size:11px;margin-bottom:6px"></div>
       <div id="mm-map" style="height:340px;border:1px solid var(--border);border-radius:8px"></div>
     </div>
   </div>

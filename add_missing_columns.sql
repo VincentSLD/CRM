@@ -535,3 +535,6 @@ CREATE INDEX IF NOT EXISTS idx_devis_marche_id     ON devis (marche_id);
 CREATE INDEX IF NOT EXISTS idx_commandes_marche_id ON commandes (marche_id);
 CREATE INDEX IF NOT EXISTS idx_factures_marche_id  ON factures (marche_id);
 CREATE INDEX IF NOT EXISTS idx_affaires_marche_id2 ON affaires (marche_id);
+
+-- Point GPS marché validé manuellement (certifié conforme)
+ALTER TABLE marches ADD COLUMN IF NOT EXISTS gps_certifie BOOLEAN DEFAULT FALSE;
