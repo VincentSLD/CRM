@@ -7964,22 +7964,24 @@ async function saveDiffLists() {
 }
 function _diffEmailsFor(agences) { const set = new Set(); (agences || []).forEach(ag => ((_diffLists && _diffLists[ag]) || []).forEach(e => set.add(e))); return [...set]; }
 // Notifie les listes de diffusion à la création d'une opportunité (non bloquant)
-async function _oppNotifyDiffusion(o, agences, honoArr) {
+async function _oppNotifyDiffusion(o, agences, honoArr, isNew) {
   try {
     await loadDiffLists();
     const to = _diffEmailsFor(agences);
-    if (!to.length) { toast('Opportunité créée (aucun email de diffusion pour ces agences)', 'info'); return; }
+    if (!to.length) { toast((isNew ? 'Opportunité créée' : 'Opportunité modifiée') + ' (aucun email de diffusion pour ' + agences.join(', ') + ')', 'info'); return; }
     const honoHtml = (honoArr && honoArr.length) ? '<ul style="margin:4px 0 0;padding-left:18px">' + honoArr.map(h => '<li>' + cmdEsc(h.agence) + ' : ' + fmt(Number(h.montant) || 0) + '</li>').join('') + '</ul>' : '';
+    const intro = isNew ? 'Une nouvelle opportunité a été créée dans le CRM :' : 'Votre agence vient d\'être ajoutée à une opportunité du CRM :';
+    const agLabel = isNew ? 'Agences concernées' : 'Agence(s) ajoutée(s)';
     const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;line-height:1.5">
-      <p>Une nouvelle opportunité a été créée dans le CRM :</p>
+      <p>${intro}</p>
       <p style="font-size:15px"><b>${cmdEsc(o.nom || '')}</b></p>
-      <p>${o.client_name ? '<b>Client :</b> ' + cmdEsc(o.client_name) + '<br>' : ''}${o.montant != null && o.montant !== '' ? '<b>Montant Prestations (HT) :</b> ' + fmt(o.montant) + '<br>' : ''}<b>Agences concernées :</b> ${agences.map(cmdEsc).join(', ')}<br>${o.responsable ? '<b>Responsable :</b> ' + cmdEsc(fmtCommercialName(o.responsable)) + '<br>' : ''}${o.chantier_dept ? '<b>Département chantier :</b> ' + cmdEsc(o.chantier_dept) + '<br>' : ''}</p>
+      <p>${o.client_name ? '<b>Client :</b> ' + cmdEsc(o.client_name) + '<br>' : ''}${o.montant != null && o.montant !== '' ? '<b>Montant Prestations (HT) :</b> ' + fmt(o.montant) + '<br>' : ''}<b>${agLabel} :</b> ${agences.map(cmdEsc).join(', ')}<br>${o.responsable ? '<b>Responsable :</b> ' + cmdEsc(fmtCommercialName(o.responsable)) + '<br>' : ''}${o.chantier_dept ? '<b>Département chantier :</b> ' + cmdEsc(o.chantier_dept) + '<br>' : ''}</p>
       ${honoHtml ? '<p><b>Répartition des honoraires :</b></p>' + honoHtml : ''}
       <p style="color:#666;font-size:12px">— Notification automatique du CRM</p></div>`;
-    const subject = '🎯 Nouvelle opportunité : ' + (o.nom || '') + (o.client_name ? ' — ' + o.client_name : '');
+    const subject = (isNew ? '🎯 Nouvelle opportunité : ' : '➕ Agence ajoutée — opportunité : ') + (o.nom || '') + (o.client_name ? ' — ' + o.client_name : '');
     await _nlSendMail(to, subject, html);
     toast('Liste de diffusion notifiée (' + to.length + ' destinataire' + (to.length > 1 ? 's' : '') + ')', 'success');
-  } catch (e) { console.warn('_oppNotifyDiffusion', e.message); toast('Opportunité créée (notification diffusion non envoyée)', 'warning'); }
+  } catch (e) { console.warn('_oppNotifyDiffusion', e.message); toast('Notification diffusion non envoyée', 'warning'); }
 }
 
 // Création d'un nouveau client (dans Akuiteo + CRM) depuis le formulaire d'opportunité
@@ -8081,6 +8083,8 @@ async function saveOpportunite() {
   if (!f.stageId) return toast('Le stade est obligatoire', 'error');
   if (!f.originTypeId) return toast('Le type d\'origine est obligatoire', 'error');
   const isUpdate = !!f.akId;
+  // Agences déjà présentes AVANT la sauvegarde (pour notifier uniquement les agences AJOUTÉES en modification)
+  const _prevAgences = new Set((isUpdate ? ((_opps.find(x => x.akuiteo_id === f.akId) || {}).honoraires_agences || []) : []).map(h => h.agence).filter(Boolean));
   // Décomposition honoraires (CRM-only) : si présente, le Montant Prestations = somme des lignes par agence
   const honoArr = (f.honorairesAgences || []).filter(h => h.agence).map(h => ({ agence: h.agence, montant: (h.montant !== '' && h.montant != null && !isNaN(Number(h.montant))) ? Number(h.montant) : 0 }));
   if (honoArr.length) f.montant = honoArr.reduce((a, h) => a + h.montant, 0);
@@ -8168,8 +8172,8 @@ async function saveOpportunite() {
     } catch (e) { console.warn('honoraires_agences', e.message); }
     showSyncLoading(false);
     toast(f.akId ? 'Opportunité mise à jour' : 'Opportunité créée', 'success');
-    // À la CRÉATION : notifier les listes de diffusion des agences cochées (non bloquant)
-    if (!isUpdate) { const agences = honoArr.map(h => h.agence); if (agences.length) { const mo2 = (_opps || []).find(x => String(x.akuiteo_id) === String(akId)); _oppNotifyDiffusion(mo2 || { nom: f.name.trim(), client_name: f.clientName || '', montant: f.montant, responsable: null, chantier_dept: f.chantierDept }, agences, honoArr); } }
+    // Notifier les listes de diffusion (non bloquant) : toutes les agences à la création, seulement les agences AJOUTÉES en modification
+    { const notifyAg = (isUpdate ? honoArr.map(h => h.agence).filter(a => !_prevAgences.has(a)) : honoArr.map(h => h.agence)); if (notifyAg.length) { const mo2 = (_opps || []).find(x => String(x.akuiteo_id) === String(akId)); _oppNotifyDiffusion(mo2 || { nom: f.name.trim(), client_name: f.clientName || '', montant: f.montant, responsable: null, chantier_dept: f.chantierDept }, notifyAg, honoArr, !isUpdate); } }
     oppDetail(akId); // ouvrir la fiche en pleine page
     if (!isUpdate && f._novaOrigin) novaActionDone('opportunite', { akuiteo_id: String(akId), nom: f.name.trim(), client_id: f.clientId || null, client_name: f.clientName || '' });
   } catch (e) {
