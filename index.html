@@ -26683,6 +26683,7 @@ const CONNEX_LOG_PAGE = 100;
 function _connexLogCutoff6m() { const d = new Date(); d.setMonth(d.getMonth() - 6); return d.toISOString(); }
 function _connexLogBaseQuery(withCount) {
   let q = sb.from('connexions_log').select('email,nom,created_at', withCount ? { count: 'exact' } : undefined).order('created_at', { ascending: false });
+  q = q.or('app.eq.CRM,app.is.null'); // uniquement les connexions CRM (les autres outils taguent geocarto/geoplan/geoter ; null = anciennes connexions CRM)
   const s = (_connexLogSearch || '').trim();
   if (s) q = q.or(`email.ilike.%${s}%,nom.ilike.%${s}%`);
   if (_connexLogFrom) q = q.gte('created_at', _connexLogFrom + 'T00:00:00');
@@ -30629,7 +30630,8 @@ async function onAuthSuccess(user) {
     sb.from('connexions_log').insert({
       user_id: user.id,
       email: user.email || null,
-      nom: (currentCommercial && currentCommercial.nom) || user.user_metadata?.full_name || (user.email ? user.email.split('@')[0] : null)
+      nom: (currentCommercial && currentCommercial.nom) || user.user_metadata?.full_name || (user.email ? user.email.split('@')[0] : null),
+      app: 'CRM'
     }).then(() => {}, () => {});
   } catch (e) {}
 

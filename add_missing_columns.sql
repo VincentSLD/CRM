@@ -304,12 +304,15 @@ CREATE TABLE IF NOT EXISTS connexions_log (
   user_id TEXT,
   email TEXT,
   nom TEXT,
+  app TEXT,   -- outil source : 'CRM', 'geocarto', 'geoplan', 'geoter'… (base Supabase partagée)
   created_at TIMESTAMPTZ DEFAULT now()
 );
+ALTER TABLE connexions_log ADD COLUMN IF NOT EXISTS app TEXT;
 ALTER TABLE connexions_log ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "connexions_log_all" ON connexions_log;
 CREATE POLICY "connexions_log_all" ON connexions_log FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE INDEX IF NOT EXISTS idx_connexions_log_created ON connexions_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_connexions_log_app ON connexions_log(app);
 
 -- ═══ Newsletter hebdomadaire (IA) ═══
 -- Préférences d'abonnement par collaborateur (espace perso, clic sur l'avatar).
