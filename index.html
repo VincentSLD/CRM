@@ -7479,7 +7479,7 @@ async function oppModalOpen(akId, prefill) {
       customerAkId: raw.customerId || (o && o.customer_akuiteo_id) || '',
       clientName: (o && o.client_name) || (raw.customer && raw.customer.name) || '',
       clientId: (o && o.client_id) || null,
-      clientUnknown: !!o && !(raw.customerId || (o && o.customer_akuiteo_id) || (o && o.client_id)), // opp existante sans client → coché
+      clientUnknown: !!o && (String(raw.customerId || (o && o.customer_akuiteo_id) || '') === OPP_UNKNOWN_CUSTOMER_ID || !(raw.customerId || (o && o.customer_akuiteo_id) || (o && o.client_id))), // opp existante sans client (ou tiers générique) → coché
 
       endCustomerAkId: raw.endCustomerId || '',
       endCustomerName: (raw.endCustomer && raw.endCustomer.name) || '',
@@ -8091,6 +8091,8 @@ async function _oppLoadContacts(clientId, selectAkId) {
   } catch (e) { /* ignore */ }
 }
 
+// Tiers Akuiteo générique utilisé quand le client d'une opportunité n'est pas encore connu (Akuiteo exige un client)
+const OPP_UNKNOWN_CUSTOMER_ID = '500013020'; // « AUCUN / TIERS INCONNU OU INDÉFINI » (code C00100003)
 async function saveOpportunite() {
   const f = _oppForm; if (!f) return;
   if (!f.name || !f.name.trim()) return toast('Le nom est obligatoire', 'error');
@@ -8112,8 +8114,8 @@ async function saveOpportunite() {
     payload.id = String(f.akId);
   }
   payload.name = f.name.trim();
-  if (f.clientUnknown) { if (isUpdate) payload.customerId = null; } // client non connu → pas de customerId envoyé (effacé en modification)
-  else payload.customerId = String(f.customerAkId);
+  // Akuiteo exige un client → « Client non connu » pointe vers le tiers générique « AUCUN / TIERS INCONNU OU INDÉFINI »
+  payload.customerId = f.clientUnknown ? OPP_UNKNOWN_CUSTOMER_ID : String(f.customerAkId);
   payload.pipeId = String(f.pipeId);
   payload.stageId = String(f.stageId);
   payload.originTypeId = String(f.originTypeId);
