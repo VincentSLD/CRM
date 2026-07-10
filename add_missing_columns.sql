@@ -538,3 +538,14 @@ CREATE INDEX IF NOT EXISTS idx_affaires_marche_id2 ON affaires (marche_id);
 
 -- Point GPS marché validé manuellement (certifié conforme)
 ALTER TABLE marches ADD COLUMN IF NOT EXISTS gps_certifie BOOLEAN DEFAULT FALSE;
+
+-- ═══ Listes de diffusion par agence (email auto à la création d'opportunité) ═══
+-- 1 agence = plusieurs emails ; à la création d'une opportunité, un mail part vers les agences cochées.
+CREATE TABLE IF NOT EXISTS listes_diffusion (
+  agence TEXT PRIMARY KEY,
+  emails TEXT[] DEFAULT '{}',
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE listes_diffusion ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "listes_diffusion_all" ON listes_diffusion;
+CREATE POLICY "listes_diffusion_all" ON listes_diffusion FOR ALL TO authenticated USING (true) WITH CHECK (true);

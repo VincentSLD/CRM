@@ -7527,7 +7527,7 @@ async function oppModalOpen(akId, prefill) {
       _oppForm._novaOrigin = !!prefill.novaOrigin;
     }
     renderPage('opportunite-edit');
-    _oppHonoOpen = (_oppForm.honorairesAgences || []).length > 0; _oppHonoRender();
+    _oppHonoOpen = true; _oppHonoRender();
     setTimeout(_oppInitChantierMap, 80);
     if (_oppForm.clientId) _oppLoadContacts(_oppForm.clientId, _oppForm.contactAkId);
     if (_oppForm.customerAkId) _oppLoadSites(_oppForm.customerAkId, _oppForm.customerLocationId);
@@ -7893,28 +7893,94 @@ function _oppHonoSyncMontant() {
 function _oppHonoUpdateTotals() { const t = document.getElementById('of-hono-total'); if (t) t.textContent = 'Total réparti : ' + fmt(_oppHonoTotal()); _oppHonoSyncMontant(); }
 function _oppHonoRender() {
   const box = document.getElementById('of-hono-block'); if (!box) return;
-  const rows = _oppForm.honorairesAgences || [];
-  const fi = 'padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)';
-  const header = `<div onclick="_oppHonoToggle()" style="cursor:pointer;user-select:none;font-size:12px;font-weight:700;color:var(--accent);padding:4px 0">${_oppHonoOpen ? '▾' : '▸'} Décomposition des honoraires par agence (CRM)${rows.length ? ' · ' + rows.length + ' agence(s)' : ''}</div>`;
+  const arr = _oppForm.honorairesAgences || [];
+  const map = {}; arr.forEach(h => { if (h.agence) map[h.agence] = (h.montant != null ? h.montant : ''); });
+  const nb = Object.keys(map).length;
+  const fi = 'padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)';
+  const header = `<div onclick="_oppHonoToggle()" style="cursor:pointer;user-select:none;font-size:12px;font-weight:700;color:var(--accent);padding:4px 0">${_oppHonoOpen ? '▾' : '▸'} Agences & honoraires (CRM)${nb ? ' · ' + nb + ' agence(s)' : ''}</div>`;
   if (!_oppHonoOpen) { box.innerHTML = header; return; }
-  const lines = rows.map((h, i) => `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-    <select style="${fi};flex:1" onchange="_oppHonoSetAg(${i},this.value)">${_oppGetAgenceOptions(h.agence)}</select>
-    <input type="number" step="any" placeholder="Montant €" style="${fi};width:130px;flex:none" value="${h.montant != null ? h.montant : ''}" oninput="_oppHonoSetMt(${i},this.value)">
-    <button class="btn" style="font-size:14px;padding:3px 9px;color:var(--red);flex:none" title="Supprimer" onclick="_oppHonoDel(${i})">×</button>
-  </div>`).join('');
+  const lines = NL_AGENCES.map(ag => {
+    const on = Object.prototype.hasOwnProperty.call(map, ag);
+    return `<label style="display:flex;gap:8px;align-items:center;margin-bottom:5px;font-size:13px;cursor:pointer">
+      <input type="checkbox" ${on ? 'checked' : ''} onchange="_oppHonoToggleAg('${ag}',this.checked)" style="width:16px;height:16px;accent-color:var(--accent)">
+      <span style="flex:0 0 70px;font-weight:600">${ag}</span>
+      <input type="number" step="any" placeholder="Honoraire €" style="${fi};width:140px;flex:none${on ? '' : ';opacity:.45'}" value="${on && map[ag] != null ? map[ag] : ''}" ${on ? '' : 'disabled'} oninput="_oppHonoSetMt('${ag}',this.value)">
+    </label>`;
+  }).join('');
   box.innerHTML = header + `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--bg-2)">
-    ${lines || '<div style="font-size:12px;color:var(--t3);margin-bottom:6px">Aucune ligne. Ajoutez une agence pour répartir le montant des prestations.</div>'}
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
-      <button class="btn" style="font-size:12px;padding:4px 8px" onclick="_oppHonoAdd()">+ Ajouter une agence</button>
-      <div id="of-hono-total" style="font-size:12px;font-weight:700">Total réparti : ${fmt(_oppHonoTotal())}</div>
-    </div></div>`;
+    <div style="font-size:11px;color:var(--t3);margin-bottom:8px">Cochez les agences concernées et saisissez l'honoraire de chacune. Un email sera envoyé à la liste de diffusion des agences cochées à la création.</div>
+    ${lines}
+    <div style="display:flex;justify-content:flex-end;align-items:center;margin-top:6px"><div id="of-hono-total" style="font-size:12px;font-weight:700">Total réparti : ${fmt(_oppHonoTotal())}</div></div></div>`;
   _oppHonoSyncMontant();
 }
 function _oppHonoToggle() { _oppHonoOpen = !_oppHonoOpen; _oppHonoRender(); }
-function _oppHonoAdd() { (_oppForm.honorairesAgences = _oppForm.honorairesAgences || []).push({ agence: '', montant: '' }); _oppHonoOpen = true; _oppHonoRender(); }
-function _oppHonoDel(i) { if (_oppForm.honorairesAgences) { _oppForm.honorairesAgences.splice(i, 1); } _oppHonoRender(); }
-function _oppHonoSetAg(i, v) { if (_oppForm.honorairesAgences[i]) _oppForm.honorairesAgences[i].agence = v; _oppHonoUpdateTotals(); }
-function _oppHonoSetMt(i, v) { if (_oppForm.honorairesAgences[i]) _oppForm.honorairesAgences[i].montant = v; _oppHonoUpdateTotals(); }
+function _oppHonoToggleAg(ag, checked) {
+  _oppForm.honorairesAgences = _oppForm.honorairesAgences || [];
+  const i = _oppForm.honorairesAgences.findIndex(h => h.agence === ag);
+  if (checked) { if (i < 0) _oppForm.honorairesAgences.push({ agence: ag, montant: '' }); }
+  else if (i >= 0) _oppForm.honorairesAgences.splice(i, 1);
+  _oppHonoRender();
+}
+function _oppHonoSetMt(ag, v) { const h = (_oppForm.honorairesAgences || []).find(x => x.agence === ag); if (h) h.montant = v; _oppHonoUpdateTotals(); }
+
+// ─── Listes de diffusion par agence (email auto à la création d'une opportunité) ───
+let _diffLists = null; // { agence: [emails] }
+async function loadDiffLists(force) {
+  if (_diffLists && !force) return _diffLists;
+  try { const { data } = await sb.from('listes_diffusion').select('agence,emails'); const m = {}; (data || []).forEach(r => { if (r.agence) m[r.agence] = Array.isArray(r.emails) ? r.emails : []; }); _diffLists = m; }
+  catch (e) { _diffLists = {}; }
+  return _diffLists;
+}
+function _parseEmails(txt) { return [...new Set(String(txt || '').split(/[\n,;]+/).map(s => s.trim()).filter(s => /.+@.+\..+/.test(s)))]; }
+async function openDiffLists() {
+  await loadDiffLists(true);
+  const rows = NL_AGENCES.map(ag => `<div style="margin-bottom:10px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:3px">${ag} <span style="color:var(--t3);font-weight:400">(${(_diffLists[ag] || []).length} email(s))</span></div>
+      <textarea data-ag="${ag}" class="diff-emails" rows="2" placeholder="un email par ligne (ou séparés par virgule)" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);resize:vertical">${cmdEsc((_diffLists[ag] || []).join('\n'))}</textarea>
+    </div>`).join('');
+  const body = `
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:16px;font-weight:700">📧 Listes de diffusion par agence</div>
+      <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
+    </div>
+    <div style="padding:16px 20px;max-height:65vh;overflow:auto">
+      <div style="font-size:12px;color:var(--t3);margin-bottom:12px">À la création d'une opportunité, un email récapitulatif est envoyé aux adresses des agences cochées. Une adresse par ligne (la virgule fonctionne aussi).</div>
+      ${rows}
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn" onclick="this.closest('.nl-overlay').remove()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveDiffLists()">💾 Enregistrer</button>
+    </div>`;
+  _nlOverlay(body, 560);
+}
+async function saveDiffLists() {
+  const rows = [];
+  document.querySelectorAll('.diff-emails').forEach(t => rows.push({ agence: t.dataset.ag, emails: _parseEmails(t.value), updated_at: new Date().toISOString() }));
+  const { error } = await sb.from('listes_diffusion').upsert(rows, { onConflict: 'agence' });
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  const m = {}; rows.forEach(r => m[r.agence] = r.emails); _diffLists = m;
+  document.querySelector('.nl-overlay')?.remove();
+  toast('Listes de diffusion enregistrées', 'success');
+}
+function _diffEmailsFor(agences) { const set = new Set(); (agences || []).forEach(ag => ((_diffLists && _diffLists[ag]) || []).forEach(e => set.add(e))); return [...set]; }
+// Notifie les listes de diffusion à la création d'une opportunité (non bloquant)
+async function _oppNotifyDiffusion(o, agences, honoArr) {
+  try {
+    await loadDiffLists();
+    const to = _diffEmailsFor(agences);
+    if (!to.length) { toast('Opportunité créée (aucun email de diffusion pour ces agences)', 'info'); return; }
+    const honoHtml = (honoArr && honoArr.length) ? '<ul style="margin:4px 0 0;padding-left:18px">' + honoArr.map(h => '<li>' + cmdEsc(h.agence) + ' : ' + fmt(Number(h.montant) || 0) + '</li>').join('') + '</ul>' : '';
+    const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;line-height:1.5">
+      <p>Une nouvelle opportunité a été créée dans le CRM :</p>
+      <p style="font-size:15px"><b>${cmdEsc(o.nom || '')}</b></p>
+      <p>${o.client_name ? '<b>Client :</b> ' + cmdEsc(o.client_name) + '<br>' : ''}${o.montant != null && o.montant !== '' ? '<b>Montant Prestations (HT) :</b> ' + fmt(o.montant) + '<br>' : ''}<b>Agences concernées :</b> ${agences.map(cmdEsc).join(', ')}<br>${o.responsable ? '<b>Responsable :</b> ' + cmdEsc(fmtCommercialName(o.responsable)) + '<br>' : ''}${o.chantier_dept ? '<b>Département chantier :</b> ' + cmdEsc(o.chantier_dept) + '<br>' : ''}</p>
+      ${honoHtml ? '<p><b>Répartition des honoraires :</b></p>' + honoHtml : ''}
+      <p style="color:#666;font-size:12px">— Notification automatique du CRM</p></div>`;
+    const subject = '🎯 Nouvelle opportunité : ' + (o.nom || '') + (o.client_name ? ' — ' + o.client_name : '');
+    await _nlSendMail(to, subject, html);
+    toast('Liste de diffusion notifiée (' + to.length + ' destinataire' + (to.length > 1 ? 's' : '') + ')', 'success');
+  } catch (e) { console.warn('_oppNotifyDiffusion', e.message); toast('Opportunité créée (notification diffusion non envoyée)', 'warning'); }
+}
 
 // Création d'un nouveau client (dans Akuiteo + CRM) depuis le formulaire d'opportunité
 // Création d'un client depuis l'opportunité : on ouvre le FORMULAIRE COMPLET (tous les champs + SIRENE + Annuaire),
@@ -8102,6 +8168,8 @@ async function saveOpportunite() {
     } catch (e) { console.warn('honoraires_agences', e.message); }
     showSyncLoading(false);
     toast(f.akId ? 'Opportunité mise à jour' : 'Opportunité créée', 'success');
+    // À la CRÉATION : notifier les listes de diffusion des agences cochées (non bloquant)
+    if (!isUpdate) { const agences = honoArr.map(h => h.agence); if (agences.length) { const mo2 = (_opps || []).find(x => String(x.akuiteo_id) === String(akId)); _oppNotifyDiffusion(mo2 || { nom: f.name.trim(), client_name: f.clientName || '', montant: f.montant, responsable: null, chantier_dept: f.chantierDept }, agences, honoArr); } }
     oppDetail(akId); // ouvrir la fiche en pleine page
     if (!isUpdate && f._novaOrigin) novaActionDone('opportunite', { akuiteo_id: String(akId), nom: f.name.trim(), client_id: f.clientId || null, client_name: f.clientName || '' });
   } catch (e) {
@@ -8251,6 +8319,7 @@ function renderOpportunites() {
       ${_oppFlag ? `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;background:#f59e0b22;color:#b45309;border:1px solid #f59e0b55;border-radius:12px;padding:3px 10px">🔔 ${OPP_FLAGS[_oppFlag] || _oppFlag}<span style="cursor:pointer;font-size:14px" onclick="_oppFlag='';renderPage('opportunites')" title="Retirer ce filtre">&times;</span></span>` : ''}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <button class="btn" onclick="openDiffLists()" title="Configurer les emails de diffusion par agence (envoi auto à la création d'opportunité)">📧 Liste Diffusion</button>
       <input type="text" placeholder="Rechercher..." value="${(_oppSearch || '').replace(/"/g, '&quot;')}" oninput="_oppSearch=this.value;clearTimeout(window._oppT);window._oppT=setTimeout(()=>renderPage('opportunites'),250)" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);min-width:160px">
       <select onchange="_oppFPipe=this.value;renderPage('opportunites')" style="padding:5px 8px;border:1px solid ${_oppFPipe ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);max-width:200px">
         <option value="">— Portefeuille —</option>${pipes.map(p => `<option value="${cmdEsc(p)}"${_oppFPipe === p ? ' selected' : ''}>${cmdEsc(p)}</option>`).join('')}
