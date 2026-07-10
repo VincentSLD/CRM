@@ -7479,6 +7479,8 @@ async function oppModalOpen(akId, prefill) {
       customerAkId: raw.customerId || (o && o.customer_akuiteo_id) || '',
       clientName: (o && o.client_name) || (raw.customer && raw.customer.name) || '',
       clientId: (o && o.client_id) || null,
+      clientUnknown: !!o && !(raw.customerId || (o && o.customer_akuiteo_id) || (o && o.client_id)), // opp existante sans client → coché
+
       endCustomerAkId: raw.endCustomerId || '',
       endCustomerName: (raw.endCustomer && raw.endCustomer.name) || '',
       contactAkId: raw.mainContactId || (o && o.contact_akuiteo_id) || '',
@@ -7603,7 +7605,11 @@ function renderOppEditPage() {
       ${sec('Général')}
       <div style="grid-column:1/3"><label style="${lbl}">Nom de l'opportunité *</label>
         <input id="of-name" style="${fi}" value="${esc(f.name)}" oninput="_oppForm.name=this.value"></div>
-      <div style="grid-column:1/3;position:relative"><label style="${lbl}">Client / Prospect *</label>
+      <div style="grid-column:1/3;display:flex;align-items:center;gap:8px;margin-top:2px">
+        <input type="checkbox" id="of-client-unknown" ${f.clientUnknown ? 'checked' : ''} onchange="_oppToggleClientUnknown(this.checked)" style="width:16px;height:16px;accent-color:#f59e0b">
+        <label for="of-client-unknown" style="font-size:13px;cursor:pointer">Client non encore connu (à qualifier) — aucun client à saisir</label>
+      </div>
+      <div id="of-client-row" style="grid-column:1/3;position:relative;${f.clientUnknown ? 'display:none' : ''}"><label style="${lbl}">Client / Prospect *</label>
         <input id="of-client" style="${fi}" placeholder="Rechercher une société…" value="${esc(f.clientName)}" autocomplete="off"
           oninput="_oppClientSearch(this.value)" onfocus="_oppClientSearch(this.value)">
         <div id="of-clientRes" style="display:none;position:absolute;z-index:30;left:0;right:0;top:100%;background:var(--card,#fff);border:1px solid var(--border);border-radius:6px;max-height:200px;overflow:auto;box-shadow:0 6px 18px rgba(0,0,0,.15)"></div></div>
@@ -7611,10 +7617,10 @@ function renderOppEditPage() {
         <input id="of-endclient" style="${fi}" placeholder="Rechercher une société…" value="${esc(f.endCustomerName)}" autocomplete="off"
           oninput="_oppClientSearch(this.value,true)" onfocus="_oppClientSearch(this.value,true)">
         <div id="of-endclientRes" style="display:none;position:absolute;z-index:30;left:0;right:0;top:100%;background:var(--card,#fff);border:1px solid var(--border);border-radius:6px;max-height:200px;overflow:auto;box-shadow:0 6px 18px rgba(0,0,0,.15)"></div></div>
-      <div style="grid-column:1/3"><label style="${lbl}">Contact</label>
+      <div id="of-contact-row" style="grid-column:1/3;${f.clientUnknown ? 'display:none' : ''}"><label style="${lbl}">Contact</label>
         <select id="of-contact" style="${fi}" onchange="_oppForm.contactAkId=this.value">
           <option value="">${f.clientId ? '—' : '(choisir un client d\'abord)'}</option></select></div>
-      <div style="grid-column:1/3"><label style="${lbl}">Établissement (site client)</label>
+      <div id="of-site-row" style="grid-column:1/3;${f.clientUnknown ? 'display:none' : ''}"><label style="${lbl}">Établissement (site client)</label>
         <select id="of-site" style="${fi}" onchange="_oppForm.customerLocationId=this.value">
           <option value="">${f.customerAkId ? '—' : '(choisir un client d\'abord)'}</option></select></div>
       <div style="grid-column:1/3;display:flex;align-items:center;gap:8px;margin-top:2px">
@@ -7706,6 +7712,16 @@ function renderOppEditPage() {
     </div>`;
 }
 
+// Case « Client non encore connu » : masque le client/contact/établissement et lève l'obligation
+function _oppToggleClientUnknown(checked) {
+  _oppForm.clientUnknown = !!checked;
+  if (checked) {
+    _oppForm.customerAkId = ''; _oppForm.clientId = null; _oppForm.clientName = ''; _oppForm.contactAkId = ''; _oppForm.customerLocationId = '';
+    const inp = document.getElementById('of-client'); if (inp) inp.value = '';
+    const box = document.getElementById('of-clientRes'); if (box) box.style.display = 'none';
+  }
+  ['of-client-row', 'of-contact-row', 'of-site-row'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = checked ? 'none' : ''; });
+}
 let _oppClientTimer = null;
 async function _oppClientSearch(q, isEnd) {
   const box = document.getElementById(isEnd ? 'of-endclientRes' : 'of-clientRes'); if (!box) return;
@@ -8078,7 +8094,7 @@ async function _oppLoadContacts(clientId, selectAkId) {
 async function saveOpportunite() {
   const f = _oppForm; if (!f) return;
   if (!f.name || !f.name.trim()) return toast('Le nom est obligatoire', 'error');
-  if (!f.customerAkId) return toast('Le client est obligatoire', 'error');
+  if (!f.clientUnknown && !f.customerAkId) return toast('Le client est obligatoire (ou cochez « Client non encore connu »)', 'error');
   if (!f.pipeId) return toast('Le portefeuille est obligatoire', 'error');
   if (!f.stageId) return toast('Le stade est obligatoire', 'error');
   if (!f.originTypeId) return toast('Le type d\'origine est obligatoire', 'error');
@@ -8096,7 +8112,8 @@ async function saveOpportunite() {
     payload.id = String(f.akId);
   }
   payload.name = f.name.trim();
-  payload.customerId = String(f.customerAkId);
+  if (f.clientUnknown) { if (isUpdate) payload.customerId = null; } // client non connu → pas de customerId envoyé (effacé en modification)
+  else payload.customerId = String(f.customerAkId);
   payload.pipeId = String(f.pipeId);
   payload.stageId = String(f.stageId);
   payload.originTypeId = String(f.originTypeId);
