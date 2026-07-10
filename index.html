@@ -2890,7 +2890,7 @@ tbody tr:last-child td { border-bottom: none; }
   </div>
 </div>
 
-<div class="modal-overlay" id="modal-link-lucca" onclick="if(event.target===this)closeModal('link-lucca')">
+<div class="modal-overlay" id="modal-link-lucca">
   <div class="modal" style="max-width:600px;max-height:80vh;overflow-y:auto">
     <div class="modal-head">
       <h3 id="link-lucca-title">Lier avec un collaborateur Lucca</h3>
@@ -2904,7 +2904,7 @@ tbody tr:last-child td { border-bottom: none; }
 </div>
 
 <!-- ═══ MODAL: ABSENCES LUCCA ═══ -->
-<div class="modal-overlay" id="modal-lucca-absences" onclick="if(event.target===this)closeModal('lucca-absences')">
+<div class="modal-overlay" id="modal-lucca-absences">
   <div class="modal" style="max-width:800px;max-height:90vh;overflow-y:auto">
     <div class="modal-head">
       <h3 id="lucca-absences-title">Absences</h3>
@@ -2916,7 +2916,7 @@ tbody tr:last-child td { border-bottom: none; }
   </div>
 </div>
 
-<div class="modal-overlay" id="modal-cr" onclick="if(event.target===this)closeCRModal()">
+<div class="modal-overlay" id="modal-cr">
   <div class="modal" style="max-width:900px;max-height:92vh;overflow-y:auto">
     <div class="modal-head">
       <h3 id="crModalTitle">Nouveau compte-rendu</h3>
@@ -8465,7 +8465,7 @@ function _nlOverlay(innerHtml, maxw) {
   const ov = document.createElement('div');
   ov.className = 'nl-overlay';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:flex-start;justify-content:center;padding:30px 14px;overflow:auto';
-  ov.onclick = e => { if (e.target === ov) document.body.removeChild(ov); };
+  // Le clic sur le fond NE ferme PAS le popup (fermeture uniquement via ✕ / Annuler).
   const box = document.createElement('div');
   box.style.cssText = `background:var(--card,#fff);color:var(--t1);border-radius:14px;max-width:${maxw || 560}px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.3);overflow:hidden`;
   box.innerHTML = innerHtml;
