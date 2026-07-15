@@ -11431,6 +11431,22 @@ async function showClient(id) {
       } catch(e) { console.warn('[Akuiteo] Erreur paiement:', e.message); }
     })();
   }
+  // Code SITE (SCLI…) : Akuiteo le génère de façon DIFFÉRÉE (traitement par lot) après la création.
+  // On le rattrape dès qu'il est disponible, à chaque ouverture de fiche tant qu'il manque.
+  if (!currentClient.code_site) {
+    (async () => {
+      try {
+        let code = null;
+        if (currentClient.akuiteo_id) {
+          code = await _akCaptureCodeSite(currentClient.akuiteo_id, id);
+        } else if (currentClient.akuiteo_site_id && /^\d+$/.test(String(currentClient.akuiteo_site_id)) && currentClient.siren) {
+          const siege = await _akSiegeFor(currentClient);
+          if (siege && siege.akuiteo_id) code = await _akCaptureCodeSite(siege.akuiteo_id, id, currentClient.akuiteo_site_id);
+        }
+        if (code) { currentClient.code_site = code; renderPage(currentPage); }
+      } catch (e) { console.warn('[code_site] backfill', e.message); }
+    })();
+  }
   currentPage = 'client-detail';
   document.getElementById('pageTitle').textContent = currentClient.name;
   renderPage('client-detail');
@@ -29526,6 +29542,7 @@ async function pullClientFromAkuiteo(clientId) {
     let methodOfPaymentFromRead = null;
     let siteAddress = null; // adresse du site de facturation Akuiteo
     let billingSiteObj = null; // objet site complet (pour managerId)
+    let siteCodeFromAk = null; // Code SITE (siteCode « SCLI… ») du site principal
     const promises = [];
     // Sites : récupérer l'adresse de facturation (useForBillingAddress), sinon site principal
     promises.push(
@@ -29535,6 +29552,8 @@ async function pullClientFromAkuiteo(clientId) {
             const billingSite = sites.find(s => s.useForBillingAddress) || sites.find(s => s.main) || sites[0];
             if (billingSite?.address) siteAddress = billingSite.address;
             billingSiteObj = billingSite;
+            const mainSite = sites.find(s => s.main) || billingSite;
+            siteCodeFromAk = (mainSite && (mainSite.siteCode || mainSite.code)) || null;
           }
         })
         .catch(() => {})
@@ -29666,6 +29685,8 @@ async function pullClientFromAkuiteo(clientId) {
       error = r2.error;
     }
     if (error) { toast('Erreur mise à jour: ' + error.message, 'error'); return; }
+    // Code SITE (SCLI…) : mise à jour SÉPARÉE et non bloquante (Akuiteo peut ne pas l'avoir encore généré)
+    if (siteCodeFromAk) { try { await sb.from('clients').update({ code_site: siteCodeFromAk }).eq('id', clientId); } catch (e) {} }
     toast('Société mise à jour depuis Akuiteo', 'success');
     const { data: refreshed } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
     if (refreshed) currentClient = refreshed;
