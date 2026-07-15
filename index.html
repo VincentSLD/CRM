@@ -7781,6 +7781,8 @@ async function _oppPickClientById(clientId, isEnd, auto) {
       if (!akId) throw new Error('Akuiteo n\'a pas renvoyé d\'identifiant');
       let code = c.code; try { const cc = await akuiteoFetch('GET', `/crm/customers/${akId}`); if (cc && cc.code) code = cc.code; } catch (e) {}
       await sb.from('clients').update({ akuiteo_id: akId, code: code || c.code }).eq('id', clientId);
+      // Code SITE (SCLI…) du site principal, généré par Akuiteo à la création
+      await _akCaptureCodeSite(akId, clientId);
       showSyncLoading(false);
       toast('Client créé dans Akuiteo et sélectionné', 'success');
     } catch (e) { showSyncLoading(false); toast('Erreur création Akuiteo : ' + e.message, 'error'); return; }
@@ -8067,6 +8069,8 @@ async function oppNewClientSubmit(isEnd) {
       status: 'nouveau', ini, color,
     }, { onConflict: 'id' });
     if (error) console.warn('insert client CRM', error.message);
+    // Code SITE (SCLI…) du site principal, généré par Akuiteo à la création
+    await _akCaptureCodeSite(akId, akId);
     showSyncLoading(false);
     closeModal('oppNewClient');
     // Sélectionner le nouveau client (principal ou final)
@@ -12457,6 +12461,8 @@ async function syncSitesVersAkuiteo() {
         }
         // Marquer l'établissement comme synchronisé (bouton vert)
         await sb.from('clients').update({ akuiteo_site_id: siteId != null ? String(siteId) : 'synced', akuiteo_dirty: false }).eq('id', etab.id);
+        // Code SITE (SCLI…) de cet établissement, généré/attribué par Akuiteo
+        await _akCaptureCodeSite(c.akuiteo_id, etab.id, siteId);
       } catch (err) {
         console.warn('Sync site error:', etab.siret, err.message);
         errors++;
@@ -12863,7 +12869,7 @@ function renderClientDetail() {
     <div class="client-info">
       <h2>${c.name} <span class="badge ${s.cls}" style="font-size:11px;vertical-align:middle;margin-left:8px">${s.label}</span></h2>
       <div class="client-meta">
-        <span>📋 ${c.code}</span><span>🏢 ${c.sector}</span><span>👤 ${c.contact}</span><span>✉ ${c.email}</span><span>📞 ${formatPhone(c.phone)}</span><span>📍 ${c.city}</span>
+        <span>📋 ${c.code}</span>${c.code_site ? `<span title="Code SITE Akuiteo (établissement)">🏷️ ${c.code_site}</span>` : ''}<span>🏢 ${c.sector}</span><span>👤 ${c.contact}</span><span>✉ ${c.email}</span><span>📞 ${formatPhone(c.phone)}</span><span>📍 ${c.city}</span>
       </div>
     </div>
     <div class="client-actions">
@@ -29859,6 +29865,8 @@ async function pushEtablissementAsSite(full, siege) {
       if (/^\d+$/.test(s)) siteId = s;
     }
     await sb.from('clients').update({ akuiteo_site_id: siteId != null ? String(siteId) : 'synced', akuiteo_dirty: false }).eq('id', full.id);
+    // Code SITE (SCLI…) de CET établissement précis, généré/attribué par Akuiteo
+    await _akCaptureCodeSite(customerAkId, full.id, siteId);
     await loadDB();
     if (currentClient && currentClient.id === full.id) { const { data: rf } = await sb.from('clients').select('*').eq('id', full.id).maybeSingle(); if (rf) currentClient = rf; }
     renderPage(currentPage);
@@ -29871,6 +29879,21 @@ async function pushEtablissementAsSite(full, siege) {
   }
 }
 
+// Récupère le Code SITE (siteCode « SCLI… ») généré par Akuiteo pour un site et l'enregistre sur la fiche CRM.
+// Akuiteo génère ce code automatiquement à la création du tiers (site principal) comme d'un site secondaire.
+// customerAkId : id du client Akuiteo ; clientId : fiche CRM à mettre à jour ; siteId : site précis (sinon site principal).
+async function _akCaptureCodeSite(customerAkId, clientId, siteId) {
+  if (!customerAkId || !clientId) return null;
+  try {
+    const sites = await akuiteoFetch('GET', '/crm/customers/' + customerAkId + '/sites');
+    if (!Array.isArray(sites) || !sites.length) return null;
+    let site = (siteId != null) ? sites.find(s => String(s.id) === String(siteId)) : null;
+    if (!site) site = sites.find(s => s.main) || sites[0];
+    const code = site && (site.siteCode || site.code);
+    if (code) { await sb.from('clients').update({ code_site: code }).eq('id', clientId); return code; }
+  } catch (e) { console.warn('_akCaptureCodeSite', e.message); }
+  return null;
+}
 async function pushClientToAkuiteo(clientId) {
   // Charger les données du client depuis Supabase (pas DB.clients qui est paginé)
   const { data: full } = await sb.from('clients').select('*').eq('id', clientId).maybeSingle();
@@ -30141,6 +30164,8 @@ async function pushClientToAkuiteo(clientId) {
               }
               // Marquer l'établissement secondaire comme synchronisé (bouton vert)
               await sb.from('clients').update({ akuiteo_site_id: siteId != null ? String(siteId) : 'synced', akuiteo_dirty: false }).eq('id', etab.id);
+              // Code SITE (SCLI…) de cet établissement, généré/attribué par Akuiteo
+              await _akCaptureCodeSite(customerAkId, etab.id, siteId);
             } catch (siteErr) { sitesErrors++; console.warn('Sync site error:', etab.siret, siteErr.message); }
           }
           const siretInvalides = siretInvalidesList.length;
@@ -30154,6 +30179,8 @@ async function pushClientToAkuiteo(clientId) {
         }
       } catch (siteErr) { console.warn('Sync sites error:', siteErr.message); }
     }
+    // Récupérer le Code SITE (siteCode « SCLI… ») du site principal, généré/attribué par Akuiteo
+    if (customerAkId) await _akCaptureCodeSite(customerAkId, clientId);
     // Marquer comme synchronisé
     await sb.from('clients').update({ akuiteo_dirty: false }).eq('id', clientId);
     // Rafraîchir la fiche pour mettre à jour les boutons
