@@ -11235,6 +11235,7 @@ function renderClients(filter='all') {
       <button class="btn btn-primary" onclick="_ncReturnCtx=null;openModal('new-client')">+ Nouveau client/prospect</button>
       <button class="btn" onclick="openModal('prospect-target')" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;border:none">🎯 Cibler prospects</button>
       <button class="btn" onclick="exportCSV('clients')">⤓ Export CSV</button>
+      <button class="btn" onclick="backfillAllCodeSite()" title="Récupérer en masse les Codes SITE (SCLI…) générés par Akuiteo pour les clients synchronisés qui n'en ont pas encore">🏷️ Rattraper Codes SITE</button>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       <input type="text" id="clientSearchInput" placeholder="Rechercher un client/prospect..." value="${clientsSearch}"
@@ -29914,6 +29915,64 @@ async function _akCaptureCodeSite(customerAkId, clientId, siteId) {
     if (code) { await sb.from('clients').update({ code_site: code }).eq('id', clientId); return code; }
   } catch (e) { console.warn('_akCaptureCodeSite', e.message); }
   return null;
+}
+// Rattrapage EN MASSE des Codes SITE : pour tous les clients synchronisés (akuiteo_id ou akuiteo_site_id)
+// qui n'ont pas encore de code_site, on interroge Akuiteo et on enregistre le siteCode s'il est généré.
+// Akuiteo génère ce code en différé (lot) → certains resteront vides jusqu'à son prochain passage.
+async function backfillAllCodeSite() {
+  if (!confirm('Rattraper les Codes SITE (SCLI…) pour tous les clients synchronisés dans Akuiteo qui n\'en ont pas encore ?\n\nAkuiteo est interrogé pour chaque société — l\'opération peut durer plusieurs minutes.')) return;
+  showSyncLoading(true); setSyncText('Chargement des clients à rattraper…');
+  try {
+    // Pagination (Supabase renvoie 1000 lignes max par requête)
+    let rows = [];
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await sb.from('clients')
+        .select('id,akuiteo_id,akuiteo_site_id,siren,code_site,name')
+        .or('akuiteo_id.not.is.null,akuiteo_site_id.not.is.null')
+        .range(from, from + PAGE - 1);
+      if (error) { toast('Erreur lecture clients : ' + error.message, 'error'); return; }
+      rows = rows.concat(data || []);
+      if (!data || data.length < PAGE) break;
+    }
+    const isNum = v => /^\d+$/.test(String(v == null ? '' : v));
+    const todo = (rows || []).filter(c => !c.code_site && (c.akuiteo_id || isNum(c.akuiteo_site_id)));
+    if (!todo.length) { toast('Aucun client à rattraper (tous ont déjà leur Code SITE)', 'success'); return; }
+    // Siège par SIREN (pour les établissements secondaires sans akuiteo_id propre)
+    const siegeBySiren = {};
+    (rows || []).forEach(c => { if (c.akuiteo_id && c.siren && !siegeBySiren[c.siren]) siegeBySiren[c.siren] = c.akuiteo_id; });
+    // Cache des sites par customer Akuiteo (1 seul GET par customer, promesse partagée)
+    const sitesCache = {};
+    const sitesOf = custId => (sitesCache[custId] || (sitesCache[custId] = akuiteoFetch('GET', '/crm/customers/' + custId + '/sites').then(s => Array.isArray(s) ? s : []).catch(() => [])));
+    const total = todo.length;
+    let idx = 0, processed = 0, filled = 0, pending = 0;
+    async function worker() {
+      while (idx < total) {
+        const c = todo[idx++];
+        try {
+          const custId = c.akuiteo_id || (c.siren ? siegeBySiren[c.siren] : null);
+          if (custId) {
+            const sites = await sitesOf(custId);
+            let site = (!c.akuiteo_id && isNum(c.akuiteo_site_id)) ? sites.find(s => String(s.id) === String(c.akuiteo_site_id)) : null;
+            if (!site) site = sites.find(s => s.main) || sites[0];
+            const code = site && (site.siteCode || site.code);
+            if (code) { await sb.from('clients').update({ code_site: code }).eq('id', c.id); filled++; }
+            else pending++;
+          } else pending++;
+        } catch (e) { pending++; }
+        processed++;
+        if (processed % 3 === 0 || processed === total) setSyncText('Rattrapage ' + processed + ' / ' + total + ' — ' + filled + ' récupéré(s)…');
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(6, total) }, worker));
+    await loadDB();
+    if (currentClient && currentClient.id) { const { data: rf } = await sb.from('clients').select('*').eq('id', currentClient.id).maybeSingle(); if (rf) currentClient = rf; }
+    if (currentPage) renderPage(currentPage);
+    toast('Rattrapage terminé : ' + filled + ' Code(s) SITE récupéré(s) sur ' + total
+      + (pending ? ' · ' + pending + ' pas encore généré(s) par Akuiteo (réessayez après le lot nocturne)' : ''),
+      filled ? 'success' : 'info');
+  } catch (e) { toast('Erreur rattrapage : ' + e.message, 'error'); }
+  finally { showSyncLoading(false); }
 }
 async function pushClientToAkuiteo(clientId) {
   // Charger les données du client depuis Supabase (pas DB.clients qui est paginé)
