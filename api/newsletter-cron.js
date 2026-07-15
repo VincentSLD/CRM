@@ -126,18 +126,42 @@ const WEB_RUBRIQUES = {
   projets_locaux: { label: 'Grands projets régionaux', query: "grands projets de construction / ZAC / aménagements annoncés récemment en Pays de la Loire, Nouvelle-Aquitaine et Bretagne" },
   concurrence_web: { label: 'Veille concurrence (BE)', query: "actualités récentes des bureaux d'études techniques / géotechnique en France (rachats, implantations, levées de fonds)" },
   innovation: { label: 'Innovation construction', query: "innovations et tendances récentes dans la construction (IA, BIM, matériaux biosourcés, réemploi, géotechnique)" },
-  agenda_pro: { label: 'Agenda salons & événements', query: "salons et événements professionnels du BTP / géotechnique à venir en France (BATIMAT, Salon des Maires, etc.)" },
+  agenda_pro: { label: 'Agenda salons & événements', query: "prochains salons et événements professionnels du BTP / géotechnique À VENIR en France (dates FUTURES uniquement) : BATIMAT, Salon des Maires, congrès, journées techniques. Exclure tout événement déjà passé, indiquer la date de chaque événement." },
 };
 const WEB_KEYS = Object.keys(WEB_RUBRIQUES);
+// Extrait les puces factuelles d'un texte de veille (sans la source, tronquées) → pour la déduplication.
+function veilleBullets(text) {
+  if (!text) return [];
+  return String(text).split('\n').map(l => l.trim()).filter(l => /^[-•*]\s+/.test(l))
+    .map(l => l.replace(/^[-•*]\s+/, '').replace(/\(\s*Sources?\s*:.*$/i, '').trim())
+    .filter(b => b && !/pas d['’]actualit/i.test(b)).map(b => b.slice(0, 140));
+}
+// Contexte de fraîcheur (« aujourd'hui » / « il y a un mois ») + infos déjà diffusées à ne pas répéter.
+function veilleCtx(previousWeb) {
+  const now = new Date();
+  const fmt = d => d.toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: 'long', year: 'numeric' });
+  const since = new Date(now.getTime() - 31 * 864e5);
+  const seen = [];
+  (previousWeb || []).forEach(txt => veilleBullets(txt).forEach(b => { if (b && !seen.includes(b)) seen.push(b); }));
+  return { today: fmt(now), since: fmt(since), exclude: seen.slice(0, 60) };
+}
 // Recherche web pour les rubriques demandées → texte groupé (### Titre + puces avec sources)
-async function fetchWebVeilleChunk(items) {
+async function fetchWebVeilleChunk(items, ctx) {
   const ask = items.map((it, i) => `${i + 1}. « ${it.label} » : ${it.query}`).join('\n');
-  const messages = [{ role: 'user', content: "Recherche sur le web (sources françaises récentes) et renvoie, pour CHAQUE rubrique ci-dessous, 2 à 3 puces FACTUELLES et datées avec source. Format STRICT, sans intro ni conclusion : pour chaque rubrique, une ligne « ### <Titre exact> » puis les puces une par ligne commençant par '- ' = info datée + courte explication + (Source : Nom — URL). Si rien de fiable : « ### <Titre> » puis « - (pas d'actualité notable cette semaine) ».\n\nRubriques :\n" + ask }];
+  const excludeBlock = (ctx.exclude && ctx.exclude.length)
+    ? "ATTENTION — les informations suivantes ont DÉJÀ été diffusées dans de précédentes infolettres. Ne les répète surtout PAS, apporte uniquement du NOUVEAU :\n" + ctx.exclude.map(e => '• ' + e).join('\n') + "\n\n"
+    : '';
+  const content = "Nous sommes le " + ctx.today + ". Recherche sur le web (sources françaises) UNIQUEMENT des informations RÉCENTES : datées de MOINS D'UN MOIS (depuis le " + ctx.since + "). Ignore et n'affiche RIEN de plus ancien.\n"
+    + "Privilégie la FRAÎCHEUR à la quantité : 1 à 2 puces MAXIMUM par rubrique, factuelles, datées, avec source. Mieux vaut une seule info très récente que plusieurs tièdes.\n"
+    + "Pour toute rubrique de type agenda / salons / événements : uniquement des événements À VENIR (postérieurs au " + ctx.today + "), JAMAIS d'événements déjà passés ; indique leur date.\n"
+    + excludeBlock
+    + "Format STRICT, sans intro ni conclusion : pour chaque rubrique, une ligne « ### <Titre exact> » puis les puces une par ligne commençant par '- ' = info datée + courte explication + (Source : Nom — URL). Si une rubrique n'a aucune actualité RÉCENTE et fiable : « ### <Titre> » puis « - (pas d'actualité récente) ».\n\nRubriques :\n" + ask;
+  const messages = [{ role: 'user', content }];
   let text = '';
   for (let i = 0; i < 5; i++) {
     const j = await callClaude({
       model: MODEL, max_tokens: 4000,
-      system: "Tu es un analyste de veille pour un bureau d'études du bâtiment en France. Tu DOIS utiliser l'outil de recherche web pour trouver des informations RÉCENTES et FRANÇAISES.",
+      system: "Tu es un analyste de veille pour un bureau d'études du bâtiment en France. Tu DOIS utiliser l'outil de recherche web pour trouver des informations RÉCENTES (moins d'un mois) et FRANÇAISES. La fraîcheur prime sur le volume : n'affiche jamais une info que tu ne peux pas dater du mois écoulé.",
       messages,
       tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
     });
@@ -148,13 +172,13 @@ async function fetchWebVeilleChunk(items) {
   }
   return text.trim();
 }
-async function fetchWebVeille(rubriqueKeys) {
+async function fetchWebVeille(rubriqueKeys, ctx) {
   const items = (rubriqueKeys || []).map(k => WEB_RUBRIQUES[k] ? { k, ...WEB_RUBRIQUES[k] } : null).filter(Boolean);
   if (!items.length) return '';
   let text = '';
   try {
     for (let i = 0; i < items.length; i += 3) {
-      const t = await fetchWebVeilleChunk(items.slice(i, i + 3));
+      const t = await fetchWebVeilleChunk(items.slice(i, i + 3), ctx);
       if (t) text += (text ? '\n' : '') + t;
     }
   } catch (e) { console.error('fetchWebVeille:', e.message); }
@@ -311,7 +335,8 @@ export default async function handler(req, res) {
     if (Array.isArray(existing) && existing.length && !force) return res.status(200).json({ ok: true, message: 'Édition déjà générée cette semaine', envoyes: 0 });
 
     const token = await appToken();
-    const wrap = inner => `<div style="max-width:640px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#222">${inner}</div>`;
+    const AI_DISCLAIMER = '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:9px 13px;margin:0 0 14px;font-size:12px;color:#9a3412;line-height:1.5">ℹ️ <b>Infolettre générée automatiquement par l\'IA (NOVA).</b> Certaines informations, notamment la veille web, peuvent contenir des erreurs ou des imprécisions&nbsp;: <b>merci de les vérifier</b> avant toute utilisation ou diffusion.</div>';
+    const wrap = inner => `<div style="max-width:640px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#222">${AI_DISCLAIMER}${inner}</div>`;
     const selOf = s => (s && typeof s === 'object') ? s : {};
 
     // 1) Newsletter groupe — 1 génération MUTUALISÉE par combinaison identique (sections + rubriques + ton)
@@ -323,7 +348,10 @@ export default async function handler(req, res) {
       // Recherche web : une seule fois pour l'UNION des rubriques sélectionnées par les abonnés
       const union = new Set();
       groupSubs.forEach(s => { const sec = selOf(s.sections); WEB_KEYS.forEach(k => { if (sec[k] !== false) union.add(k); }); });
-      const veille = union.size ? await fetchWebVeille([...union]) : '';
+      // Anti-doublon inter-éditions : on exclut les infos déjà diffusées dans les 5 dernières veilles archivées.
+      const prevEd = await sbGet('newsletters', 'select=veille&order=created_at.desc&limit=5');
+      const previousWeb = (Array.isArray(prevEd) ? prevEd : []).map(e => e && e.veille).filter(Boolean);
+      const veille = union.size ? await fetchWebVeille([...union], veilleCtx(previousWeb)) : '';
       const subject = '📰 Infolettre CRM — semaine du ' + new Date().toLocaleDateString('fr-FR');
 
       // Regrouper les abonnés par signature (mêmes sections/rubriques + même ton) → 1 seule génération par groupe
@@ -341,7 +369,7 @@ export default async function handler(req, res) {
           const inner = await generateHtml(data, { veille, allowedLabels, sections: g.sec, ton: g.ton });
           if (!inner) { errors.push('groupe (' + g.emails.length + ' dest.) : génération vide'); continue; }
           const html = wrap(inner);
-          if (!firstHtml) { firstHtml = html; try { await sbReq('newsletters', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ titre: subject, periode_debut: data.meta.periode_debut, periode_fin: data.meta.periode_fin, html, data, cree_par: 'cron', envoye_a: groupSubs.length }) }); } catch (e) {} }
+          if (!firstHtml) { firstHtml = html; try { await sbReq('newsletters', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ titre: subject, periode_debut: data.meta.periode_debut, periode_fin: data.meta.periode_fin, html, data, veille, cree_par: 'cron', envoye_a: groupSubs.length }) }); } catch (e) {} }
           for (const email of g.emails) {
             try { await graphSend(token, email, subject, html); sent++; } catch (e) { errors.push('news ' + email + ': ' + e.message); }
           }

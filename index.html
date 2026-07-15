@@ -8650,11 +8650,16 @@ async function nlBuildData() {
 }
 
 // ─ Génération + aperçu ─
-function _nlWrap(inner) { return `<div style="max-width:640px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#222">${inner}</div>`; }
+const NL_AI_DISCLAIMER = '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:9px 13px;margin:0 0 14px;font-size:12px;color:#9a3412;line-height:1.5">ℹ️ <b>Infolettre générée automatiquement par l\'IA (NOVA).</b> Certaines informations, notamment la veille web, peuvent contenir des erreurs ou des imprécisions&nbsp;: <b>merci de les vérifier</b> avant toute utilisation ou diffusion.</div>';
+function _nlWrap(inner) { return `<div style="max-width:640px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#222">${NL_AI_DISCLAIMER}${inner}</div>`; }
 async function nlGenerate() {
   await _nlLoadPrefs();
   const p = _nlPrefs || {};
   const data = await nlBuildData();
+  // Anti-doublon inter-éditions : on transmet la veille des dernières infolettres pour ne pas répéter les mêmes infos.
+  let previousWeb = [];
+  try { const { data: prev } = await sb.from('newsletters').select('veille').order('created_at', { ascending: false }).limit(5); previousWeb = (prev || []).map(e => e.veille).filter(Boolean); }
+  catch (e) { previousWeb = []; }
   const r = await fetch('/api/newsletter-build', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -8664,6 +8669,7 @@ async function nlGenerate() {
       sections: p.sections || _nlDefaultSections(),
       useWeb: NL_WEB_KEYS.some(k => (p.sections ? p.sections[k] !== false : true)),
       crmUrl: data.meta.crmUrl,
+      previousWeb,
     }),
   });
   const j = await r.json().catch(() => ({}));
@@ -8691,7 +8697,7 @@ async function nlPreview() {
       <button class="btn btn-primary" onclick="nlPublish()">🚀 Publier & envoyer aux abonnés</button>
     </div>`, 760);
   const fr = ov.querySelector('#nl-preview-frame'); if (fr) fr.srcdoc = wrapped;
-  window._nlLast = { html: res.html, wrapped, data: res.data };
+  window._nlLast = { html: res.html, wrapped, data: res.data, web: res.web };
 }
 async function _nlSendMail(to, subject, html) {
   const msRefresh = localStorage.getItem('ms_graph_refresh') || undefined;
@@ -8718,7 +8724,7 @@ async function nlPublish() {
   if (!confirm('Publier cette édition et l\'envoyer par email à ' + emails.length + ' abonné(s) ?')) return;
   const d = window._nlLast.data || {};
   try {
-    await sb.from('newsletters').insert({ titre: _nlSubject(), periode_debut: d.meta && d.meta.periode_debut, periode_fin: d.meta && d.meta.periode_fin, html: window._nlLast.wrapped, data: d, cree_par: (currentCommercial && currentCommercial.nom) || null, envoye_a: emails.length });
+    await sb.from('newsletters').insert({ titre: _nlSubject(), periode_debut: d.meta && d.meta.periode_debut, periode_fin: d.meta && d.meta.periode_fin, html: window._nlLast.wrapped, data: d, veille: (window._nlLast.web && window._nlLast.web.veilleRaw) || null, cree_par: (currentCommercial && currentCommercial.nom) || null, envoye_a: emails.length });
   } catch (e) { /* archive non bloquante */ }
   try { await _nlSendMail(emails, _nlSubject(), window._nlLast.wrapped); toast('Édition publiée et envoyée à ' + emails.length + ' abonné(s) 🎉', 'success'); _nlEditionsLoaded = false; }
   catch (e) { toast('Erreur envoi : ' + e.message, 'error'); }

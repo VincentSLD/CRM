@@ -38,20 +38,46 @@ const WEB_RUBRIQUES = {
   projets_locaux: { label: 'Grands projets régionaux', query: "grands projets de construction / ZAC / aménagements annoncés récemment en Pays de la Loire, Nouvelle-Aquitaine et Bretagne" },
   concurrence_web: { label: 'Veille concurrence (BE)', query: "actualités récentes des bureaux d'études techniques / géotechnique en France (rachats, implantations, levées de fonds)" },
   innovation: { label: 'Innovation construction', query: "innovations et tendances récentes dans la construction (IA, BIM, matériaux biosourcés, réemploi, géotechnique)" },
-  agenda_pro: { label: 'Agenda salons & événements', query: "salons et événements professionnels du BTP / géotechnique à venir en France (BATIMAT, Salon des Maires, etc.)" },
+  agenda_pro: { label: 'Agenda salons & événements', query: "prochains salons et événements professionnels du BTP / géotechnique À VENIR en France (dates FUTURES uniquement) : BATIMAT, Salon des Maires, congrès, journées techniques. Exclure tout événement déjà passé, indiquer la date de chaque événement." },
 };
+
+// Contexte de fraîcheur : « aujourd'hui » et « il y a un mois » (pour cadrer la recherche web).
+function veilleCtx(previousWeb) {
+  const now = new Date();
+  const fmt = d => d.toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: 'long', year: 'numeric' });
+  const since = new Date(now.getTime() - 31 * 864e5);
+  // Liste des infos déjà diffusées (extraites des puces des éditions précédentes) → à ne pas répéter.
+  const seen = [];
+  (previousWeb || []).forEach(txt => veilleBullets(txt).forEach(b => { if (b && !seen.includes(b)) seen.push(b); }));
+  return { today: fmt(now), since: fmt(since), exclude: seen.slice(0, 60) };
+}
+// Extrait les puces factuelles d'un texte de veille (sans la source, tronquées) → pour la déduplication.
+function veilleBullets(text) {
+  if (!text) return [];
+  return String(text).split('\n').map(l => l.trim()).filter(l => /^[-•*]\s+/.test(l))
+    .map(l => l.replace(/^[-•*]\s+/, '').replace(/\(\s*Sources?\s*:.*$/i, '').trim())
+    .filter(b => b && !/pas d['’]actualit/i.test(b)).map(b => b.slice(0, 140));
+}
 // Recherche web pour les rubriques sélectionnées → texte groupé par rubrique (### Titre + puces avec sources).
 // Étape séparée pour fiabiliser (toujours appelée) et permettre une mise en forme propre ensuite.
 // Un lot de rubriques (≤ 3) → un appel web. Découpé pour que les résultats web n'épuisent
 // pas le budget de tokens avant la synthèse (cause de veille vide quand beaucoup de rubriques).
-async function fetchWebVeilleChunk(key, items) {
+async function fetchWebVeilleChunk(key, items, ctx) {
   const ask = items.map((it, i) => `${i + 1}. « ${it.label} » : ${it.query}`).join('\n');
-  const messages = [{ role: 'user', content: "Recherche sur le web (sources françaises récentes) et renvoie, pour CHAQUE rubrique ci-dessous, 2 à 3 puces FACTUELLES et datées avec source. Format STRICT, sans introduction ni conclusion : pour chaque rubrique, d'abord une ligne « ### <Titre exact de la rubrique> », puis les puces, une par ligne, commençant par '- ', chaque puce = info datée + très courte explication + (Source : Nom — URL). Si une rubrique ne donne rien de fiable, mets « ### <Titre> » suivi de « - (pas d'actualité notable cette semaine) ».\n\nRubriques :\n" + ask }];
+  const excludeBlock = (ctx.exclude && ctx.exclude.length)
+    ? "ATTENTION — les informations suivantes ont DÉJÀ été diffusées dans de précédentes infolettres. Ne les répète surtout PAS, apporte uniquement du NOUVEAU :\n" + ctx.exclude.map(e => '• ' + e).join('\n') + "\n\n"
+    : '';
+  const content = "Nous sommes le " + ctx.today + ". Recherche sur le web (sources françaises) UNIQUEMENT des informations RÉCENTES : datées de MOINS D'UN MOIS (depuis le " + ctx.since + "). Ignore et n'affiche RIEN de plus ancien.\n"
+    + "Privilégie la FRAÎCHEUR à la quantité : 1 à 2 puces MAXIMUM par rubrique, factuelles, datées, avec source. Mieux vaut une seule info très récente que plusieurs tièdes.\n"
+    + "Pour toute rubrique de type agenda / salons / événements : uniquement des événements À VENIR (postérieurs au " + ctx.today + "), JAMAIS d'événements déjà passés ; indique leur date.\n"
+    + excludeBlock
+    + "Format STRICT, sans introduction ni conclusion : pour chaque rubrique, d'abord une ligne « ### <Titre exact de la rubrique> », puis les puces, une par ligne, commençant par '- ', chaque puce = info datée + très courte explication + (Source : Nom — URL). Si une rubrique n'a aucune actualité RÉCENTE et fiable, mets « ### <Titre> » suivi de « - (pas d'actualité récente) ».\n\nRubriques :\n" + ask;
+  const messages = [{ role: 'user', content }];
   let text = '', stop = null;
   for (let i = 0; i < 5; i++) {
     const j = await callClaude(key, {
       model: MODEL, max_tokens: 4000,
-      system: "Tu es un analyste de veille pour un bureau d'études du bâtiment en France. Tu DOIS utiliser l'outil de recherche web pour trouver des informations RÉCENTES et FRANÇAISES.",
+      system: "Tu es un analyste de veille pour un bureau d'études du bâtiment en France. Tu DOIS utiliser l'outil de recherche web pour trouver des informations RÉCENTES (moins d'un mois) et FRANÇAISES. La fraîcheur prime sur le volume : n'affiche jamais une info que tu ne peux pas dater du mois écoulé.",
       messages,
       tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
     });
@@ -63,13 +89,13 @@ async function fetchWebVeilleChunk(key, items) {
   }
   return { text: text.trim(), stop };
 }
-async function fetchWebVeille(key, rubriqueKeys) {
+async function fetchWebVeille(key, rubriqueKeys, ctx) {
   const items = (rubriqueKeys || []).map(k => WEB_RUBRIQUES[k] ? { k, ...WEB_RUBRIQUES[k] } : null).filter(Boolean);
   if (!items.length) return { text: '', error: null, stop: null };
   let text = '', stop = null, error = null;
   try {
     for (let i = 0; i < items.length; i += 3) {
-      const r = await fetchWebVeilleChunk(key, items.slice(i, i + 3));
+      const r = await fetchWebVeilleChunk(key, items.slice(i, i + 3), ctx);
       if (r.text) text += (text ? '\n' : '') + r.text;
       stop = r.stop;
     }
@@ -118,7 +144,7 @@ export default async function handler(req, res) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return res.status(500).json({ error: 'ANTHROPIC_API_KEY non configuré' });
 
-  const { data = {}, recipientName = '', ton = 'convivial', sections = {}, useWeb = true, crmUrl = '', kind = 'newsletter' } = req.body || {};
+  const { data = {}, recipientName = '', ton = 'convivial', sections = {}, useWeb = true, crmUrl = '', kind = 'newsletter', previousWeb = [] } = req.body || {};
 
   const tonDesc = ton === 'fun'
     ? "très enjoué, complice, avec une pointe d'humour BTP (une petite blague/punchline), des emojis bien dosés"
@@ -163,7 +189,7 @@ export default async function handler(req, res) {
   // Étape 1 : recherche web (rubriques sélectionnées) — séparée pour fiabilité + mise en forme propre
   const selectedRubriques = Object.keys(WEB_RUBRIQUES).filter(k => sections[k] !== false);
   let veille = '', webErr = null, webStop = null;
-  if (useWeb && selectedRubriques.length) { const wr = await fetchWebVeille(key, selectedRubriques); veille = wr.text; webErr = wr.error; webStop = wr.stop; }
+  if (useWeb && selectedRubriques.length) { const wr = await fetchWebVeille(key, selectedRubriques, veilleCtx(previousWeb)); veille = wr.text; webErr = wr.error; webStop = wr.stop; }
 
   const veilleHtml = renderVeilleHtml(veille);
   const userPrompt = [
@@ -198,7 +224,7 @@ export default async function handler(req, res) {
       if (clean.includes('<!--VEILLE-->')) clean = clean.replace('<!--VEILLE-->', veilleHtml);
       else { const sig = clean.search(/—\s*NOVA/); clean = sig > -1 ? clean.slice(0, sig) + veilleHtml + clean.slice(sig) : clean + veilleHtml; }
     } else { clean = clean.replace('<!--VEILLE-->', ''); }
-    return res.status(200).json({ html: clean, web: { rubriques: selectedRubriques.length, chars: veille.length, rendered: veilleHtml.length, error: webErr, stop: webStop } });
+    return res.status(200).json({ html: clean, web: { rubriques: selectedRubriques.length, chars: veille.length, rendered: veilleHtml.length, error: webErr, stop: webStop, veilleRaw: veille } });
   } catch (e) {
     console.error('newsletter-build:', e.message);
     return res.status(500).json({ error: e.message });

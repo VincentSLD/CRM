@@ -351,6 +351,8 @@ ALTER TABLE newsletters ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "newsletters_all" ON newsletters;
 CREATE POLICY "newsletters_all" ON newsletters FOR ALL TO authenticated USING (true) WITH CHECK (true);
 CREATE INDEX IF NOT EXISTS idx_newsletters_created ON newsletters(created_at DESC);
+-- Texte brut de la veille web de l'édition (puces par rubrique) → sert à ne pas répéter les mêmes infos d'une infolettre à l'autre
+ALTER TABLE newsletters ADD COLUMN IF NOT EXISTS veille TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_clients_legacy_id ON clients(legacy_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_legacy_id ON contacts(legacy_id);
