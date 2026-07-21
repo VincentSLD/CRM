@@ -7895,8 +7895,27 @@ function _oppPickEndClient(clientId, akId, name) {
 }
 
 // ═══ Typologie / sous-typologie d'opportunité (CRM-only) ═══
-// À REMPLIR : clé = typologie, valeur = liste des sous-typologies associées. Ex. { 'Bâtiment': ['Neuf', 'Réhabilitation'], ... }
-const OPP_TYPOLOGIE_MAP = {};
+// Clé = typologie, valeur = liste des sous-typologies associées (tableau vide = typologie sans sous-typologie).
+const OPP_TYPOLOGIE_MAP = {
+  'Aménagement - VRD': ['Aquatique', 'Piscine', 'Thalasso / spa / centre thermal'],
+  'Commercial': ['Centres commerciaux - supermarchés', 'Commerces de proximité'],
+  'Démolition': [],
+  'ECO-RESPONSABLE': ['BOIS', 'HQE'],
+  'Enseignement': ['Conservatoire / école de musique', 'Internat / résidence universitaire', 'Périscolaire / Petite enfance', 'Restauration', 'Scolaire', 'Secondaire / Universitaire'],
+  'Environnement': [],
+  'Equipements publics': ['Mairie', 'SDIS', 'Sécurité (gendarmerie – police – prison – tribunal – armée)', 'autres'],
+  'Hébergements collectifs': ['Collectifs', 'Hotellerie'],
+  'Industrie': ['Agroalimentaire', 'Atelier relais et stockage', 'Data center', 'Déchet', 'Plateforme logistique'],
+  'Logement individuel': [],
+  'Modulaire': [],
+  "Ouvrage d'arts / Génie Civil": ['Centrale élec', 'Chaufferie', 'Parking', 'Ponts – passerelle', 'Station épuration', 'transports'],
+  'Patrimoine': [],
+  'Photovoltaïque': [],
+  'Santé': ['Autres (recherche / labo / pharmacie / scanner / radiologie / …)', 'EHPAD', 'Hospitalier', 'Pole santé', 'Psy - handicap'],
+  'Sociaux-culturel': ['Biblio - médiathèque', 'Musée', 'Salle polyvalente / Festive', 'Spectacle / concert / cinéma'],
+  'Sports / Loisirs': ['Autres (club house – vestiaires – asso - tribunes …)', 'Salle de sports (y/c tennis / boulodrome)', 'Stade'],
+  'Tertiaire / Bureaux': [],
+};
 function _oppTypoList() { return Object.keys(OPP_TYPOLOGIE_MAP); }
 function _oppOptionList(values, sel) {
   const list = values.slice();
