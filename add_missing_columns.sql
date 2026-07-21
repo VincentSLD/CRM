@@ -548,6 +548,21 @@ CREATE INDEX IF NOT EXISTS idx_affaires_marche_id2 ON affaires (marche_id);
 -- Point GPS marché validé manuellement (certifié conforme)
 ALTER TABLE marches ADD COLUMN IF NOT EXISTS gps_certifie BOOLEAN DEFAULT FALSE;
 
+-- Typologie / sous-typologie du marché (CRM-only) — héritée par les affaires/documents du marché
+ALTER TABLE marches ADD COLUMN IF NOT EXISTS typologie TEXT;
+ALTER TABLE marches ADD COLUMN IF NOT EXISTS sous_typologie TEXT;
+
+-- ═══ Paramétrage applicatif générique (clé → valeur JSON) ═══
+-- Sert notamment à stocker la liste éditable des typologies/sous-typologies (key='typologies').
+CREATE TABLE IF NOT EXISTS app_config (
+  key TEXT PRIMARY KEY,
+  value JSONB,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE app_config ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "app_config_all" ON app_config;
+CREATE POLICY "app_config_all" ON app_config FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
 -- ═══ Listes de diffusion par agence (email auto à la création d'opportunité) ═══
 -- 1 agence = plusieurs emails ; à la création d'une opportunité, un mail part vers les agences cochées.
 CREATE TABLE IF NOT EXISTS listes_diffusion (

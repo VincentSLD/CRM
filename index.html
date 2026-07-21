@@ -3506,7 +3506,7 @@ async function loadDB() {
     const DEVIS_LITE = 'id,ref,client_id,client_name,sujet,montant,montant_ttc,date,statut,projet,agence,societe,responsable_id,commercial_id,probabilite,marche_id,affaire_id,apporteur_affaire,architecte,gros_oeuvre,apporteur_code,gros_oeuvre_code,akuiteo_id,adresse,ville,code_postal,type_prestation';
     const CMD_LITE = 'id,ref,client_id,client_name,nom,montant,montant_ttc,date,statut,livraison,projet,agence,societe,responsable_id,commercial_id,marche_id,affaire_id,apporteur_affaire,architecte,gros_oeuvre,apporteur_code,gros_oeuvre_code,akuiteo_id,adresse,ville,code_postal,surface_facturee,type_prestation';
     const FACT_LITE = 'id,ref,client_id,client_name,montant,montant_ttc,date,echeance,statut,jours_retard,projet,agence,societe,responsable_id,type_facture,reste_a_payer,date_paiement,marche_id,affaire_id,apporteur_affaire,architecte,gros_oeuvre,apporteur_code,gros_oeuvre_code,akuiteo_id,adresse,ville,code_postal,type_prestation';
-    const MARCHE_LITE = 'id,ref,akuiteo_id,nom,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,adresse,code_postal,ville,lat,lng,gps_certifie,nb_affaires,responsable_id';
+    const MARCHE_LITE = 'id,ref,akuiteo_id,nom,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,adresse,code_postal,ville,lat,lng,gps_certifie,nb_affaires,responsable_id,typologie,sous_typologie';
     const AFFAIRE_LITE = 'id,nom,marche_id,client_id,client_name,montant,montant_ttc,date_debut,date_fin,agence,statut,code_projet,apporteur_affaire,architecte,responsable,adresse,ville,code_postal,departement,region';
 
     // Filtre : 1 an glissant pour les tables volumineuses
@@ -3628,6 +3628,8 @@ async function loadDB() {
       DB.notifications = nAll.map(n => ({ ...n, time: n.time_label }));
       DB.relancesDevis = {};
       for (const r of (relancesAll || [])) { if (r.devis_id) DB.relancesDevis[r.devis_id] = r; }
+      // Config typologies (opportunités & marchés) — non bloquant
+      loadTypologies().catch(() => {});
       // Précharge la correspondance société → commercial + le mapping métier, enrichit les documents, puis rafraîchit si besoin (non bloquant)
       Promise.all([loadApporteurCommMap(), loadMissionMapping().catch(() => {})]).then(() => {
         _ensureDocsCommercial();
@@ -7916,19 +7918,35 @@ const OPP_TYPOLOGIE_MAP = {
   'Sports / Loisirs': ['Autres (club house – vestiaires – asso - tribunes …)', 'Salle de sports (y/c tennis / boulodrome)', 'Stade'],
   'Tertiaire / Bureaux': [],
 };
-function _oppTypoList() { return Object.keys(OPP_TYPOLOGIE_MAP); }
-function _oppOptionList(values, sel) {
-  const list = values.slice();
+// Config ACTIVE des typologies : chargée depuis app_config (key='typologies'), sinon valeurs par défaut ci-dessus.
+// Éditable par les admins (voir renderTypoAdmin / saveTypologies). Utilisée par opportunités ET marchés.
+let _typoMap = null;
+function _defaultTypoMap() { return JSON.parse(JSON.stringify(OPP_TYPOLOGIE_MAP)); }
+function _typoActive() { return _typoMap || OPP_TYPOLOGIE_MAP; }
+async function loadTypologies(force) {
+  if (_typoMap && !force) return _typoMap;
+  try {
+    const { data } = await sb.from('app_config').select('value').eq('key', 'typologies').maybeSingle();
+    _typoMap = (data && data.value && typeof data.value === 'object' && !Array.isArray(data.value) && Object.keys(data.value).length) ? data.value : _defaultTypoMap();
+  } catch (e) { _typoMap = _defaultTypoMap(); }
+  return _typoMap;
+}
+function _typoList() { return Object.keys(_typoActive()); }
+function _typoOptionList(values, sel) {
+  const list = (values || []).slice();
   if (sel && !list.includes(sel)) list.unshift(sel); // conserver une valeur existante hors liste
   return '<option value="">—</option>' + list.map(v => `<option value="${cmdEsc(v)}"${v === sel ? ' selected' : ''}>${cmdEsc(v)}</option>`).join('');
 }
-function _oppTypoOptions(sel) { return _oppOptionList(_oppTypoList(), sel || ''); }
-function _oppSousTypoOptions(typo, sel) { return _oppOptionList((typo && OPP_TYPOLOGIE_MAP[typo]) ? OPP_TYPOLOGIE_MAP[typo] : [], sel || ''); }
+function _typoOptions(sel) { return _typoOptionList(_typoList(), sel || ''); }
+function _sousTypoOptions(typo, sel) { const M = _typoActive(); return _typoOptionList((typo && M[typo]) ? M[typo] : [], sel || ''); }
+// Alias opportunité (formulaire d'opportunité)
+function _oppTypoOptions(sel) { return _typoOptions(sel); }
+function _oppSousTypoOptions(typo, sel) { return _sousTypoOptions(typo, sel); }
 function _oppTypologieChanged(v) {
   _oppForm.typologie = v;
   _oppForm.sousTypologie = '';
   const sel = document.getElementById('of-sous-typologie');
-  if (sel) sel.innerHTML = _oppSousTypoOptions(v, '');
+  if (sel) sel.innerHTML = _sousTypoOptions(v, '');
 }
 
 // ═══ Décomposition des honoraires par agence (CRM-only) ═══
@@ -9429,7 +9447,7 @@ function renderPage(page) {
     _clientsServerLoaded = true;
     loadClientsPage(clientsPage || 0, clientsLetter, clientsSearch);
   }
-  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); }, 50);
+  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); }, 50);
   if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); }, 50);
   if (page === 'analyse') setTimeout(initAnalyse, 30);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
@@ -13775,6 +13793,18 @@ function _mmClear() {
   const c = document.getElementById('mm-coords'); if (c) c.textContent = 'aucune';
   _mmCertifie = false; _mmUpdateCertifUi();
 }
+// Typologie / sous-typologie du marché (CRM-only, héritée par les affaires)
+function _marcheTypoChanged(v) { const sel = document.getElementById('mm-sous-typologie'); if (sel) sel.innerHTML = _sousTypoOptions(v, ''); }
+async function marcheSaveTypo() {
+  const m = DB.marches.find(x => x.id === currentMarcheId); if (!m) return;
+  const typo = (document.getElementById('mm-typologie') || {}).value || null;
+  const sous = (document.getElementById('mm-sous-typologie') || {}).value || null;
+  const { error } = await sb.from('marches').update({ typologie: typo, sous_typologie: sous }).eq('id', m.id);
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  m.typologie = typo; m.sous_typologie = sous;
+  toast('Typologie du marché enregistrée', 'success');
+  renderPage('marche-detail');
+}
 async function marcheSaveGeo() {
   const m = DB.marches.find(x => x.id === currentMarcheId); if (!m) return;
   const { error } = await sb.from('marches').update({ lat: _mmLat, lng: _mmLng, gps_certifie: _mmCertifie }).eq('id', m.id);
@@ -13856,6 +13886,8 @@ function renderMarcheDetail() {
       detailRow('Description', m.description),
       detailRow('Statut', marcheStatutBadge(m.statut)),
       detailRow('Agence', m.agence),
+      detailRow('Typologie', m.typologie),
+      detailRow('Sous-typologie', m.sous_typologie),
     ])}
     ${detailSection('Dates & Montants', [
       detailRow('Date début', m.date_debut ? fmtDateFR(m.date_debut) : null),
@@ -13865,6 +13897,17 @@ function renderMarcheDetail() {
       detailRow('Devise', m.devise),
     ])}
     ${(() => { const addr = affaires.find(a => a.adresse || a.ville || a.code_postal) || {}; const hasGps = (m.lat != null && m.lng != null); if (!addr.adresse && !addr.ville && !addr.code_postal && !hasGps) return ''; return detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region), detailRow('Latitude', m.lat != null ? Number(m.lat).toFixed(6) : '—'), detailRow('Longitude', m.lng != null ? Number(m.lng).toFixed(6) : '—'), detailRow('Position GPS', '<span id="mm-certif-addr">' + (hasGps ? _mmCertifLabel(!!m.gps_certifie) : '—') + '</span>')]); })()}
+  </div>
+
+  <div class="card" style="margin-bottom:20px"><div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">🏷️ Typologie du marché</div>
+    <button class="btn btn-primary" onclick="marcheSaveTypo()" style="font-size:12px">💾 Enregistrer</button></div>
+    <div class="card-body" style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+      <div><label style="display:block;font-size:11px;color:var(--t3);margin-bottom:3px">Typologie</label>
+        <select id="mm-typologie" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card,#fff);color:var(--t1);min-width:200px" onchange="_marcheTypoChanged(this.value)">${_typoOptions(m.typologie)}</select></div>
+      <div><label style="display:block;font-size:11px;color:var(--t3);margin-bottom:3px">Sous-typologie</label>
+        <select id="mm-sous-typologie" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card,#fff);color:var(--t1);min-width:200px">${_sousTypoOptions(m.typologie, m.sous_typologie)}</select></div>
+      <div style="font-size:11px;color:var(--t3);flex:1;min-width:180px">La typologie du marché est héritée par ses affaires.</div>
+    </div>
   </div>
 
   <div class="card" style="margin-bottom:20px"><div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">📍 Localisation du marché</div>
@@ -14150,6 +14193,8 @@ function renderAffaireDetail() {
       detailRow('Commercial architecte', commLine(a.architecte, apporteurCommercialLabel(a.architecte))),
       detailRow('Responsable', a.responsable),
       detailRow('Marché', marche ? '<a href="#" onclick="showMarcheDetail(&#39;'+marche.id+'&#39;);return false" style="color:var(--accent)">'+( marche.ref||'')+' - '+(marche.nom||'')+'</a>' : '—'),
+      detailRow('Typologie <span style="color:var(--t3);font-size:10px">(marché)</span>', marche && marche.typologie),
+      detailRow('Sous-typologie <span style="color:var(--t3);font-size:10px">(marché)</span>', marche && marche.sous_typologie),
       _gpsRowFor(a),
       detailRow('Statut', marcheStatutBadge(a.statut)),
     ])}
@@ -22180,6 +22225,20 @@ function renderAdmin() {
   </div>
 
   <div class="card" style="margin-bottom:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <div class="card-title">Typologies / sous-typologies <span style="font-weight:400;font-size:11px;color:var(--t3)">(opportunités & marchés)</span></div>
+      <button class="btn btn-primary" onclick="saveTypologies()" style="font-size:12px">💾 Enregistrer</button>
+    </div>
+    <div class="card-body">
+      <div style="font-size:12px;color:var(--t3);margin-bottom:10px">Ajoutez / supprimez des typologies et leurs sous-typologies, puis cliquez sur <strong>Enregistrer</strong>. Ces listes alimentent les opportunités et les marchés.</div>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <input id="typoNewTypo" placeholder="Nouvelle typologie…" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter'){event.preventDefault();typoAddTypologie()}">
+        <button class="btn" onclick="typoAddTypologie()" style="font-size:12px">+ Ajouter la typologie</button>
+      </div>
+      <div id="typoAdminBox" style="color:var(--t3);font-size:13px">Chargement…</div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:16px">
     <div class="card-header"><div class="card-title">Demandes d'accès au CRM</div></div>
     <div class="card-body">
       <div id="adminAccessList" style="color:var(--t3);font-size:13px">Chargement...</div>
@@ -23150,6 +23209,60 @@ async function setMissionMetier(typeMission, metier) {
   }
 }
 
+// ═══ ÉDITEUR ADMIN : TYPOLOGIES / SOUS-TYPOLOGIES ═══
+// Éditent la config _typoMap en mémoire (référence par index pour éviter tout souci d'échappement) ; « Enregistrer » persiste dans app_config.
+async function initTypoAdmin() { await loadTypologies(true); if (!_typoMap) _typoMap = _defaultTypoMap(); renderTypoAdmin(); }
+function renderTypoAdmin() {
+  const box = document.getElementById('typoAdminBox'); if (!box) return;
+  if (!_typoMap) _typoMap = _defaultTypoMap();
+  const keys = Object.keys(_typoMap);
+  const e = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  if (!keys.length) { box.innerHTML = '<div style="padding:10px;color:var(--t3)">Aucune typologie. Ajoutez-en une ci-dessus.</div>'; return; }
+  box.innerHTML = keys.map((t, i) => `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--bg-2)">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
+        <strong style="font-size:13px">${e(t)}</strong>
+        <button class="btn" style="font-size:11px;color:var(--red)" onclick="typoRemoveTypologie(${i})" title="Supprimer cette typologie">🗑 Supprimer</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">
+        ${(_typoMap[t] || []).map((s, j) => `<span style="display:inline-flex;align-items:center;gap:5px;background:var(--card,#fff);border:1px solid var(--border);border-radius:14px;padding:2px 4px 2px 10px;font-size:12px">${e(s)} <span style="cursor:pointer;color:var(--red);font-weight:700;padding:0 4px" onclick="typoRemoveSous(${i},${j})" title="Retirer">✕</span></span>`).join('') || '<span style="font-size:11px;color:var(--t3)">Aucune sous-typologie</span>'}
+      </div>
+      <div style="display:flex;gap:6px">
+        <input id="typoSousInput_${i}" placeholder="Nouvelle sous-typologie…" style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter'){event.preventDefault();typoAddSous(${i})}">
+        <button class="btn" style="font-size:11px" onclick="typoAddSous(${i})">+ Ajouter</button>
+      </div>
+    </div>`).join('');
+}
+function typoAddTypologie() {
+  const el = document.getElementById('typoNewTypo'); const name = (el && el.value || '').trim(); if (!name) return;
+  if (!_typoMap) _typoMap = _defaultTypoMap();
+  if (Object.prototype.hasOwnProperty.call(_typoMap, name)) { toast('Cette typologie existe déjà', 'info'); return; }
+  _typoMap[name] = []; if (el) el.value = ''; renderTypoAdmin();
+}
+function typoRemoveTypologie(i) {
+  const t = Object.keys(_typoMap || {})[i]; if (t == null) return;
+  if (!confirm('Supprimer la typologie « ' + t +' » et ses sous-typologies ?')) return;
+  delete _typoMap[t]; renderTypoAdmin();
+}
+function typoAddSous(i) {
+  const t = Object.keys(_typoMap || {})[i]; if (t == null) return;
+  const el = document.getElementById('typoSousInput_' + i); const v = (el && el.value || '').trim(); if (!v) return;
+  _typoMap[t] = _typoMap[t] || []; if (_typoMap[t].includes(v)) { toast('Sous-typologie déjà présente', 'info'); return; }
+  _typoMap[t].push(v); if (el) el.value = ''; renderTypoAdmin();
+}
+function typoRemoveSous(i, j) {
+  const t = Object.keys(_typoMap || {})[i]; if (t == null) return;
+  (_typoMap[t] || []).splice(j, 1); renderTypoAdmin();
+}
+async function saveTypologies() {
+  if (!_typoMap) return;
+  try {
+    const { error } = await sb.from('app_config').upsert({ key: 'typologies', value: _typoMap, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    if (error) { toast('Erreur enregistrement : ' + error.message, 'error'); return; }
+    toast('Typologies enregistrées ✅', 'success');
+  } catch (e) { toast('Erreur : ' + e.message, 'error'); }
+}
+
 // ═══ OBJECTIFS PAR AGENCE ═══
 // Agences avec split SOL/EXE (paramétrable). Les autres = objectif global (métier='GLOBAL')
 const AGENCES_AVEC_METIERS = ['GPH64','GPH85'];
@@ -23784,7 +23897,7 @@ async function autoLinkCommerciaux() {
   if (linkedAk > 0) msgs.push(`${linkedAk} ID Akuiteo rempli(s)`);
   toast(msgs.length > 0 ? msgs.join(', ') : 'Aucune nouvelle liaison trouvée', msgs.length > 0 ? 'success' : 'info');
   renderPage('admin');
-  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); }, 50);
+  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); }, 50);
 }
 
 let linkCommercialLuccaForId = null;
@@ -23800,7 +23913,7 @@ function openManualLinkCommercialLucca(commId, commName) {
     closeModal('link-lucca');
     toast('Liaison effectuée', 'success');
     renderPage('admin');
-    setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); }, 50);
+    setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); }, 50);
   };
   renderLinkLuccaList();
   openModal('link-lucca');
@@ -23813,7 +23926,7 @@ async function unlinkCommercialLucca(commId) {
   if (comm) comm.lucca_id = null;
   toast('Liaison supprimée', 'success');
   renderPage('admin');
-  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); }, 50);
+  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); }, 50);
 }
 
 async function updateCommercialRole(commercialId, role) {
