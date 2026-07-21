@@ -7512,8 +7512,11 @@ async function oppModalOpen(akId, prefill) {
       city: raw.city || '',
       country: raw.country || '',
       description: raw.description || (o && o.description) || '',
-      // CRM-only : décomposition des honoraires par agence (non synchronisé Akuiteo)
-      honorairesAgences: (o && Array.isArray(o.honoraires_agences)) ? o.honoraires_agences.map(h => ({ agence: h.agence || '', montant: (h.montant != null ? h.montant : '') })) : [],
+      // CRM-only : décomposition des honoraires par agence (non synchronisé Akuiteo) — montant + stade + statut par agence
+      honorairesAgences: (o && Array.isArray(o.honoraires_agences)) ? o.honoraires_agences.map(h => ({ agence: h.agence || '', montant: (h.montant != null ? h.montant : ''), stade: h.stade || '', statut: h.statut || '' })) : [],
+      // CRM-only : typologie / sous-typologie (valeurs configurables — voir OPP_TYPOLOGIE_MAP)
+      typologie: (o && o.typologie) || '',
+      sousTypologie: (o && o.sous_typologie) || '',
       // CRM-only : localisation du chantier (point placé sur la carte)
       chantierLat: (o && o.chantier_lat != null) ? Number(o.chantier_lat) : null,
       chantierLng: (o && o.chantier_lng != null) ? Number(o.chantier_lng) : null,
@@ -7589,6 +7592,7 @@ function _oppPipeChanged(pipeId) {
   if (_oppForm.stageId && !list.some(s => String(s.id) === String(_oppForm.stageId))) _oppForm.stageId = '';
   const sel = document.getElementById('of-stage');
   if (sel) sel.innerHTML = _oppStageOptionsHtml(list, _oppForm.stageId);
+  if (_oppHonoOpen) _oppHonoRender(); // rafraîchir les stades par agence (dépendent du portefeuille)
 }
 
 function renderOppEditPage() {
@@ -7641,6 +7645,10 @@ function renderOppEditPage() {
           ${_oppRefs.originTypes.map(t => `<option value="${t.id}"${String(f.originTypeId) === String(t.id) ? ' selected' : ''}>${cmdEsc(t.name)}</option>`).join('')}</select></div>
       <div style="grid-column:1/3"><label style="${lbl}">Origine (précision)</label>
         <input id="of-originText" style="${fi}" value="${esc(f.origin)}" oninput="_oppForm.origin=this.value"></div>
+      <div><label style="${lbl}">Typologie</label>
+        <select id="of-typologie" style="${fi}" onchange="_oppTypologieChanged(this.value)">${_oppTypoOptions(f.typologie)}</select></div>
+      <div><label style="${lbl}">Sous-typologie</label>
+        <select id="of-sous-typologie" style="${fi}" onchange="_oppForm.sousTypologie=this.value">${_oppSousTypoOptions(f.typologie, f.sousTypologie)}</select></div>
 
       ${sec('Équipe')}
       <div><label style="${lbl}">Responsable commercial</label>
@@ -7886,6 +7894,24 @@ function _oppPickEndClient(clientId, akId, name) {
   const box = document.getElementById('of-endclientRes'); if (box) box.style.display = 'none';
 }
 
+// ═══ Typologie / sous-typologie d'opportunité (CRM-only) ═══
+// À REMPLIR : clé = typologie, valeur = liste des sous-typologies associées. Ex. { 'Bâtiment': ['Neuf', 'Réhabilitation'], ... }
+const OPP_TYPOLOGIE_MAP = {};
+function _oppTypoList() { return Object.keys(OPP_TYPOLOGIE_MAP); }
+function _oppOptionList(values, sel) {
+  const list = values.slice();
+  if (sel && !list.includes(sel)) list.unshift(sel); // conserver une valeur existante hors liste
+  return '<option value="">—</option>' + list.map(v => `<option value="${cmdEsc(v)}"${v === sel ? ' selected' : ''}>${cmdEsc(v)}</option>`).join('');
+}
+function _oppTypoOptions(sel) { return _oppOptionList(_oppTypoList(), sel || ''); }
+function _oppSousTypoOptions(typo, sel) { return _oppOptionList((typo && OPP_TYPOLOGIE_MAP[typo]) ? OPP_TYPOLOGIE_MAP[typo] : [], sel || ''); }
+function _oppTypologieChanged(v) {
+  _oppForm.typologie = v;
+  _oppForm.sousTypologie = '';
+  const sel = document.getElementById('of-sous-typologie');
+  if (sel) sel.innerHTML = _oppSousTypoOptions(v, '');
+}
+
 // ═══ Décomposition des honoraires par agence (CRM-only) ═══
 let _oppHonoOpen = false;
 function _oppGetAgenceOptions(selected) {
@@ -7910,37 +7936,60 @@ function _oppHonoSyncMontant() {
   }
 }
 function _oppHonoUpdateTotals() { const t = document.getElementById('of-hono-total'); if (t) t.textContent = 'Total réparti : ' + fmt(_oppHonoTotal()); _oppHonoSyncMontant(); }
+// Statut global déduit des lignes par agence : ≥1 Gagné ⇒ Gagnée ; toutes Perdu ⇒ Perdue ; sinon En cours
+function _oppDerivedStatut(arr) {
+  const lines = (arr || []).filter(h => h.agence);
+  if (!lines.length) return null;
+  if (lines.some(h => h.statut === 'WON')) return 'WON';
+  if (lines.every(h => h.statut === 'LOST')) return 'LOST';
+  return 'IN_PROGRESS';
+}
+function _oppStatutLabel(s) { return s === 'WON' ? 'Gagnée 🏆' : s === 'LOST' ? 'Perdue' : 'En cours'; }
+function _oppStatutColor(s) { return s === 'WON' ? '#10b981' : s === 'LOST' ? '#ef4444' : '#f59e0b'; }
+function _oppHonoDerivedHtml() { const d = _oppDerivedStatut(_oppForm.honorairesAgences); return d ? 'Statut global déduit : <strong style="color:' + _oppStatutColor(d) + '">' + _oppStatutLabel(d) + '</strong>' : ''; }
+function _oppHonoUpdateDerived() { const el = document.getElementById('of-hono-derived'); if (el) el.innerHTML = _oppHonoDerivedHtml(); }
 function _oppHonoRender() {
   const box = document.getElementById('of-hono-block'); if (!box) return;
   const arr = _oppForm.honorairesAgences || [];
-  const map = {}; arr.forEach(h => { if (h.agence) map[h.agence] = (h.montant != null ? h.montant : ''); });
+  const map = {}; arr.forEach(h => { if (h.agence) map[h.agence] = h; });
   const nb = Object.keys(map).length;
-  const fi = 'padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)';
+  const fi = 'padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)';
   const header = `<div onclick="_oppHonoToggle()" style="cursor:pointer;user-select:none;font-size:12px;font-weight:700;color:var(--accent);padding:4px 0">${_oppHonoOpen ? '▾' : '▸'} Agences & honoraires (CRM)${nb ? ' · ' + nb + ' agence(s)' : ''}</div>`;
   if (!_oppHonoOpen) { box.innerHTML = header; return; }
-  const lines = NL_AGENCES.map(ag => {
-    const on = Object.prototype.hasOwnProperty.call(map, ag);
-    return `<label style="display:flex;gap:8px;align-items:center;margin-bottom:5px;font-size:13px;cursor:pointer">
-      <input type="checkbox" ${on ? 'checked' : ''} onchange="_oppHonoToggleAg('${ag}',this.checked)" style="width:16px;height:16px;accent-color:var(--accent)">
-      <span style="flex:0 0 70px;font-weight:600">${ag}</span>
-      <input type="number" step="any" placeholder="Honoraire €" style="${fi};width:140px;flex:none${on ? '' : ';opacity:.45'}" value="${on && map[ag] != null ? map[ag] : ''}" ${on ? '' : 'disabled'} oninput="_oppHonoSetMt('${ag}',this.value)">
-    </label>`;
+  const stageList = _oppStagesForPipe(_oppForm.pipeId, null);
+  const statutOpts = sel => ['', 'WON', 'LOST'].map(v => `<option value="${v}"${sel === v ? ' selected' : ''}>${v === '' ? '—' : v === 'WON' ? 'Gagné' : 'Perdu'}</option>`).join('');
+  const rows = NL_AGENCES.map(ag => {
+    const h = map[ag]; const on = !!h;
+    return `<tr style="${on ? '' : 'opacity:.5'}">
+      <td style="padding:3px 4px"><input type="checkbox" ${on ? 'checked' : ''} onchange="_oppHonoToggleAg('${ag}',this.checked)" style="width:15px;height:15px;accent-color:var(--accent)"></td>
+      <td style="padding:3px 6px;font-weight:600">${ag}</td>
+      <td style="padding:3px 4px"><input type="number" step="any" placeholder="€" style="${fi};width:110px" value="${on && h.montant != null ? h.montant : ''}" ${on ? '' : 'disabled'} oninput="_oppHonoSetMt('${ag}',this.value)"></td>
+      <td style="padding:3px 4px"><select style="${fi};min-width:150px" ${on ? '' : 'disabled'} onchange="_oppHonoSetStade('${ag}',this.value)">${_oppStageOptionsHtml(stageList, on ? h.stade : '')}</select></td>
+      <td style="padding:3px 4px"><select style="${fi};min-width:90px" ${on ? '' : 'disabled'} onchange="_oppHonoSetStatut('${ag}',this.value)">${statutOpts(on ? h.statut : '')}</select></td>
+    </tr>`;
   }).join('');
-  box.innerHTML = header + `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--bg-2)">
-    <div style="font-size:11px;color:var(--t3);margin-bottom:8px">Cochez les agences concernées et saisissez l'honoraire de chacune. Un email sera envoyé à la liste de diffusion des agences cochées à la création.</div>
-    ${lines}
-    <div style="display:flex;justify-content:flex-end;align-items:center;margin-top:6px"><div id="of-hono-total" style="font-size:12px;font-weight:700">Total réparti : ${fmt(_oppHonoTotal())}</div></div></div>`;
+  box.innerHTML = header + `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--bg-2);overflow-x:auto">
+    <div style="font-size:11px;color:var(--t3);margin-bottom:8px">Cochez les agences concernées : honoraire, <b>stade d'avancement</b> et <b>statut</b> (Gagné/Perdu) propres à chaque agence. Statut global : une agence gagnée ⇒ opportunité <b>Gagnée</b> ; toutes perdues ⇒ <b>Perdue</b>. Un email est envoyé à la liste de diffusion des agences cochées à la création.</div>
+    <table style="border-collapse:collapse;font-size:12px;width:100%"><thead><tr style="color:var(--t3);text-align:left;font-size:11px">
+      <th style="padding:2px 4px"></th><th style="padding:2px 6px">Agence</th><th style="padding:2px 4px">Honoraire</th><th style="padding:2px 4px">Stade d'avancement</th><th style="padding:2px 4px">Statut</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:12px;flex-wrap:wrap">
+      <div id="of-hono-derived" style="font-size:12px">${_oppHonoDerivedHtml()}</div>
+      <div id="of-hono-total" style="font-size:12px;font-weight:700">Total réparti : ${fmt(_oppHonoTotal())}</div>
+    </div></div>`;
   _oppHonoSyncMontant();
 }
 function _oppHonoToggle() { _oppHonoOpen = !_oppHonoOpen; _oppHonoRender(); }
 function _oppHonoToggleAg(ag, checked) {
   _oppForm.honorairesAgences = _oppForm.honorairesAgences || [];
   const i = _oppForm.honorairesAgences.findIndex(h => h.agence === ag);
-  if (checked) { if (i < 0) _oppForm.honorairesAgences.push({ agence: ag, montant: '' }); }
+  if (checked) { if (i < 0) _oppForm.honorairesAgences.push({ agence: ag, montant: '', stade: '', statut: '' }); }
   else if (i >= 0) _oppForm.honorairesAgences.splice(i, 1);
   _oppHonoRender();
 }
 function _oppHonoSetMt(ag, v) { const h = (_oppForm.honorairesAgences || []).find(x => x.agence === ag); if (h) h.montant = v; _oppHonoUpdateTotals(); }
+function _oppHonoSetStade(ag, v) { const h = (_oppForm.honorairesAgences || []).find(x => x.agence === ag); if (h) h.stade = v; }
+function _oppHonoSetStatut(ag, v) { const h = (_oppForm.honorairesAgences || []).find(x => x.agence === ag); if (h) h.statut = v; _oppHonoUpdateDerived(); }
 
 // ─── Listes de diffusion par agence (email auto à la création d'une opportunité) ───
 let _diffLists = null; // { agence: [emails] }
@@ -8108,8 +8157,13 @@ async function saveOpportunite() {
   const isUpdate = !!f.akId;
   // Agences déjà présentes AVANT la sauvegarde (pour notifier uniquement les agences AJOUTÉES en modification)
   const _prevAgences = new Set((isUpdate ? ((_opps.find(x => x.akuiteo_id === f.akId) || {}).honoraires_agences || []) : []).map(h => h.agence).filter(Boolean));
-  // Décomposition honoraires (CRM-only) : si présente, le Montant Prestations = somme des lignes par agence
-  const honoArr = (f.honorairesAgences || []).filter(h => h.agence).map(h => ({ agence: h.agence, montant: (h.montant !== '' && h.montant != null && !isNaN(Number(h.montant))) ? Number(h.montant) : 0 }));
+  // Décomposition honoraires (CRM-only) : montant + stade + statut par agence ; si présente, le Montant Prestations = somme des lignes
+  const honoArr = (f.honorairesAgences || []).filter(h => h.agence).map(h => ({
+    agence: h.agence,
+    montant: (h.montant !== '' && h.montant != null && !isNaN(Number(h.montant))) ? Number(h.montant) : 0,
+    stade: h.stade || null,
+    statut: (h.statut === 'WON' || h.statut === 'LOST') ? h.statut : null,
+  }));
   if (honoArr.length) f.montant = honoArr.reduce((a, h) => a + h.montant, 0);
   // En modification : repartir de l'objet Akuiteo complet (conserve id, code et autres champs requis)
   let payload = {};
@@ -8185,6 +8239,8 @@ async function saveOpportunite() {
     try {
       const crmFields = {
         honoraires_agences: honoArr.length ? honoArr : null,
+        typologie: f.typologie || null,
+        sous_typologie: f.sousTypologie || null,
         chantier_lat: (f.chantierLat != null ? f.chantierLat : null),
         chantier_lng: (f.chantierLng != null ? f.chantierLng : null),
         chantier_adresse: f.chantierAdresse || null,
@@ -8194,6 +8250,31 @@ async function saveOpportunite() {
       const mo = (_opps || []).find(x => String(x.akuiteo_id) === String(akId)); if (mo) Object.assign(mo, crmFields);
       _vrOppsLoaded = false; // forcer le recalcul de la couche/liste « Opportunités » de la Carte
     } catch (e) { console.warn('honoraires_agences', e.message); }
+    // Statut global déduit des lignes par agence → propagation à Akuiteo (win/lose) avec confirmation
+    try {
+      const derived = _oppDerivedStatut(honoArr);
+      if (derived === 'WON' || derived === 'LOST') {
+        const mo = (_opps || []).find(x => String(x.akuiteo_id) === String(akId));
+        if (!mo || mo.statut !== derived) {
+          const lbl = derived === 'WON' ? 'GAGNÉE (au moins une agence est gagnée)' : 'PERDUE (toutes les agences sont perdues)';
+          showSyncLoading(false);
+          if (confirm('D\'après les statuts par agence, marquer cette opportunité comme ' + lbl + ' dans Akuiteo ?')) {
+            showSyncLoading(true); setSyncText(derived === 'WON' ? 'Marquage gagnée…' : 'Marquage perdue…');
+            if (!_oppRefs) await loadOppRefs();
+            const st = _oppRefs.stages.find(s => s.status === derived);
+            if (st) {
+              const body = derived === 'WON'
+                ? { stageId: String(st.id), signatureDate: new Date().toISOString() }
+                : { stageId: String(st.id), lossDate: new Date().toISOString() };
+              await akuiteoFetch('POST', `/crm/opportunities/${akId}/${derived === 'WON' ? 'win' : 'lose'}`, body, { accept: 'text/plain' });
+              await _refreshOneOpp(akId);
+              // Réappliquer les champs CRM (le refresh repart de l'objet Akuiteo)
+              try { await sb.from('opportunites').update({ honoraires_agences: honoArr.length ? honoArr : null }).eq('akuiteo_id', String(akId)); const m2 = (_opps || []).find(x => String(x.akuiteo_id) === String(akId)); if (m2) m2.honoraires_agences = honoArr.length ? honoArr : null; } catch (e) {}
+            } else toast('Aucun stade « ' + _oppStatutLabel(derived) + ' » configuré dans Akuiteo', 'warn');
+          }
+        }
+      }
+    } catch (e) { console.warn('statut global déduit', e.message); toast('Statut global non appliqué : ' + e.message, 'warning'); }
     showSyncLoading(false);
     toast(f.akId ? 'Opportunité mise à jour' : 'Opportunité créée', 'success');
     // Notifier les listes de diffusion (non bloquant) : toutes les agences à la création, seulement les agences AJOUTÉES en modification
@@ -8976,6 +9057,7 @@ function renderOppDetailPage() {
   const dFR = v => v ? fmtDateFR(String(v).slice(0, 10)) : '';
   const deptName = refName(_oppRefs && _oppRefs.departments, raw.departmentId);
   const yearName = refName(_oppRefs && _oppRefs.years, raw.yearId);
+  const stageName = id => { const s = _oppRefs && _oppRefs.stages && _oppRefs.stages.find(x => String(x.id) === String(id)); return s ? (s.name || '') : ''; };
   const info = `
     ${row('Client', o.client_id ? `<a href="#" onclick="showClient('${o.client_id}');return false" style="color:var(--accent)">${cmdEsc(o.client_name || '')}</a>` : cmdEsc(o.client_name || '—'))}
     ${row('Client final', cmdEsc((raw.endCustomer && raw.endCustomer.name) || ''))}
@@ -8984,10 +9066,12 @@ function renderOppDetailPage() {
     ${row('Code', cmdEsc(o.code || ''))}
     ${row('Stade', cmdEsc(o.stage || ''))}
     ${row('Portefeuille', cmdEsc(o.pipe || ''))}
+    ${row('Typologie', cmdEsc(o.typologie || ''))}
+    ${row('Sous-typologie', cmdEsc(o.sous_typologie || ''))}
     ${row('Statut', _oppStatutBadge(o.statut))}
     ${row('Stratégique', raw.strategic ? '⭐ Oui' : 'Non')}
     ${row('Montant Prestations (HT)', o.montant != null ? fmt(o.montant) : '')}
-    ${(Array.isArray(o.honoraires_agences) && o.honoraires_agences.length) ? row('Décomposition par agence', o.honoraires_agences.map(h => `<div style="display:flex;justify-content:space-between;gap:12px"><span style="color:var(--t3)">${cmdEsc(h.agence || '')}</span><strong>${fmt(Number(h.montant) || 0)}</strong></div>`).join('')) : ''}
+    ${(Array.isArray(o.honoraires_agences) && o.honoraires_agences.length) ? row('Décomposition par agence', o.honoraires_agences.map(h => { const st = stageName(h.stade); const stat = h.statut === 'WON' ? '<span style="color:#10b981;font-weight:700">Gagné</span>' : h.statut === 'LOST' ? '<span style="color:#ef4444;font-weight:700">Perdu</span>' : ''; return `<div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><span style="color:var(--t3)">${cmdEsc(h.agence || '')}</span><span style="display:flex;gap:10px;align-items:center">${st ? '<span style="color:var(--t3);font-size:11px">' + cmdEsc(st) + '</span>' : ''}${stat}<strong>${fmt(Number(h.montant) || 0)}</strong></span></div>`; }).join('')) : ''}
     ${(() => { const v = (raw.customData && raw.customData[OPP_CD_TRAVAUX] && raw.customData[OPP_CD_TRAVAUX].value) != null ? raw.customData[OPP_CD_TRAVAUX].value : o.montant_travaux; return row('Montant des travaux', v != null && v !== '' ? fmt(v) : ''); })()}
     ${row('Quantité', raw.quantity != null ? raw.quantity : '')}
     ${row('Probabilité', o.probabilite != null ? o.probabilite + '%' : '')}
