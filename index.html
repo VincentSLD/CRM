@@ -9157,17 +9157,21 @@ function renderOppDetailPage() {
 }
 
 // ═══ ANALYSE DES OPPORTUNITÉS ═══
-let _oppAnaYear = '', _oppAnaResp = '', _oppAnaPipe = '';
+let _oppAnaYear = '', _oppAnaResp = '', _oppAnaPipe = '', _oppAnaTypo = '', _oppAnaSousTypo = '';
 function renderOppAnalyse() {
   if (!_oppsLoaded) return '<div style="text-align:center;padding:40px;color:var(--t3)">Chargement…</div>';
   const allOpps = _opps || [];
   const years = [...new Set(allOpps.map(o => (o.date_creation || '').slice(0, 4)).filter(Boolean))].sort().reverse();
   const respList = [...new Set(allOpps.map(o => o.responsable).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
   const pipeList = [...new Set(allOpps.map(o => o.pipe).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+  const typoList = [...new Set(allOpps.map(o => o.typologie).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+  const sousTypoList = [...new Set(allOpps.filter(o => !_oppAnaTypo || o.typologie === _oppAnaTypo).map(o => o.sous_typologie).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
   const opps = allOpps.filter(o =>
     (!_oppAnaYear || (o.date_creation || '').slice(0, 4) === _oppAnaYear) &&
     (!_oppAnaResp || (o.responsable || '') === _oppAnaResp) &&
-    (!_oppAnaPipe || (o.pipe || '') === _oppAnaPipe));
+    (!_oppAnaPipe || (o.pipe || '') === _oppAnaPipe) &&
+    (!_oppAnaTypo || (o.typologie || '') === _oppAnaTypo) &&
+    (!_oppAnaSousTypo || (o.sous_typologie || '') === _oppAnaSousTypo));
   const num = v => Number(v) || 0;
   const enCours = opps.filter(o => o.statut === 'IN_PROGRESS');
   const gagnees = opps.filter(o => o.statut === 'WON');
@@ -9219,6 +9223,8 @@ function renderOppAnalyse() {
   const respSorted = Object.entries(byResp).sort((a, b) => b[1] - a[1]).slice(0, 12);
   // Par origine
   const byOrig = grp(enCours, o => o.type_origine, o => num(o.montant));
+  // Par typologie
+  const byTypo = grp(enCours, o => o.typologie, o => num(o.montant));
   // Par agence (basé sur la décomposition CRM des honoraires) — les opportunités sans décomposition sont regroupées en "(Non réparti)"
   const byAgence = {};
   let nonReparti = 0;
@@ -9243,6 +9249,7 @@ function renderOppAnalyse() {
     { id: 'oppAnaResp', cfg: { type: 'bar', data: { labels: respSorted.map(r => r[0]), datasets: [{ label: 'Pipeline (HT)', data: respSorted.map(r => r[1]), backgroundColor: '#8b5cf6' }] }, options: { indexAxis: 'y', plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false } } },
     { id: 'oppAnaMonth', cfg: { type: 'bar', data: { labels: mLab, datasets: [{ label: 'Signatures prévues (HT)', data: months.map(m => byMonth[m] || 0), backgroundColor: '#10b981' }] }, options: { plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false } } },
     { id: 'oppAnaOrig', cfg: { type: 'doughnut', data: { labels: Object.keys(byOrig), datasets: [{ data: Object.values(byOrig), backgroundColor: PAL }] }, options: { plugins: { legend: { position: 'bottom' } }, responsive: true, maintainAspectRatio: false } } },
+    { id: 'oppAnaTypo', cfg: { type: 'doughnut', data: { labels: Object.keys(byTypo), datasets: [{ data: Object.values(byTypo), backgroundColor: PAL }] }, options: { plugins: { legend: { position: 'bottom' } }, responsive: true, maintainAspectRatio: false } } },
     { id: 'oppAnaAgence', cfg: { type: 'bar', data: { labels: agenceSorted.map(a => a[0]), datasets: [{ label: 'Honoraires en cours (HT)', data: agenceSorted.map(a => a[1]), backgroundColor: '#06b6d4' }] }, options: { indexAxis: 'y', plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false } } },
   ];
 
@@ -9264,7 +9271,9 @@ function renderOppAnalyse() {
         ${fsel('_oppAnaYear', _oppAnaYear, years, '— Année —')}
         ${fsel('_oppAnaResp', _oppAnaResp, respList.map(r => ({ v: r, l: fmtCommercialName(r) })), '— Responsable —')}
         ${fsel('_oppAnaPipe', _oppAnaPipe, pipeList, '— Portefeuille —')}
-        ${(_oppAnaYear || _oppAnaResp || _oppAnaPipe) ? `<button class="btn" onclick="_oppAnaYear='';_oppAnaResp='';_oppAnaPipe='';renderPage('opportunite-analyse')" style="font-size:12px" title="Réinitialiser">✕</button>` : ''}
+        ${fsel('_oppAnaTypo', _oppAnaTypo, typoList, '— Typologie —')}
+        ${fsel('_oppAnaSousTypo', _oppAnaSousTypo, sousTypoList, '— Sous-typologie —')}
+        ${(_oppAnaYear || _oppAnaResp || _oppAnaPipe || _oppAnaTypo || _oppAnaSousTypo) ? `<button class="btn" onclick="_oppAnaYear='';_oppAnaResp='';_oppAnaPipe='';_oppAnaTypo='';_oppAnaSousTypo='';renderPage('opportunite-analyse')" style="font-size:12px" title="Réinitialiser">✕</button>` : ''}
         <button class="btn" onclick="oppAnaExportPdf()">📄 Export PDF</button>
         <button class="btn" onclick="syncOpportunites()">⬇ Synchroniser</button>
       </div>
@@ -9286,6 +9295,7 @@ function renderOppAnalyse() {
       ${chartBox('oppAnaPipe', '💼 Répartition par portefeuille', 240)}
       ${chartBox('oppAnaStatut', '🥧 Répartition par statut', 240)}
       ${chartBox('oppAnaOrig', '🌱 Répartition par origine', 240)}
+      ${chartBox('oppAnaTypo', '🏷️ Pipeline par typologie', 240)}
       ${chartBox('oppAnaAgence', '🏢 Honoraires par agence (décomposition CRM)', 280)}
     </div>`;
 }
@@ -9468,7 +9478,7 @@ function renderPage(page) {
 //  ANALYSE / KPI — indicateurs + cartographie "qui travaille avec qui"
 // ═══════════════════════════════════════════════════════════
 let anFrom = '', anTo = '';            // plage de dates (date de facture)
-let anAgences = [], anMetiers = [];    // filtres multi-sélection
+let anAgences = [], anMetiers = [], anTypologies = [], anSousTypologies = [];    // filtres multi-sélection
 let _anData = null, _anLoading = false;
 let _anNetwork = null, _anNetFocus = '';
 let _anNetTypes = { agence: true, client: true, architecte: true, apporteur: true, gros_oeuvre: false };
@@ -9501,24 +9511,47 @@ function loadVisNetwork() {
   return _visLoading;
 }
 
+// Typologie/sous-typologie par marché (id → {typologie, sous_typologie}) pour l'analyse, sur TOUS les marchés (pas seulement 1 an)
+let _anMarcheTypo = null;
+async function loadAnMarcheTypo() {
+  if (_anMarcheTypo) return _anMarcheTypo;
+  const m = {}; let lastId = '';
+  try {
+    while (true) {
+      let q = sb.from('marches').select('id,typologie,sous_typologie').order('id', { ascending: true }).limit(1000);
+      if (lastId) q = q.gt('id', lastId);
+      const { data, error } = await q;
+      if (error || !data || !data.length) break;
+      for (const r of data) { if (r.typologie || r.sous_typologie) m[r.id] = { t: r.typologie || '', s: r.sous_typologie || '' }; }
+      lastId = data[data.length - 1].id;
+      if (data.length < 1000) break;
+    }
+  } catch (e) { console.warn('[analyse] marché typo', e); }
+  _anMarcheTypo = m; return m;
+}
 function _anEnrich(rows) {
+  const tm = _anMarcheTypo || {};
   for (const f of rows) {
     const e = (_clientCommById && f.client_id && _clientCommById[f.client_id]) || (_apporteurCommMap && _apporteurCommMap[_normApporteurName(f.client_name)]) || null;
     f._novam = (e && e.novam) || '';
     f._gph = (e && e.gph) || '';
     f._metier = deriveMetier(f.type_prestation);
+    const mt = f.marche_id ? tm[f.marche_id] : null;
+    f._typologie = (mt && mt.t) || '';
+    f._sousTypologie = (mt && mt.s) || '';
   }
 }
 async function loadAnalyseData() {
   _anLoading = true;
   await loadMissionMapping().catch(() => {});
   await loadAnAffaireCP().catch(() => {});
+  await loadAnMarcheTypo().catch(() => {});
   // Pagination keyset (par id) pour éviter les OFFSET profonds (erreur 500).
   // Repli automatique si les colonnes optionnelles (type_prestation / gros_oeuvre) n'existent pas encore.
   const colSets = [
-    'id,ref,montant,date,client_id,client_name,apporteur_affaire,architecte,societe,type_prestation,gros_oeuvre,statut',
-    'id,ref,montant,date,client_id,client_name,apporteur_affaire,architecte,societe,type_prestation,statut',
-    'id,ref,montant,date,client_id,client_name,apporteur_affaire,architecte,societe,statut',
+    'id,ref,montant,date,client_id,client_name,apporteur_affaire,architecte,societe,type_prestation,gros_oeuvre,statut,marche_id',
+    'id,ref,montant,date,client_id,client_name,apporteur_affaire,architecte,societe,type_prestation,statut,marche_id',
+    'id,ref,montant,date,client_id,client_name,apporteur_affaire,architecte,societe,statut,marche_id',
   ];
   let ci = 0, all = [], lastId = '', firstPage = true;
   try {
@@ -9547,6 +9580,8 @@ function _anFiltered() {
   let rows = _anData || [];
   if (anAgences.length) rows = rows.filter(f => anAgences.includes(f.societe || ''));
   if (anMetiers.length) rows = rows.filter(f => anMetiers.includes(f._metier));
+  if (anTypologies.length) rows = rows.filter(f => anTypologies.includes(f._typologie || ''));
+  if (anSousTypologies.length) rows = rows.filter(f => anSousTypologies.includes(f._sousTypologie || ''));
   return rows;
 }
 
@@ -9559,7 +9594,7 @@ function initAnalyse() {
   }
 }
 function anSetDates(from, to) { anFrom = from; anTo = to; _anData = null; _anNetwork = null; _anMap = null; renderPage('analyse'); }
-function anReset() { const r = _anDefaultRange(); anFrom = r.from; anTo = r.to; anAgences = []; anMetiers = []; _anNetFocus = ''; _anData = null; _anNetwork = null; _anMap = null; renderPage('analyse'); }
+function anReset() { const r = _anDefaultRange(); anFrom = r.from; anTo = r.to; anAgences = []; anMetiers = []; anTypologies = []; anSousTypologies = []; _anNetFocus = ''; _anData = null; _anNetwork = null; _anMap = null; renderPage('analyse'); }
 function anToggleNetType(t, on) { _anNetTypes[t] = on; buildAnalyseNetwork(); }
 function anClearFocus() { _anNetFocus = ''; buildAnalyseNetwork(); document.getElementById('anFocusLabel') && (document.getElementById('anFocusLabel').textContent = ''); }
 
@@ -9636,6 +9671,8 @@ function renderAnalyse() {
     <input type="date" value="${anTo}" onchange="anSetDates(anFrom, this.value)" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1)">
     ${(() => { msDef('anAgence', agences.map(a => ({ v: a, label: a })), anAgences, arr => { anAgences = arr; _anNetwork = null; _anMap = null; renderPage('analyse'); }, false); return msButton('anAgence', 'Agences'); })()}
     ${(() => { msDef('anMetier', [{ v: 'Géotechnique', label: 'Géotechnique' }, { v: 'Structure', label: 'Structure' }], anMetiers, arr => { anMetiers = arr; _anNetwork = null; _anMap = null; renderPage('analyse'); }, false); return msButton('anMetier', 'Métiers'); })()}
+    ${(() => { const opts = [...new Set((_anData || []).map(f => f._typologie).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr')); msDef('anTypo', opts.map(t => ({ v: t, label: t })), anTypologies, arr => { anTypologies = arr; anSousTypologies = anSousTypologies.filter(s => !arr.length || (_anData || []).some(f => arr.includes(f._typologie) && f._sousTypologie === s)); _anNetwork = null; _anMap = null; renderPage('analyse'); }, false); return msButton('anTypo', 'Typologies'); })()}
+    ${(() => { const base = anTypologies.length ? (_anData || []).filter(f => anTypologies.includes(f._typologie || '')) : (_anData || []); const opts = [...new Set(base.map(f => f._sousTypologie).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr')); msDef('anSousTypo', opts.map(t => ({ v: t, label: t })), anSousTypologies, arr => { anSousTypologies = arr; _anNetwork = null; _anMap = null; renderPage('analyse'); }, false); return msButton('anSousTypo', 'Sous-typologies'); })()}
     <button class="btn" style="font-size:12px" onclick="anReset()">Réinitialiser</button>
   </div>`;
 
@@ -9658,6 +9695,8 @@ function renderAnalyse() {
   const byNovam = rk(f => f._novam);
   const byGph = rk(f => f._gph);
   const byMetier = rk(f => f._metier);
+  const byTypo = rk(f => f._typologie);
+  const bySousTypo = rk(f => f._sousTypologie);
 
   const kpi = (label, val, sub) => `<div class="card"><div class="card-body" style="text-align:center;padding:14px 10px">
     <div style="font-size:20px;font-weight:800;color:var(--accent)">${val}</div>
@@ -9678,6 +9717,8 @@ function renderAnalyse() {
     ${_anRankCard('CA par commercial Novam', byNovam, caTotal, '#8b5cf6')}
     ${_anRankCard('CA par commercial GPH', byGph, caTotal, '#06b6d4')}
     ${_anRankCard('CA par métier', byMetier, caTotal, '#ef4444')}
+    ${_anRankCard('CA par typologie', byTypo, caTotal, '#0ea5e9')}
+    ${_anRankCard('CA par sous-typologie', bySousTypo, caTotal, '#14b8a6')}
   </div>`;
 
   const tcb = (t, lbl) => `<label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" ${_anNetTypes[t] ? 'checked' : ''} onchange="anToggleNetType('${t}',this.checked)"> ${lbl}</label>`;
