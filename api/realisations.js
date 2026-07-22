@@ -68,7 +68,8 @@ async function loadPermis(name, depts, debug) {
   if (!PERMISAPI_KEY) return { configured: false, items: [], error: null };
   const list = (depts || []).filter(Boolean).slice(0, 3);
   if (!list.length) return { configured: true, items: [], error: 'Aucun département fourni (renseignez le code postal / département de la fiche).' };
-  const headers = { 'Authorization': 'Bearer ' + PERMISAPI_KEY, 'Accept': 'application/json' };
+  // PermisAPI attend la clé dans le header X-API-Key (on envoie aussi Authorization: Bearer par sécurité)
+  const headers = { 'X-API-Key': PERMISAPI_KEY, 'Authorization': 'Bearer ' + PERMISAPI_KEY, 'Accept': 'application/json' };
   const out = []; let error = null; let sampleKeys = null;
   for (const dep of list) {
     const url = PERMISAPI_BASE + '/permits?dep_code=' + encodeURIComponent(dep) + (name ? '&q=' + encodeURIComponent(name) : '');

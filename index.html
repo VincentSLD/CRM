@@ -27429,18 +27429,29 @@ async function doSearch(q) {
   const ql = q.toLowerCase();
   let results = [];
 
-  // Recherche clients côté serveur (Supabase)
-  const { data: serverClients } = await sb.from('clients')
-    .select('id,name,code,sector,city,est_siege')
-    .or(`name.ilike.%${q}%,code.ilike.%${q}%,city.ilike.%${q}%,sector.ilike.%${q}%,raison_sociale.ilike.%${q}%,raison_sociale2.ilike.%${q}%`)
-    .order('est_siege', { ascending: false, nullsFirst: false })
-    .limit(8);
-  if (serverClients) {
-    serverClients.forEach(c => {
-      const badge = c.est_siege === true ? ' · Siège' : c.est_siege === false ? ' · Étab.' : '';
-      results.push({type:'Client',name:c.name,meta:`${c.code} · ${c.sector||''} · ${c.city||''}${badge}`,action:`showClient('${c.id}')`});
-    });
-  }
+  // Recherche clients côté serveur (Supabase) — dédoublonnée par id
+  const _seenCl = new Set();
+  const pushClient = c => {
+    if (!c || !c.id || _seenCl.has(c.id)) return;
+    _seenCl.add(c.id);
+    const badge = c.est_siege === true ? ' · Siège' : c.est_siege === false ? ' · Étab.' : '';
+    const meta = [c.code, c.sector, c.city].filter(Boolean).join(' · ') + badge;
+    results.push({ type: 'Client', name: c.name, meta, action: `showClient('${c.id}')` });
+  };
+  // 1) Recherche TOLÉRANTE par nom (RPC pg_trgm) : insensible à la ponctuation/espaces/casse (ex. « 6K » → « 6.K - SICA »)
+  try { const { data } = await sb.rpc('search_clients', { q, lim: 8 }); (data || []).forEach(pushClient); } catch (e) { console.warn('search_clients', e && e.message); }
+  // 2) Complément ilike : code / ville / secteur / raison sociale (q assaini pour ne pas casser la syntaxe .or)
+  try {
+    const qs = q.replace(/[,()]/g, ' ').trim();
+    if (qs) {
+      const { data } = await sb.from('clients')
+        .select('id,name,code,sector,city,est_siege')
+        .or(`name.ilike.%${qs}%,code.ilike.%${qs}%,city.ilike.%${qs}%,sector.ilike.%${qs}%,raison_sociale.ilike.%${qs}%,raison_sociale2.ilike.%${qs}%`)
+        .order('est_siege', { ascending: false, nullsFirst: false })
+        .limit(8);
+      (data || []).forEach(pushClient);
+    }
+  } catch (e) { console.warn('ilike clients', e && e.message); }
 
   // Recherche devis/commandes/factures en local (déjà chargés, filtrés par commercial)
   filterByCommercial(DB.devis).forEach(d => {
