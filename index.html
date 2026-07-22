@@ -2116,7 +2116,6 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="fg"><label class="fl">Département</label><input class="fi" id="nc-fact-dept"></div>
               <div class="fg"><label class="fl">Région</label><input class="fi" id="nc-fact-region"></div>
               <div class="fg"><label class="fl">Pays</label><input class="fi" id="nc-fact-pays" value="FR"></div>
-              <div class="fg"><label class="fl">Responsable du site</label><select class="fi" id="nc-fact-responsable"></select></div>
             </div>
           </div>
         </div>
@@ -2651,7 +2650,6 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="fg"><label class="fl">Département</label><input class="fi" id="ec-fact-dept"></div>
               <div class="fg"><label class="fl">Région</label><input class="fi" id="ec-fact-region"></div>
               <div class="fg"><label class="fl">Pays</label><input class="fi" id="ec-fact-pays"></div>
-              <div class="fg"><label class="fl">Responsable du site</label><select class="fi" id="ec-fact-responsable"></select></div>
             </div>
           </div>
         </div>
@@ -13783,7 +13781,6 @@ function renderClientDetail() {
       detailRow('Département', c.fact_departement || '—'),
       detailRow('Région', c.fact_region || '—'),
       detailRow('Pays', c.fact_pays || '—'),
-      detailRow('Responsable du site', c.responsable_site_name ? '<strong>' + c.responsable_site_name + '</strong>' : resolveManagerName(c.responsable_site_id) || '—'),
     ])}
     ${detailSection('Coordonnées', [
       detailRow('Email', c.email ? '<a href="mailto:'+c.email+'" style="color:var(--accent)">'+c.email+'</a>' : '—'),
@@ -26461,15 +26458,6 @@ async function fillAkuiteoDropdowns(prefix, client) {
   setHtml('tarification', akRefOptionsKeep(akRef.pricingMethods, c.mode_tarification, c.mode_tarification_name, 'Mode de tarification GPH...'));
   setHtml('manager', akRefOptionsKeep(akRef.employees, c.account_manager_id, c.account_manager_name, 'Commercial Novam...'));
   setHtml('salesman', akRefOptionsKeep(akRef.employees, c.salesman_id, c.salesman_name, 'Commercial GPH...'));
-  const factResp = document.getElementById(prefix + '-fact-responsable');
-  if (factResp) factResp.innerHTML = akRefOptionsKeep(akRef.employees, c.responsable_site_id, c.responsable_site_name, 'Responsable du site...');
-  // Par défaut, copier le Commercial GPH vers le Responsable du site
-  const salesmanSel = document.getElementById(prefix + '-mk-salesman');
-  if (salesmanSel && factResp) {
-    salesmanSel.addEventListener('change', function() {
-      if (this.value && factResp.value === '') factResp.value = this.value;
-    });
-  }
   // Groupe / Origine (dropdowns dynamiques)
   const [groupes, origines] = await Promise.all([loadDistinctValues('mk_groupe'), loadDistinctValues('mk_origine')]);
   setHtml('groupe', buildDistinctOptions(groupes, c.mk_groupe, 'Groupe...'));
@@ -27488,8 +27476,6 @@ async function submitNewClient() {
       fact_departement: document.getElementById('nc-fact-dept').value.trim() || null,
       fact_region: document.getElementById('nc-fact-region').value.trim() || null,
       fact_pays: document.getElementById('nc-fact-pays').value.trim() || null,
-      responsable_site_id: document.getElementById('nc-fact-responsable')?.value || null,
-      responsable_site_name: document.getElementById('nc-fact-responsable')?.selectedOptions?.[0]?.text !== 'Responsable du site...' ? document.getElementById('nc-fact-responsable')?.selectedOptions?.[0]?.text || null : null,
       email: document.getElementById('nc-email').value.trim() || '',
       phone: document.getElementById('nc-phone').value.trim() || '',
       telephone2: document.getElementById('nc-phone2').value.trim() || null,
@@ -27716,8 +27702,6 @@ async function submitEditClient() {
       fact_departement: document.getElementById('ec-fact-dept').value.trim() || null,
       fact_region: document.getElementById('ec-fact-region').value.trim() || null,
       fact_pays: document.getElementById('ec-fact-pays').value.trim() || null,
-      responsable_site_id: document.getElementById('ec-fact-responsable')?.value || null,
-      responsable_site_name: document.getElementById('ec-fact-responsable')?.selectedOptions?.[0]?.text !== 'Responsable du site...' ? document.getElementById('ec-fact-responsable')?.selectedOptions?.[0]?.text || null : null,
       email: document.getElementById('ec-email').value.trim(),
       phone: document.getElementById('ec-phone').value.trim(),
       telephone2: document.getElementById('ec-phone2').value.trim() || null,
@@ -27785,7 +27769,6 @@ async function submitEditClient() {
       const commercialFields = {
         account_manager_id: fields.account_manager_id, account_manager_name: fields.account_manager_name,
         salesman_id: fields.salesman_id, salesman_name: fields.salesman_name,
-        responsable_site_id: fields.responsable_site_id, responsable_site_name: fields.responsable_site_name,
       };
       const { error: propErr2, count: count2 } = await sb.from('clients').update(commercialFields, { count: 'exact' })
         .eq('siren', currentClient.siren).eq('est_siege', false);
