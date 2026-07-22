@@ -9573,6 +9573,18 @@ function renderPage(page) {
   if (page === 'sollic-edit') { setTimeout(() => { sollicRenderClientChip(); sollicLoadContacts(); if (!_oppsLoaded) loadOpportunites().then(() => { const sel = document.getElementById('sol-opp'); if (sel) sel.innerHTML = _sollicOppOptions(); }); }, 30); }
   if (page === 'opportunites' && !_oppsLoaded) { loadOpportunites().then(() => { if (currentPage === 'opportunites') renderPage('opportunites'); }); }
   if (page === 'opportunite-analyse') { if (!_oppsLoaded) { loadOpportunites().then(() => { if (currentPage === 'opportunite-analyse') renderPage('opportunite-analyse'); }); } else { setTimeout(_oppAnalyseCharts, 40); } }
+  // Fiche client : (re)charger les blocs asynchrones à CHAQUE rendu — évite qu'ils restent bloqués
+  // sur « Chargement… » après un re-rendu (backfill Code SITE, résolution des noms Akuiteo, etc.)
+  if (page === 'client-detail' && currentClient) setTimeout(() => {
+    if (!currentClient) return;
+    const cid = currentClient.id, siren = currentClient.siren;
+    try { resolveEmployeeNames(); } catch (e) {}
+    try { loadClientContacts(cid); } catch (e) {}
+    try { renderClientObjectifs(cid); } catch (e) {}
+    try { renderClientConcurrents(cid); } catch (e) {}
+    try { if (siren) loadEtablissementsLies(siren, cid); } catch (e) {}
+    try { checkClientDuplicates(currentClient); } catch (e) {}
+  }, 60);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -11826,18 +11838,9 @@ async function showClient(id) {
   currentPage = 'client-detail';
   document.getElementById('pageTitle').textContent = currentClient.name;
   renderPage('client-detail');
-  // Résoudre les noms des employés et modes de tarification Akuiteo
-  setTimeout(() => resolveEmployeeNames(), 50);
-  // Charger automatiquement les contacts depuis Supabase
-  setTimeout(() => loadClientContacts(currentClient.id), 100);
-  // Charger les objectifs annuels et le réalisé
-  setTimeout(() => renderClientObjectifs(currentClient.id), 120);
-  // Charger les concurrents liés
-  setTimeout(() => renderClientConcurrents(currentClient.id), 140);
-  // Charger les établissements liés (même SIREN)
-  if (currentClient.siren) setTimeout(() => loadEtablissementsLies(currentClient.siren, currentClient.id), 160);
-  // Détecter les fiches en doublon
-  setTimeout(() => checkClientDuplicates(currentClient), 180);
+  // Les blocs asynchrones (contacts, objectifs, concurrents, établissements liés, doublons,
+  // noms Akuiteo) sont (re)chargés par le hook « client-detail » de renderPage — à chaque rendu,
+  // ce qui évite qu'ils restent bloqués sur « Chargement… » après un re-rendu.
 }
 
 // ═══ Détection de doublon sur la fiche client (banni​ère + actions correctives) ═══
