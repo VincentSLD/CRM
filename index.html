@@ -3240,9 +3240,36 @@ function _buildCommGroups(set) {
   return { opts, variants };
 }
 
-async function loadClientsFilterOpts() {
-  if (clientsFilterOptsLoaded) return;
-  // Récupère uniquement les colonnes nécessaires en pagination interne
+const CLIENTS_FILTER_OPTS_CACHE_KEY = 'clientsFilterOpts_v1';
+const CLIENTS_FILTER_OPTS_TTL = 24 * 3600 * 1000; // 24 h
+function _applyClientsFilterOptsCache(c) {
+  if (!c || !c.opts) return false;
+  Object.assign(clientsFilterOpts, c.opts);
+  clientsFilterOptsVariants = c.variants || {};
+  clientsNovamVariants = c.novamVariants || {};
+  clientsGphVariants = c.gphVariants || {};
+  return true;
+}
+async function loadClientsFilterOpts(force) {
+  if (clientsFilterOptsLoaded && !force) return;
+  // 1) Cache navigateur : les listes de valeurs des filtres changent rarement → affichage quasi instantané
+  if (!force) {
+    try {
+      const raw = localStorage.getItem(CLIENTS_FILTER_OPTS_CACHE_KEY);
+      if (raw) {
+        const c = JSON.parse(raw);
+        if (_applyClientsFilterOptsCache(c)) {
+          clientsFilterOptsLoaded = true;
+          // Rafraîchit silencieusement en arrière-plan si le cache est périmé (> 24 h)
+          if (!c.t || (Date.now() - c.t) > CLIENTS_FILTER_OPTS_TTL) {
+            loadClientsFilterOpts(true).then(() => { if (currentPage === 'clients') renderPage('clients'); }).catch(() => {});
+          }
+          return;
+        }
+      }
+    } catch (e) {}
+  }
+  // 2) Chargement complet depuis Supabase (première visite ou rafraîchissement) : colonnes nécessaires, en pagination interne
   const fetchAll = async (cols) => {
     let all = [], off = 0;
     while (true) {
@@ -3288,6 +3315,13 @@ async function loadClientsFilterOpts() {
   }
   clientsFilterOpts.reseauxPro = sortFr(sets.reseauxPro);
   clientsFilterOptsLoaded = true;
+  // 3) Mémorise en cache pour un chargement quasi instantané les prochaines fois
+  try {
+    localStorage.setItem(CLIENTS_FILTER_OPTS_CACHE_KEY, JSON.stringify({
+      t: Date.now(), opts: clientsFilterOpts, variants: clientsFilterOptsVariants,
+      novamVariants: clientsNovamVariants, gphVariants: clientsGphVariants,
+    }));
+  } catch (e) {}
 }
 let clientsTotalCount = 0;
 
