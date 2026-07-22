@@ -13683,11 +13683,13 @@ function renderClientDetail() {
       <div id="clientObjectifsList" style="padding:14px;color:var(--t3);font-size:13px">Chargement...</div>
     </div>
   </div>
-  ${renderTachesCard({ client_id: c.id, client_name: c.name })}
-  ${renderSollicCard({ client_id: c.id, client_name: c.name })}
-  <div class="card" style="margin-bottom:16px;overflow:visible">
-    <div class="card-header"><div class="card-title">🎯 Profil marchés (sollicitations)</div></div>
-    <div class="card-body" style="overflow:visible"><div id="mp-block">${_mpBlockHtml()}</div></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;align-items:start">
+    ${renderTachesCard({ client_id: c.id, client_name: c.name })}
+    ${renderSollicCard({ client_id: c.id, client_name: c.name })}
+    <div class="card" style="margin-bottom:0;overflow:visible">
+      <div class="card-header"><div class="card-title">🎯 Profil marchés (sollicitations)</div></div>
+      <div class="card-body" style="overflow:visible"><div id="mp-block">${_mpBlockHtml()}</div></div>
+    </div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;align-items:start">
     <div class="card" style="margin-bottom:0"><div class="card-header"><div class="card-title">Habitudes Administratives et Commerciales</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes || '—'}</div></div></div>
