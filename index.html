@@ -22971,6 +22971,13 @@ function renderAdmin() {
     </div>
   </div>
   <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><div class="card-title">Commerciaux Novam / GPH → site Akuiteo</div></div>
+    <div class="card-body" style="font-size:13px;color:var(--t3)">
+      Écrit le <strong>Commercial Novam</strong> et le <strong>Commercial GPH</strong> de chaque client (format « NOM Prénom ») dans les <strong>données personnalisées de son site Akuiteo</strong> (onglet « Informations complémentaires » : champs <code>Commercial NOVAM</code> et <code>Commercial GPH</code>). Concernés : clients ayant un <strong>ID Akuiteo</strong>, un <strong>Code SITE</strong> et au moins un commercial renseigné.
+      <div style="margin-top:10px"><button class="btn btn-primary" onclick="pushAllSitesCommerciaux()" style="font-size:12px">⇄ Transférer les commerciaux (tous les clients)</button></div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:16px">
     <div class="card-header"><div class="card-title">Marchés publics des clients (DECP)</div></div>
     <div class="card-body" style="font-size:13px;color:var(--t3)">
       Interroge la base <strong>DECP</strong> (open data, sans clé) pour tous les clients ayant un SIREN, <strong>archive</strong> leurs marchés publics gagnés (table <code>decp_marches</code>, pour analyses) et <strong>pré-remplit</strong> les profils marchés (départements + fourchette TCE) <strong>sans écraser</strong> vos saisies.
@@ -24095,6 +24102,65 @@ async function syncAllClientsDecp(force) {
     await Promise.all(Array.from({ length: Math.min(4, total) }, worker));
     showSyncLoading(false);
     toast('DECP : ' + withMarches + ' client(s) avec marchés (' + totalMarches + ' archivés), ' + prefilled + ' profil(s) pré-rempli(s)' + (errors ? ', ' + errors + ' erreur(s)' : ''), errors ? 'warn' : 'success');
+  } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
+}
+
+// ═══ Commerciaux Novam / GPH → données personnalisées du SITE Akuiteo (onglet « Informations complémentaires ») ═══
+// customData du site : 2-alpha02 = « Commercial NOVAM », 1-alpha01 = « Commercial GPH » (type ALPHANUMERIC).
+const AK_SITE_CD_NOVAM = '2-alpha02';
+const AK_SITE_CD_GPH = '1-alpha01';
+// Écrit les commerciaux (format « NOM Prénom ») d'un client dans son site Akuiteo (identifié par son Code SITE).
+// Repart du site existant pour ne pas écraser ses autres données. Renvoie { ok, novam, gph, site } ou { ok:false, reason }.
+async function akPushSiteCommerciaux(client) {
+  const akId = client.akuiteo_id;
+  if (!akId) return { ok: false, reason: 'non synchronisé (pas d\'ID Akuiteo)' };
+  const codeSite = client.code_site;
+  if (!codeSite) return { ok: false, reason: 'pas de Code SITE' };
+  const novam = fmtCommercialName(client.account_manager_name || '') || null; // Commercial Novam
+  const gph = fmtCommercialName(client.salesman_name || '') || null;          // Commercial GPH
+  if (!novam && !gph) return { ok: false, reason: 'aucun commercial Novam/GPH renseigné' };
+  let sites = await akuiteoFetch('GET', '/crm/customers/' + akId + '/sites');
+  sites = Array.isArray(sites) ? sites : [];
+  const site = sites.find(s => String(s.code) === String(codeSite) || String(s.siteCode) === String(codeSite));
+  if (!site || site.id == null) return { ok: false, reason: 'site ' + codeSite + ' introuvable dans Akuiteo' };
+  // Repartir du site existant (préserve nom/adresse), retirer les sous-objets non ré-envoyables, ajouter les 2 données perso (fusion par clé)
+  const body = { ...site }; delete body.contacts; delete body.taxInformation;
+  const cd = {};
+  if (novam != null) cd[AK_SITE_CD_NOVAM] = { type: 'ALPHANUMERIC', value: novam };
+  if (gph != null) cd[AK_SITE_CD_GPH] = { type: 'ALPHANUMERIC', value: gph };
+  body.customData = cd;
+  await akuiteoFetch('POST', '/crm/customers/' + akId + '/sites/' + site.id, body, { accept: 'text/plain' });
+  return { ok: true, novam, gph, site: site.code || codeSite };
+}
+// Transfert global : commerciaux Novam/GPH de tous les clients éligibles → leur site Akuiteo
+async function pushAllSitesCommerciaux() {
+  if (!confirm('Transférer les commerciaux Novam/GPH de TOUS les clients vers les champs personnalisés (Informations complémentaires) de leur site Akuiteo ?\n\nConcernés : clients ayant un ID Akuiteo, un Code SITE et au moins un commercial renseigné.\nL\'écriture se fait dans Akuiteo — plusieurs minutes possibles.')) return;
+  showSyncLoading(true); setSyncText('Chargement des clients…');
+  try {
+    let clients = []; const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await sb.from('clients').select('id,name,akuiteo_id,code_site,account_manager_name,salesman_name').not('akuiteo_id', 'is', null).not('code_site', 'is', null).range(from, from + PAGE - 1);
+      if (error) { showSyncLoading(false); toast('Erreur lecture clients : ' + error.message, 'error'); return; }
+      clients = clients.concat(data || []);
+      if (!data || data.length < PAGE) break;
+    }
+    const todo = clients.filter(c => (c.account_manager_name || c.salesman_name));
+    if (!todo.length) { showSyncLoading(false); toast('Aucun client éligible (Code SITE + ID Akuiteo + commercial).', 'warn'); return; }
+    const total = todo.length;
+    let idx = 0, done = 0, ok = 0, skip = 0, errors = 0; const errList = [];
+    async function worker() {
+      while (idx < total) {
+        const c = todo[idx++];
+        try { const r = await akPushSiteCommerciaux(c); if (r.ok) ok++; else skip++; }
+        catch (e) { errors++; if (errList.length < 30) errList.push((c.name || c.id) + ' : ' + e.message); }
+        done++;
+        if (done % 5 === 0 || done === total) setSyncText('Transfert commerciaux → Akuiteo : ' + done + ' / ' + total + ' (écrits ' + ok + ', ignorés ' + skip + ', erreurs ' + errors + ')');
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(4, total) }, worker));
+    showSyncLoading(false);
+    toast('Transfert terminé : ' + ok + ' écrit(s), ' + skip + ' ignoré(s), ' + errors + ' erreur(s).', errors ? 'warn' : 'success');
+    if (errList.length) console.warn('[pushAllSitesCommerciaux] erreurs :', errList);
   } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
 }
 
