@@ -1,0 +1,32 @@
+name: Synchro DECP clients (nocturne)
+
+# Actualise l'archive DECP (table decp_marches) + pré-remplit les profils marchés.
+# Rappelle /api/decp-sync-cron en boucle (30 clients/lot) jusqu'à épuisement.
+on:
+  schedule:
+    - cron: '0 3 * * *'   # tous les jours à 03:00 UTC
+  workflow_dispatch: {}    # déclenchable manuellement
+
+concurrency:
+  group: decp-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Synchroniser par lots
+        env:
+          URL: ${{ vars.DECP_SYNC_URL || 'https://crm-nine-livid.vercel.app/api/decp-sync-cron' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -e
+          for i in $(seq 1 400); do
+            RESP=$(curl -s -m 70 -H "Authorization: Bearer ${CRON_SECRET}" "${URL}") || RESP=""
+            echo "lot $i : ${RESP}"
+            PROC=$(printf '%s' "$RESP" | grep -o '"processed":[0-9]*' | grep -o '[0-9]*' || true)
+            if printf '%s' "$RESP" | grep -q '"error"'; then echo "Erreur endpoint, arrêt."; exit 1; fi
+            if [ -z "$PROC" ] || [ "$PROC" = "0" ]; then echo "Rien à traiter — terminé."; break; fi
+            sleep 2
+          done
