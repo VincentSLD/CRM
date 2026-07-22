@@ -11786,8 +11786,87 @@ async function showClient(id) {
   setTimeout(() => renderClientConcurrents(currentClient.id), 140);
   // Charger les établissements liés (même SIREN)
   if (currentClient.siren) setTimeout(() => loadEtablissementsLies(currentClient.siren, currentClient.id), 160);
+  // Détecter les fiches en doublon
+  setTimeout(() => checkClientDuplicates(currentClient), 180);
 }
 
+// ═══ Détection de doublon sur la fiche client (banni​ère + actions correctives) ═══
+function _dupNorm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, ''); }
+async function checkClientDuplicates(c) {
+  const el = document.getElementById('dup-alert'); if (!el || !c) return;
+  el.innerHTML = '';
+  const myName = _dupNorm(c.name);
+  const siret = String(c.siret || '').replace(/\D/g, '');
+  const siren = String(c.siren || '').replace(/\D/g, '');
+  const cp = String(c.code_postal || '').replace(/\s/g, '');
+  const city = _dupNorm(c.city);
+  const cols = 'id,name,code,siren,siret,city,code_postal,phone,email,akuiteo_id,est_siege';
+  const cand = {};
+  const addRows = rows => (rows || []).forEach(x => { if (x && x.id !== c.id) cand[x.id] = x; });
+  try {
+    if (siret.length === 14) { const { data } = await sb.from('clients').select(cols).eq('siret', c.siret).neq('id', c.id); addRows(data); }
+    try { const { data } = await sb.rpc('search_clients', { q: c.name || '', lim: 25 }); addRows((data || []).map(x => ({ id: x.id, name: x.name, code: x.code, siren: x.siren, siret: null, city: x.city, code_postal: x.code_postal }))); } catch (e) {}
+  } catch (e) { console.warn('checkClientDuplicates', e.message); return; }
+  let ignored = []; try { ignored = JSON.parse(localStorage.getItem('dupignore_' + c.id) || '[]'); } catch (e) {}
+  const dups = [];
+  for (const x of Object.values(cand)) {
+    if (ignored.includes(String(x.id))) continue;
+    const xSiret = String(x.siret || '').replace(/\D/g, '');
+    const xSiren = String(x.siren || '').replace(/\D/g, '');
+    const xName = _dupNorm(x.name);
+    const xCp = String(x.code_postal || '').replace(/\s/g, '');
+    // Exclure les vrais établissements liés (mêmes noms mais SIRET/SIREN distincts = entités différentes)
+    if (siret.length === 14 && xSiret.length === 14 && siret !== xSiret) continue;
+    if (siren.length === 9 && xSiren.length === 9 && siren !== xSiren) continue;
+    const sameSiret = siret.length === 14 && xSiret === siret;
+    const sameSiren = siren.length === 9 && xSiren === siren;
+    const sameName = myName && xName === myName;
+    const sameLoc = (cp && xCp && cp === xCp) || (city && _dupNorm(x.city) === city);
+    const probable = sameSiret || (sameName && (sameLoc || sameSiren));
+    if (!probable) continue;
+    const reasons = [];
+    if (sameSiret) reasons.push('même SIRET');
+    if (sameName) reasons.push('nom identique');
+    if (sameSiren && !sameSiret) reasons.push('même SIREN');
+    if (sameLoc && !sameSiret) reasons.push('même localisation');
+    dups.push({ x, reasons });
+  }
+  if (!dups.length) return;
+  const esc = s => cmdEsc(String(s || ''));
+  el.innerHTML = `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 14px;margin-bottom:16px">
+    <div style="font-weight:700;color:#b45309;font-size:14px;margin-bottom:6px">⚠️ Doublon probable — ${dups.length} fiche(s) semblent correspondre à ce compte</div>
+    ${dups.map(d => {
+      const x = d.x;
+      const meta = [x.code, x.city, x.siret ? 'SIRET ' + x.siret : (x.siren ? 'SIREN ' + x.siren : '')].filter(Boolean).join(' · ');
+      return `<div style="border-top:1px solid #fed7aa;padding:8px 0;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+        <div style="font-size:13px"><strong>${esc(x.name)}</strong> <span style="color:var(--t3);font-size:11px">${esc(meta)}</span><br><span style="color:#b45309;font-size:11px">${esc(d.reasons.join(' · '))}</span></div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <button class="btn" style="font-size:11px" onclick="showClient('${x.id}')">↗ Ouvrir</button>
+          <button class="btn" style="font-size:11px;background:#3b82f6;color:#fff;border:none" onclick="_ficheMerge('${c.id}','${x.id}')" title="Conserver CETTE fiche, y fusionner l'autre">← Fusionner ici</button>
+          <button class="btn" style="font-size:11px" onclick="_ficheMerge('${x.id}','${c.id}')" title="Conserver l'AUTRE fiche, y fusionner celle-ci">Fusionner vers l'autre →</button>
+          <button class="btn" style="font-size:11px;color:var(--t3)" onclick="dupIgnoreFiche('${c.id}','${x.id}')">Pas un doublon</button>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+async function _ficheMerge(keepId, removeId) {
+  if (keepId === removeId) return;
+  if (!confirm('Fusionner ces deux fiches ?\n\nToutes les liaisons (devis, commandes, factures, affaires, marchés, contacts, CR, objectifs, concurrents) de la fiche source seront rattachées à la fiche conservée, puis la source sera supprimée.\n\nIrréversible.')) return;
+  if (typeof requireDeletePassword === 'function' && !(await requireDeletePassword())) return;
+  showSyncLoading(true); setSyncText('Fusion en cours...');
+  try {
+    await _mergeClientsCore(keepId, removeId, true);
+    toast('Fusion réussie', 'success');
+    showClient(keepId);
+  } catch (e) { toast('Erreur fusion : ' + e.message, 'error'); }
+  finally { showSyncLoading(false); }
+}
+function dupIgnoreFiche(currentId, otherId) {
+  try { const k = 'dupignore_' + currentId; const arr = JSON.parse(localStorage.getItem(k) || '[]'); if (!arr.includes(String(otherId))) arr.push(String(otherId)); localStorage.setItem(k, JSON.stringify(arr)); } catch (e) {}
+  toast('Ignoré — traité comme « pas un doublon »', 'info');
+  if (currentClient) checkClientDuplicates(currentClient);
+}
 async function loadEtablissementsLies(siren, currentClientId) {
   const el = document.getElementById('etablissements-lies');
   if (!el) return;
@@ -13518,6 +13597,7 @@ function renderClientDetail() {
   return `
   <button class="btn" onclick="go('clients')" style="margin-bottom:14px">← Retour aux clients/prospects</button>
   ${alertBanner}
+  <div id="dup-alert"></div>
   <div class="client-hero">
     <div class="client-big-av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div>
     <div class="client-info">
@@ -17191,6 +17271,33 @@ async function dupDeleteFromGroup(groupIdx, clientId, clientName) {
 }
 
 // Fusionner removeId vers keepId : transfère toutes les FK puis supprime removeId
+// Cœur de fusion réutilisable : la cible (keep) gagne, la source (remove) comble les vides,
+// toutes les liaisons (client_id) sont rattachées à la cible, puis la source est supprimée.
+async function _mergeClientsCore(keepId, removeId, pushAkuiteo) {
+  const { data: pair } = await sb.from('clients').select('*').in('id', [keepId, removeId]);
+  if (!pair || pair.length !== 2) throw new Error('Fiches introuvables');
+  const fullKeep = pair.find(x => x.id === keepId);
+  const fullRemove = pair.find(x => x.id === removeId);
+  const merged = {};
+  for (const k of Object.keys(fullKeep)) {
+    if (k === 'id' || k === 'created_at') continue;
+    const v = fullKeep[k];
+    merged[k] = (v == null || v === '') ? fullRemove[k] : v;
+  }
+  const { error: errUp } = await sb.from('clients').update(merged).eq('id', keepId);
+  if (errUp) throw errUp;
+  const tables = ['contacts', 'devis', 'commandes', 'factures', 'affaires', 'marches', 'reports', 'objectifs_clients', 'client_concurrents'];
+  for (const t of tables) {
+    try { const { error: e } = await sb.from(t).update({ client_id: keepId }).eq('client_id', removeId); if (e) console.warn('Réaffectation', t, e.message); }
+    catch (e) { console.warn(t, e); }
+  }
+  const { error: errDel } = await sb.from('clients').delete().eq('id', removeId);
+  if (errDel) throw errDel;
+  if (pushAkuiteo && fullKeep.akuiteo_id) {
+    try { setSyncText('Mise à jour Akuiteo...'); await pushClientToAkuiteo(keepId); }
+    catch (e) { console.warn('Push Akuiteo après fusion:', e); toast('Fusion CRM OK, mais erreur push Akuiteo : ' + e.message, 'warn'); }
+  }
+}
 async function dupMerge(groupIdx, keepId, removeId) {
   const g = _dupGroups[groupIdx]; if (!g) return;
   const keep = g.clients.find(c => c.id === keepId);
@@ -17213,43 +17320,7 @@ async function dupMerge(groupIdx, keepId, removeId) {
   if (!(await requireDeletePassword())) return;
   showSyncLoading(true); setSyncText('Fusion en cours...');
   try {
-    // 1) Charger les fiches complètes des deux côtés pour fusionner les champs
-    const { data: pair } = await sb.from('clients').select('*').in('id', [keepId, removeId]);
-    if (!pair || pair.length !== 2) throw new Error('Fiches introuvables');
-    const fullKeep = pair.find(x => x.id === keepId);
-    const fullRemove = pair.find(x => x.id === removeId);
-    // 2) Fusionner : keep gagne, remove fill gaps (champs vides de keep ← non vides de remove)
-    const merged = {};
-    for (const k of Object.keys(fullKeep)) {
-      if (k === 'id' || k === 'created_at') continue;
-      const v = fullKeep[k];
-      if (v == null || v === '') merged[k] = fullRemove[k];
-      else merged[k] = v;
-    }
-    // 3) Update keep avec les champs fusionnés
-    const { error: errUp } = await sb.from('clients').update(merged).eq('id', keepId);
-    if (errUp) throw errUp;
-    // 4) Réattacher toutes les FK (client_id) vers keep
-    const tables = ['contacts','devis','commandes','factures','affaires','marches','reports','objectifs_clients','client_concurrents'];
-    for (const t of tables) {
-      try {
-        const { error: e } = await sb.from(t).update({ client_id: keepId }).eq('client_id', removeId);
-        if (e) console.warn('Réaffectation', t, e.message);
-      } catch (e) { console.warn(t, e); }
-    }
-    // 5) Supprimer la fiche source
-    const { error: errDel } = await sb.from('clients').delete().eq('id', removeId);
-    if (errDel) throw errDel;
-    // 6) Pousser la fiche cible mise à jour vers Akuiteo si elle est synchronisée
-    if (_dupPushAkuiteo && keep.akuiteo_id) {
-      try {
-        setSyncText('Mise à jour Akuiteo...');
-        await pushClientToAkuiteo(keepId);
-      } catch (e) {
-        console.warn('Push Akuiteo après fusion:', e);
-        toast('Fusion CRM OK, mais erreur push Akuiteo : ' + e.message, 'warn');
-      }
-    }
+    await _mergeClientsCore(keepId, removeId, _dupPushAkuiteo);
     toast('Fusion réussie : "' + remove.name + '" → "' + keep.name + '"', 'success');
     // Mettre à jour le groupe
     g.clients = g.clients.filter(c => c.id !== removeId);
