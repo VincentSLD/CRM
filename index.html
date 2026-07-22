@@ -13023,29 +13023,43 @@ function ccaExportPDF() {
 }
 
 // ═══ Réalisations externes : marchés publics gagnés (DECP) + permis de construire (PermisAPI) ═══
-async function openRealisations() {
+// Cache navigateur 30 j (par SIREN+dépt) pour économiser le quota PermisAPI (500 req/mois en offre gratuite).
+async function openRealisations(force) {
   const c = currentClient; if (!c) return;
   const siren = String(c.siren || (c.siret ? String(c.siret).slice(0, 9) : '') || '').replace(/\D/g, '');
   if (!siren || siren.length < 9) { toast('SIREN manquant sur la fiche — complétez-la (bouton SIRENE) puis réessayez.', 'warn'); return; }
   const dept = String(c.departement || (c.code_postal ? String(c.code_postal).replace(/\s/g, '').slice(0, 2) : '') || '').trim();
+  const cacheKey = 'realiz_' + siren + '_' + dept;
   const ov = _nlOverlay(`
-    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px">
       <div style="font-size:16px;font-weight:700">🔎 Réalisations — ${cmdEsc(c.name || '')}</div>
-      <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
+      <div style="display:flex;gap:6px">
+        <button class="btn" onclick="this.closest('.nl-overlay').remove();openRealisations(true)" title="Forcer une actualisation (consomme 1 requête PermisAPI)">🔄 Rafraîchir</button>
+        <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
+      </div>
     </div>
     <div id="realiz-body" style="padding:16px;max-height:72vh;overflow:auto">
       <div style="text-align:center;color:var(--t3);padding:34px">Interrogation DECP (marchés publics) & PermisAPI (permis de construire)…</div>
     </div>`, 860);
+  const body = () => ov.querySelector('#realiz-body');
+  // 1) Cache navigateur (sauf si Rafraîchir)
+  if (!force) {
+    try { const raw = localStorage.getItem(cacheKey); if (raw) { const o = JSON.parse(raw); if (o && o.t && (Date.now() - o.t) < 30 * 864e5 && o.d) { const b = body(); if (b) b.innerHTML = _realizRender(o.d, c, o.t); return; } } } catch (e) {}
+  }
   try {
     const r = await fetch('/api/realisations?siren=' + siren + '&name=' + encodeURIComponent(c.name || '') + '&depts=' + encodeURIComponent(dept));
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
-    const body = ov.querySelector('#realiz-body'); if (body) body.innerHTML = _realizRender(j, c);
+    try { localStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), d: j })); } catch (e) {}
+    const b = body(); if (b) b.innerHTML = _realizRender(j, c, Date.now());
   } catch (e) {
-    const body = ov.querySelector('#realiz-body'); if (body) body.innerHTML = '<div style="color:var(--red);padding:20px">Erreur : ' + cmdEsc(e.message) + '</div>';
+    const b = body(); if (b) b.innerHTML = '<div style="color:var(--red);padding:20px">Erreur : ' + cmdEsc(e.message) + '</div>';
   }
 }
-function _realizRender(j, c) {
+// Libellé de la division CPV (2 premiers chiffres) — catégorie lisible pour un code CPV
+const CPV_DIVISIONS = { '03': 'Produits agricoles', '09': 'Pétrole, combustibles, électricité', '14': 'Produits minéraux', '15': 'Produits alimentaires', '16': 'Machines agricoles', '18': 'Habillement', '19': 'Cuir, textile, plastique', '22': 'Imprimés', '24': 'Produits chimiques', '30': 'Bureautique, informatique', '31': 'Machines/appareils électriques', '32': 'Radio, TV, télécom', '33': 'Matériel médical', '34': 'Matériel de transport', '35': 'Sécurité, défense', '37': 'Instruments (musique, sport)', '38': 'Instruments labo/optique', '39': 'Mobilier, ménager', '41': 'Eau', '42': 'Machines industrielles', '43': 'Machines BTP/extraction', '44': 'Matériaux de construction', '45': 'Travaux de construction', '48': 'Logiciels, SI', '50': 'Réparation et entretien', '51': 'Installation', '55': 'Hôtellerie, restauration', '60': 'Transport', '63': 'Appui aux transports', '64': 'Poste et télécom', '65': 'Services publics (eau/élec)', '66': 'Banque, assurance', '70': 'Services immobiliers', '71': 'Architecture, ingénierie, contrôle', '72': 'Services informatiques', '73': 'R&D', '75': 'Administration publique', '76': 'Services pétrole/gaz', '77': 'Agriculture, sylviculture', '79': 'Services aux entreprises', '80': 'Enseignement, formation', '85': 'Santé, action sociale', '90': 'Assainissement, environnement', '92': 'Culture, loisirs, sport', '98': 'Autres services' };
+function _cpvLabel(code) { const c = String(code || '').replace(/[^0-9]/g, ''); if (c.length < 2) return ''; return CPV_DIVISIONS[c.slice(0, 2)] || ''; }
+function _realizRender(j, c, ts) {
   const decp = j.decp || {}, permis = j.permis || {};
   const h2 = t => `<h3 style="font-size:15px;font-weight:700;margin:6px 0 8px;color:var(--t1)">${t}</h3>`;
   const empty = t => `<div style="padding:12px;color:var(--t3);font-size:13px;background:var(--bg-2);border-radius:8px">${t}</div>`;
@@ -13061,7 +13075,7 @@ function _realizRender(j, c) {
       if (x.procedure) meta.push(cmdEsc(x.procedure));
       if (x.formePrix) meta.push('Prix ' + cmdEsc(x.formePrix));
       if (x.duree) meta.push(cmdEsc(String(x.duree)) + ' mois');
-      if (x.cpv) meta.push('CPV ' + cmdEsc(String(x.cpv)));
+      if (x.cpv) { const cl = _cpvLabel(x.cpv); meta.push('CPV ' + cmdEsc(String(x.cpv)) + (cl ? ' – ' + cmdEsc(cl) : '')); }
       if (x.lieu) meta.push('📍 ' + cmdEsc(x.lieu) + (x.dept ? ' (' + cmdEsc(x.dept) + ')' : ''));
       const badge = x.typeMarche ? `<span style="background:#eef2ff;color:#4338ca;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:6px">${cmdEsc(x.typeMarche)}</span>` : '';
       return `<div style="border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:7px;background:var(--bg-2)">
@@ -13087,7 +13101,7 @@ function _realizRender(j, c) {
       <tbody>${permis.items.map(p => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 6px;white-space:nowrap">${p.date ? fmtDateFR(p.date) : '—'}</td><td style="padding:5px 6px">${cmdEsc(String(p.type || ''))}</td><td style="padding:5px 6px">${cmdEsc(String(p.commune || p.cp || ''))}</td><td style="padding:5px 6px">${cmdEsc(String(p.petitionnaire || ''))}</td><td style="padding:5px 6px">${cmdEsc(String(p.surface || ''))}</td><td style="padding:5px 6px">${cmdEsc(String(p.num || ''))}</td></tr>`).join('')}</tbody></table></div>`;
 
   return `
-    <div style="font-size:12px;color:var(--t3);margin-bottom:12px">SIREN ${cmdEsc(j.siren || '')}${j.depts && j.depts.length ? ' · département(s) ' + cmdEsc(j.depts.join(', ')) : ''}. Données publiques ouvertes — à vérifier avant exploitation commerciale (RGPD/CADA).</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:12px">SIREN ${cmdEsc(j.siren || '')}${j.depts && j.depts.length ? ' · département(s) ' + cmdEsc(j.depts.join(', ')) : ''}${ts ? ' · récupéré le ' + fmtDateFR(new Date(ts).toISOString().slice(0, 10)) : ''}. Données publiques ouvertes — à vérifier avant exploitation commerciale (RGPD/CADA).</div>
     ${h2('🏛️ Marchés publics gagnés (DECP)')}${decpHtml}
     <div style="height:18px"></div>
     ${h2('🏗️ Permis de construire (PermisAPI)')}${permisHtml}`;
