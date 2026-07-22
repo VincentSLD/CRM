@@ -13059,6 +13059,43 @@ async function openRealisations(force) {
 // Libellé de la division CPV (2 premiers chiffres) — catégorie lisible pour un code CPV
 const CPV_DIVISIONS = { '03': 'Produits agricoles', '09': 'Pétrole, combustibles, électricité', '14': 'Produits minéraux', '15': 'Produits alimentaires', '16': 'Machines agricoles', '18': 'Habillement', '19': 'Cuir, textile, plastique', '22': 'Imprimés', '24': 'Produits chimiques', '30': 'Bureautique, informatique', '31': 'Machines/appareils électriques', '32': 'Radio, TV, télécom', '33': 'Matériel médical', '34': 'Matériel de transport', '35': 'Sécurité, défense', '37': 'Instruments (musique, sport)', '38': 'Instruments labo/optique', '39': 'Mobilier, ménager', '41': 'Eau', '42': 'Machines industrielles', '43': 'Machines BTP/extraction', '44': 'Matériaux de construction', '45': 'Travaux de construction', '48': 'Logiciels, SI', '50': 'Réparation et entretien', '51': 'Installation', '55': 'Hôtellerie, restauration', '60': 'Transport', '63': 'Appui aux transports', '64': 'Poste et télécom', '65': 'Services publics (eau/élec)', '66': 'Banque, assurance', '70': 'Services immobiliers', '71': 'Architecture, ingénierie, contrôle', '72': 'Services informatiques', '73': 'R&D', '75': 'Administration publique', '76': 'Services pétrole/gaz', '77': 'Agriculture, sylviculture', '79': 'Services aux entreprises', '80': 'Enseignement, formation', '85': 'Santé, action sociale', '90': 'Assainissement, environnement', '92': 'Culture, loisirs, sport', '98': 'Autres services' };
 function _cpvLabel(code) { const c = String(code || '').replace(/[^0-9]/g, ''); if (c.length < 2) return ''; return CPV_DIVISIONS[c.slice(0, 2)] || ''; }
+
+// Recherche web IA des réalisations d'un client (couvre le privé) — cache navigateur 30 j (coût IA).
+async function openRealisationsWeb(force) {
+  const c = currentClient; if (!c) return;
+  const name = (c.name || c.raison_sociale || '').trim();
+  if (!name) { toast('Nom du client manquant', 'warn'); return; }
+  const siren = String(c.siren || '').replace(/\D/g, '');
+  const cacheKey = 'realizweb_' + (siren || name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24));
+  const ov = _nlOverlay(`
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div style="font-size:16px;font-weight:700">🔎 Réalisations (web) — ${cmdEsc(name)}</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn" onclick="this.closest('.nl-overlay').remove();openRealisationsWeb(true)" title="Relancer la recherche web (consomme de l'IA)">🔄 Relancer</button>
+        <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
+      </div>
+    </div>
+    <div id="realizweb-body" style="padding:16px 20px;max-height:72vh;overflow:auto;line-height:1.5">
+      <div style="text-align:center;color:var(--t3);padding:34px">🌐 NOVA recherche les réalisations sur le web… (10‑25 s)</div>
+    </div>`, 820);
+  const body = () => ov.querySelector('#realizweb-body');
+  const wrap = (html, ts) => `<div style="font-size:11px;color:var(--t3);margin-bottom:10px">Synthèse IA à partir de recherches web — <b>à vérifier</b>${ts ? ' · généré le ' + fmtDateFR(new Date(ts).toISOString().slice(0, 10)) : ''}.</div>` + html;
+  if (!force) {
+    try { const raw = localStorage.getItem(cacheKey); if (raw) { const o = JSON.parse(raw); if (o && o.t && (Date.now() - o.t) < 30 * 864e5 && o.html) { const b = body(); if (b) b.innerHTML = wrap(o.html, o.t); return; } } } catch (e) {}
+  }
+  try {
+    const r = await fetch('/api/realisations-web', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, city: c.city || '', siren, sector: c.sector || c.secteur_activite || '', dept: c.departement || (c.code_postal ? String(c.code_postal).slice(0, 2) : '') }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    try { localStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), html: j.html })); } catch (e) {}
+    const b = body(); if (b) b.innerHTML = wrap(j.html, Date.now());
+  } catch (e) {
+    const b = body(); if (b) b.innerHTML = '<div style="color:var(--red);padding:20px">Erreur : ' + cmdEsc(e.message) + '</div>';
+  }
+}
 function _realizRender(j, c, ts) {
   const decp = j.decp || {};
   const h2 = t => `<h3 style="font-size:15px;font-weight:700;margin:6px 0 8px;color:var(--t1)">${t}</h3>`;
@@ -13149,6 +13186,7 @@ function renderClientDetail() {
       })()}
       <button class="btn" onclick="ccaOpen()" title="Analyse multi-filtres du compte (CA, rôles, missions, graphiques, PDF)">📊 Analyser le compte</button>
       <button class="btn" onclick="openRealisations()" title="Marchés publics gagnés par ce client (DECP, open data)">🏛️ Marchés publics</button>
+      <button class="btn" onclick="openRealisationsWeb()" title="Recherche web IA des réalisations/chantiers du client (couvre le privé)">🔎 Réalisations (web)</button>
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
       <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer ce client/prospect">Supprimer</button>
     </div>
