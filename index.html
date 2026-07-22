@@ -8378,6 +8378,68 @@ async function oppLose(akId) {
     closeModal('opp'); if (currentPage === 'opportunites' || currentPage === 'opportunite-detail') renderPage(currentPage);
   } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
 }
+
+// ═══ Suggestion de clients à solliciter pour une opportunité (selon leur « Profil marchés ») ═══
+async function oppSuggestClients(akId) {
+  const o = (_opps || []).find(x => String(x.akuiteo_id) === String(akId));
+  if (!o) { toast('Opportunité introuvable', 'error'); return; }
+  const num = v => (v != null && v !== '' && !isNaN(Number(v))) ? Number(v) : null;
+  const typo = o.typologie || '', sous = o.sous_typologie || '', dept = o.chantier_dept || '', tce = num(o.montant_travaux);
+  const critHtml = [typo && ('Typologie : <b>' + cmdEsc(typo) + '</b>'), sous && ('Sous-typo : <b>' + cmdEsc(sous) + '</b>'), dept && ('Dépt : <b>' + cmdEsc(dept) + '</b>'), tce != null && ('TCE : <b>' + fmt(tce) + '</b>')].filter(Boolean).join(' · ') || 'aucun critère renseigné sur l\'opportunité';
+  const ov = _nlOverlay(`
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div><div style="font-size:16px;font-weight:700">🎯 Clients à solliciter</div><div style="font-size:11px;color:var(--t3);margin-top:2px">${critHtml}</div></div>
+      <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
+    </div>
+    <div id="sugg-body" style="padding:16px 20px;max-height:70vh;overflow:auto"><div style="text-align:center;color:var(--t3);padding:30px">Recherche des clients au profil correspondant…</div></div>`, 840);
+  const body = ov.querySelector('#sugg-body');
+  let rows = [];
+  try {
+    let from = 0; const PAGE = 1000;
+    for (;;) {
+      const { data, error } = await sb.from('clients').select('id,name,city,phone,email,marche_profil').not('marche_profil', 'is', null).range(from, from + PAGE - 1);
+      if (error) throw error;
+      rows = rows.concat(data || []);
+      if (!data || data.length < PAGE) break; from += PAGE;
+    }
+  } catch (e) { if (body) body.innerHTML = '<div style="color:var(--red);padding:20px">Erreur : ' + cmdEsc(e.message) + '</div>'; return; }
+
+  const scored = [];
+  for (const c of rows) {
+    const p = c.marche_profil || {};
+    const T = p.typologies || [], S = p.sous_typologies || [], D = p.departements || [];
+    const typoOk = !T.length || (typo && T.includes(typo));
+    const sousOk = !S.length || (sous && S.includes(sous));
+    const deptOk = !D.length || (dept && D.includes(dept));
+    const hasRange = (p.tce_min != null || p.tce_max != null);
+    const tceOk = !hasRange || (tce != null && (p.tce_min == null || tce >= p.tce_min) && (p.tce_max == null || tce <= p.tce_max));
+    if (!(typoOk && sousOk && deptOk && tceOk)) continue;
+    const posTypo = !!(typo && T.includes(typo)), posSous = !!(sous && S.includes(sous)), posDept = !!(dept && D.includes(dept)), posTce = !!(tce != null && hasRange && tceOk);
+    if (!(posTypo || posSous || posDept || posTce || p.mandataire)) continue;
+    const score = (posTypo ? 3 : 0) + (posSous ? 2 : 0) + (posDept ? 1.5 : 0) + (posTce ? 1 : 0) + (p.mandataire ? 0.5 : 0);
+    scored.push({ c, p, score, posTypo, posSous, posDept, posTce });
+  }
+  scored.sort((a, b) => b.score - a.score || (a.c.name || '').localeCompare(b.c.name || '', 'fr'));
+
+  if (!scored.length) { if (body) body.innerHTML = '<div style="padding:16px;color:var(--t3);font-size:13px">Aucun client au profil correspondant. Renseignez le « Profil marchés » de vos clients (fiche client → 🎯 Profil marchés) pour les voir proposés ici.</div>'; return; }
+  const badge = (on, txt, col) => on ? `<span style="background:${col}22;color:${col};border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-right:4px">${txt}</span>` : '';
+  const oppNomEsc = (o.nom || '').replace(/'/g, "\\'");
+  if (body) body.innerHTML = `<div style="font-size:12px;color:var(--t3);margin-bottom:10px">${scored.length} client(s) correspondant(s)</div>` + scored.slice(0, 80).map(x => {
+    const c = x.c, p = x.p;
+    const comps = (p.competences || []).slice(0, 8).map(k => cmdEsc(k)).join(', ');
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:7px;background:var(--bg-2)">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+        <div><strong>${cmdEsc(c.name || '')}</strong>${c.city ? ' <span style="color:var(--t3);font-size:11px">— ' + cmdEsc(c.city) + '</span>' : ''}
+          <div style="margin-top:3px">${p.mandataire ? badge(true, 'Mandataire', '#8b5cf6') : ''}${badge(x.posTypo, 'Typologie ✓', '#0ea5e9')}${badge(x.posSous, 'Sous-typo ✓', '#14b8a6')}${badge(x.posDept, 'Département ✓', '#10b981')}${badge(x.posTce, 'TCE ✓', '#f59e0b')}</div></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn" style="font-size:11px" onclick="this.closest('.nl-overlay').remove();showClient('${c.id}')">Fiche</button>
+          <button class="btn btn-primary" style="font-size:11px" onclick="this.closest('.nl-overlay').remove();sollicModalOpen(null,{client_id:'${c.id}',client_name:'${(c.name || '').replace(/'/g, "\\'")}',opportunite_id:'${akId}',opportunite_nom:'${oppNomEsc}'})">🤝 Solliciter</button>
+        </div>
+      </div>
+      ${comps ? '<div style="font-size:11px;color:var(--t3);margin-top:4px">Compétences : ' + comps + '</div>' : ''}
+    </div>`;
+  }).join('');
+}
 // Suppression définitive d'une opportunité (Akuiteo + CRM). Gère les tâches liées.
 async function oppDelete(akId) {
   const o = (_opps || []).find(x => String(x.akuiteo_id) === String(akId));
@@ -9150,6 +9212,7 @@ function renderOppDetailPage() {
     `<button class="btn" onclick="oppModalOpen('${o.akuiteo_id}')">✏️ Modifier</button>`,
     `<button class="btn" onclick="oppCreerTache('${o.akuiteo_id}')">✅ Créer une tâche</button>`,
     `<button class="btn" onclick="oppCreerCR('${o.akuiteo_id}')">📝 Créer un CR</button>`,
+    `<button class="btn" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;border:none" onclick="oppSuggestClients('${o.akuiteo_id}')" title="Proposer des clients à solliciter selon leur profil marchés (typologie, département, TCE…)">🎯 Clients à solliciter</button>`,
     enCours ? `<button class="btn" style="color:#10b981" onclick="oppWin('${o.akuiteo_id}')">🏆 Gagnée</button>` : '',
     enCours ? `<button class="btn" style="color:#ef4444" onclick="oppLose('${o.akuiteo_id}')">Perdue</button>` : '',
     o.client_id ? `<button class="btn" onclick="showClient('${o.client_id}')">Voir le client</button>` : '',
