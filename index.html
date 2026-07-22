@@ -13257,6 +13257,8 @@ async function openRealisationsWeb(force) {
   if (!force && c.web_research && c.web_research.html) { show({ html: c.web_research.html, structured: c.web_research.structured, t: c.web_research.generated_at ? new Date(c.web_research.generated_at).getTime() : null }, 'base'); return; }
   // 2) cache navigateur
   if (!force) { try { const raw = localStorage.getItem(cacheKey); if (raw) { const o = JSON.parse(raw); if (o && o.t && (Date.now() - o.t) < 30 * 864e5 && o.html) { show({ html: o.html, structured: o.structured, t: o.t }, 'cache'); return; } } } catch (e) {} }
+  // Garde-fou : aucune recherche web sans SIRET valide (fiabilité de l'identification)
+  if (!_siretValide(c.siret)) { const b = body(); if (b) b.innerHTML = '<div style="padding:16px;color:#b45309;font-size:13px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px">🔒 Recherche web bloquée : ce client n\'a pas de <b>SIRET valide</b>. Complétez la fiche (bouton <b>SIRENE</b>) puis réessayez.</div>'; return; }
   // 3) recherche IA
   try {
     const r = await fetch('/api/realisations-web', {
@@ -23930,17 +23932,21 @@ async function webResearchBulk(force) {
     let clients = [];
     const PAGE = 1000;
     for (let from = 0; ; from += PAGE) {
-      let q = sb.from('clients').select('id,name,siren,sector,secteur_activite,city,departement,code_postal,marche_profil').order('name');
+      let q = sb.from('clients').select('id,name,siret,siren,sector,secteur_activite,city,departement,code_postal,marche_profil').order('name');
       if (!force) q = q.is('web_research', null);
       const { data, error } = await q.range(from, from + PAGE - 1);
       if (error) { showSyncLoading(false); toast('Erreur lecture clients : ' + error.message, 'error'); return; }
       clients = clients.concat(data || []);
-      if (!data || data.length < PAGE || clients.length >= cap) break;
+      // on continue tant qu'on n'a pas assez de clients AVEC SIRET valide
+      if (!data || data.length < PAGE || clients.filter(c => _siretValide(c.siret)).length >= cap) break;
     }
-    const todo = clients.filter(c => (c.name || '').trim()).slice(0, cap);
+    // Garde-fou : uniquement les clients avec SIRET valide
+    const named = clients.filter(c => (c.name || '').trim());
+    const skippedNoSiret = named.filter(c => !_siretValide(c.siret)).length;
+    const todo = named.filter(c => _siretValide(c.siret)).slice(0, cap);
     showSyncLoading(false);
-    if (!todo.length) { toast(force ? 'Aucun client.' : 'Tous les clients ont déjà une recherche web enregistrée. Utilisez « Tout refaire ».', 'success'); return; }
-    if (!confirm('Lancer la recherche web IA pour ' + todo.length + ' client(s) ?\n\n⚠️ ' + todo.length + ' appels IA facturés (ordre de grandeur ~' + (todo.length * 0.05).toFixed(1) + ' €). Durée estimée : ~' + Math.max(1, Math.ceil(todo.length * 20 / 3 / 60)) + ' min.')) return;
+    if (!todo.length) { toast(force ? ('Aucun client avec SIRET valide' + (skippedNoSiret ? ' (' + skippedNoSiret + ' sans SIRET ignorés)' : '') + '.') : 'Tous les clients (avec SIRET) ont déjà une recherche web. Utilisez « Tout refaire ».', 'info'); return; }
+    if (!confirm('Lancer la recherche web IA pour ' + todo.length + ' client(s) avec SIRET ?' + (skippedNoSiret ? '\n(' + skippedNoSiret + ' client(s) sans SIRET valide seront ignorés)' : '') + '\n\n⚠️ ' + todo.length + ' appels IA facturés (ordre de grandeur ~' + (todo.length * 0.05).toFixed(1) + ' €). Durée estimée : ~' + Math.max(1, Math.ceil(todo.length * 20 / 3 / 60)) + ' min.')) return;
     showSyncLoading(true);
     const total = todo.length; let idx = 0, done = 0, ok = 0, prefilled = 0, errors = 0;
     async function worker() {
@@ -23966,7 +23972,7 @@ async function webResearchBulk(force) {
     }
     await Promise.all(Array.from({ length: Math.min(3, total) }, worker));
     showSyncLoading(false);
-    toast('Recherche web : ' + ok + ' fiche(s) enrichie(s), ' + prefilled + ' profil(s) complété(s)' + (errors ? ', ' + errors + ' erreur(s)' : ''), errors ? 'warn' : 'success');
+    toast('Recherche web : ' + ok + ' fiche(s) enrichie(s), ' + prefilled + ' profil(s) complété(s)' + (errors ? ', ' + errors + ' erreur(s)' : '') + (skippedNoSiret ? ' · ' + skippedNoSiret + ' sans SIRET ignorés' : ''), errors ? 'warn' : 'success');
   } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
 }
 
