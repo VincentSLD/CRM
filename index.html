@@ -13553,7 +13553,6 @@ function renderClientDetail() {
       <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer ce client/prospect">Supprimer</button>
     </div>
   </div>
-  ${renderOppsCard(c.id)}
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
     ${detailSection('Adresse du site', [
       detailRow('Ligne 1', c.adresse_ligne1 || '—'),
@@ -13688,6 +13687,7 @@ function renderClientDetail() {
       <div id="clientObjectifsList" style="padding:14px;color:var(--t3);font-size:13px">Chargement...</div>
     </div>
   </div>
+  ${renderOppsCard(c.id)}
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;align-items:start">
     ${renderTachesCard({ client_id: c.id, client_name: c.name })}
     ${renderSollicCard({ client_id: c.id, client_name: c.name })}
