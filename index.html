@@ -24111,18 +24111,21 @@ const AK_SITE_CD_NOVAM = '2-alpha02';
 const AK_SITE_CD_GPH = '1-alpha01';
 // Écrit les commerciaux (format « NOM Prénom ») d'un client dans son site Akuiteo (identifié par son Code SITE).
 // Repart du site existant pour ne pas écraser ses autres données. Renvoie { ok, novam, gph, site } ou { ok:false, reason }.
-async function akPushSiteCommerciaux(client) {
-  const akId = client.akuiteo_id;
+// opts : { customerAkId } (client Akuiteo propriétaire du site, pour les établissements),
+//        { siteId } (cible un site précis), { fallbackMain } (à défaut de code_site, viser le site principal).
+async function akPushSiteCommerciaux(client, opts = {}) {
+  const akId = opts.customerAkId || client.akuiteo_id;
   if (!akId) return { ok: false, reason: 'non synchronisé (pas d\'ID Akuiteo)' };
-  const codeSite = client.code_site;
-  if (!codeSite) return { ok: false, reason: 'pas de Code SITE' };
   const novam = fmtCommercialName(client.account_manager_name || '') || null; // Commercial Novam
   const gph = fmtCommercialName(client.salesman_name || '') || null;          // Commercial GPH
   if (!novam && !gph) return { ok: false, reason: 'aucun commercial Novam/GPH renseigné' };
   let sites = await akuiteoFetch('GET', '/crm/customers/' + akId + '/sites');
   sites = Array.isArray(sites) ? sites : [];
-  const site = sites.find(s => String(s.code) === String(codeSite) || String(s.siteCode) === String(codeSite));
-  if (!site || site.id == null) return { ok: false, reason: 'site ' + codeSite + ' introuvable dans Akuiteo' };
+  let site = null;
+  if (opts.siteId != null) site = sites.find(s => String(s.id) === String(opts.siteId));
+  if (!site && client.code_site) site = sites.find(s => String(s.code) === String(client.code_site) || String(s.siteCode) === String(client.code_site));
+  if (!site && opts.fallbackMain) site = sites.find(s => s.main) || sites[0];
+  if (!site || site.id == null) return { ok: false, reason: client.code_site ? ('site ' + client.code_site + ' introuvable dans Akuiteo') : 'site introuvable dans Akuiteo' };
   // Repartir du site existant (préserve nom/adresse), retirer les sous-objets non ré-envoyables, ajouter les 2 données perso (fusion par clé)
   const body = { ...site }; delete body.contacts; delete body.taxInformation;
   const cd = {};
@@ -24130,7 +24133,7 @@ async function akPushSiteCommerciaux(client) {
   if (gph != null) cd[AK_SITE_CD_GPH] = { type: 'ALPHANUMERIC', value: gph };
   body.customData = cd;
   await akuiteoFetch('POST', '/crm/customers/' + akId + '/sites/' + site.id, body, { accept: 'text/plain' });
-  return { ok: true, novam, gph, site: site.code || codeSite };
+  return { ok: true, novam, gph, site: site.code || site.id };
 }
 // Transfert global : commerciaux Novam/GPH de tous les clients éligibles → leur site Akuiteo
 async function pushAllSitesCommerciaux() {
@@ -31089,6 +31092,8 @@ async function pushEtablissementAsSite(full, siege) {
     await sb.from('clients').update({ akuiteo_site_id: siteId != null ? String(siteId) : 'synced', akuiteo_dirty: false }).eq('id', full.id);
     // Code SITE (SCLI…) de CET établissement précis, généré/attribué par Akuiteo
     await _akCaptureCodeSite(customerAkId, full.id, siteId);
+    // Commerciaux Novam/GPH → données personnalisées de CE site (best-effort, non bloquant)
+    try { await akPushSiteCommerciaux(full, { customerAkId, siteId }); } catch (e) { console.warn('push commerciaux site (étab):', e.message); }
     await loadDB();
     if (currentClient && currentClient.id === full.id) { const { data: rf } = await sb.from('clients').select('*').eq('id', full.id).maybeSingle(); if (rf) currentClient = rf; }
     renderPage(currentPage);
@@ -31461,6 +31466,8 @@ async function pushClientToAkuiteo(clientId) {
     }
     // Récupérer le Code SITE (siteCode « SCLI… ») du site principal, généré/attribué par Akuiteo
     if (customerAkId) await _akCaptureCodeSite(customerAkId, clientId);
+    // Commerciaux Novam/GPH → données personnalisées du site principal (best-effort, non bloquant)
+    if (customerAkId) { try { await akPushSiteCommerciaux({ ...full, akuiteo_id: customerAkId }, { fallbackMain: true }); } catch (e) { console.warn('push commerciaux site (siège):', e.message); } }
     // Marquer comme synchronisé
     await sb.from('clients').update({ akuiteo_dirty: false }).eq('id', clientId);
     // Rafraîchir la fiche pour mettre à jour les boutons
