@@ -2182,7 +2182,7 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
       <!-- Catégorie du compte (par agence) -->
       <div class="card" style="margin-bottom:16px">
-        <div class="card-header"><div class="card-title">Catégorie du compte <span style="font-weight:400;font-size:11px">(par agence)</span></div></div>
+        <div class="card-header"><div class="card-title">Importance du compte <span style="font-weight:400;font-size:11px">(par agence)</span></div></div>
         <div class="card-body">
           <div id="nc-categorie-compte" style="display:flex;gap:12px;flex-wrap:wrap"></div>
           <div style="font-size:11px;color:var(--t3);margin-top:6px">A/B/C calculé automatiquement par la catégorisation ABC. Cochez <strong>++</strong> pour un compte clé (très important, spécificités).</div>
@@ -2738,7 +2738,7 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
       <!-- Catégorie du compte (par agence) -->
       <div class="card" style="margin-bottom:16px">
-        <div class="card-header"><div class="card-title">Catégorie du compte <span style="font-weight:400;font-size:11px">(par agence)</span></div></div>
+        <div class="card-header"><div class="card-title">Importance du compte <span style="font-weight:400;font-size:11px">(par agence)</span></div></div>
         <div class="card-body">
           <div id="ec-categorie-compte" style="display:flex;gap:12px;flex-wrap:wrap"></div>
           <div style="font-size:11px;color:var(--t3);margin-top:6px">A/B/C calculé automatiquement par la catégorisation ABC. Cochez <strong>++</strong> pour un compte clé (très important, spécificités).</div>
@@ -13636,7 +13636,7 @@ function renderClientDetail() {
     ${detailSection('Commercial', [
       detailRow('Commercial Novam', c.account_manager_name ? '<strong>' + c.account_manager_name + '</strong>' : resolveManagerName(c.account_manager_id) || '—'),
       detailRow('Commercial GPH', c.salesman_name ? '<strong>' + c.salesman_name + '</strong>' + (c.commerciaux_associes && c.commerciaux_associes !== c.salesman_name ? '<br><span style="font-size:11px;color:var(--t3)">' + c.commerciaux_associes + '</span>' : '') : c.commerciaux_associes || '—'),
-      detailRow('Catégorie du compte', (() => {
+      detailRow('Importance du compte', (() => {
         const cc = (c.categorie_compte && typeof c.categorie_compte === 'object') ? c.categorie_compte : {};
         const rg = (c.categorie_compte_rang && typeof c.categorie_compte_rang === 'object') ? c.categorie_compte_rang : {};
         const pl = (c.categorie_compte_plus && typeof c.categorie_compte_plus === 'object') ? c.categorie_compte_plus : {};
@@ -23428,7 +23428,7 @@ function abcEditExportPDF() {
 }
 
 async function calculerCategoriesABC() {
-  if (!confirm('Recalculer la catégorisation ABC de tous les clients ?\nCela mettra à jour le champ « Catégorie du compte » pour chaque agence.')) return;
+  if (!confirm('Recalculer la catégorisation ABC de tous les clients ?\nCela mettra à jour le champ « Importance du compte » pour chaque agence.')) return;
 
   showSyncLoading(true);
   setSyncText('Calcul des catégories ABC…');
