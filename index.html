@@ -24117,6 +24117,9 @@ async function akPushSiteCommerciaux(client, opts = {}) {
   if (!site || site.id == null) return { ok: false, reason: client.code_site ? ('site ' + client.code_site + ' introuvable dans Akuiteo') : 'site introuvable dans Akuiteo' };
   // Repartir du site existant (préserve nom/adresse), retirer les sous-objets non ré-envoyables, ajouter les 2 données perso (fusion par clé)
   const body = { ...site }; delete body.contacts; delete body.taxInformation;
+  // Champs contact en lecture seule (dérivés de l'adresse) : leur renvoi (parfois mal formé) fait échouer la validation Akuiteo (400 « email »)
+  delete body.phone; delete body.email; delete body.mobilePhone; delete body.fax; delete body.webSite;
+  if (body.address && body.address.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(body.address.email))) body.address = { ...body.address, email: null };
   const cd = {};
   if (novam != null) cd[AK_SITE_CD_NOVAM] = { type: 'ALPHANUMERIC', value: novam };
   if (gph != null) cd[AK_SITE_CD_GPH] = { type: 'ALPHANUMERIC', value: gph };
@@ -24126,24 +24129,37 @@ async function akPushSiteCommerciaux(client, opts = {}) {
 }
 // Transfert global : commerciaux Novam/GPH de tous les clients éligibles → leur site Akuiteo
 async function pushAllSitesCommerciaux() {
-  if (!confirm('Transférer les commerciaux Novam/GPH de TOUS les clients vers les champs personnalisés (Informations complémentaires) de leur site Akuiteo ?\n\nConcernés : clients ayant un ID Akuiteo, un Code SITE et au moins un commercial renseigné.\nL\'écriture se fait dans Akuiteo — plusieurs minutes possibles.')) return;
+  if (!confirm('Transférer les commerciaux Novam/GPH de TOUS les clients synchronisés vers les champs personnalisés (Informations complémentaires) de leur site Akuiteo ?\n\nConcernés : les sièges (site principal) et les établissements liés ayant un site Akuiteo, avec au moins un commercial renseigné.\nL\'écriture se fait dans Akuiteo — plusieurs minutes possibles.')) return;
   showSyncLoading(true); setSyncText('Chargement des clients…');
   try {
-    let clients = []; const PAGE = 1000;
+    let rows = []; const PAGE = 1000;
     for (let from = 0; ; from += PAGE) {
-      const { data, error } = await sb.from('clients').select('id,name,akuiteo_id,code_site,account_manager_name,salesman_name').not('akuiteo_id', 'is', null).not('code_site', 'is', null).range(from, from + PAGE - 1);
+      const { data, error } = await sb.from('clients').select('id,name,akuiteo_id,akuiteo_site_id,code_site,siren,account_manager_name,salesman_name').or('akuiteo_id.not.is.null,akuiteo_site_id.not.is.null').range(from, from + PAGE - 1);
       if (error) { showSyncLoading(false); toast('Erreur lecture clients : ' + error.message, 'error'); return; }
-      clients = clients.concat(data || []);
+      rows = rows.concat(data || []);
       if (!data || data.length < PAGE) break;
     }
-    const todo = clients.filter(c => (c.account_manager_name || c.salesman_name));
-    if (!todo.length) { showSyncLoading(false); toast('Aucun client éligible (Code SITE + ID Akuiteo + commercial).', 'warn'); return; }
+    const isNum = v => /^\d+$/.test(String(v == null ? '' : v));
+    // Siège par SIREN : fournit le client Akuiteo (customer) pour les établissements sans akuiteo_id propre
+    const siegeBySiren = {};
+    rows.forEach(c => { if (isNum(c.akuiteo_id) && c.siren && !siegeBySiren[c.siren]) siegeBySiren[c.siren] = c.akuiteo_id; });
+    // Éligibles : au moins un commercial + un customer Akuiteo joignable + un site ciblable
+    const todo = rows.filter(c => {
+      if (!(c.account_manager_name || c.salesman_name)) return false;
+      if (isNum(c.akuiteo_id)) return true;                                        // siège → site principal (ou code_site)
+      return !!siegeBySiren[c.siren] && (c.code_site || isNum(c.akuiteo_site_id)); // établissement → son propre site
+    });
+    if (!todo.length) { showSyncLoading(false); toast('Aucun client éligible (Akuiteo + commercial).', 'warn'); return; }
     const total = todo.length;
     let idx = 0, done = 0, ok = 0, skip = 0, errors = 0; const errList = [];
     async function worker() {
       while (idx < total) {
         const c = todo[idx++];
-        try { const r = await akPushSiteCommerciaux(c); if (r.ok) ok++; else skip++; }
+        const own = isNum(c.akuiteo_id);
+        const opts = { customerAkId: own ? c.akuiteo_id : siegeBySiren[c.siren] };
+        if (own) opts.fallbackMain = true;                       // siège : site principal à défaut de Code SITE
+        else if (isNum(c.akuiteo_site_id)) opts.siteId = c.akuiteo_site_id; // établissement : son site précis
+        try { const r = await akPushSiteCommerciaux(c, opts); if (r.ok) ok++; else skip++; }
         catch (e) { errors++; if (errList.length < 30) errList.push((c.name || c.id) + ' : ' + e.message); }
         done++;
         if (done % 5 === 0 || done === total) setSyncText('Transfert commerciaux → Akuiteo : ' + done + ' / ' + total + ' (écrits ' + ok + ', ignorés ' + skip + ', erreurs ' + errors + ')');
