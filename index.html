@@ -527,6 +527,8 @@ details.acc > summary { list-style: none; }
 details.acc > summary::-webkit-details-marker { display: none; }
 details.acc > summary::before { content: '\25B8'; display: inline-block; margin-right: 6px; transition: transform .15s; }
 details.acc[open] > summary::before { transform: rotate(90deg); }
+/* Grilles de 2 cartes côte à côte : neutralise les marges propres des cartes pour un alignement en haut */
+.ts-grid > .card { margin-top: 0 !important; margin-bottom: 0 !important; }
 
 /* ═══════════════════ BUTTONS ═══════════════════ */
 .btn {
@@ -10199,13 +10201,13 @@ function renderDashboard() {
     <span style="font-size:11px;color:var(--t3);margin-left:6px">${myDevis.length} devis, ${myCommandes.length} commandes, ${myFactures.length} factures sur la période</span>
   </div>
   ${alertsHTML}
-  <div class="card" style="margin-bottom:16px">
-    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
-      <div class="card-title">✅ Mes tâches à faire</div>
-      <button class="btn btn-sm" onclick="go('taches')" style="font-size:12px">Toutes les tâches →</button>
-    </div>
+  <details class="card acc" id="dashTodo" open style="margin-bottom:16px">
+    <summary class="card-header" style="cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px">
+      <div class="card-title" style="flex:1;display:flex;align-items:center;gap:8px">✅ Mes tâches à faire<span id="dashTodoCount" style="display:none;background:var(--accent);color:#fff;border-radius:10px;padding:1px 8px;font-size:12px;font-weight:700"></span></div>
+      <button class="btn btn-sm" onclick="event.preventDefault();event.stopPropagation();go('taches')" style="font-size:12px">Toutes les tâches →</button>
+    </summary>
     <div class="card-body" id="dashMesTaches" style="padding:0;font-size:13px;color:var(--t3)">Chargement…</div>
-  </div>
+  </details>
   <div class="kpi-grid">
     <div class="kpi-card green">
       <div class="kpi-header"><div class="kpi-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>${trendBadge(devisTrend)}</div>
@@ -10289,10 +10291,14 @@ function renderDashboard() {
 
 async function renderDashMesTaches() {
   const el = document.getElementById('dashMesTaches');
+  const cnt = document.getElementById('dashTodoCount');
   if (!el) return;
   if (!_tachesLoaded) { try { await loadTaches(); } catch (e) {} }
+  if (!_sollicLoaded) { try { await loadSollicitations(); } catch (e) {} }
   const myEmail = (currentCommercial && currentCommercial.email) || '';
-  if (!myEmail) { el.innerHTML = '<div style="padding:14px;color:var(--t3)">Connectez-vous pour voir vos tâches.</div>'; return; }
+  if (!myEmail) { el.innerHTML = '<div style="padding:14px;color:var(--t3)">Connectez-vous pour voir vos tâches.</div>'; if (cnt) cnt.style.display = 'none'; return; }
+
+  // 1) Mes tâches (à faire / en cours) qui me sont assignées
   const mine = _taches.filter(t => (t.statut === 'a_faire' || t.statut === 'en_cours') && t.assigne_email === myEmail);
   mine.sort((a, b) => {
     const ra = _tEnRetard(a) ? 0 : 1, rb = _tEnRetard(b) ? 0 : 1;
@@ -10301,9 +10307,17 @@ async function renderDashMesTaches() {
     const eb = b.echeance ? new Date(b.echeance).getTime() : Infinity;
     return ea - eb;
   });
-  if (!mine.length) { el.innerHTML = '<div style="padding:14px;color:var(--t3)">🎉 Aucune tâche en attente — tout est à jour !</div>'; return; }
-  const show = mine.slice(0, 8);
-  const ligne = t => {
+
+  // 2) Mes sollicitations non finalisées (les miennes : assignées à moi, ou créées par moi si non assignées)
+  const mySollic = (_sollic || []).filter(s => !_sollicTerminal(s.statut) && (s.assigne_email === myEmail || (!s.assigne_email && s.createur_email === myEmail)));
+  const _sdue = s => s.date_relance ? new Date(s.date_relance).getTime() : Infinity;
+  mySollic.sort((a, b) => _sdue(a) - _sdue(b));
+
+  const total = mine.length + mySollic.length;
+  if (cnt) { if (total > 0) { cnt.textContent = total; cnt.style.display = ''; } else { cnt.style.display = 'none'; } }
+  if (!total) { el.innerHTML = '<div style="padding:14px;color:var(--t3)">🎉 Rien à faire — tout est à jour !</div>'; return; }
+
+  const ligneT = t => {
     const retard = _tEnRetard(t);
     const ctxParts = [];
     if (t.client_name) ctxParts.push(cmdEsc(t.client_name));
@@ -10320,10 +10334,36 @@ async function renderDashMesTaches() {
       <div style="font-size:12px;white-space:nowrap;flex:none;${retard ? 'color:var(--red);font-weight:600' : 'color:var(--t3)'}">${_tEcheanceTxt(t.echeance)}${retard ? ' ⚠' : ''}</div>
     </div>`;
   };
-  el.innerHTML = show.map(ligne).join('') +
-    (mine.length > show.length
-      ? `<div style="padding:10px 14px;text-align:center"><a href="#" onclick="go('taches');return false" style="color:var(--accent);font-size:12px;text-decoration:none">Voir mes ${mine.length} tâches →</a></div>`
-      : '');
+  const todayS = new Date().toISOString().slice(0, 10);
+  const ligneS = s => {
+    const enRetard = s.date_relance && String(s.date_relance).slice(0, 10) < todayS;
+    const ctxParts = [];
+    if (s.client_name) ctxParts.push(cmdEsc(s.client_name));
+    if (s.opportunite_nom) ctxParts.push('🎯 ' + cmdEsc(s.opportunite_nom));
+    const ctx = ctxParts.join(' · ');
+    const dueTxt = s.date_relance ? fmtDateFR(String(s.date_relance).slice(0, 10)) : '';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border)${enRetard ? ';background:rgba(239,68,68,.06)' : ''}">
+      <span title="Sollicitation" style="flex:none;font-size:15px;width:16px;text-align:center">🤝</span>
+      <div style="flex:1;min-width:0;cursor:pointer" onclick="sollicModalOpen(${s.id})">
+        <div style="font-size:13px;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ctx || 'Sollicitation'}</div>
+        <div style="margin-top:2px">${_sollicBadge(s.statut)}</div>
+      </div>
+      ${dueTxt ? '<div style="font-size:12px;white-space:nowrap;flex:none;' + (enRetard ? 'color:var(--red);font-weight:600' : 'color:var(--t3)') + '">' + dueTxt + (enRetard ? ' ⚠' : '') + '</div>' : ''}
+    </div>`;
+  };
+
+  const showT = mine.slice(0, 8), showS = mySollic.slice(0, 8);
+  const subHdr = t => '<div style="padding:9px 14px 4px;font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.4px;border-top:1px solid var(--border)">' + t + '</div>';
+  let html = '';
+  if (showT.length) {
+    html += subHdr('✅ Tâches (' + mine.length + ')') + showT.map(ligneT).join('');
+    if (mine.length > showT.length) html += '<div style="padding:8px 14px;text-align:center"><a href="#" onclick="go(\'taches\');return false" style="color:var(--accent);font-size:12px;text-decoration:none">Voir mes ' + mine.length + ' tâches →</a></div>';
+  }
+  if (showS.length) {
+    html += subHdr('🤝 Sollicitations à traiter (' + mySollic.length + ')') + showS.map(ligneS).join('');
+    if (mySollic.length > showS.length) html += '<div style="padding:8px 14px;text-align:center"><a href="#" onclick="go(\'sollicitations\');return false" style="color:var(--accent);font-size:12px;text-decoration:none">Voir mes ' + mySollic.length + ' sollicitations →</a></div>';
+  }
+  el.innerHTML = html;
 }
 
 async function renderDashObjectifsAgences() {
@@ -11858,7 +11898,7 @@ async function checkClientDuplicates(c) {
 async function _ficheMerge(keepId, removeId) {
   if (keepId === removeId) return;
   if (!confirm('Fusionner ces deux fiches ?\n\nToutes les liaisons (devis, commandes, factures, affaires, marchés, contacts, CR, objectifs, concurrents) de la fiche source seront rattachées à la fiche conservée, puis la source sera supprimée.\n\nIrréversible.')) return;
-  if (typeof requireDeletePassword === 'function' && !(await requireDeletePassword())) return;
+  if (typeof requireDeletePassword === 'function' && !(await requireDeletePassword('Mot de passe admin requis pour fusionner ces fiches'))) return;
   showSyncLoading(true); setSyncText('Fusion en cours...');
   try {
     await _mergeClientsCore(keepId, removeId, true);
@@ -11867,7 +11907,8 @@ async function _ficheMerge(keepId, removeId) {
   } catch (e) { toast('Erreur fusion : ' + e.message, 'error'); }
   finally { showSyncLoading(false); }
 }
-function dupIgnoreFiche(currentId, otherId) {
+async function dupIgnoreFiche(currentId, otherId) {
+  if (typeof requireDeletePassword === 'function' && !(await requireDeletePassword('Mot de passe admin requis pour marquer « pas un doublon »'))) return;
   try { const k = 'dupignore_' + currentId; const arr = JSON.parse(localStorage.getItem(k) || '[]'); if (!arr.includes(String(otherId))) arr.push(String(otherId)); localStorage.setItem(k, JSON.stringify(arr)); } catch (e) {}
   toast('Ignoré — traité comme « pas un doublon »', 'info');
   if (currentClient) checkClientDuplicates(currentClient);
@@ -13809,7 +13850,7 @@ function renderClientDetail() {
     </div>
   </div>
   ${renderOppsCard(c.id)}
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;align-items:start">
+  <div class="ts-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;align-items:start">
     ${renderTachesCard({ client_id: c.id, client_name: c.name })}
     ${renderSollicCard({ client_id: c.id, client_name: c.name })}
   </div>
@@ -27732,10 +27773,10 @@ function askPasswordModal(message) {
 function _pwdAskOk() { const v = document.getElementById('pwdAskInput')?.value || ''; const ov = document.getElementById('pwdAskOverlay'); if (ov) ov.remove(); const r = _pwdAskResolve; _pwdAskResolve = null; if (r) r(v); }
 function _pwdAskCancel() { const ov = document.getElementById('pwdAskOverlay'); if (ov) ov.remove(); const r = _pwdAskResolve; _pwdAskResolve = null; if (r) r(null); }
 // Garde commun à toutes les suppressions : vérifie le mot de passe configuré (Admin). Renvoie true si autorisé.
-async function requireDeletePassword() {
+async function requireDeletePassword(label) {
   const pwd = await loadDeletePassword();
   if (!pwd) return true; // aucune protection configurée
-  const input = await askPasswordModal('Mot de passe requis pour supprimer');
+  const input = await askPasswordModal(label || 'Mot de passe requis pour supprimer');
   if (input === null) return false; // annulé
   if (input !== pwd) { toast('Mot de passe incorrect', 'error'); return false; }
   return true;
