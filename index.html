@@ -13076,6 +13076,8 @@ function _realizRender(j, c, ts) {
       if (x.formePrix) meta.push('Prix ' + cmdEsc(x.formePrix));
       if (x.duree) meta.push(cmdEsc(String(x.duree)) + ' mois');
       if (x.cpv) { const cl = _cpvLabel(x.cpv); meta.push('CPV ' + cmdEsc(String(x.cpv)) + (cl ? ' – ' + cmdEsc(cl) : '')); }
+      if (x.offres != null && x.offres !== '') meta.push(cmdEsc(String(x.offres)) + ' offre(s) reçue(s)');
+      if (x.sousTraitance && /oui|true|^1$/i.test(String(x.sousTraitance))) meta.push('sous-traitance déclarée');
       if (x.lieu) meta.push('📍 ' + cmdEsc(x.lieu) + (x.dept ? ' (' + cmdEsc(x.dept) + ')' : ''));
       const badge = x.typeMarche ? `<span style="background:#eef2ff;color:#4338ca;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:6px">${cmdEsc(x.typeMarche)}</span>` : '';
       return `<div style="border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:7px;background:var(--bg-2)">

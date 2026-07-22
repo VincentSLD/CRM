@@ -3,7 +3,10 @@
 //
 // Appel : GET /api/realisations?siren=<9 chiffres>
 
-const DECP_URL = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/decp_augmente/records';
+// Consolidé DECP officiel sur data.gouv (mise à jour QUOTIDIENNE, couvre 2024→aujourd'hui + historique),
+// requêtable via l'API tabulaire de data.gouv. Remplace decp_augmente (data.economie) qui était figé à 2023.
+const DECP_RESOURCE = '22847056-61df-452d-837d-8b8ceadbfc52'; // ressource decp.csv du dataset « DECP consolidées (format tabulaire) »
+const DECP_TABULAR = 'https://tabular-api.data.gouv.fr/api/resources/' + DECP_RESOURCE + '/data/';
 
 async function fetchJson(url, opts, timeoutMs = 20000) {
   const ctrl = new AbortController();
@@ -18,41 +21,37 @@ async function fetchJson(url, opts, timeoutMs = 20000) {
   } finally { clearTimeout(t); }
 }
 
-// ─ DECP : marchés publics où l'entreprise est titulaire (par SIREN) ─
+// ─ DECP : marchés publics où l'entreprise est titulaire (par SIREN), source consolidée fraîche ─
 async function loadDecp(siren) {
   if (!siren) return { items: [], total: 0, error: null };
-  // ODSQL : startswith() pour un préfixe SIREN (le joker ODS est « * », pas « % » comme en SQL)
-  const where = `startswith(siretetablissement, "${siren}")`;
-  const select = [
-    'datenotification', 'anneenotification', 'datepublicationdonnees', 'nomacheteur', 'codepostalacheteur', 'libellecommuneacheteur',
-    'objetmarche', 'montant', 'natureobjetmarche', 'nature', 'procedure', 'formeprix', 'dureemois',
-    'codecpv', 'referencecpv', 'lieuexecutionnom', 'codedepartementexecution',
-    'denominationsociale_cotitulaire1', 'denominationsociale_cotitulaire2', 'denominationsociale_cotitulaire3',
-  ].join(',');
-  const url = DECP_URL + '?where=' + encodeURIComponent(where)
-    + '&order_by=' + encodeURIComponent('datenotification desc')
-    + '&limit=60&select=' + encodeURIComponent(select);
+  const cols = 'dateNotification,acheteur_nom,acheteur_commune_nom,acheteur_departement_code,objet,montant,nature,procedure,formePrix,dureeMois,codeCPV,offresRecues,sousTraitanceDeclaree,titulaire_id,titulaire_nom';
+  const url = DECP_TABULAR + '?titulaire_id__contains=' + encodeURIComponent(siren)
+    + '&dateNotification__sort=desc&page_size=100&columns=' + encodeURIComponent(cols);
   const r = await fetchJson(url);
-  if (!r.ok) return { items: [], total: 0, error: 'DECP ' + r.status + ': ' + String((r.data && r.data.message) || r.text).slice(0, 160) };
-  const items = ((r.data && r.data.results) || []).map(x => ({
-    date: String(x.datenotification || '').slice(0, 10),
-    annee: x.anneenotification || '',
-    publie: String(x.datepublicationdonnees || '').slice(0, 10),
-    acheteur: x.nomacheteur || '',
-    acheteurVille: [x.codepostalacheteur, x.libellecommuneacheteur].filter(Boolean).join(' '),
-    objet: x.objetmarche || '',
-    montant: (x.montant != null && x.montant !== '') ? Number(x.montant) : null,
-    typeMarche: x.natureobjetmarche || '',      // Travaux / Fournitures / Services
-    nature: x.nature || '',                     // Marché / Marché subséquent / Concession…
-    procedure: x.procedure || '',
-    formePrix: x.formeprix || '',
-    duree: x.dureemois || null,
-    cpv: x.codecpv || x.referencecpv || '',
-    lieu: x.lieuexecutionnom || '',
-    dept: x.codedepartementexecution || '',
-    cotraitants: [x.denominationsociale_cotitulaire1, x.denominationsociale_cotitulaire2, x.denominationsociale_cotitulaire3].filter(Boolean),
-  }));
-  return { items, total: (r.data && r.data.total_count) != null ? r.data.total_count : items.length, error: null };
+  if (!r.ok) return { items: [], total: 0, error: 'DECP ' + r.status + ': ' + String((r.data && (r.data.message || r.data.error)) || r.text).slice(0, 160) };
+  const rows = (r.data && r.data.data) || [];
+  const total = (r.data && r.data.meta && r.data.meta.total != null) ? r.data.meta.total : rows.length;
+  const items = rows
+    .filter(x => String(x.titulaire_id || '').replace(/\D/g, '').startsWith(siren)) // le SIREN doit être en tête du SIRET du titulaire
+    .map(x => ({
+      date: String(x.dateNotification || '').slice(0, 10),
+      acheteur: x.acheteur_nom || '',
+      acheteurVille: [x.acheteur_commune_nom, x.acheteur_departement_code].filter(Boolean).join(' · '),
+      objet: x.objet || '',
+      montant: (x.montant != null && x.montant !== '') ? Number(x.montant) : null,
+      nature: x.nature || '',                 // Marché / Accord-cadre / Concession…
+      procedure: x.procedure || '',
+      formePrix: x.formePrix || '',
+      duree: x.dureeMois || null,
+      cpv: x.codeCPV || '',
+      dept: x.acheteur_departement_code || '',
+      offres: (x.offresRecues != null && x.offresRecues !== '') ? x.offresRecues : null,
+      sousTraitance: x.sousTraitanceDeclaree || '',
+      typeMarche: '', lieu: '', cotraitants: [],
+    }))
+    .sort((a, b) => (b.date || '').localeCompare(a.date || '')) // plus récents d'abord (dates vides en dernier)
+    .slice(0, 60);
+  return { items, total, error: null };
 }
 
 export default async function handler(req, res) {
