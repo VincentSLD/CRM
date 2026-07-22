@@ -13276,9 +13276,55 @@ function _mpBlockHtml() {
     <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
       <div><span style="${lbl}">Montant TCE souhaité — min (€)</span><input type="number" step="any" style="${fi};width:150px" value="${f.tceMin !== '' ? f.tceMin : ''}" oninput="_mpForm.tceMin=this.value" placeholder="ex. 500000"></div>
       <div><span style="${lbl}">max (€)</span><input type="number" step="any" style="${fi};width:150px" value="${f.tceMax !== '' ? f.tceMax : ''}" oninput="_mpForm.tceMax=this.value" placeholder="ex. 5000000"></div>
+      <button class="btn" onclick="mpPrefillFromDecp()" style="font-size:12px" title="Proposer départements + fourchette TCE (+ typologies) depuis les marchés publics DECP du client">✨ Pré-remplir depuis les DECP</button>
       <button class="btn btn-primary" onclick="saveMarcheProfil()" style="font-size:12px">💾 Enregistrer le profil</button>
     </div>
   </div>`;
+}
+// Mots-clés (dans l'objet des marchés) → typologie suggérée (approximatif, à valider)
+const TYPO_KEYWORDS = {
+  'Santé': ['ehpad', 'hopital', 'hôpital', 'santé', 'sante', 'medical', 'médical', 'pharmacie', 'clinique', 'kiné', 'kine', 'dentaire'],
+  'Enseignement': ['ecole', 'école', 'scolaire', 'collège', 'college', 'lycée', 'lycee', 'universit', 'crèche', 'creche', 'periscolaire', 'périscolaire'],
+  'Sports / Loisirs': ['gymnase', 'stade', 'sportif', 'boulodrome', 'tennis', 'vestiaire'],
+  'Sociaux-culturel': ['mediatheque', 'médiathèque', 'bibliot', 'musée', 'musee', 'salle polyvalente', 'cinéma', 'cinema', 'culturel'],
+  'Aménagement - VRD': ['vrd', 'voirie', 'réseaux', 'reseaux', 'piscine', 'aquatique', 'thalasso'],
+  'Equipements publics': ['mairie', 'gendarmerie', 'police', 'caserne', 'sdis', 'tribunal'],
+  'Hébergements collectifs': ['hotel', 'hôtel', 'hébergement', 'hebergement', 'résidence', 'residence'],
+  'Industrie': ['industriel', 'usine', 'entrepot', 'entrepôt', 'stockage', 'logistique', 'agroalimentaire', 'data center'],
+  'Commercial': ['commerce', 'supermarch', 'centre commercial', 'magasin'],
+  "Ouvrage d'arts / Génie Civil": ['pont', 'passerelle', "ouvrage d'art", 'parking', 'chaufferie', 'épuration', 'epuration'],
+  'Tertiaire / Bureaux': ['bureaux', 'tertiaire'],
+  'Patrimoine': ['château', 'chateau', 'patrimoine', 'monument'],
+  'Photovoltaïque': ['photovolta', 'panneaux solaires', 'centrale solaire'],
+  'Démolition': ['démolition', 'demolition', 'déconstruction', 'deconstruction'],
+  'Environnement': ['dépollution', 'depollution', 'assainissement'],
+  'Logement individuel': ['maison individuelle'],
+};
+async function mpPrefillFromDecp() {
+  const c = currentClient; if (!c) return; _mpEnsure();
+  showSyncLoading(true); setSyncText('Analyse des marchés publics du client…');
+  try {
+    let marches = [];
+    try { const { data } = await sb.from('decp_marches').select('acheteur_dept,montant,objet').eq('client_id', c.id).limit(1000); marches = data || []; } catch (e) {}
+    if (!marches.length) {
+      const siren = String(c.siren || '').replace(/\D/g, '').slice(0, 9);
+      if (siren.length === 9) { const r = await fetch('/api/decp-client?siren=' + siren + '&max=500'); const j = await r.json().catch(() => ({})); marches = (j.marches || []).map(m => ({ acheteur_dept: m.acheteur_dept, montant: m.montant, objet: m.objet })); }
+    }
+    showSyncLoading(false);
+    if (!marches.length) { toast('Aucun marché public trouvé pour ce client (clientèle privée ?).', 'info'); return; }
+    const f = _mpForm;
+    const depts = [...new Set(marches.map(m => m.acheteur_dept).filter(Boolean))];
+    f.departements = [...new Set([...(f.departements || []), ...depts])];
+    const montants = marches.map(m => Number(m.montant)).filter(v => v > 0);
+    let tceSet = false;
+    if (montants.length && f.tceMin === '' && f.tceMax === '') { f.tceMin = Math.round(_pctl(montants, 10)); f.tceMax = Math.round(_pctl(montants, 90)); tceSet = true; }
+    const txt = marches.map(m => String(m.objet || '').toLowerCase()).join(' \n ');
+    const suggested = [];
+    Object.keys(TYPO_KEYWORDS).forEach(t => { if (_typoList().includes(t) && TYPO_KEYWORDS[t].some(k => txt.includes(k))) suggested.push(t); });
+    if (suggested.length) f.typologies = [...new Set([...(f.typologies || []), ...suggested])];
+    _mpRefresh();
+    toast('Proposé depuis les DECP : ' + depts.length + ' département(s)' + (tceSet ? ', fourchette TCE' : '') + (suggested.length ? ', ' + suggested.length + ' typologie(s) à valider' : '') + '. Vérifiez puis « Enregistrer le profil ».', 'success');
+  } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
 }
 async function saveMarcheProfil() {
   const c = currentClient; if (!c || !_mpForm) return;
@@ -22572,6 +22618,16 @@ function renderAdmin() {
     </div>
   </div>
   <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><div class="card-title">Marchés publics des clients (DECP)</div></div>
+    <div class="card-body" style="font-size:13px;color:var(--t3)">
+      Interroge la base <strong>DECP</strong> (open data, sans clé) pour tous les clients ayant un SIREN, <strong>archive</strong> leurs marchés publics gagnés (table <code>decp_marches</code>, pour analyses) et <strong>pré-remplit</strong> les profils marchés (départements + fourchette TCE) <strong>sans écraser</strong> vos saisies.
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="syncAllClientsDecp(false)" style="font-size:12px">🔄 Synchroniser (nouveaux + anciens &gt; 7 j)</button>
+        <button class="btn" onclick="syncAllClientsDecp(true)" style="font-size:12px" title="Reprend tous les clients, même récemment synchronisés">Tout resynchroniser</button>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:16px">
     <div class="card-header"><div class="card-title">Demandes d'accès au CRM</div></div>
     <div class="card-body">
       <div id="adminAccessList" style="color:var(--t3);font-size:13px">Chargement...</div>
@@ -23619,6 +23675,63 @@ async function saveCompetences() {
     if (error) { toast('Erreur enregistrement : ' + error.message, 'error'); return; }
     toast('Compétences enregistrées ✅', 'success');
   } catch (e) { toast('Erreur : ' + e.message, 'error'); }
+}
+
+// Percentile (0-100) d'un tableau numérique
+function _pctl(arr, p) { if (!arr || !arr.length) return null; const a = arr.slice().sort((x, y) => x - y); const i = Math.min(a.length - 1, Math.max(0, Math.round((p / 100) * (a.length - 1)))); return a[i]; }
+// Synchro DECP de TOUS les clients : archive les marchés (decp_marches) + pré-remplit départements/TCE (non destructif)
+async function syncAllClientsDecp(force) {
+  if (!confirm('Synchroniser les marchés publics (DECP) de tous les clients ayant un SIREN ?\n\nLa base DECP (open data) est interrogée pour chaque société — plusieurs minutes possibles. Les marchés sont archivés et les profils marchés pré-remplis (départements + fourchette TCE) SANS écraser vos saisies.')) return;
+  showSyncLoading(true); setSyncText('Chargement des clients…');
+  try {
+    let clients = [];
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await sb.from('clients').select('id,siren,decp_synced_at,marche_profil').not('siren', 'is', null).range(from, from + PAGE - 1);
+      if (error) { showSyncLoading(false); toast('Erreur lecture clients : ' + error.message, 'error'); return; }
+      clients = clients.concat(data || []);
+      if (!data || data.length < PAGE) break;
+    }
+    const isSiren = s => /^\d{9}$/.test(String(s || '').replace(/\D/g, ''));
+    const weekAgo = Date.now() - 7 * 864e5;
+    let todo = clients.filter(c => isSiren(c.siren));
+    if (!force) todo = todo.filter(c => !c.decp_synced_at || new Date(c.decp_synced_at).getTime() < weekAgo);
+    if (!todo.length) { showSyncLoading(false); toast('Tous les clients sont déjà à jour. Utilisez « Tout resynchroniser » pour forcer.', 'success'); return; }
+    const total = todo.length;
+    let idx = 0, done = 0, withMarches = 0, totalMarches = 0, prefilled = 0, errors = 0;
+    async function worker() {
+      while (idx < total) {
+        const c = todo[idx++];
+        const siren = String(c.siren).replace(/\D/g, '').slice(0, 9);
+        try {
+          const r = await fetch('/api/decp-client?siren=' + siren + '&max=500');
+          const j = await r.json().catch(() => ({}));
+          const marches = (j && j.marches) || [];
+          if (marches.length) {
+            const rows = marches.map(m => ({ ...m, client_id: c.id, siren, synced_at: new Date().toISOString() }));
+            for (let i = 0; i < rows.length; i += 500) { await sb.from('decp_marches').upsert(rows.slice(i, i + 500), { onConflict: 'client_id,marche_id' }); }
+            withMarches++; totalMarches += marches.length;
+          }
+          const upd = { decp_synced_at: new Date().toISOString(), decp_count: marches.length };
+          if (marches.length) {
+            const p = c.marche_profil || {};
+            const depts = [...new Set(marches.map(m => m.acheteur_dept).filter(Boolean))];
+            const montants = marches.map(m => Number(m.montant)).filter(v => v > 0);
+            const np = { ...p }; let changed = false;
+            if ((!p.departements || !p.departements.length) && depts.length) { np.departements = depts; changed = true; }
+            if (p.tce_min == null && p.tce_max == null && montants.length) { np.tce_min = Math.round(_pctl(montants, 10)); np.tce_max = Math.round(_pctl(montants, 90)); changed = true; }
+            if (changed) { upd.marche_profil = np; prefilled++; }
+          }
+          await sb.from('clients').update(upd).eq('id', c.id);
+        } catch (e) { errors++; }
+        done++;
+        if (done % 5 === 0 || done === total) setSyncText('Synchro DECP ' + done + ' / ' + total + ' — ' + withMarches + ' avec marchés, ' + prefilled + ' profils pré-remplis…');
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(4, total) }, worker));
+    showSyncLoading(false);
+    toast('DECP : ' + withMarches + ' client(s) avec marchés (' + totalMarches + ' archivés), ' + prefilled + ' profil(s) pré-rempli(s)' + (errors ? ', ' + errors + ' erreur(s)' : ''), errors ? 'warn' : 'success');
+  } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
 }
 
 // ═══ OBJECTIFS PAR AGENCE ═══
