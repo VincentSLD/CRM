@@ -23,6 +23,8 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS mots_cles TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS statut_akuiteo TEXT;
 -- Code SITE Akuiteo (siteCode « SCLI… » de l'établissement) : généré par Akuiteo, récupéré à la synchro
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS code_site TEXT;
+-- Profil « marchés / sollicitations » (CRM-only) : { mandataire, typologies[], sous_typologies[], departements[], competences[], tce_min, tce_max }
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS marche_profil JSONB;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS contact TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS code_societe TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS condition_paiement TEXT;

@@ -3628,8 +3628,9 @@ async function loadDB() {
       DB.notifications = nAll.map(n => ({ ...n, time: n.time_label }));
       DB.relancesDevis = {};
       for (const r of (relancesAll || [])) { if (r.devis_id) DB.relancesDevis[r.devis_id] = r; }
-      // Config typologies (opportunités & marchés) — non bloquant
+      // Config typologies (opportunités & marchés) + compétences — non bloquant
       loadTypologies().catch(() => {});
+      loadCompetences().catch(() => {});
       // Précharge la correspondance société → commercial + le mapping métier, enrichit les documents, puis rafraîchit si besoin (non bloquant)
       Promise.all([loadApporteurCommMap(), loadMissionMapping().catch(() => {})]).then(() => {
         _ensureDocsCommercial();
@@ -9470,7 +9471,7 @@ function renderPage(page) {
     _clientsServerLoaded = true;
     loadClientsPage(clientsPage || 0, clientsLetter, clientsSearch);
   }
-  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); }, 50);
+  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); }, 50);
   if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); }, 50);
   if (page === 'analyse') setTimeout(initAnalyse, 30);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
@@ -13168,6 +13169,68 @@ function _realizRender(j, c, ts) {
     ${h2('🏛️ Marchés publics gagnés (DECP)')}${decpHtml}`;
 }
 
+// ═══ Profil « marchés / sollicitations » du client (mandataire, typologies, sous-typologies, départements, compétences, fourchette TCE) ═══
+let _mpForm = null;
+function _mpFromClient(c) {
+  const p = (c && c.marche_profil) || {};
+  return {
+    _cid: c ? c.id : null,
+    mandataire: !!p.mandataire,
+    typologies: Array.isArray(p.typologies) ? p.typologies : [],
+    sousTypologies: Array.isArray(p.sous_typologies) ? p.sous_typologies : [],
+    departements: Array.isArray(p.departements) ? p.departements : [],
+    competences: Array.isArray(p.competences) ? p.competences : [],
+    tceMin: (p.tce_min != null ? p.tce_min : ''),
+    tceMax: (p.tce_max != null ? p.tce_max : ''),
+  };
+}
+function _mpEnsure() { const c = currentClient; if (!c) return; if (!_mpForm || _mpForm._cid !== c.id) _mpForm = _mpFromClient(c); }
+function _mpRefresh() { const el = document.getElementById('mp-block'); if (el) el.innerHTML = _mpBlockHtml(); }
+function _mpBlockHtml() {
+  _mpEnsure(); const f = _mpForm; if (!f) return '';
+  const typoOpts = _typoList().map(t => ({ v: t, label: t }));
+  const sousBase = f.typologies.length ? f.typologies : _typoList();
+  const sousSet = new Set(); sousBase.forEach(t => (_typoActive()[t] || []).forEach(s => sousSet.add(s)));
+  const sousOpts = [...sousSet].map(s => ({ v: s, label: s }));
+  const deptOpts = _frDeptList().map(d => ({ v: d, label: d }));
+  const compOpts = _competencesActive().map(x => ({ v: x, label: x }));
+  msDef('mpTypo', typoOpts, f.typologies, arr => { f.typologies = arr; f.sousTypologies = f.sousTypologies.filter(s => sousSet.has(s)); _mpRefresh(); }, false);
+  msDef('mpSous', sousOpts, f.sousTypologies, arr => { f.sousTypologies = arr; }, false);
+  msDef('mpDept', deptOpts, f.departements, arr => { f.departements = arr; }, false);
+  msDef('mpComp', compOpts, f.competences, arr => { f.competences = arr; }, false);
+  const lbl = 'font-size:11px;color:var(--t3);display:block;margin-bottom:3px';
+  const fi = 'padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)';
+  return `<div style="display:flex;flex-direction:column;gap:12px">
+    <div style="font-size:11px;color:var(--t3)">Renseignez les souhaits de ce client pour qu'il soit proposé automatiquement à la sollicitation quand une opportunité correspond.</div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+      <input type="checkbox" ${f.mandataire ? 'checked' : ''} onchange="_mpForm.mandataire=this.checked" style="width:16px;height:16px;accent-color:var(--accent)"> Ce client peut être <b>mandataire</b></label>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+      <div><span style="${lbl}">Typologies souhaitées</span>${msButton('mpTypo', 'Typologies')}</div>
+      <div><span style="${lbl}">Sous-typologies</span>${msButton('mpSous', 'Sous-typologies')}</div>
+      <div><span style="${lbl}">Départements souhaités</span>${msButton('mpDept', 'Départements')}</div>
+      <div><span style="${lbl}">Compétences souhaitées</span>${msButton('mpComp', 'Compétences')}</div>
+    </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+      <div><span style="${lbl}">Montant TCE souhaité — min (€)</span><input type="number" step="any" style="${fi};width:150px" value="${f.tceMin !== '' ? f.tceMin : ''}" oninput="_mpForm.tceMin=this.value" placeholder="ex. 500000"></div>
+      <div><span style="${lbl}">max (€)</span><input type="number" step="any" style="${fi};width:150px" value="${f.tceMax !== '' ? f.tceMax : ''}" oninput="_mpForm.tceMax=this.value" placeholder="ex. 5000000"></div>
+      <button class="btn btn-primary" onclick="saveMarcheProfil()" style="font-size:12px">💾 Enregistrer le profil</button>
+    </div>
+  </div>`;
+}
+async function saveMarcheProfil() {
+  const c = currentClient; if (!c || !_mpForm) return;
+  const f = _mpForm;
+  const num = v => (v !== '' && v != null && !isNaN(Number(v))) ? Number(v) : null;
+  const profil = { mandataire: !!f.mandataire, typologies: f.typologies || [], sous_typologies: f.sousTypologies || [], departements: f.departements || [], competences: f.competences || [], tce_min: num(f.tceMin), tce_max: num(f.tceMax) };
+  const empty = !profil.mandataire && !profil.typologies.length && !profil.sous_typologies.length && !profil.departements.length && !profil.competences.length && profil.tce_min == null && profil.tce_max == null;
+  try {
+    const { error } = await sb.from('clients').update({ marche_profil: empty ? null : profil }).eq('id', c.id);
+    if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+    c.marche_profil = empty ? null : profil;
+    toast('Profil marchés enregistré', 'success');
+  } catch (e) { toast('Erreur : ' + e.message, 'error'); }
+}
+
 function renderClientDetail() {
   const c = currentClient;
   if(!c) return '<p>Société non trouvée</p>';
@@ -13227,6 +13290,10 @@ function renderClientDetail() {
   ${renderOppsCard(c.id)}
   ${renderTachesCard({ client_id: c.id, client_name: c.name })}
   ${renderSollicCard({ client_id: c.id, client_name: c.name })}
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><div class="card-title">🎯 Profil marchés (sollicitations)</div></div>
+    <div class="card-body" style="overflow:visible"><div id="mp-block">${_mpBlockHtml()}</div></div>
+  </div>
   <div class="card" style="margin-bottom:16px">
     <div class="card-header">
       <div class="card-title">Analyse CA facturé</div>
@@ -22428,6 +22495,20 @@ function renderAdmin() {
     </div>
   </div>
   <div class="card" style="margin-bottom:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <div class="card-title">Compétences souhaitées <span style="font-weight:400;font-size:11px;color:var(--t3)">(profil marchés des clients)</span></div>
+      <button class="btn btn-primary" onclick="saveCompetences()" style="font-size:12px">💾 Enregistrer</button>
+    </div>
+    <div class="card-body">
+      <div style="font-size:12px;color:var(--t3);margin-bottom:10px">Liste des compétences (BET.) proposées dans le profil marchés des clients. Ajoutez / supprimez puis <strong>Enregistrer</strong>.</div>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <input id="compNew" placeholder="Nouvelle compétence…" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter'){event.preventDefault();compAddOne()}">
+        <button class="btn" onclick="compAddOne()" style="font-size:12px">+ Ajouter</button>
+      </div>
+      <div id="compAdminBox" style="color:var(--t3);font-size:13px">Chargement…</div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:16px">
     <div class="card-header"><div class="card-title">Demandes d'accès au CRM</div></div>
     <div class="card-body">
       <div id="adminAccessList" style="color:var(--t3);font-size:13px">Chargement...</div>
@@ -23452,6 +23533,31 @@ async function saveTypologies() {
   } catch (e) { toast('Erreur : ' + e.message, 'error'); }
 }
 
+// ═══ ÉDITEUR ADMIN : COMPÉTENCES (liste plate) ═══
+async function initCompAdmin() { await loadCompetences(true); if (!_competences) _competences = DEFAULT_COMPETENCES.slice(); renderCompAdmin(); }
+function renderCompAdmin() {
+  const box = document.getElementById('compAdminBox'); if (!box) return;
+  if (!_competences) _competences = DEFAULT_COMPETENCES.slice();
+  const e = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  if (!_competences.length) { box.innerHTML = '<div style="padding:10px;color:var(--t3)">Aucune compétence. Ajoutez-en une ci-dessus.</div>'; return; }
+  box.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:6px">' + _competences.map((s, i) => `<span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg-2);border:1px solid var(--border);border-radius:14px;padding:3px 6px 3px 11px;font-size:12px">${e(s)} <span style="cursor:pointer;color:var(--red);font-weight:700;padding:0 4px" onclick="compRemove(${i})" title="Retirer">✕</span></span>`).join('') + '</div>';
+}
+function compAddOne() {
+  const el = document.getElementById('compNew'); const v = (el && el.value || '').trim(); if (!v) return;
+  if (!_competences) _competences = DEFAULT_COMPETENCES.slice();
+  if (_competences.includes(v)) { toast('Compétence déjà présente', 'info'); return; }
+  _competences.push(v); if (el) el.value = ''; renderCompAdmin();
+}
+function compRemove(i) { if (!_competences) return; _competences.splice(i, 1); renderCompAdmin(); }
+async function saveCompetences() {
+  if (!_competences) return;
+  try {
+    const { error } = await sb.from('app_config').upsert({ key: 'competences', value: _competences, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    if (error) { toast('Erreur enregistrement : ' + error.message, 'error'); return; }
+    toast('Compétences enregistrées ✅', 'success');
+  } catch (e) { toast('Erreur : ' + e.message, 'error'); }
+}
+
 // ═══ OBJECTIFS PAR AGENCE ═══
 // Agences avec split SOL/EXE (paramétrable). Les autres = objectif global (métier='GLOBAL')
 const AGENCES_AVEC_METIERS = ['GPH64','GPH85'];
@@ -24086,7 +24192,7 @@ async function autoLinkCommerciaux() {
   if (linkedAk > 0) msgs.push(`${linkedAk} ID Akuiteo rempli(s)`);
   toast(msgs.length > 0 ? msgs.join(', ') : 'Aucune nouvelle liaison trouvée', msgs.length > 0 ? 'success' : 'info');
   renderPage('admin');
-  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); }, 50);
+  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); }, 50);
 }
 
 let linkCommercialLuccaForId = null;
@@ -24102,7 +24208,7 @@ function openManualLinkCommercialLucca(commId, commName) {
     closeModal('link-lucca');
     toast('Liaison effectuée', 'success');
     renderPage('admin');
-    setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); }, 50);
+    setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); }, 50);
   };
   renderLinkLuccaList();
   openModal('link-lucca');
@@ -24115,7 +24221,7 @@ async function unlinkCommercialLucca(commId) {
   if (comm) comm.lucca_id = null;
   toast('Liaison supprimée', 'success');
   renderPage('admin');
-  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); }, 50);
+  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); }, 50);
 }
 
 async function updateCommercialRole(commercialId, role) {
