@@ -13428,7 +13428,7 @@ function _mpBlockHtml() {
     <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
       <div><span style="${lbl}">Montant TCE souhaité — min (€)</span><input type="number" step="any" style="${fi};width:150px" value="${f.tceMin !== '' ? f.tceMin : ''}" oninput="_mpForm.tceMin=this.value" placeholder="ex. 500000"></div>
       <div><span style="${lbl}">max (€)</span><input type="number" step="any" style="${fi};width:150px" value="${f.tceMax !== '' ? f.tceMax : ''}" oninput="_mpForm.tceMax=this.value" placeholder="ex. 5000000"></div>
-      <button class="btn" onclick="mpPrefillFromDecp()" style="font-size:12px" title="Proposer départements + fourchette TCE (+ typologies) depuis les marchés publics DECP du client">✨ Pré-remplir depuis les DECP</button>
+      <button class="btn" onclick="mpPrefillFromDecp()" style="font-size:12px" title="Proposer départements + fourchette TCE (+ typologies) depuis les marchés publics DECP du client">✨ Pré-remplir selon les données récupérées</button>
       <button class="btn btn-primary" onclick="saveMarcheProfil()" style="font-size:12px">💾 Enregistrer le profil</button>
     </div>
   </div>`;
@@ -13585,6 +13585,22 @@ function renderClientDetail() {
       detailRow('Fax', c.fax ? formatPhone(c.fax) : '—'),
       detailRow('Site web', c.site_web ? '<a href="' + (c.site_web.startsWith('http') ? c.site_web : 'https://'+c.site_web) + '" target="_blank" style="color:var(--accent)">' + c.site_web + '</a>' : '—'),
     ])}
+    ${detailSection('Tarification GPH', [
+      detailRow('Mode de tarification GPH', c.mode_tarification_name || resolvePricingMethod(c.mode_tarification) || '—'),
+      detailRow('RFA applicable', c.rfa_applicable || c.custom_data?.['1-alpha04']?.value || '—'),
+      detailRow('Date de Remise de la convention', (c.date_remise_convention || c.custom_data?.['1-date01']?.value) ? fmtDateFR(c.date_remise_convention || c.custom_data['1-date01'].value) : '—'),
+      detailRow('Date de signature de la convention', (c.date_signature_convention || c.custom_data?.['1-date02']?.value) ? fmtDateFR(c.date_signature_convention || c.custom_data['1-date02'].value) : '—'),
+      detailRow('Commentaires', c.commentaires_tarification || c.custom_data?.['1-alpha01']?.value || '—'),
+      detailRow('Code CODIAL <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.code_codial || '—'),
+      detailRow('Compta CODIAL <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.compta_codial || '—'),
+      detailRow('ID Plateforme <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.id_plateforme || '—'),
+    ])}
+  </div>
+  ${c.siren ? `<div class="card" style="margin-bottom:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ${c.siren})</span></div>${c.akuiteo_id && c.siren ? '<button class="btn" onclick="syncSitesVersAkuiteo()" style="font-size:11px;padding:3px 10px">Synchroniser Sites → Akuiteo</button> <button class="btn" onclick="rapportSitesAkuiteo()" style="font-size:11px;padding:3px 10px" title="Comparer les sites Akuiteo et les établissements CRM">📊 Rapport sites</button>' : ''}</div>
+    <div class="card-body" id="etablissements-lies" style="padding:12px"><div style="color:var(--t3);font-size:13px">Chargement...</div></div>
+  </div>` : ''}
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
     <div class="card" style="margin-bottom:16px">
       <div class="card-header" style="flex-wrap:wrap;gap:8px">
         <div class="card-title">Informations légales</div>
@@ -13617,12 +13633,6 @@ function renderClientDetail() {
         ].filter(r=>r).join('')}
       </div>
     </div>
-  </div>
-  ${c.siren ? `<div class="card" style="margin-bottom:16px">
-    <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ${c.siren})</span></div>${c.akuiteo_id && c.siren ? '<button class="btn" onclick="syncSitesVersAkuiteo()" style="font-size:11px;padding:3px 10px">Synchroniser Sites → Akuiteo</button> <button class="btn" onclick="rapportSitesAkuiteo()" style="font-size:11px;padding:3px 10px" title="Comparer les sites Akuiteo et les établissements CRM">📊 Rapport sites</button>' : ''}</div>
-    <div class="card-body" id="etablissements-lies" style="padding:12px"><div style="color:var(--t3);font-size:13px">Chargement...</div></div>
-  </div>` : ''}
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
     ${detailSection('Commercial', [
       detailRow('Commercial Novam', c.account_manager_name ? '<strong>' + c.account_manager_name + '</strong>' : resolveManagerName(c.account_manager_id) || '—'),
       detailRow('Commercial GPH', c.salesman_name ? '<strong>' + c.salesman_name + '</strong>' + (c.commerciaux_associes && c.commerciaux_associes !== c.salesman_name ? '<br><span style="font-size:11px;color:var(--t3)">' + c.commerciaux_associes + '</span>' : '') : c.commerciaux_associes || '—'),
@@ -13650,9 +13660,6 @@ function renderClientDetail() {
         return out;
       })(),
       detailRow('Société Akuiteo', c.code_societe || '—'),
-      detailRow('Code CODIAL <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.code_codial || '—'),
-      detailRow('Compta CODIAL <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.compta_codial || '—'),
-      detailRow('ID Plateforme <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.id_plateforme || '—'),
       detailRow('Réseaux pro', (() => {
         const rp = c.reseaux_pro;
         if (!rp || !Array.isArray(rp) || rp.length === 0) return '—';
@@ -13672,13 +13679,6 @@ function renderClientDetail() {
       detailRow('Mode de paiement', ({BANK_TRANSFER:'Virement',CHECK:'Chèque',BANK_DRAFT:'Traite',CASH:'Espèces'})[c.mode_paiement] || c.mode_paiement || '—'),
       detailRow('Conditions de paiement', c.condition_paiement || '—'),
     ])}
-    ${detailSection('Tarification GPH', [
-      detailRow('Mode de tarification GPH', c.mode_tarification_name || resolvePricingMethod(c.mode_tarification) || '—'),
-      detailRow('RFA applicable', c.rfa_applicable || c.custom_data?.['1-alpha04']?.value || '—'),
-      detailRow('Date de Remise de la convention', (c.date_remise_convention || c.custom_data?.['1-date01']?.value) ? fmtDateFR(c.date_remise_convention || c.custom_data['1-date01'].value) : '—'),
-      detailRow('Date de signature de la convention', (c.date_signature_convention || c.custom_data?.['1-date02']?.value) ? fmtDateFR(c.date_signature_convention || c.custom_data['1-date02'].value) : '—'),
-      detailRow('Commentaires', c.commentaires_tarification || c.custom_data?.['1-alpha01']?.value || '—'),
-    ])}
   </div>
   <div class="card" style="margin-bottom:16px">
     <div class="card-header" style="flex-wrap:wrap;gap:8px">
@@ -13689,14 +13689,16 @@ function renderClientDetail() {
       <div id="clientObjectifsList" style="padding:14px;color:var(--t3);font-size:13px">Chargement...</div>
     </div>
   </div>
-  <div class="card" style="margin-bottom:16px"><div class="card-header"><div class="card-title">Habitudes Administratives et Commerciales</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes || '—'}</div></div></div>
-  <div class="card" style="margin-bottom:16px">
-    <div class="card-header" style="flex-wrap:wrap;gap:8px">
-      <div class="card-title">Concurrents qui travaillent avec ce compte</div>
-      <button class="btn btn-primary" onclick="addClientConcurrent('${c.id}')" style="font-size:12px">+ Ajouter un concurrent</button>
-    </div>
-    <div class="card-body" style="padding:0">
-      <div id="clientConcurrentsList" style="padding:14px;color:var(--t3);font-size:13px">Chargement...</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;align-items:start">
+    <div class="card" style="margin-bottom:0"><div class="card-header"><div class="card-title">Habitudes Administratives et Commerciales</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes || '—'}</div></div></div>
+    <div class="card" style="margin-bottom:0">
+      <div class="card-header" style="flex-wrap:wrap;gap:8px">
+        <div class="card-title">Concurrents qui travaillent avec ce compte</div>
+        <button class="btn btn-primary" onclick="addClientConcurrent('${c.id}')" style="font-size:12px">+ Ajouter un concurrent</button>
+      </div>
+      <div class="card-body" style="padding:0">
+        <div id="clientConcurrentsList" style="padding:14px;color:var(--t3);font-size:13px">Chargement...</div>
+      </div>
     </div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
