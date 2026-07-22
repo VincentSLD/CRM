@@ -10218,12 +10218,12 @@ function renderDashboard() {
     <span style="font-size:11px;color:var(--t3);margin-left:6px">${myDevis.length} devis, ${myCommandes.length} commandes, ${myFactures.length} factures sur la période</span>
   </div>
   <details class="card acc" id="dashTodo" style="margin-bottom:16px">
-    <summary class="card-header" style="cursor:pointer;user-select:none;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px">
+    <summary class="card-header" style="cursor:pointer;user-select:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px">
       <span class="card-title" style="display:inline-flex;align-items:center;gap:8px;white-space:nowrap">
         <span style="white-space:nowrap">✅ Mes tâches à faire</span>
         <span id="dashTodoCount" style="display:none;flex:none;white-space:nowrap;background:var(--accent);color:#fff;border-radius:10px;padding:1px 8px;font-size:12px;font-weight:700;line-height:1.6"></span>
       </span>
-      <span style="display:inline-flex;gap:6px;flex:none;flex-wrap:wrap">
+      <span style="display:inline-flex;gap:6px;flex:none;flex-wrap:wrap;margin-left:auto">
         <button class="btn btn-sm" onclick="event.preventDefault();event.stopPropagation();go('taches')" style="font-size:12px">Toutes les tâches →</button>
         <button class="btn btn-sm" onclick="event.preventDefault();event.stopPropagation();go('sollicitations')" style="font-size:12px">Toutes les sollicitations →</button>
       </span>
