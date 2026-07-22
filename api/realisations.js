@@ -28,7 +28,8 @@ async function fetchJson(url, opts, timeoutMs = 20000) {
 // ─ DECP : marchés publics où l'entreprise est titulaire (par SIREN) ─
 async function loadDecp(siren) {
   if (!siren) return { items: [], total: 0, error: null };
-  const where = `siretetablissement like "${siren}%"`;
+  // ODSQL : startswith() pour un préfixe SIREN (le joker ODS est « * », pas « % » comme en SQL)
+  const where = `startswith(siretetablissement, "${siren}")`;
   const select = 'datenotification,nomacheteur,objetmarche,montant,codedepartementexecution,natureobjetmarche,codecpv,dureemois';
   const url = DECP_URL + '?where=' + encodeURIComponent(where)
     + '&order_by=' + encodeURIComponent('datenotification desc')
