@@ -30,7 +30,12 @@ async function loadDecp(siren) {
   if (!siren) return { items: [], total: 0, error: null };
   // ODSQL : startswith() pour un préfixe SIREN (le joker ODS est « * », pas « % » comme en SQL)
   const where = `startswith(siretetablissement, "${siren}")`;
-  const select = 'datenotification,nomacheteur,objetmarche,montant,codedepartementexecution,natureobjetmarche,codecpv,dureemois';
+  const select = [
+    'datenotification', 'anneenotification', 'datepublicationdonnees', 'nomacheteur', 'codepostalacheteur', 'libellecommuneacheteur',
+    'objetmarche', 'montant', 'natureobjetmarche', 'nature', 'procedure', 'formeprix', 'dureemois',
+    'codecpv', 'referencecpv', 'lieuexecutionnom', 'codedepartementexecution',
+    'denominationsociale_cotitulaire1', 'denominationsociale_cotitulaire2', 'denominationsociale_cotitulaire3',
+  ].join(',');
   const url = DECP_URL + '?where=' + encodeURIComponent(where)
     + '&order_by=' + encodeURIComponent('datenotification desc')
     + '&limit=60&select=' + encodeURIComponent(select);
@@ -38,12 +43,21 @@ async function loadDecp(siren) {
   if (!r.ok) return { items: [], total: 0, error: 'DECP ' + r.status + ': ' + String((r.data && r.data.message) || r.text).slice(0, 160) };
   const items = ((r.data && r.data.results) || []).map(x => ({
     date: String(x.datenotification || '').slice(0, 10),
+    annee: x.anneenotification || '',
+    publie: String(x.datepublicationdonnees || '').slice(0, 10),
     acheteur: x.nomacheteur || '',
+    acheteurVille: [x.codepostalacheteur, x.libellecommuneacheteur].filter(Boolean).join(' '),
     objet: x.objetmarche || '',
     montant: (x.montant != null && x.montant !== '') ? Number(x.montant) : null,
-    dept: x.codedepartementexecution || '',
-    nature: x.natureobjetmarche || '',
+    typeMarche: x.natureobjetmarche || '',      // Travaux / Fournitures / Services
+    nature: x.nature || '',                     // Marché / Marché subséquent / Concession…
+    procedure: x.procedure || '',
+    formePrix: x.formeprix || '',
     duree: x.dureemois || null,
+    cpv: x.codecpv || x.referencecpv || '',
+    lieu: x.lieuexecutionnom || '',
+    dept: x.codedepartementexecution || '',
+    cotraitants: [x.denominationsociale_cotitulaire1, x.denominationsociale_cotitulaire2, x.denominationsociale_cotitulaire3].filter(Boolean),
   }));
   return { items, total: (r.data && r.data.total_count) != null ? r.data.total_count : items.length, error: null };
 }
@@ -74,27 +88,17 @@ async function loadPermis(siren, depts, debug) {
     const arr = (r.data && (r.data.data || r.data.results || r.data.permits || r.data.items)) || (Array.isArray(r.data) ? r.data : []);
     return { arr: arr || [], err: null };
   };
+  const list = (depts || []).filter(Boolean).slice(0, 3);
+  if (!list.length) return { configured: true, items: [], error: 'Aucun département fourni (renseignez le code postal / département de la fiche).' };
   let error = null, sampleKeys = null, raw = [], serverFiltered = false;
-  // 1) Filtre serveur précis par SIREN du demandeur (national) — best-effort selon les paramètres supportés
-  if (siren) {
-    const r1 = await pull(PERMISAPI_BASE + '/permits?siren_dem=' + encodeURIComponent(siren) + '&per_page=100');
-    if (r1.err) error = r1.err;
-    else if (r1.arr.length) {
-      if (r1.arr[0] && !sampleKeys) sampleKeys = Object.keys(r1.arr[0]);
-      // Le filtre serveur a-t-il vraiment agi ? (toutes les lignes doivent porter ce SIREN)
-      const allMatch = r1.arr.every(p => String(p.siren_dem || '').replace(/\D/g, '') === siren);
-      if (allMatch) { raw = r1.arr; serverFiltered = true; }
-    }
+  // dep_code obligatoire (plan gratuit = 1 département) ; on ajoute siren_dem (filtre serveur si l'API le supporte)
+  for (const dep of list) {
+    const r = await pull(PERMISAPI_BASE + '/permits?dep_code=' + encodeURIComponent(dep) + (siren ? '&siren_dem=' + encodeURIComponent(siren) : '') + '&per_page=100');
+    if (r.err) { error = r.err; continue; }
+    if (r.arr.length && !sampleKeys) sampleKeys = Object.keys(r.arr[0]);
+    raw = raw.concat(r.arr);
   }
-  // 2) Sinon, repli par département puis filtre client sur siren_dem exact
-  if (!serverFiltered) {
-    for (const dep of (depts || []).filter(Boolean).slice(0, 3)) {
-      const r2 = await pull(PERMISAPI_BASE + '/permits?dep_code=' + encodeURIComponent(dep) + '&per_page=100');
-      if (r2.err) { error = r2.err; continue; }
-      if (r2.arr.length && !sampleKeys) sampleKeys = Object.keys(r2.arr[0]);
-      raw = raw.concat(r2.arr);
-    }
-  }
+  if (siren && raw.length && raw.every(p => String(p.siren_dem || '').replace(/\D/g, '') === siren)) serverFiltered = true;
   // Normalisation + déduplication
   const seen = new Set(); let items = [];
   for (const p of raw) {
@@ -105,7 +109,8 @@ async function loadPermis(siren, depts, debug) {
   }
   // Filtre PRÉCIS : uniquement les permis où l'entreprise est le pétitionnaire (siren_dem = SIREN)
   if (siren) items = items.filter(p => p.sirenDem === siren);
-  return { configured: true, items: items.slice(0, 100), count: items.length, serverFiltered, error, sampleKeys: debug ? sampleKeys : undefined };
+  // On ne remonte une erreur que si AUCUNE donnée n'a pu être récupérée (sinon 0 = pas de permis à ce nom)
+  return { configured: true, items: items.slice(0, 100), count: items.length, serverFiltered, error: raw.length ? null : error, sampleKeys: debug ? sampleKeys : undefined };
 }
 
 export default async function handler(req, res) {
