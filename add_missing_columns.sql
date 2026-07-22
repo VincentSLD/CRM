@@ -57,6 +57,8 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS statut_akuiteo TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS code_site TEXT;
 -- Profil « marchés / sollicitations » (CRM-only) : { mandataire, typologies[], sous_typologies[], departements[], competences[], tce_min, tce_max }
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS marche_profil JSONB;
+-- Recherche web IA persistée (base de connaissance du compte) : { html, structured{...}, generated_at, by }
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS web_research JSONB;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS contact TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS code_societe TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS condition_paiement TEXT;

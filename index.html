@@ -13230,6 +13230,7 @@ function _decpDetails(raw) {
 }
 
 // Recherche web IA des réalisations d'un client (couvre le privé) — cache navigateur 30 j (coût IA).
+let _realizWebLast = null; // { html, structured } affiché pour le client courant (pour Enregistrer / Appliquer)
 async function openRealisationsWeb(force) {
   const c = currentClient; if (!c) return;
   const name = (c.name || c.raison_sociale || '').trim();
@@ -13248,22 +13249,80 @@ async function openRealisationsWeb(force) {
       <div style="text-align:center;color:var(--t3);padding:34px">🌐 NOVA recherche les réalisations sur le web… (10‑25 s)</div>
     </div>`, 820);
   const body = () => ov.querySelector('#realizweb-body');
-  const wrap = (html, ts) => `<div style="font-size:11px;color:var(--t3);margin-bottom:10px">Synthèse IA à partir de recherches web — <b>à vérifier</b>${ts ? ' · généré le ' + fmtDateFR(new Date(ts).toISOString().slice(0, 10)) : ''}.</div>` + html;
-  if (!force) {
-    try { const raw = localStorage.getItem(cacheKey); if (raw) { const o = JSON.parse(raw); if (o && o.t && (Date.now() - o.t) < 30 * 864e5 && o.html) { const b = body(); if (b) b.innerHTML = wrap(o.html, o.t); return; } } } catch (e) {}
-  }
+  const show = (o, src) => { _realizWebLast = { html: o.html, structured: o.structured || null }; const b = body(); if (b) b.innerHTML = _realizWebRender(o.html, o.structured, o.t, src); };
+  // 1) base de connaissance (partagée) prioritaire
+  if (!force && c.web_research && c.web_research.html) { show({ html: c.web_research.html, structured: c.web_research.structured, t: c.web_research.generated_at ? new Date(c.web_research.generated_at).getTime() : null }, 'base'); return; }
+  // 2) cache navigateur
+  if (!force) { try { const raw = localStorage.getItem(cacheKey); if (raw) { const o = JSON.parse(raw); if (o && o.t && (Date.now() - o.t) < 30 * 864e5 && o.html) { show({ html: o.html, structured: o.structured, t: o.t }, 'cache'); return; } } } catch (e) {} }
+  // 3) recherche IA
   try {
     const r = await fetch('/api/realisations-web', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, city: c.city || '', siren, sector: c.sector || c.secteur_activite || '', dept: c.departement || (c.code_postal ? String(c.code_postal).slice(0, 2) : '') }),
+      body: JSON.stringify({ name, city: c.city || '', siren, sector: c.sector || c.secteur_activite || '', dept: c.departement || (c.code_postal ? String(c.code_postal).slice(0, 2) : ''), typologies: _typoList(), competences: _competencesActive() }),
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
-    try { localStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), html: j.html })); } catch (e) {}
-    const b = body(); if (b) b.innerHTML = wrap(j.html, Date.now());
+    const now = Date.now();
+    try { localStorage.setItem(cacheKey, JSON.stringify({ t: now, html: j.html, structured: j.structured || null })); } catch (e) {}
+    show({ html: j.html, structured: j.structured, t: now }, null);
   } catch (e) {
     const b = body(); if (b) b.innerHTML = '<div style="color:var(--red);padding:20px">Erreur : ' + cmdEsc(e.message) + '</div>';
   }
+}
+function _realizWebRender(html, structured, ts, src) {
+  const srcTxt = src === 'base' ? ' · depuis la base' : src === 'cache' ? ' · cache navigateur' : '';
+  let out = '<div style="font-size:11px;color:var(--t3);margin-bottom:8px">Synthèse IA (recherches web) — <b>à vérifier</b>' + (ts ? ' · généré le ' + fmtDateFR(new Date(ts).toISOString().slice(0, 10)) : '') + srcTxt + '.</div>';
+  out += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'
+    + '<button class="btn btn-primary" style="font-size:12px" onclick="saveRealizWeb()">💾 Enregistrer dans la base</button>'
+    + '<button class="btn" style="font-size:12px" onclick="applyWebToProfil()">🧩 Appliquer au profil marchés</button></div>';
+  const s = structured || {}; const arr = a => Array.isArray(a) ? a : [];
+  const hasSugg = s && (s.role || arr(s.typologies).length || arr(s.departements).length || arr(s.competences).length || s.tce_min != null || s.tce_max != null || s.peut_mandataire != null);
+  if (hasSugg) {
+    const line = (l, v) => v ? '<div><b>' + l + ' :</b> ' + v + '</div>' : '';
+    const list = a => arr(a).length ? arr(a).map(x => cmdEsc(String(x))).join(', ') : '—';
+    out += '<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;background:var(--bg-2)">'
+      + '<div style="font-weight:700;font-size:13px;margin-bottom:6px">🧩 Suggestions profil marchés <span style="font-weight:400;color:var(--t3);font-size:11px">(déduit du web — à valider)</span></div>'
+      + '<div style="font-size:12px;line-height:1.6">'
+      + line('Rôle', s.role ? cmdEsc(String(s.role)) : '')
+      + line('Mandataire possible', s.peut_mandataire != null ? (s.peut_mandataire ? 'oui' : 'non') : '')
+      + line('Typologies', list(s.typologies))
+      + line('Départements', list(s.departements))
+      + line('Compétences', list(s.competences))
+      + ((s.tce_min != null || s.tce_max != null) ? line('Ordre de grandeur TCE', (s.tce_min != null ? fmt(s.tce_min) : '?') + ' – ' + (s.tce_max != null ? fmt(s.tce_max) : '?')) : '')
+      + '</div></div>';
+  }
+  return out + html;
+}
+async function saveRealizWeb() {
+  const c = currentClient; if (!c || !_realizWebLast) return;
+  const rec = { html: _realizWebLast.html, structured: _realizWebLast.structured || null, generated_at: new Date().toISOString(), by: (currentCommercial && currentCommercial.nom) || null };
+  try {
+    const { error } = await sb.from('clients').update({ web_research: rec }).eq('id', c.id);
+    if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+    c.web_research = rec;
+    toast('Recherche web enregistrée dans la base de connaissance ✅', 'success');
+  } catch (e) { toast('Erreur : ' + e.message, 'error'); }
+}
+function applyWebToProfil() {
+  const c = currentClient; if (!c || !_realizWebLast) return;
+  const s = _realizWebLast.structured; if (!s) { toast('Aucune donnée structurée à appliquer', 'info'); return; }
+  _mpEnsure(); const f = _mpForm;
+  const inRef = (vals, ref) => arrayU(vals).filter(v => ref.includes(v));
+  function arrayU(a) { return Array.isArray(a) ? a : []; }
+  const typo = inRef(s.typologies, _typoList());
+  const comp = inRef(s.competences, _competencesActive());
+  const deptRef = _frDeptList(); const depts = [];
+  arrayU(s.departements).forEach(d => { const d0 = String(d).trim().toUpperCase(); const cand = deptRef.includes(d0) ? d0 : (d0.replace(/[^0-9]/g, '').padStart(2, '0')); if (deptRef.includes(cand) && !depts.includes(cand)) depts.push(cand); });
+  if (typo.length) f.typologies = [...new Set([...(f.typologies || []), ...typo])];
+  if (comp.length) f.competences = [...new Set([...(f.competences || []), ...comp])];
+  if (depts.length) f.departements = [...new Set([...(f.departements || []), ...depts])];
+  if (f.tceMin === '' && s.tce_min != null && !isNaN(Number(s.tce_min))) f.tceMin = Math.round(Number(s.tce_min));
+  if (f.tceMax === '' && s.tce_max != null && !isNaN(Number(s.tce_max))) f.tceMax = Math.round(Number(s.tce_max));
+  if (!f.mandataire && s.peut_mandataire === true) f.mandataire = true;
+  _mpRefresh();
+  const ov = document.querySelector('.nl-overlay'); if (ov) ov.remove();
+  const el = document.getElementById('mp-block'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  toast('Appliqué au profil marchés — vérifiez puis « Enregistrer le profil ».', 'success');
 }
 function _realizRender(j, c, ts) {
   const decp = j.decp || {};

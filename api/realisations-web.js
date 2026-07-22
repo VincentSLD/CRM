@@ -27,8 +27,10 @@ export default async function handler(req, res) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return res.status(500).json({ error: 'ANTHROPIC_API_KEY non configuré' });
 
-  const { name = '', city = '', siren = '', sector = '', dept = '' } = req.body || {};
+  const { name = '', city = '', siren = '', sector = '', dept = '', typologies = [], competences = [] } = req.body || {};
   if (!name || !String(name).trim()) return res.status(400).json({ error: 'name manquant' });
+  const typoList = Array.isArray(typologies) ? typologies.slice(0, 60) : [];
+  const compList = Array.isArray(competences) ? competences.slice(0, 60) : [];
 
   const ctx = [String(name).trim(), sector && ('secteur : ' + sector), city && ('à ' + city), dept && ('dépt ' + dept), siren && ('SIREN ' + siren)].filter(Boolean).join(' — ');
   const system = "Tu es un analyste commercial d'un bureau d'études techniques du bâtiment (groupe NOVAM Ingénierie). Tu DOIS utiliser l'outil de recherche web pour trouver des informations FACTUELLES et RÉCENTES sur une entreprise et ses réalisations de construction (y compris projets privés). N'invente RIEN : uniquement ce que tu trouves réellement, avec la source. Si tu ne trouves pas grand-chose, dis-le honnêtement plutôt que d'inventer.";
@@ -43,6 +45,15 @@ export default async function handler(req, res) {
     '<h4> À retenir pour la prospection</h4> : 2 à 3 puces.',
     'Termine par <p style="font-size:11px;color:#888"> <b>Sources :</b> puis les liens (balises <a>) réellement utilisés.',
     'En français. Reste factuel et concis.',
+    '',
+    'PUIS, tout à la fin, ajoute un bloc JSON (entre ```json et ```) pour exploitation automatique du « profil marchés ». Format STRICT :',
+    '{"role":"architecte|promoteur|entreprise de construction|bailleur|collectivité|BET|maître d\'ouvrage|autre|null","peut_mandataire":true|false|null,"typologies":[],"departements":[],"competences":[],"tce_min":null,"tce_max":null,"resume":""}',
+    '- typologies : UNIQUEMENT des valeurs de cette liste (sinon []): ' + (typoList.length ? JSON.stringify(typoList) : '[]'),
+    '- competences : UNIQUEMENT des valeurs de cette liste (sinon []): ' + (compList.length ? JSON.stringify(compList) : '[]'),
+    '- departements : codes à 2 chiffres des départements où l\'entreprise intervient (ex. ["85","44"]), sinon [].',
+    '- tce_min / tce_max : ordre de grandeur en euros des montants de projets si identifiable, sinon null.',
+    '- peut_mandataire : true si c\'est une structure susceptible d\'être mandataire d\'un groupement (entreprise générale, architecte, BET pilote…), sinon false/null.',
+    'N\'INVENTE RIEN : mets null/[] si l\'info n\'est pas trouvée.',
   ].join('\n');
 
   const messages = [{ role: 'user', content: userPrompt }];
@@ -60,9 +71,13 @@ export default async function handler(req, res) {
       if (j.stop_reason === 'pause_turn' && Array.isArray(j.content)) { messages.push({ role: 'assistant', content: j.content }); continue; }
       break;
     }
+    // Extraire le bloc JSON structuré (```json … ```) puis le retirer du HTML
+    let structured = null;
+    const mJson = text.match(/```json\s*([\s\S]*?)```/i);
+    if (mJson) { try { structured = JSON.parse(mJson[1].trim()); } catch (e) {} text = text.replace(mJson[0], '').trim(); }
     text = text.replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/i, '').trim();
     if (!text) return res.status(502).json({ error: 'Réponse IA vide' });
-    return res.status(200).json({ html: text });
+    return res.status(200).json({ html: text, structured });
   } catch (e) {
     console.error('realisations-web:', e.message);
     return res.status(500).json({ error: e.message });
