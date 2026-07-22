@@ -64,25 +64,29 @@ async function loadDecp(siren) {
     .sort((a, b) => (b.date || '').localeCompare(a.date || '')) // plus récents d'abord (dates vides en dernier)
     .slice(0, 60);
 
-  // Co-traitants : pour les marchés en groupement, récupérer TOUS les titulaires en un seul appel (id__in)
-  const grpIds = [...new Set(items.filter(it => it.groupement && it.id).map(it => it.id))];
+  // Co-traitants : uniquement les marchés RÉELLEMENT en groupement (exclut « Pas de groupement »),
+  // par lots de 25 ids (id__in a une limite sur le nombre de valeurs).
+  const grpIds = [...new Set(items.filter(it => it.id && it.groupement && !/pas de groupement/i.test(it.groupement)).map(it => it.id))];
   if (grpIds.length) {
-    try {
-      const u2 = DECP_TABULAR + '?id__in=' + encodeURIComponent(grpIds.join(','))
-        + '&donneesActuelles__exact=true&page_size=500&columns=' + encodeURIComponent('id,titulaire_id,titulaire_nom');
-      const r2 = await fetchJson(u2);
-      const byId = {};
-      ((r2.data && r2.data.data) || []).forEach(t => {
-        const mid = String(t.id != null ? t.id : ''); if (!mid) return;
-        (byId[mid] = byId[mid] || []).push({ siren: String(t.titulaire_id || '').replace(/\D/g, '').slice(0, 9), nom: t.titulaire_nom || '' });
-      });
-      items.forEach(it => {
-        const seen = new Set();
-        it.cotraitants = (byId[it.id] || [])
-          .filter(t => t.siren !== siren && t.nom && !seen.has(t.nom) && seen.add(t.nom))
-          .map(t => t.nom);
-      });
-    } catch (e) { /* co-traitants best-effort */ }
+    const byId = {};
+    for (let i = 0; i < grpIds.length; i += 25) {
+      const chunk = grpIds.slice(i, i + 25);
+      try {
+        const u2 = DECP_TABULAR + '?id__in=' + encodeURIComponent(chunk.join(','))
+          + '&donneesActuelles__exact=true&page_size=200&columns=' + encodeURIComponent('id,titulaire_id,titulaire_nom');
+        const r2 = await fetchJson(u2);
+        ((r2.data && r2.data.data) || []).forEach(t => {
+          const mid = String(t.id != null ? t.id : ''); if (!mid) return;
+          (byId[mid] = byId[mid] || []).push({ siren: String(t.titulaire_id || '').replace(/\D/g, '').slice(0, 9), nom: t.titulaire_nom || '' });
+        });
+      } catch (e) { /* lot best-effort */ }
+    }
+    items.forEach(it => {
+      const seen = new Set();
+      it.cotraitants = (byId[it.id] || [])
+        .filter(t => t.siren !== siren && t.nom && !seen.has(t.nom) && seen.add(t.nom))
+        .map(t => t.nom);
+    });
   }
   return { items, total, error: null };
 }
