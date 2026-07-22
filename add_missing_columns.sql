@@ -1,6 +1,38 @@
 -- Ajout des colonnes manquantes + tables manquantes
 -- À exécuter dans Supabase SQL Editor
 
+-- ═══ Archive des marchés publics DECP par client (pour analyses + pré-remplissage du profil marchés) ═══
+CREATE TABLE IF NOT EXISTS decp_marches (
+  client_id TEXT NOT NULL,
+  marche_id TEXT NOT NULL,
+  siren TEXT,
+  date_notification DATE,
+  acheteur_nom TEXT,
+  acheteur_dept TEXT,
+  objet TEXT,
+  montant NUMERIC,
+  cpv TEXT,
+  nature TEXT,
+  procedure TEXT,
+  forme_prix TEXT,
+  duree_mois INT,
+  groupement TEXT,
+  titulaire_nom TEXT,
+  raw JSONB,
+  synced_at TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (client_id, marche_id)
+);
+ALTER TABLE decp_marches ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "decp_marches_all" ON decp_marches;
+CREATE POLICY "decp_marches_all" ON decp_marches FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE INDEX IF NOT EXISTS idx_decp_marches_client ON decp_marches(client_id);
+CREATE INDEX IF NOT EXISTS idx_decp_marches_siren ON decp_marches(siren);
+CREATE INDEX IF NOT EXISTS idx_decp_marches_dept ON decp_marches(acheteur_dept);
+CREATE INDEX IF NOT EXISTS idx_decp_marches_date ON decp_marches(date_notification DESC);
+-- Suivi de synchro DECP sur la fiche client
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS decp_synced_at TIMESTAMPTZ;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS decp_count INT;
+
 -- Table groupes de diffusion
 CREATE TABLE IF NOT EXISTS groupes_diffusion (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
