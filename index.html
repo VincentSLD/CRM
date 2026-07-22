@@ -13109,12 +13109,16 @@ function _realizRender(j, c, ts) {
   else decpHtml = decp.items.map(x => {
       const meta = [];
       if (x.nature) meta.push(cmdEsc(x.nature));
+      if (x.type) meta.push(cmdEsc(x.type));
       if (x.procedure) meta.push(cmdEsc(x.procedure));
       if (x.formePrix) meta.push('Prix ' + cmdEsc(x.formePrix));
       if (x.duree) meta.push(cmdEsc(String(x.duree)) + ' mois');
       if (x.cpv) { const cl = _cpvLabel(x.cpv); meta.push('CPV ' + cmdEsc(String(x.cpv)) + (cl ? ' – ' + cmdEsc(cl) : '')); }
       if (x.offres != null && x.offres !== '') meta.push(cmdEsc(String(x.offres)) + ' offre(s) reçue(s)');
       if (x.sousTraitance && /oui|true|^1$/i.test(String(x.sousTraitance))) meta.push('sous-traitance déclarée');
+      if (x.ccag) meta.push('CCAG ' + cmdEsc(x.ccag));
+      if (x.clauseSociale) meta.push('clause sociale');
+      if (x.clauseEnv) meta.push('clause environnementale');
       if (x.lieu) meta.push('📍 ' + cmdEsc(x.lieu) + (x.dept ? ' (' + cmdEsc(x.dept) + ')' : ''));
       const badge = x.typeMarche ? `<span style="background:#eef2ff;color:#4338ca;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:6px">${cmdEsc(x.typeMarche)}</span>` : '';
       return `<div style="border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:7px;background:var(--bg-2)">
@@ -13124,6 +13128,7 @@ function _realizRender(j, c, ts) {
         </div>
         <div style="font-size:13px;margin:3px 0 2px"><strong>${cmdEsc(x.acheteur || '')}</strong>${x.acheteurVille ? ' <span style="color:var(--t3);font-size:11px">— ' + cmdEsc(x.acheteurVille) + '</span>' : ''}</div>
         <div style="font-size:12px;color:var(--t2);line-height:1.45">${cmdEsc(x.objet || '')}</div>
+        ${x.titulaireNom ? '<div style="font-size:11px;color:var(--t3);margin-top:2px">🏷️ Attributaire : ' + cmdEsc(x.titulaireNom) + (x.titulaireVille ? ' (' + cmdEsc(x.titulaireVille) + ')' : '') + '</div>' : ''}
         ${meta.length ? '<div style="font-size:11px;color:var(--t3);margin-top:4px">' + meta.join(' · ') + '</div>' : ''}
         ${(x.cotraitants && x.cotraitants.length) ? '<div style="font-size:11px;color:var(--t3);margin-top:2px">🤝 Co-traitants : ' + x.cotraitants.map(cmdEsc).join(', ') + '</div>' : ''}
       </div>`;
