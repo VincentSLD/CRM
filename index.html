@@ -13584,10 +13584,6 @@ function renderClientDetail() {
       detailRow('Site web', c.site_web ? '<a href="' + (c.site_web.startsWith('http') ? c.site_web : 'https://'+c.site_web) + '" target="_blank" style="color:var(--accent)">' + c.site_web + '</a>' : '—'),
     ])}
   </div>
-  ${c.siren ? `<div class="card" style="margin-bottom:16px">
-    <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ${c.siren})</span></div>${c.akuiteo_id && c.siren ? '<button class="btn" onclick="syncSitesVersAkuiteo()" style="font-size:11px;padding:3px 10px">Synchroniser Sites → Akuiteo</button> <button class="btn" onclick="rapportSitesAkuiteo()" style="font-size:11px;padding:3px 10px" title="Comparer les sites Akuiteo et les établissements CRM">📊 Rapport sites</button>' : ''}</div>
-    <div class="card-body" id="etablissements-lies" style="padding:12px"><div style="color:var(--t3);font-size:13px">Chargement...</div></div>
-  </div>` : ''}
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
     <div class="card" style="margin-bottom:16px">
       <div class="card-header" style="flex-wrap:wrap;gap:8px">
@@ -13678,6 +13674,10 @@ function renderClientDetail() {
       detailRow('Conditions de paiement', c.condition_paiement || '—'),
     ])}
   </div>
+  ${c.siren ? `<div class="card" style="margin-bottom:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">Établissements liés <span style="font-weight:400;font-size:12px;color:var(--t3)">(SIREN ${c.siren})</span></div>${c.akuiteo_id && c.siren ? '<button class="btn" onclick="syncSitesVersAkuiteo()" style="font-size:11px;padding:3px 10px">Synchroniser Sites → Akuiteo</button> <button class="btn" onclick="rapportSitesAkuiteo()" style="font-size:11px;padding:3px 10px" title="Comparer les sites Akuiteo et les établissements CRM">📊 Rapport sites</button>' : ''}</div>
+    <div class="card-body" id="etablissements-lies" style="padding:12px"><div style="color:var(--t3);font-size:13px">Chargement...</div></div>
+  </div>` : ''}
   <div class="card" style="margin-bottom:16px">
     <div class="card-header" style="flex-wrap:wrap;gap:8px">
       <div class="card-title">Objectifs annuels</div>
