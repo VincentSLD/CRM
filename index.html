@@ -1762,6 +1762,10 @@ tbody tr:last-child td { border-bottom: none; }
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M6.5 7.5l4.5 9M17.5 7.5l-4.5 9M7 6h10"/></svg>
         Analyse / KPI
       </div>
+      <div class="nav-item" data-page="decp-analyse" onclick="go('decp-analyse')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/></svg>
+        Marchés publics
+      </div>
       <div class="nav-item" data-page="clients" onclick="go('clients')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Clients/Prospects
@@ -4372,7 +4376,7 @@ function go(page) {
   const titles = {dashboard:'Tableau de bord',analyse:'Analyse / KPI',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing','marches-publics':'Veille marchés publics','procedures-coll':'Veille procédures collectives (BODACC)',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
     cr:'Comptes-rendus',taches:'Tâches commerciales',sollicitations:'Sollicitations',opportunites:'Opportunités',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
-    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'",'mode-emploi':"Mode d'emploi",'cahier-charges':'Cahier des charges','veille-regar':'Carte des opportunités',newsletter:'Infolettre hebdomadaire'};
+    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'",'mode-emploi':"Mode d'emploi",'cahier-charges':'Cahier des charges','veille-regar':'Carte des opportunités',newsletter:'Infolettre hebdomadaire','decp-analyse':'Marchés publics (DECP)'};
   document.getElementById('pageTitle').textContent = titles[page]||page;
   renderPage(page);
   if(window.innerWidth<=768) toggleSidebar(false);
@@ -9445,6 +9449,7 @@ function renderPage(page) {
   const renderers = {
     dashboard: renderDashboard,
     analyse: renderAnalyse,
+    'decp-analyse': renderDecpAnalyse,
     clients: renderClients,
     contacts: renderContacts,
     taches: renderTaches,
@@ -9537,6 +9542,7 @@ function renderPage(page) {
   if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); }, 50);
   if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); }, 50);
   if (page === 'analyse') setTimeout(initAnalyse, 30);
+  if (page === 'decp-analyse') setTimeout(initDecpAnalyse, 30);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
   if (page === 'collaborateurs-lucca') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); renderCollaborateursLuccaRefresh(); }, 50);
   if (page === 'annuaire') setTimeout(async () => { await loadAnnuaireAbsences(); renderAnnuaireRefresh(); }, 50);
@@ -9672,6 +9678,79 @@ function initAnalyse() {
 }
 function anSetDates(from, to) { anFrom = from; anTo = to; _anData = null; _anNetwork = null; _anMap = null; renderPage('analyse'); }
 function anReset() { const r = _anDefaultRange(); anFrom = r.from; anTo = r.to; anAgences = []; anMetiers = []; anTypologies = []; anSousTypologies = []; _anNetFocus = ''; _anData = null; _anNetwork = null; _anMap = null; renderPage('analyse'); }
+// ═══ ANALYSE DES MARCHÉS PUBLICS (DECP archivés — table decp_marches) ═══
+let _decpData = null, _decpLoading = false, _decpNames = {};
+let decpFDept = [], decpFCpv = [], decpFYear = [], decpFClient = [];
+async function loadDecpAnalyseData() {
+  _decpLoading = true;
+  let rows = [];
+  try {
+    for (let from = 0; from < 60000; from += 1000) {
+      const { data, error } = await sb.from('decp_marches').select('client_id,acheteur_dept,acheteur_nom,montant,cpv,groupement,date_notification,titulaire_nom').order('date_notification', { ascending: false, nullsFirst: false }).range(from, from + 999);
+      if (error) { console.warn('[decp analyse]', error.message); break; }
+      rows = rows.concat(data || []);
+      if (!data || data.length < 1000) break;
+    }
+  } catch (e) { console.warn('[decp analyse]', e); }
+  const ids = [...new Set(rows.map(r => r.client_id).filter(Boolean))];
+  const names = {};
+  for (let i = 0; i < ids.length; i += 300) {
+    try { const { data } = await sb.from('clients').select('id,name').in('id', ids.slice(i, i + 300)); (data || []).forEach(c => names[c.id] = c.name); } catch (e) {}
+  }
+  _decpNames = names; _decpData = rows; _decpLoading = false;
+}
+function _decpYear(r) { return String(r.date_notification || '').slice(0, 4); }
+function _decpFiltered() {
+  let rows = _decpData || [];
+  if (decpFClient.length) rows = rows.filter(r => decpFClient.includes(r.client_id));
+  if (decpFDept.length) rows = rows.filter(r => decpFDept.includes(r.acheteur_dept || ''));
+  if (decpFCpv.length) rows = rows.filter(r => decpFCpv.includes(_cpvLabel(r.cpv) || 'Autre'));
+  if (decpFYear.length) rows = rows.filter(r => decpFYear.includes(_decpYear(r)));
+  return rows;
+}
+function initDecpAnalyse() { if (!_decpData && !_decpLoading) loadDecpAnalyseData().then(() => { if (currentPage === 'decp-analyse') renderPage('decp-analyse'); }); }
+function decpAnaReset() { decpFDept = []; decpFCpv = []; decpFYear = []; decpFClient = []; renderPage('decp-analyse'); }
+function decpAnaReload() { _decpData = null; loadDecpAnalyseData().then(() => { if (currentPage === 'decp-analyse') renderPage('decp-analyse'); }); renderPage('decp-analyse'); }
+function renderDecpAnalyse() {
+  const data = _decpData || [];
+  const uniq = vals => [...new Set(vals.filter(v => v != null && v !== ''))];
+  const deptOpts = uniq(data.map(r => r.acheteur_dept)).sort().map(d => ({ v: d, label: d }));
+  const cpvOpts = uniq(data.map(r => _cpvLabel(r.cpv) || 'Autre')).sort().map(d => ({ v: d, label: d }));
+  const yearOpts = uniq(data.map(_decpYear)).sort().reverse().map(d => ({ v: d, label: d }));
+  const clientOpts = uniq(data.map(r => r.client_id)).map(id => ({ v: id, label: _decpNames[id] || id })).sort((a, b) => String(a.label).localeCompare(String(b.label), 'fr'));
+  msDef('decpClient', clientOpts, decpFClient, arr => { decpFClient = arr; renderPage('decp-analyse'); }, false);
+  msDef('decpDept', deptOpts, decpFDept, arr => { decpFDept = arr; renderPage('decp-analyse'); }, false);
+  msDef('decpCpv', cpvOpts, decpFCpv, arr => { decpFCpv = arr; renderPage('decp-analyse'); }, false);
+  msDef('decpYear', yearOpts, decpFYear, arr => { decpFYear = arr; renderPage('decp-analyse'); }, false);
+  const anyF = decpFClient.length || decpFDept.length || decpFCpv.length || decpFYear.length;
+  const filters = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px">
+    <strong style="font-size:13px;color:var(--t1)">🏛️ Marchés publics des clients (DECP)</strong>
+    ${msButton('decpClient', 'Client')} ${msButton('decpDept', 'Département')} ${msButton('decpCpv', 'Nature (CPV)')} ${msButton('decpYear', 'Année')}
+    ${anyF ? '<button class="btn" style="font-size:12px;color:var(--red)" onclick="decpAnaReset()">Effacer</button>' : ''}
+    <button class="btn" style="font-size:12px" onclick="decpAnaReload()" title="Recharger depuis la base">↻ Actualiser</button>
+  </div>`;
+  if (_decpLoading || !_decpData) return filters + `<div style="text-align:center;padding:50px;color:var(--t3)">Chargement des marchés publics archivés…</div>`;
+  if (!data.length) return filters + `<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--t3)">Aucun marché archivé pour l'instant.<br>Lancez la synchro depuis <b>Admin → Marchés publics des clients (DECP)</b>.</div></div>`;
+  const rows = _decpFiltered();
+  const num = v => Number(v) || 0;
+  const caTotal = rows.reduce((a, r) => a + num(r.montant), 0);
+  const nb = rows.length, nClients = new Set(rows.map(r => r.client_id)).size, nAch = new Set(rows.map(r => r.acheteur_nom).filter(Boolean)).size;
+  const grpN = rows.filter(r => r.groupement && !/pas de groupement/i.test(r.groupement)).length;
+  const ticket = nb ? caTotal / nb : 0;
+  const kpi = (l, v, s) => `<div class="card"><div class="card-body" style="text-align:center;padding:14px 10px"><div style="font-size:20px;font-weight:800;color:var(--accent)">${v}</div><div style="font-size:11px;color:var(--t3);margin-top:3px">${l}</div>${s ? '<div style="font-size:10px;color:var(--t3)">' + s + '</div>' : ''}</div></div>`;
+  const kpis = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">
+    ${kpi('Montant total', fmt(caTotal))}${kpi('Marchés', nb)}${kpi('Montant moyen', fmt(ticket))}${kpi('Clients titulaires', nClients)}${kpi('Donneurs d\'ordre', nAch)}${kpi('En groupement', nb ? Math.round(grpN / nb * 100) + ' %' : '—', grpN + ' marché(s)')}
+  </div>`;
+  const rk = keyFn => { const m = {}; for (const r of rows) { const k = keyFn(r); if (k == null || k === '') continue; (m[k] = m[k] || { ca: 0, n: 0 }); m[k].ca += num(r.montant); m[k].n++; } return Object.entries(m).sort((a, b) => b[1].ca - a[1].ca); };
+  const ranks = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:18px">
+    ${_anRankCard('Montant public par client', rk(r => _decpNames[r.client_id] || r.titulaire_nom || r.client_id), caTotal, '#4f8ff7')}
+    ${_anRankCard('Par département (acheteur)', rk(r => r.acheteur_dept), caTotal, '#10b981')}
+    ${_anRankCard('Par nature de travaux (CPV)', rk(r => _cpvLabel(r.cpv) || 'Autre'), caTotal, '#0ea5e9')}
+    ${_anRankCard('Top donneurs d\'ordre publics', rk(r => r.acheteur_nom), caTotal, '#f59e0b')}
+    ${_anRankCard('Par année de notification', rk(_decpYear), caTotal, '#8b5cf6')}
+  </div>`;
+  return filters + kpis + ranks;
+}
 function anToggleNetType(t, on) { _anNetTypes[t] = on; buildAnalyseNetwork(); }
 function anClearFocus() { _anNetFocus = ''; buildAnalyseNetwork(); document.getElementById('anFocusLabel') && (document.getElementById('anFocusLabel').textContent = ''); }
 
@@ -11474,7 +11553,6 @@ function renderClients(filter='all') {
       <button class="btn btn-primary" onclick="_ncReturnCtx=null;openModal('new-client')">+ Nouveau client/prospect</button>
       <button class="btn" onclick="openModal('prospect-target')" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;border:none">🎯 Cibler prospects</button>
       <button class="btn" onclick="exportCSV('clients')">⤓ Export CSV</button>
-      <button class="btn" onclick="backfillAllCodeSite()" title="Récupérer en masse les Codes SITE (SCLI…) générés par Akuiteo pour les clients synchronisés qui n'en ont pas encore">🏷️ Rattraper Codes SITE</button>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       <input type="text" id="clientSearchInput" placeholder="Rechercher un client/prospect..." value="${clientsSearch}"
@@ -22615,6 +22693,13 @@ function renderAdmin() {
         <button class="btn" onclick="compAddOne()" style="font-size:12px">+ Ajouter</button>
       </div>
       <div id="compAdminBox" style="color:var(--t3);font-size:13px">Chargement…</div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><div class="card-title">Codes SITE Akuiteo</div></div>
+    <div class="card-body" style="font-size:13px;color:var(--t3)">
+      Récupère en masse les <strong>Codes SITE</strong> (SCLI…) générés par Akuiteo pour les clients synchronisés qui n'en ont pas encore.
+      <div style="margin-top:10px"><button class="btn btn-primary" onclick="backfillAllCodeSite()" style="font-size:12px">🏷️ Rattraper les Codes SITE</button></div>
     </div>
   </div>
   <div class="card" style="margin-bottom:16px">
