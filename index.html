@@ -529,6 +529,9 @@ details.acc > summary::before { content: '\25B8'; display: inline-block; margin-
 details.acc[open] > summary::before { transform: rotate(90deg); }
 /* Grilles de 2 cartes côte à côte : neutralise les marges propres des cartes pour un alignement en haut */
 .ts-grid > .card { margin-top: 0 !important; margin-bottom: 0 !important; }
+/* Sablier animé (recherches en cours) */
+@keyframes hgFlip { 0%,40% { transform: rotate(0deg); } 50%,90% { transform: rotate(180deg); } 100% { transform: rotate(360deg); } }
+.hg-spin { display: inline-block; animation: hgFlip 1.6s ease-in-out infinite; }
 
 /* ═══════════════════ BUTTONS ═══════════════════ */
 .btn {
@@ -4390,7 +4393,7 @@ function go(page) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
   const titles = {dashboard:'Tableau de bord',analyse:'Analyse / KPI',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing','marches-publics':'Veille marchés publics','procedures-coll':'Veille procédures collectives (BODACC)',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
-    cr:'Comptes-rendus',taches:'Tâches commerciales',sollicitations:'Sollicitations',opportunites:'Opportunités',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
+    cr:'Comptes-rendus',taches:'✅ Tâches commerciales',sollicitations:'🤝 Sollicitations',opportunites:'🎯 Opportunités',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'",'mode-emploi':"Mode d'emploi",'cahier-charges':'Cahier des charges','veille-regar':'Carte des opportunités',newsletter:'Infolettre hebdomadaire','decp-analyse':'Marchés publics (DECP)'};
   document.getElementById('pageTitle').textContent = titles[page]||page;
   renderPage(page);
@@ -6677,7 +6680,7 @@ function tacheModalOpen(id, prefill) {
     : (prefill ? { client_id: prefill.client_id || null, client_name: prefill.client_name || null, affaire_id: prefill.affaire_id || null, affaire_nom: prefill.affaire_nom || null, opportunite_id: prefill.opportunite_id || null } : { client_id: null, client_name: null, affaire_id: null, affaire_nom: null, opportunite_id: null });
   closeModal('tache');
   currentPage = 'tache-edit';
-  const pt = document.getElementById('pageTitle'); if (pt) pt.textContent = id ? 'Modifier la tâche' : 'Nouvelle tâche';
+  const pt = document.getElementById('pageTitle'); if (pt) pt.textContent = id ? '✅ Modifier la tâche' : '✅ Nouvelle tâche';
   renderPage('tache-edit');
 }
 function tacheEditCancel() { currentPage = _tacheEditReturn || 'taches'; renderPage(currentPage); }
@@ -6712,7 +6715,7 @@ function renderTacheEditPage() {
     <div class="fg"><label class="fl">Opportunité liée</label><select class="fi" id="t-opportunite" onchange="tachePickOpp(this.value)"></select></div>`;
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-      <div style="display:flex;align-items:center;gap:10px"><button class="btn" onclick="tacheEditCancel()">← Annuler</button><h2 style="margin:0;font-size:20px">${id ? 'Modifier la tâche' : 'Nouvelle tâche commerciale'}</h2></div>
+      <div style="display:flex;align-items:center;gap:10px"><button class="btn" onclick="tacheEditCancel()">← Annuler</button><h2 style="margin:0;font-size:20px">${id ? '✅ Modifier la tâche' : '✅ Nouvelle tâche commerciale'}</h2></div>
       <button class="btn btn-primary" onclick="saveTache()">💾 Enregistrer</button>
     </div>
     <div class="card" style="max-width:680px"><div class="card-body">${body}</div></div>
@@ -6878,7 +6881,7 @@ function renderTachesCard(opts) {
   const list = (_taches || []).filter(t => opts.client_id ? t.client_id === opts.client_id : (opts.affaire_id ? t.affaire_id === opts.affaire_id : false));
   const pre = opts.client_id ? `{client_id:'${opts.client_id}',client_name:'${(opts.client_name || '').replace(/'/g, "\\'")}'${opts.affaire_id ? ",affaire_id:'" + opts.affaire_id + "',affaire_nom:'" + (opts.affaire_nom || '').replace(/'/g, "\\'") + "'" : ''}}` : `{affaire_id:'${opts.affaire_id}',affaire_nom:'${(opts.affaire_nom || '').replace(/'/g, "\\'")}',client_id:'${opts.client_id_aff || ''}',client_name:'${(opts.client_name || '').replace(/'/g, "\\'")}'}`;
   return `<div class="card" style="margin-bottom:16px">
-    <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">Tâches (${list.length})</div>
+    <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">✅ Tâches (${list.length})</div>
       <button class="btn btn-sm" onclick="tacheModalOpen(null, ${pre})">+ Tâche</button></div>
     <div class="card-body" style="padding:0">${list.length ? '<div class="table-wrap"><table><thead><tr><th>Tâche</th><th>Échéance</th><th>Statut</th><th>Assigné</th><th></th></tr></thead><tbody>' +
       list.map(t => `<tr style="${_tEnRetard(t) ? 'background:rgba(239,68,68,.06)' : ''}"><td style="padding:6px 8px;font-size:12px"><strong>${cmdEsc(t.titre)}</strong></td><td style="padding:6px 8px;font-size:12px;white-space:nowrap">${_tEcheanceTxt(t.echeance)}</td><td style="padding:6px 8px">${_tStatutBadge(t.statut)}</td><td style="padding:6px 8px;font-size:12px">${cmdEsc(fmtCommercialName(t.assigne_nom || '') || '—')}</td><td style="padding:6px 8px;white-space:nowrap">${t.statut !== 'terminee' ? '<button class="btn" style="font-size:11px;padding:2px 6px;color:var(--green)" title="Terminer" onclick="setTacheStatut(' + t.id + ',\'terminee\')">✓</button>' : ''}<button class="btn" style="font-size:11px;padding:2px 6px" onclick="tacheModalOpen(' + t.id + ')">✎</button></td></tr>`).join('') +
@@ -7021,7 +7024,7 @@ function sollicModalOpen(id, prefill) {
     : { id: null, client_id: pf.client_id || null, client_name: pf.client_name || null, opportunite_id: pf.opportunite_id || null, opportunite_nom: pf.opportunite_nom || null, assigne_id: null, contact_id: null, contact_nom: null, contact_email: null };
   if (!s) { const def = _sollicDefaultAssigne(_sollicSel.opportunite_id); _sollicSel.assigne_id = def ? def.id : null; }
   currentPage = 'sollic-edit';
-  const pt = document.getElementById('pageTitle'); if (pt) pt.textContent = id ? 'Modifier la sollicitation' : 'Nouvelle sollicitation';
+  const pt = document.getElementById('pageTitle'); if (pt) pt.textContent = id ? '🤝 Modifier la sollicitation' : '🤝 Nouvelle sollicitation';
   renderPage('sollic-edit');
 }
 function sollicEditCancel() { currentPage = _sollicEditReturn || 'sollicitations'; renderPage(currentPage); }
@@ -7077,7 +7080,7 @@ function renderSollicEditPage() {
     <div class="fg"><label class="fl">Commentaire</label><textarea class="fi" id="sol-comment" rows="4" style="resize:vertical">${s ? cmdEsc(s.commentaire || '') : ''}</textarea></div>`;
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-      <div style="display:flex;align-items:center;gap:10px"><button class="btn" onclick="sollicEditCancel()">← Annuler</button><h2 style="margin:0;font-size:20px">${id ? 'Modifier la sollicitation' : 'Nouvelle sollicitation'}</h2></div>
+      <div style="display:flex;align-items:center;gap:10px"><button class="btn" onclick="sollicEditCancel()">← Annuler</button><h2 style="margin:0;font-size:20px">${id ? '🤝 Modifier la sollicitation' : '🤝 Nouvelle sollicitation'}</h2></div>
       <button class="btn btn-primary" onclick="sollicSave()">💾 Enregistrer</button>
     </div>
     <div class="card" style="max-width:680px"><div class="card-body">${body}</div></div>
@@ -7485,7 +7488,7 @@ async function oppModalOpen(akId, prefill) {
   try {
     closeModal('opp');
     currentPage = 'opportunite-edit';
-    const pt = document.getElementById('pageTitle'); if (pt) pt.textContent = akId ? "Modifier l'opportunité" : 'Nouvelle opportunité';
+    const pt = document.getElementById('pageTitle'); if (pt) pt.textContent = akId ? "🎯 Modifier l'opportunité" : '🎯 Nouvelle opportunité';
     const C = document.getElementById('contentArea'); if (C) C.innerHTML = '<div class="page active"><div style="text-align:center;padding:40px;color:var(--t3)">Chargement…</div></div>';
     await Promise.all([loadOppRefs(), loadAkuiteoRefs().catch(() => {})]);
     const o = akId ? _opps.find(x => x.akuiteo_id === akId) : null;
@@ -7730,7 +7733,7 @@ function renderOppEditPage() {
       </div>
     </div>`;
   const cancel = f.akId ? `oppDetail('${f.akId}')` : `go('opportunites')`;
-  const titre = f.akId ? "Modifier l'opportunité" : 'Nouvelle opportunité';
+  const titre = f.akId ? "🎯 Modifier l'opportunité" : '🎯 Nouvelle opportunité';
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:10px"><button class="btn" onclick="${cancel}">← Annuler</button><h2 style="margin:0;font-size:20px">${titre}</h2></div>
@@ -8440,7 +8443,7 @@ async function oppSuggestClients(akId) {
   }
   scored.sort((a, b) => b.score - a.score || (a.c.name || '').localeCompare(b.c.name || '', 'fr'));
 
-  if (!scored.length) { if (body) body.innerHTML = '<div style="padding:16px;color:var(--t3);font-size:13px">Aucun client au profil correspondant. Renseignez le « Profil marchés » de vos clients (fiche client → 🎯 Profil marchés) pour les voir proposés ici.</div>'; return; }
+  if (!scored.length) { if (body) body.innerHTML = '<div style="padding:16px;color:var(--t3);font-size:13px">Aucun client au profil correspondant. Renseignez le « Profil marchés » de vos clients (fiche client → Profil marchés) pour les voir proposés ici.</div>'; return; }
   const badge = (on, txt, col) => on ? `<span style="background:${col}22;color:${col};border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-right:4px">${txt}</span>` : '';
   const oppNomEsc = (o.nom || '').replace(/'/g, "\\'");
   if (body) body.innerHTML = `<div style="font-size:12px;color:var(--t3);margin-bottom:10px">${scored.length} client(s) correspondant(s)</div>` + scored.slice(0, 80).map(x => {
@@ -9241,7 +9244,7 @@ function renderOppDetailPage() {
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <button class="btn" onclick="go('opportunites')">← Retour</button>
-        <h2 style="margin:0;font-size:20px">${cmdEsc(o.nom || 'Opportunité')}</h2>
+        <h2 style="margin:0;font-size:20px">🎯 ${cmdEsc(o.nom || 'Opportunité')}</h2>
         ${_oppStatutBadge(o.statut)}
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">${actions}</div>
@@ -9444,7 +9447,7 @@ function renderOppsCard(clientId) {
   const list = (_opps || []).filter(o => o.client_id === clientId);
   if (!list.length) return '';
   return `<div class="card" style="margin-bottom:16px">
-    <div class="card-header"><div class="card-title">Opportunités (${list.length})</div></div>
+    <div class="card-header"><div class="card-title">🎯 Opportunités (${list.length})</div></div>
     <div class="card-body" style="padding:0"><div class="table-wrap"><table><thead><tr><th>Opportunité</th><th>Stade</th><th>Statut</th><th style="text-align:right">Montant</th><th style="text-align:right">Prob.</th></tr></thead><tbody>${list.map(o => `<tr style="cursor:pointer" onclick="oppDetail('${o.akuiteo_id}')"><td style="padding:6px 8px;font-size:12px"><strong>${cmdEsc(o.nom || '')}</strong></td><td style="padding:6px 8px;font-size:12px">${cmdEsc(o.stage || '—')}</td><td style="padding:6px 8px">${_oppStatutBadge(o.statut)}</td><td style="padding:6px 8px;text-align:right">${o.montant != null ? fmt(o.montant) : '—'}</td><td style="padding:6px 8px;text-align:right">${o.probabilite != null ? o.probabilite + '%' : '—'}</td></tr>`).join('')}</tbody></table></div></div>
   </div>`;
 }
@@ -13347,10 +13350,10 @@ async function rrRun(force) {
   if (!wantDecp && !wantWeb) { toast('Sélectionnez au moins une source.', 'warn'); return; }
   const f = force || (forceCb && forceCb.checked);
   const body = document.getElementById('rr-body'), goBtn = document.getElementById('rr-go');
-  if (goBtn) { goBtn.disabled = true; goBtn.textContent = 'Recherche en cours…'; }
+  if (goBtn) { goBtn.disabled = true; goBtn.innerHTML = '<span class="hg-spin">⏳</span> Recherche en cours…'; }
   body.innerHTML =
-    (wantDecp ? '<div id="rr-decp-sec" style="margin-bottom:16px"><div style="text-align:center;color:var(--t3);padding:22px">🏛️ Interrogation des marchés publics (DECP)…</div></div>' : '')
-    + (wantWeb ? '<div id="rr-web-sec"><div style="text-align:center;color:var(--t3);padding:22px">🌐 NOVA recherche les réalisations sur le web… (10‑25 s)</div></div>' : '')
+    (wantDecp ? '<div id="rr-decp-sec" style="margin-bottom:16px"><div style="text-align:center;color:var(--t3);padding:22px"><span class="hg-spin" style="font-size:22px">⏳</span><div style="margin-top:8px">🏛️ Interrogation des marchés publics (DECP)…</div></div></div>' : '')
+    + (wantWeb ? '<div id="rr-web-sec"><div style="text-align:center;color:var(--t3);padding:22px"><span class="hg-spin" style="font-size:22px">⏳</span><div style="margin-top:8px">🌐 NOVA recherche les réalisations sur le web… (10‑25 s)</div></div></div>' : '')
     + '<div id="rr-usage"></div>';
   const tasks = [];
   if (wantDecp) tasks.push(_rrDecp(c, f));
@@ -13856,7 +13859,7 @@ function renderClientDetail() {
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;align-items:start">
     <div class="card" style="margin-bottom:0;overflow:visible">
-      <div class="card-header"><div class="card-title">🎯 Profil marchés (sollicitations)</div></div>
+      <div class="card-header"><div class="card-title">Profil marchés (sollicitations)</div></div>
       <div class="card-body" style="overflow:visible"><div id="mp-block">${_mpBlockHtml()}</div></div>
     </div>
     <div class="card" style="margin-bottom:0">
