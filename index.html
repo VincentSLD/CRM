@@ -22772,6 +22772,17 @@ function renderAdmin() {
     </div>
   </div>
   <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><div class="card-title">Recherche web IA des clients (NOVA)</div></div>
+    <div class="card-body" style="font-size:13px;color:var(--t3)">
+      Lance la recherche web NOVA en masse : enrichit la <strong>base de connaissance</strong> (réalisations, rôle) et pré-remplit le <strong>profil marchés</strong> (typologies, départements, compétences, TCE) <strong>sans écraser</strong> vos saisies.
+      <b style="color:#b45309">⚠️ Chaque recherche est un appel IA facturé</b> — un plafond (nombre de clients) est demandé à chaque lancement.
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="webResearchBulk(false)" style="font-size:12px">🔎 Rechercher (clients sans recherche)</button>
+        <button class="btn" onclick="webResearchBulk(true)" style="font-size:12px" title="Inclut aussi les clients déjà recherchés (refait)">Tout refaire…</button>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:16px">
     <div class="card-header"><div class="card-title">Demandes d'accès au CRM</div></div>
     <div class="card-body">
       <div id="adminAccessList" style="color:var(--t3);font-size:13px">Chargement...</div>
@@ -23875,6 +23886,74 @@ async function syncAllClientsDecp(force) {
     await Promise.all(Array.from({ length: Math.min(4, total) }, worker));
     showSyncLoading(false);
     toast('DECP : ' + withMarches + ' client(s) avec marchés (' + totalMarches + ' archivés), ' + prefilled + ' profil(s) pré-rempli(s)' + (errors ? ', ' + errors + ' erreur(s)' : ''), errors ? 'warn' : 'success');
+  } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
+}
+
+// Fusion non destructive d'une extraction structurée (recherche web) dans un profil marchés (forme base : tce_min/tce_max)
+function _mergeProfilFromStructured(profil, s) {
+  if (!s) return null;
+  const np = { ...(profil || {}) }; let changed = false;
+  const arr = a => Array.isArray(a) ? a : [];
+  const inRef = (vals, ref) => arr(vals).filter(v => ref.includes(v));
+  const typo = inRef(s.typologies, _typoList());
+  const comp = inRef(s.competences, _competencesActive());
+  const deptRef = _frDeptList(); const depts = [];
+  arr(s.departements).forEach(d => { const d0 = String(d).trim().toUpperCase(); const cand = deptRef.includes(d0) ? d0 : (d0.replace(/[^0-9]/g, '').padStart(2, '0')); if (deptRef.includes(cand) && !depts.includes(cand)) depts.push(cand); });
+  if ((!np.typologies || !np.typologies.length) && typo.length) { np.typologies = typo; changed = true; }
+  if ((!np.competences || !np.competences.length) && comp.length) { np.competences = comp; changed = true; }
+  if ((!np.departements || !np.departements.length) && depts.length) { np.departements = depts; changed = true; }
+  if (np.tce_min == null && s.tce_min != null && !isNaN(Number(s.tce_min))) { np.tce_min = Math.round(Number(s.tce_min)); changed = true; }
+  if (np.tce_max == null && s.tce_max != null && !isNaN(Number(s.tce_max))) { np.tce_max = Math.round(Number(s.tce_max)); changed = true; }
+  if (!np.mandataire && s.peut_mandataire === true) { np.mandataire = true; changed = true; }
+  return changed ? np : null;
+}
+// Recherche web IA EN MASSE (payante) : enrichit web_research + pré-remplit le profil marchés. Plafond + reprise.
+async function webResearchBulk(force) {
+  const capStr = prompt('Recherche web IA en masse — nombre MAXIMUM de clients à traiter cette fois-ci ?\n\n⚠️ Chaque recherche = 1 appel IA facturé (~quelques centimes). Commencez petit et relancez.', '50');
+  if (capStr == null) return;
+  const cap = Math.max(1, Math.min(1000, parseInt(capStr, 10) || 50));
+  showSyncLoading(true); setSyncText('Sélection des clients…');
+  try {
+    let clients = [];
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      let q = sb.from('clients').select('id,name,siren,sector,secteur_activite,city,departement,code_postal,marche_profil').order('name');
+      if (!force) q = q.is('web_research', null);
+      const { data, error } = await q.range(from, from + PAGE - 1);
+      if (error) { showSyncLoading(false); toast('Erreur lecture clients : ' + error.message, 'error'); return; }
+      clients = clients.concat(data || []);
+      if (!data || data.length < PAGE || clients.length >= cap) break;
+    }
+    const todo = clients.filter(c => (c.name || '').trim()).slice(0, cap);
+    showSyncLoading(false);
+    if (!todo.length) { toast(force ? 'Aucun client.' : 'Tous les clients ont déjà une recherche web enregistrée. Utilisez « Tout refaire ».', 'success'); return; }
+    if (!confirm('Lancer la recherche web IA pour ' + todo.length + ' client(s) ?\n\n⚠️ ' + todo.length + ' appels IA facturés (ordre de grandeur ~' + (todo.length * 0.05).toFixed(1) + ' €). Durée estimée : ~' + Math.max(1, Math.ceil(todo.length * 20 / 3 / 60)) + ' min.')) return;
+    showSyncLoading(true);
+    const total = todo.length; let idx = 0, done = 0, ok = 0, prefilled = 0, errors = 0;
+    async function worker() {
+      while (idx < total) {
+        const c = todo[idx++];
+        try {
+          const r = await fetch('/api/realisations-web', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: (c.name || '').trim(), city: c.city || '', siren: String(c.siren || '').replace(/\D/g, ''), sector: c.sector || c.secteur_activite || '', dept: c.departement || (c.code_postal ? String(c.code_postal).slice(0, 2) : ''), typologies: _typoList(), competences: _competencesActive() }),
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || !j.html) { errors++; }
+          else {
+            const upd = { web_research: { html: j.html, structured: j.structured || null, generated_at: new Date().toISOString(), by: 'bulk' } };
+            if (j.structured) { const np = _mergeProfilFromStructured(c.marche_profil, j.structured); if (np) { upd.marche_profil = np; prefilled++; } }
+            await sb.from('clients').update(upd).eq('id', c.id);
+            ok++;
+          }
+        } catch (e) { errors++; }
+        done++;
+        setSyncText('Recherche web ' + done + ' / ' + total + ' — ' + ok + ' ok, ' + prefilled + ' profils enrichis' + (errors ? ', ' + errors + ' err.' : '') + '…');
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(3, total) }, worker));
+    showSyncLoading(false);
+    toast('Recherche web : ' + ok + ' fiche(s) enrichie(s), ' + prefilled + ' profil(s) complété(s)' + (errors ? ', ' + errors + ' erreur(s)' : ''), errors ? 'warn' : 'success');
   } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
 }
 
