@@ -2066,10 +2066,10 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="card-header"><div class="card-title">Identité</div></div>
         <div class="card-body">
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-            <div class="fg"><label class="fl">Nom *</label><input class="fi" id="nc-name" placeholder="Nom du client"></div>
+            <div class="fg"><label class="fl">Nom *</label><input class="fi" id="nc-name" placeholder="Nom du client" oninput="_ncSyncNomCommercial()"></div>
             <div class="fg"><label class="fl">Code</label><input class="fi" id="nc-code" placeholder="CLI-XXXX"></div>
             <div class="fg"><label class="fl">Raison sociale</label><input class="fi" id="nc-raison"></div>
-            <div class="fg"><label class="fl">Raison sociale 2</label><input class="fi" id="nc-raison2"></div>
+            <div class="fg"><label class="fl">Nom Commercial</label><input class="fi" id="nc-raison2" placeholder="= nom du client (modifiable)" oninput="this.dataset.manual='1'"></div>
             <div class="fg"><label class="fl">Forme juridique</label><input class="fi" id="nc-forme"></div>
             <div class="fg"><label class="fl">Secteur</label><input class="fi" id="nc-sector" placeholder="Ex: Énergie"></div>
           </div>
@@ -2604,7 +2604,7 @@ tbody tr:last-child td { border-bottom: none; }
             <div class="fg"><label class="fl">Nom *</label><input class="fi" id="ec-name"></div>
             <div class="fg"><label class="fl">Code</label><input class="fi" id="ec-code"></div>
             <div class="fg"><label class="fl">Raison sociale</label><input class="fi" id="ec-raison"></div>
-            <div class="fg"><label class="fl">Raison sociale 2</label><input class="fi" id="ec-raison2"></div>
+            <div class="fg"><label class="fl">Nom Commercial</label><input class="fi" id="ec-raison2" placeholder="= nom du client (modifiable)"></div>
             <div class="fg"><label class="fl">Forme juridique</label><input class="fi" id="ec-forme"></div>
             <div class="fg"><label class="fl">Secteur</label><input class="fi" id="ec-sector"></div>
           </div>
@@ -3499,6 +3499,11 @@ function mapClient(c) {
     lastContact: timeAgo(c.last_contact),
     devis: 0
   };
+}
+// « Nom Commercial » (nouveau client) : recopie le nom tant que le champ n'a pas été modifié manuellement
+function _ncSyncNomCommercial() {
+  const n = document.getElementById('nc-name'), r = document.getElementById('nc-raison2');
+  if (n && r && r.dataset.manual !== '1') r.value = n.value;
 }
 
 async function loadDB() {
@@ -13600,7 +13605,7 @@ function renderClientDetail() {
       <div class="card-body">
         ${[
           detailRow('Raison sociale', c.raison_sociale || '—'),
-          detailRow('Raison sociale 2', c.raison_sociale2 || '—'),
+          detailRow('Nom Commercial', c.raison_sociale2 || c.name || '—'),
           detailRow('SIREN', c.siren || '—'),
           detailRow('SIRET', c.siret || '—'),
           detailRow('Type établissement', c.est_siege === true ? '<span style="color:var(--accent);font-weight:600">Siège social</span>' : c.est_siege === false ? '<span style="color:var(--t2)">Établissement secondaire</span>' : '—'),
@@ -26115,7 +26120,7 @@ function openModal(id) {
     document.getElementById('ec-name').value = c.name||'';
     document.getElementById('ec-code').value = c.code||'';
     document.getElementById('ec-raison').value = c.raison_sociale||'';
-    document.getElementById('ec-raison2').value = c.raison_sociale2||'';
+    document.getElementById('ec-raison2').value = c.raison_sociale2 || c.name || '';
     document.getElementById('ec-forme').value = c.forme_juridique||'';
     document.getElementById('ec-sector').value = c.sector||'';
     document.getElementById('ec-addr1').value = c.adresse_ligne1||'';
