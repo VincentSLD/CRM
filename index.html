@@ -527,8 +527,11 @@ details.acc > summary { list-style: none; }
 details.acc > summary::-webkit-details-marker { display: none; }
 details.acc > summary::before { content: '\25B8'; display: inline-block; margin-right: 6px; transition: transform .15s; }
 details.acc[open] > summary::before { transform: rotate(90deg); }
-/* Titre « Mes tâches à faire » du tableau de bord : toujours sur une seule ligne horizontale */
-#dashTodo > summary .card-title, #dashTodo > summary .card-title > span { white-space: nowrap !important; }
+/* Neutralise la règle globale « details[open] > summary span:first-child { rotate(90deg) } » (prévue
+   pour l'accordéon filtres clients) sur nos accordéons .acc : sinon le titre pivote à la verticale à l'ouverture */
+details.acc[open] > summary span { transform: none !important; }
+/* Titre « Mes tâches à faire » du tableau de bord : toujours sur une seule ligne horizontale, à gauche */
+#dashTodo > summary .card-title, #dashTodo > summary .card-title > span { white-space: nowrap !important; transform: none !important; }
 /* Grilles de 2 cartes côte à côte : neutralise les marges propres des cartes pour un alignement en haut */
 .ts-grid > .card { margin-top: 0 !important; margin-bottom: 0 !important; }
 /* Sablier animé (recherches en cours) */
