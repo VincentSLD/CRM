@@ -48,45 +48,64 @@ async function loadDecp(siren) {
   return { items, total: (r.data && r.data.total_count) != null ? r.data.total_count : items.length, error: null };
 }
 
-// ─ PermisAPI : normalisation défensive (schéma exact non figé) ─
+// ─ PermisAPI : normalisation (champs réels : num_pa, date_reelle_autorisation, permit_type, superficie_terrain, denom_dem, siren_dem, adr_localite_ter, full_address, comm_code, etat_pa) ─
 function normPermit(p) {
   const g = (...keys) => { for (const k of keys) { if (p && p[k] != null && p[k] !== '') return p[k]; } return ''; };
   return {
-    num: g('num_pa', 'numero_permis', 'numero', 'num', 'id', 'reference'),
-    date: String(g('date_reelle_autorisation', 'date_autorisation', 'date_decision', 'date_depot', 'date_reelle_depot', 'date')).slice(0, 10),
-    type: g('type', 'nature_projet', 'nature', 'type_permis', 'type_dau', 'categorie'),
-    surface: g('surface_reelle', 'surface_plancher', 'surface', 'shon', 'superficie'),
-    logements: g('nb_logements', 'nb_lgt_tot', 'nb_lgt', 'logements'),
-    petitionnaire: g('petitionnaire', 'demandeur', 'nom_petitionnaire', 'maitre_ouvrage', 'nom_demandeur', 'denomination'),
-    commune: g('commune', 'nom_commune', 'ville', 'libelle_commune', 'commune_nom'),
-    cp: g('code_postal', 'cp', 'code_insee', 'insee', 'comm'),
-    adresse: g('adresse', 'adresse_terrain', 'localisation', 'libelle_adresse'),
-    statut: g('statut', 'etat', 'decision', 'etat_dossier'),
+    num: g('num_pa', 'numero', 'id'),
+    date: String(g('date_reelle_autorisation', 'date', 'an_depot')).slice(0, 10),
+    type: g('permit_type', 'type', 'nature_projet'),
+    surface: g('superficie_terrain', 'cadastre_surface', 'surface_plancher', 'surface'),
+    petitionnaire: g('denom_dem', 'petitionnaire', 'demandeur', 'nom_demandeur'),
+    sirenDem: String(g('siren_dem') || '').replace(/\D/g, ''),
+    commune: g('adr_localite_ter', 'commune', 'nom_commune', 'ville'),
+    cp: g('comm_code', 'code_postal', 'code_insee'),
+    adresse: g('full_address', 'adresse', 'adresse_terrain'),
+    statut: g('etat_pa', 'statut', 'etat'),
   };
 }
-async function loadPermis(name, depts, debug) {
+async function loadPermis(siren, depts, debug) {
   if (!PERMISAPI_KEY) return { configured: false, items: [], error: null };
-  const list = (depts || []).filter(Boolean).slice(0, 3);
-  if (!list.length) return { configured: true, items: [], error: 'Aucun département fourni (renseignez le code postal / département de la fiche).' };
   // PermisAPI attend la clé dans le header X-API-Key (on envoie aussi Authorization: Bearer par sécurité)
   const headers = { 'X-API-Key': PERMISAPI_KEY, 'Authorization': 'Bearer ' + PERMISAPI_KEY, 'Accept': 'application/json' };
-  const out = []; let error = null; let sampleKeys = null;
-  for (const dep of list) {
-    const url = PERMISAPI_BASE + '/permits?dep_code=' + encodeURIComponent(dep) + (name ? '&q=' + encodeURIComponent(name) : '');
+  const pull = async url => {
     const r = await fetchJson(url, { headers });
-    if (!r.ok) { error = 'PermisAPI ' + r.status + ': ' + String((r.data && (r.data.message || r.data.error)) || r.text).slice(0, 200); continue; }
+    if (!r.ok) return { arr: null, err: 'PermisAPI ' + r.status + ': ' + String((r.data && (r.data.message || r.data.detail || r.data.error)) || r.text).slice(0, 200) };
     const arr = (r.data && (r.data.data || r.data.results || r.data.permits || r.data.items)) || (Array.isArray(r.data) ? r.data : []);
-    if (arr && arr.length && !sampleKeys) sampleKeys = Object.keys(arr[0]);
-    for (const p of arr) out.push(normPermit(p));
+    return { arr: arr || [], err: null };
+  };
+  let error = null, sampleKeys = null, raw = [], serverFiltered = false;
+  // 1) Filtre serveur précis par SIREN du demandeur (national) — best-effort selon les paramètres supportés
+  if (siren) {
+    const r1 = await pull(PERMISAPI_BASE + '/permits?siren_dem=' + encodeURIComponent(siren) + '&per_page=100');
+    if (r1.err) error = r1.err;
+    else if (r1.arr.length) {
+      if (r1.arr[0] && !sampleKeys) sampleKeys = Object.keys(r1.arr[0]);
+      // Le filtre serveur a-t-il vraiment agi ? (toutes les lignes doivent porter ce SIREN)
+      const allMatch = r1.arr.every(p => String(p.siren_dem || '').replace(/\D/g, '') === siren);
+      if (allMatch) { raw = r1.arr; serverFiltered = true; }
+    }
   }
-  // Filtre par nom du pétitionnaire quand le champ est exploitable (sinon on garde tout)
-  let items = out;
-  if (name) {
-    const tokens = name.toUpperCase().split(/[^A-Z0-9À-Ÿ]+/).filter(t => t.length >= 4);
-    const filtered = out.filter(p => { const pet = String(p.petitionnaire || '').toUpperCase(); return pet && tokens.some(t => pet.includes(t)); });
-    if (filtered.length) items = filtered;
+  // 2) Sinon, repli par département puis filtre client sur siren_dem exact
+  if (!serverFiltered) {
+    for (const dep of (depts || []).filter(Boolean).slice(0, 3)) {
+      const r2 = await pull(PERMISAPI_BASE + '/permits?dep_code=' + encodeURIComponent(dep) + '&per_page=100');
+      if (r2.err) { error = r2.err; continue; }
+      if (r2.arr.length && !sampleKeys) sampleKeys = Object.keys(r2.arr[0]);
+      raw = raw.concat(r2.arr);
+    }
   }
-  return { configured: true, items: items.slice(0, 60), count: items.length, error, sampleKeys: debug ? sampleKeys : undefined };
+  // Normalisation + déduplication
+  const seen = new Set(); let items = [];
+  for (const p of raw) {
+    const np = normPermit(p);
+    const key = np.num || (p.id != null ? String(p.id) : '');
+    if (key && seen.has(key)) continue; if (key) seen.add(key);
+    items.push(np);
+  }
+  // Filtre PRÉCIS : uniquement les permis où l'entreprise est le pétitionnaire (siren_dem = SIREN)
+  if (siren) items = items.filter(p => p.sirenDem === siren);
+  return { configured: true, items: items.slice(0, 100), count: items.length, serverFiltered, error, sampleKeys: debug ? sampleKeys : undefined };
 }
 
 export default async function handler(req, res) {
@@ -103,7 +122,7 @@ export default async function handler(req, res) {
   try {
     const [decp, permis] = await Promise.all([
       loadDecp(siren).catch(e => ({ items: [], total: 0, error: String(e && e.message || e) })),
-      loadPermis(name, depts, debug).catch(e => ({ configured: !!PERMISAPI_KEY, items: [], error: String(e && e.message || e) })),
+      loadPermis(siren, depts, debug).catch(e => ({ configured: !!PERMISAPI_KEY, items: [], error: String(e && e.message || e) })),
     ]);
     return res.status(200).json({ siren, name, depts, decp, permis });
   } catch (e) {
