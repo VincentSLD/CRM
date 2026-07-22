@@ -13553,7 +13553,7 @@ function renderClientDetail() {
       <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer ce client/prospect">Supprimer</button>
     </div>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
     ${detailSection('Adresse du site', [
       detailRow('Ligne 1', c.adresse_ligne1 || '—'),
       detailRow('Ligne 2', c.adresse_ligne2 || '—'),
