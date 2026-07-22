@@ -151,7 +151,7 @@ body::before {
 /* Accordéon filtres tableau clients */
 details > summary::-webkit-details-marker { display: none; }
 details > summary::marker { display: none; content: ''; }
-details[open] > summary span:first-child { transform: rotate(90deg); }
+details.filtres-acc[open] > summary span:first-child { transform: rotate(90deg); }
 
 .nav-item {
   display: flex;
@@ -527,11 +527,8 @@ details.acc > summary { list-style: none; }
 details.acc > summary::-webkit-details-marker { display: none; }
 details.acc > summary::before { content: '\25B8'; display: inline-block; margin-right: 6px; transition: transform .15s; }
 details.acc[open] > summary::before { transform: rotate(90deg); }
-/* Neutralise la règle globale « details[open] > summary span:first-child { rotate(90deg) } » (prévue
-   pour l'accordéon filtres clients) sur nos accordéons .acc : sinon le titre pivote à la verticale à l'ouverture */
-details.acc[open] > summary span { transform: none !important; }
 /* Titre « Mes tâches à faire » du tableau de bord : toujours sur une seule ligne horizontale, à gauche */
-#dashTodo > summary .card-title, #dashTodo > summary .card-title > span { white-space: nowrap !important; transform: none !important; }
+#dashTodo > summary .card-title, #dashTodo > summary .card-title > span { white-space: nowrap !important; }
 /* Grilles de 2 cartes côte à côte : neutralise les marges propres des cartes pour un alignement en haut */
 .ts-grid > .card { margin-top: 0 !important; margin-bottom: 0 !important; }
 /* Sablier animé (recherches en cours) */
@@ -11644,7 +11641,7 @@ function renderClients(filter='all') {
     <button class="btn ${!clientsLetter?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'','')">Tous</button>
     ${letters.map(l => `<button class="btn ${clientsLetter===l?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadClientsPage(0,'${l}','')">${l}</button>`).join('')}
   </div>
-  <details style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-3)"${_clientsHasFilters() ?' open' : ''}>
+  <details class="filtres-acc" style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-3)"${_clientsHasFilters() ?' open' : ''}>
     <summary style="padding:8px 10px;cursor:pointer;font-size:11px;font-weight:600;color:var(--t3);user-select:none;list-style:none;display:flex;align-items:center;gap:6px">
       <span style="transition:transform .2s;display:inline-block">&#9654;</span> Filtres & Infos Entreprise
       ${_clientsHasFilters() ?'<span style="display:inline-block;padding:1px 6px;border-radius:10px;background:var(--accent);color:#fff;font-size:10px;font-weight:700">filtres actifs</span>' : ''}
