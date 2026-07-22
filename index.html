@@ -19215,12 +19215,10 @@ async function resolveEmployeeNames() {
 // L'apporteur d'affaire (souvent un cabinet d'architecte) est une société du
 // CRM. On affiche le(s) commercial(aux) de cette société (Novam + GPH).
 // L'apporteur peut être n'importe quelle société du CRM (siège OU établissement
-// secondaire). On affiche ses commerciaux : Novam, GPH et le Responsable du site
-// (avec repli sur le responsable du siège du même SIREN si l'établissement n'en a pas).
-let _apporteurCommMap = null;       // nom normalisé société -> { novam, gph, resp, respId, siren }
+// secondaire). On affiche ses commerciaux : Novam et GPH (données complémentaires Akuiteo).
+let _apporteurCommMap = null;       // nom normalisé société -> { novam, gph, siren }
 let _clientCommById = null;         // client_id -> même rec (pour les colonnes Novam/GPH des documents)
 let _apporteurCommByCode = null;    // code compte Akuiteo (clients.code) -> même rec (pour Code AA / Code GO)
-let _apporteurSiegeResp = null;     // siren -> nom du responsable du site du siège
 let _apporteurLoading = null;       // promesse en cours (évite les scans concurrents)
 function _normApporteurName(s) { return (s || '').toString().trim().toUpperCase().replace(/\s+/g, ' '); }
 // Résout un compte par CODE Akuiteo (Code AA / Code GO) → rec commercial { nom, id, novam, gph, resp… }
@@ -19234,12 +19232,12 @@ async function loadApporteurCommMap() {
   if (_apporteurLoading) return _apporteurLoading;
   // Pagination keyset (par id) : évite les OFFSET profonds qui font expirer Postgres (erreur 500)
   _apporteurLoading = (async () => {
-    const map = {}, byId = {}, byCode = {}, siegeResp = {};
+    const map = {}, byId = {}, byCode = {};
     let lastId = '';
     try {
       while (true) {
         let q = sb.from('clients')
-          .select('id,name,code,raison_sociale,account_manager_name,salesman_name,responsable_site_name,responsable_site_id,est_siege,siren,code_postal')
+          .select('id,name,code,raison_sociale,account_manager_name,salesman_name,est_siege,siren,code_postal')
           .order('id', { ascending: true }).limit(1000);
         if (lastId) q = q.gt('id', lastId);
         const { data, error } = await q;
@@ -19252,8 +19250,6 @@ async function loadApporteurCommMap() {
             code: c.code || null,
             novam: c.account_manager_name ? fmtCommercialName(c.account_manager_name) : null,
             gph: c.salesman_name ? fmtCommercialName(c.salesman_name) : null,
-            resp: c.responsable_site_name ? fmtCommercialName(c.responsable_site_name) : null,
-            respId: c.responsable_site_id || null,
             siren: c.siren || null,
             cp: c.code_postal || null,
           };
@@ -19262,13 +19258,12 @@ async function loadApporteurCommMap() {
           for (const k of [_normApporteurName(c.name), _normApporteurName(c.raison_sociale)]) {
             if (k && !map[k]) map[k] = rec;
           }
-          if (c.est_siege === true && c.siren && c.responsable_site_name && !siegeResp[c.siren]) siegeResp[c.siren] = c.responsable_site_name;
         }
         lastId = data[data.length - 1].id;
         if (data.length < 1000) break;
       }
     } catch (e) { console.warn('[loadApporteurCommMap] exception', e); }
-    _apporteurCommMap = map; _clientCommById = byId; _apporteurCommByCode = byCode; _apporteurSiegeResp = siegeResp; _apporteurLoading = null;
+    _apporteurCommMap = map; _clientCommById = byId; _apporteurCommByCode = byCode; _apporteurLoading = null;
     return _apporteurCommMap;
   })();
   return _apporteurLoading;
@@ -19304,15 +19299,12 @@ function _ensureDocsCommercial() {
   (DB.factures || []).forEach(apply);
   (DB.affaires || []).forEach(apply);
 }
-// Formate le/les commercial(aux) Novam/GPH (+ resp. site) d'un enregistrement société
+// Formate le/les commercial(aux) Novam/GPH d'un enregistrement société
 function _fmtCommRec(e) {
   if (!e) return null;
-  let resp = e.resp;
-  if (!resp && e.siren && _apporteurSiegeResp) resp = _apporteurSiegeResp[e.siren] || null; // repli sur le siège
   const parts = [];
   if (e.novam) parts.push('Novam : ' + e.novam);
   if (e.gph && e.gph !== e.novam) parts.push('GPH : ' + e.gph);
-  if (resp) parts.push('Resp. site : ' + resp);
   return parts.length ? parts.join('<br>') : null;
 }
 // Commercial(aux) d'une société par SON NOM (apporteur, architecte, gros-œuvre…)
@@ -27737,7 +27729,7 @@ async function submitEditClient() {
       // Fallback : ne garder que les colonnes de base connues
       const safeCols = ['name','code','sector','city','email','phone','raison_sociale','raison_sociale2','forme_juridique',
         'adresse_ligne1','adresse_ligne2','adresse_ligne3','code_postal','departement','region','pays',
-        'fact_adresse_ligne1','fact_adresse_ligne2','fact_adresse_ligne3','fact_code_postal','fact_ville','fact_departement','fact_region','fact_pays','responsable_site_id','responsable_site_name',
+        'fact_adresse_ligne1','fact_adresse_ligne2','fact_adresse_ligne3','fact_code_postal','fact_ville','fact_departement','fact_region','fact_pays',
         'telephone2','mobile','fax','site_web','siren','siret','ape','reference_externe',
         'notes','habitudes_techniques','habitudes_geotechniques','code_codial','compta_codial','id_plateforme','categorie_compte',
         'mode_tarification','rfa_applicable','date_remise_convention','date_signature_convention','commentaires_tarification'];
