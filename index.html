@@ -527,6 +527,8 @@ details.acc > summary { list-style: none; }
 details.acc > summary::-webkit-details-marker { display: none; }
 details.acc > summary::before { content: '\25B8'; display: inline-block; margin-right: 6px; transition: transform .15s; }
 details.acc[open] > summary::before { transform: rotate(90deg); }
+/* Titre « Mes tâches à faire » du tableau de bord : toujours sur une seule ligne horizontale */
+#dashTodo > summary .card-title, #dashTodo > summary .card-title > span { white-space: nowrap !important; }
 /* Grilles de 2 cartes côte à côte : neutralise les marges propres des cartes pour un alignement en haut */
 .ts-grid > .card { margin-top: 0 !important; margin-bottom: 0 !important; }
 /* Sablier animé (recherches en cours) */
@@ -10216,11 +10218,11 @@ function renderDashboard() {
     <span style="font-size:11px;color:var(--t3);margin-left:6px">${myDevis.length} devis, ${myCommandes.length} commandes, ${myFactures.length} factures sur la période</span>
   </div>
   <details class="card acc" id="dashTodo" style="margin-bottom:16px">
-    <summary class="card-header" style="cursor:pointer;user-select:none;display:flex;flex-wrap:nowrap;align-items:center;gap:8px">
-      <div class="card-title" style="flex:1;min-width:0;display:flex;align-items:center;gap:8px">
-        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">✅ Mes tâches à faire</span>
+    <summary class="card-header" style="cursor:pointer;user-select:none;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px">
+      <span class="card-title" style="display:inline-flex;align-items:center;gap:8px;white-space:nowrap">
+        <span style="white-space:nowrap">✅ Mes tâches à faire</span>
         <span id="dashTodoCount" style="display:none;flex:none;white-space:nowrap;background:var(--accent);color:#fff;border-radius:10px;padding:1px 8px;font-size:12px;font-weight:700;line-height:1.6"></span>
-      </div>
+      </span>
       <button class="btn btn-sm" onclick="event.preventDefault();event.stopPropagation();go('taches')" style="font-size:12px;flex:none">Toutes les tâches →</button>
     </summary>
     <div class="card-body" id="dashMesTaches" style="padding:0;font-size:13px;color:var(--t3)">Chargement…</div>
