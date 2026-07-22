@@ -13555,21 +13555,6 @@ function renderClientDetail() {
     <div class="card-header"><div class="card-title">🎯 Profil marchés (sollicitations)</div></div>
     <div class="card-body" style="overflow:visible"><div id="mp-block">${_mpBlockHtml()}</div></div>
   </div>
-  <div class="card" style="margin-bottom:16px">
-    <div class="card-header">
-      <div class="card-title">Analyse CA facturé</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <label style="font-size:12px;color:var(--t3)">Du</label>
-        <input type="date" id="ca-date-from" class="fi" style="padding:4px 8px;font-size:12px;width:auto" value="${new Date(new Date().getFullYear() - 1, new Date().getMonth(), new Date().getDate()).toISOString().slice(0,10)}">
-        <label style="font-size:12px;color:var(--t3)">au</label>
-        <input type="date" id="ca-date-to" class="fi" style="padding:4px 8px;font-size:12px;width:auto" value="${new Date().toISOString().slice(0,10)}">
-        <button class="btn" onclick="analyseCAClient('${c.id}')" style="font-size:12px">Analyser</button>
-      </div>
-    </div>
-    <div class="card-body" id="ca-analysis-result" style="padding:16px">
-      <div style="text-align:center;color:var(--t3);font-size:13px">Cliquez sur "Analyser" pour afficher le CA facturé sur la période</div>
-    </div>
-  </div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
     ${detailSection('Adresse du site', [
       detailRow('Ligne 1', c.adresse_ligne1 || '—'),
