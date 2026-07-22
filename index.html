@@ -13022,6 +13022,60 @@ function ccaExportPDF() {
   } catch (e) { toast('Erreur export PDF : ' + e.message, 'error'); }
 }
 
+// ═══ Réalisations externes : marchés publics gagnés (DECP) + permis de construire (PermisAPI) ═══
+async function openRealisations() {
+  const c = currentClient; if (!c) return;
+  const siren = String(c.siren || (c.siret ? String(c.siret).slice(0, 9) : '') || '').replace(/\D/g, '');
+  if (!siren || siren.length < 9) { toast('SIREN manquant sur la fiche — complétez-la (bouton SIRENE) puis réessayez.', 'warn'); return; }
+  const dept = String(c.departement || (c.code_postal ? String(c.code_postal).replace(/\s/g, '').slice(0, 2) : '') || '').trim();
+  const ov = _nlOverlay(`
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:16px;font-weight:700">🔎 Réalisations — ${cmdEsc(c.name || '')}</div>
+      <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
+    </div>
+    <div id="realiz-body" style="padding:16px;max-height:72vh;overflow:auto">
+      <div style="text-align:center;color:var(--t3);padding:34px">Interrogation DECP (marchés publics) & PermisAPI (permis de construire)…</div>
+    </div>`, 860);
+  try {
+    const r = await fetch('/api/realisations?siren=' + siren + '&name=' + encodeURIComponent(c.name || '') + '&depts=' + encodeURIComponent(dept));
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    const body = ov.querySelector('#realiz-body'); if (body) body.innerHTML = _realizRender(j, c);
+  } catch (e) {
+    const body = ov.querySelector('#realiz-body'); if (body) body.innerHTML = '<div style="color:var(--red);padding:20px">Erreur : ' + cmdEsc(e.message) + '</div>';
+  }
+}
+function _realizRender(j, c) {
+  const decp = j.decp || {}, permis = j.permis || {};
+  const h2 = t => `<h3 style="font-size:15px;font-weight:700;margin:6px 0 8px;color:var(--t1)">${t}</h3>`;
+  const empty = t => `<div style="padding:12px;color:var(--t3);font-size:13px;background:var(--bg-2);border-radius:8px">${t}</div>`;
+  const errBox = t => `<div style="padding:10px 12px;color:#b45309;font-size:12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px">${cmdEsc(t)}</div>`;
+
+  // ── DECP ──
+  let decpHtml;
+  if (decp.error) decpHtml = errBox('DECP indisponible : ' + decp.error);
+  else if (!decp.items || !decp.items.length) decpHtml = empty('Aucun marché public trouvé pour ce SIREN (clientèle vraisemblablement privée, ou marchés < 40 k€ HT non publiés).');
+  else decpHtml = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="text-align:left;color:var(--t3);border-bottom:2px solid var(--border)"><th style="padding:5px 6px">Date</th><th style="padding:5px 6px">Acheteur</th><th style="padding:5px 6px">Objet</th><th style="padding:5px 6px;text-align:right">Montant</th><th style="padding:5px 6px">Dpt</th></tr></thead>
+      <tbody>${decp.items.map(x => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 6px;white-space:nowrap">${x.date ? fmtDateFR(x.date) : '—'}</td><td style="padding:5px 6px">${cmdEsc(x.acheteur || '')}</td><td style="padding:5px 6px">${cmdEsc(String(x.objet || '').slice(0, 140))}</td><td style="padding:5px 6px;text-align:right;white-space:nowrap">${x.montant != null ? fmt(x.montant) : '—'}</td><td style="padding:5px 6px">${cmdEsc(x.dept || '')}</td></tr>`).join('')}</tbody></table></div>
+      ${decp.total > decp.items.length ? `<div style="font-size:11px;color:var(--t3);margin-top:4px">${decp.total} marché(s) au total — ${decp.items.length} affichés (plus récents).</div>` : ''}`;
+
+  // ── PermisAPI ──
+  let permisHtml;
+  if (!permis.configured) permisHtml = errBox("PermisAPI non configuré. Créez une clé (offre gratuite, 500 requêtes/mois sur permisapi.fr) puis ajoutez la variable d'environnement PERMISAPI_KEY dans Vercel. Le volet marchés publics ci-dessus fonctionne sans clé.");
+  else if (permis.error) permisHtml = errBox('PermisAPI : ' + permis.error);
+  else if (!permis.items || !permis.items.length) permisHtml = empty('Aucun permis de construire remonté pour ce département / critère. Rappel : sur les données ouvertes, le permis porte le pétitionnaire (maître d\'ouvrage), pas toujours l\'architecte/BE.');
+  else permisHtml = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="text-align:left;color:var(--t3);border-bottom:2px solid var(--border)"><th style="padding:5px 6px">Date</th><th style="padding:5px 6px">Type</th><th style="padding:5px 6px">Commune</th><th style="padding:5px 6px">Pétitionnaire</th><th style="padding:5px 6px">Surface</th><th style="padding:5px 6px">N°</th></tr></thead>
+      <tbody>${permis.items.map(p => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 6px;white-space:nowrap">${p.date ? fmtDateFR(p.date) : '—'}</td><td style="padding:5px 6px">${cmdEsc(String(p.type || ''))}</td><td style="padding:5px 6px">${cmdEsc(String(p.commune || p.cp || ''))}</td><td style="padding:5px 6px">${cmdEsc(String(p.petitionnaire || ''))}</td><td style="padding:5px 6px">${cmdEsc(String(p.surface || ''))}</td><td style="padding:5px 6px">${cmdEsc(String(p.num || ''))}</td></tr>`).join('')}</tbody></table></div>`;
+
+  return `
+    <div style="font-size:12px;color:var(--t3);margin-bottom:12px">SIREN ${cmdEsc(j.siren || '')}${j.depts && j.depts.length ? ' · département(s) ' + cmdEsc(j.depts.join(', ')) : ''}. Données publiques ouvertes — à vérifier avant exploitation commerciale (RGPD/CADA).</div>
+    ${h2('🏛️ Marchés publics gagnés (DECP)')}${decpHtml}
+    <div style="height:18px"></div>
+    ${h2('🏗️ Permis de construire (PermisAPI)')}${permisHtml}`;
+}
+
 function renderClientDetail() {
   const c = currentClient;
   if(!c) return '<p>Société non trouvée</p>';
@@ -13072,6 +13126,7 @@ function renderClientDetail() {
         return '<button class="btn ' + cls + '" onclick="pushClientToAkuiteo(\'' + c.id + '\')" title="' + title + '">' + label + '</button>';
       })()}
       <button class="btn" onclick="ccaOpen()" title="Analyse multi-filtres du compte (CA, rôles, missions, graphiques, PDF)">📊 Analyser le compte</button>
+      <button class="btn" onclick="openRealisations()" title="Rechercher les réalisations externes : marchés publics gagnés (DECP) + permis de construire (PermisAPI)">🔎 Réalisations</button>
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
       <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer ce client/prospect">Supprimer</button>
     </div>
