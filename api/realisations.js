@@ -91,9 +91,9 @@ async function loadPermis(siren, depts, debug) {
   const list = (depts || []).filter(Boolean).slice(0, 3);
   if (!list.length) return { configured: true, items: [], error: 'Aucun département fourni (renseignez le code postal / département de la fiche).' };
   let error = null, sampleKeys = null, raw = [], serverFiltered = false;
-  // dep_code obligatoire (plan gratuit = 1 département) ; on ajoute siren_dem (filtre serveur si l'API le supporte)
+  // dep_code obligatoire (plan gratuit = 1 département) + filtre serveur par SIREN du demandeur (param « siren ») ; pagination « limit » (max 200)
   for (const dep of list) {
-    const r = await pull(PERMISAPI_BASE + '/permits?dep_code=' + encodeURIComponent(dep) + (siren ? '&siren_dem=' + encodeURIComponent(siren) : '') + '&per_page=100');
+    const r = await pull(PERMISAPI_BASE + '/permits?dep_code=' + encodeURIComponent(dep) + (siren ? '&siren=' + encodeURIComponent(siren) : '') + '&limit=200');
     if (r.err) { error = r.err; continue; }
     if (r.arr.length && !sampleKeys) sampleKeys = Object.keys(r.arr[0]);
     raw = raw.concat(r.arr);
