@@ -519,6 +519,9 @@ details[open] > summary span:first-child { transform: rotate(90deg); }
 }
 
 .card-body { padding: 18px; }
+/* Menus multi-sélection du « Profil marchés » : plus hauts et plus larges pour voir toute la liste */
+#mspop-mpTypo, #mspop-mpSous, #mspop-mpDept, #mspop-mpComp { max-height: 60vh !important; min-width: 260px !important; }
+#mspop-mpDept { min-width: 320px !important; }
 
 /* ═══════════════════ BUTTONS ═══════════════════ */
 .btn {
@@ -13546,7 +13549,7 @@ function renderClientDetail() {
   ${renderOppsCard(c.id)}
   ${renderTachesCard({ client_id: c.id, client_name: c.name })}
   ${renderSollicCard({ client_id: c.id, client_name: c.name })}
-  <div class="card" style="margin-bottom:16px">
+  <div class="card" style="margin-bottom:16px;overflow:visible">
     <div class="card-header"><div class="card-title">🎯 Profil marchés (sollicitations)</div></div>
     <div class="card-body" style="overflow:visible"><div id="mp-block">${_mpBlockHtml()}</div></div>
   </div>
