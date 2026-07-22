@@ -13303,9 +13303,19 @@ async function saveRealizWeb() {
     toast('Recherche web enregistrée dans la base de connaissance ✅', 'success');
   } catch (e) { toast('Erreur : ' + e.message, 'error'); }
 }
-function applyWebToProfil() {
+async function applyWebToProfil() {
   const c = currentClient; if (!c || !_realizWebLast) return;
-  const s = _realizWebLast.structured; if (!s) { toast('Aucune donnée structurée à appliquer', 'info'); return; }
+  let s = _realizWebLast.structured;
+  // Recherche ancienne (cache/base) sans extraction → on structure à la volée depuis le HTML affiché
+  if (!s && _realizWebLast.html) {
+    toast('Structuration en cours…', 'info');
+    try {
+      const r = await fetch('/api/realisations-web', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ extractOnly: true, html: _realizWebLast.html, typologies: _typoList(), competences: _competencesActive() }) });
+      const j = await r.json().catch(() => ({}));
+      if (j && j.structured) { s = j.structured; _realizWebLast.structured = s; }
+    } catch (e) {}
+  }
+  if (!s) { toast('Impossible de structurer cette recherche (relancez-la).', 'warn'); return; }
   _mpEnsure(); const f = _mpForm;
   const inRef = (vals, ref) => arrayU(vals).filter(v => ref.includes(v));
   function arrayU(a) { return Array.isArray(a) ? a : []; }

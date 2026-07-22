@@ -51,9 +51,17 @@ export default async function handler(req, res) {
   if (!key) return res.status(500).json({ error: 'ANTHROPIC_API_KEY non configuré' });
 
   const { name = '', city = '', siren = '', sector = '', dept = '', typologies = [], competences = [] } = req.body || {};
-  if (!name || !String(name).trim()) return res.status(400).json({ error: 'name manquant' });
   const typoList = Array.isArray(typologies) ? typologies.slice(0, 60) : [];
   const compList = Array.isArray(competences) ? competences.slice(0, 60) : [];
+
+  // Mode « extraction seule » : structure un HTML/texte déjà obtenu (sans nouvelle recherche web)
+  if (req.body && req.body.extractOnly) {
+    const html = String(req.body.html || '');
+    if (!html.trim()) return res.status(400).json({ error: 'html manquant' });
+    try { const structured = await extractStructured(key, html, typoList, compList); return res.status(200).json({ structured }); }
+    catch (e) { console.error('extractOnly:', e.message); return res.status(500).json({ error: e.message }); }
+  }
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'name manquant' });
 
   const ctx = [String(name).trim(), sector && ('secteur : ' + sector), city && ('à ' + city), dept && ('dépt ' + dept), siren && ('SIREN ' + siren)].filter(Boolean).join(' — ');
   const system = "Tu es un analyste commercial d'un bureau d'études techniques du bâtiment (groupe NOVAM Ingénierie). Tu DOIS utiliser l'outil de recherche web pour trouver des informations FACTUELLES et RÉCENTES sur une entreprise et ses réalisations de construction (y compris projets privés). N'invente RIEN : uniquement ce que tu trouves réellement, avec la source. Si tu ne trouves pas grand-chose, dis-le honnêtement plutôt que d'inventer.";
