@@ -10223,7 +10223,10 @@ function renderDashboard() {
         <span style="white-space:nowrap">✅ Mes tâches à faire</span>
         <span id="dashTodoCount" style="display:none;flex:none;white-space:nowrap;background:var(--accent);color:#fff;border-radius:10px;padding:1px 8px;font-size:12px;font-weight:700;line-height:1.6"></span>
       </span>
-      <button class="btn btn-sm" onclick="event.preventDefault();event.stopPropagation();go('taches')" style="font-size:12px;flex:none">Toutes les tâches →</button>
+      <span style="display:inline-flex;gap:6px;flex:none;flex-wrap:wrap">
+        <button class="btn btn-sm" onclick="event.preventDefault();event.stopPropagation();go('taches')" style="font-size:12px">Toutes les tâches →</button>
+        <button class="btn btn-sm" onclick="event.preventDefault();event.stopPropagation();go('sollicitations')" style="font-size:12px">Toutes les sollicitations →</button>
+      </span>
     </summary>
     <div class="card-body" id="dashMesTaches" style="padding:0;font-size:13px;color:var(--t3)">Chargement…</div>
   </details>
