@@ -26,9 +26,9 @@ async function fetchJson(url, opts, timeoutMs = 20000) {
 async function loadDecp(siren) {
   if (!siren) return { items: [], total: 0, error: null };
   const isTrue = v => v === true || /^(true|oui|1)$/i.test(String(v == null ? '' : v));
-  const cols = 'id,dateNotification,datePublicationDonnees,acheteur_nom,acheteur_commune_nom,acheteur_departement_code,acheteur_region_nom,objet,montant,nature,type,procedure,formePrix,dureeMois,codeCPV,offresRecues,sousTraitanceDeclaree,ccag,considerationsSociales,considerationsEnvironnementales,typeGroupementOperateurs,titulaire_id,titulaire_nom,titulaire_commune_nom,titulaire_departement_code';
+  // Pas de restriction de colonnes → on récupère TOUS les champs disponibles (affichés en « Tous les détails »)
   const url = DECP_TABULAR + '?titulaire_id__contains=' + encodeURIComponent(siren)
-    + '&donneesActuelles__exact=true&dateNotification__sort=desc&page_size=100&columns=' + encodeURIComponent(cols);
+    + '&donneesActuelles__exact=true&dateNotification__sort=desc&page_size=100';
   const r = await fetchJson(url);
   if (!r.ok) return { items: [], total: 0, error: 'DECP ' + r.status + ': ' + String((r.data && (r.data.message || r.data.error)) || r.text).slice(0, 160) };
   const rows = (r.data && r.data.data) || [];
@@ -59,6 +59,7 @@ async function loadDecp(siren) {
       groupement: x.typeGroupementOperateurs || '',
       titulaireNom: x.titulaire_nom || '',    // établissement attributaire (utile si le client est un groupe)
       titulaireVille: [x.titulaire_commune_nom, x.titulaire_departement_code].filter(Boolean).join(' · '),
+      raw: x,                                 // tous les champs bruts (volet « Tous les détails »)
       cotraitants: [], typeMarche: '', lieu: '',
     }))
     .sort((a, b) => (b.date || '').localeCompare(a.date || '')) // plus récents d'abord (dates vides en dernier)

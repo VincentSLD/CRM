@@ -7931,6 +7931,19 @@ async function loadTypologies(force) {
   } catch (e) { _typoMap = _defaultTypoMap(); }
   return _typoMap;
 }
+
+// ═══ Compétences souhaitées (BET.) — liste éditable en admin (app_config key='competences') ═══
+const DEFAULT_COMPETENCES = ['BET. Acoustique', 'BET. BIM Manager', 'BET. Bureau de Contrôle', 'BET. Coordinateur SPS', 'BET. Coordinateur Travaux - OPC', 'BET. Cuisine', 'BET. Démolition - Gestion des Déchets', 'BET. DET', 'BET. Diagnostic Amiante Plomb Parasitaire', 'BET. DRONE', 'BET. Economiste', 'BET. Environnement', 'BET. Expertise', 'BET. Fluide', 'BET. Généraliste - Ingénierie', 'BET. Géomètre', 'BET. Géotechnique', 'BET. HQE', 'BET. MOEX', 'BET. Paysagiste', 'BET. Scénographie', 'BET. SSI', 'BET. Structure BA', 'BET. Structure Charpente', 'BET. Syndic - Immobilier', 'BET. Synthèse', 'BET. Thermique', 'BET. VRD'];
+let _competences = null;
+function _competencesActive() { return _competences || DEFAULT_COMPETENCES; }
+async function loadCompetences(force) {
+  if (_competences && !force) return _competences;
+  try {
+    const { data } = await sb.from('app_config').select('value').eq('key', 'competences').maybeSingle();
+    _competences = (data && Array.isArray(data.value) && data.value.length) ? data.value : DEFAULT_COMPETENCES.slice();
+  } catch (e) { _competences = DEFAULT_COMPETENCES.slice(); }
+  return _competences;
+}
 function _typoList() { return Object.keys(_typoActive()); }
 function _typoOptionList(values, sel) {
   const list = (values || []).slice();
@@ -13059,6 +13072,20 @@ async function openRealisations(force) {
 // Libellé de la division CPV (2 premiers chiffres) — catégorie lisible pour un code CPV
 const CPV_DIVISIONS = { '03': 'Produits agricoles', '09': 'Pétrole, combustibles, électricité', '14': 'Produits minéraux', '15': 'Produits alimentaires', '16': 'Machines agricoles', '18': 'Habillement', '19': 'Cuir, textile, plastique', '22': 'Imprimés', '24': 'Produits chimiques', '30': 'Bureautique, informatique', '31': 'Machines/appareils électriques', '32': 'Radio, TV, télécom', '33': 'Matériel médical', '34': 'Matériel de transport', '35': 'Sécurité, défense', '37': 'Instruments (musique, sport)', '38': 'Instruments labo/optique', '39': 'Mobilier, ménager', '41': 'Eau', '42': 'Machines industrielles', '43': 'Machines BTP/extraction', '44': 'Matériaux de construction', '45': 'Travaux de construction', '48': 'Logiciels, SI', '50': 'Réparation et entretien', '51': 'Installation', '55': 'Hôtellerie, restauration', '60': 'Transport', '63': 'Appui aux transports', '64': 'Poste et télécom', '65': 'Services publics (eau/élec)', '66': 'Banque, assurance', '70': 'Services immobiliers', '71': 'Architecture, ingénierie, contrôle', '72': 'Services informatiques', '73': 'R&D', '75': 'Administration publique', '76': 'Services pétrole/gaz', '77': 'Agriculture, sylviculture', '79': 'Services aux entreprises', '80': 'Enseignement, formation', '85': 'Santé, action sociale', '90': 'Assainissement, environnement', '92': 'Culture, loisirs, sport', '98': 'Autres services' };
 function _cpvLabel(code) { const c = String(code || '').replace(/[^0-9]/g, ''); if (c.length < 2) return ''; return CPV_DIVISIONS[c.slice(0, 2)] || ''; }
+// Libellés FR des champs DECP (volet « Tous les détails »)
+const DECP_FIELD_LABELS = { id: 'N° marché', nature: 'Nature', type: 'Type', objet: 'Objet', montant: 'Montant (€)', codeCPV: 'Code CPV', procedure: 'Procédure', techniques: "Technique d'achat", dureeMois: 'Durée (mois)', dureeRestanteMois: 'Durée restante (mois)', offresRecues: 'Offres reçues', dateNotification: 'Notifié le', datePublicationDonnees: 'Publié le', formePrix: 'Forme de prix', typesPrix: 'Type de prix', attributionAvance: 'Avance attribuée', tauxAvance: "Taux d'avance", marcheInnovant: 'Marché innovant', modalitesExecution: "Modalités d'exécution", considerationsSociales: 'Considérations sociales', considerationsEnvironnementales: 'Considérations environnementales', ccag: 'CCAG', sousTraitanceDeclaree: 'Sous-traitance déclarée', typeGroupementOperateurs: 'Type de groupement', origineUE: 'Part origine UE (%)', origineFrance: 'Part origine France (%)', lieuExecution_code: "Lieu d'exécution (code)", lieuExecution_typeCode: 'Type de lieu', idAccordCadre: 'Accord-cadre (id)', acheteur_id: 'Acheteur (SIRET)', acheteur_nom: 'Acheteur', acheteur_categorie: 'Catégorie acheteur', acheteur_commune_nom: 'Commune acheteur', acheteur_departement_nom: 'Département acheteur', acheteur_region_nom: 'Région acheteur', titulaire_id: 'Titulaire (SIRET)', titulaire_typeIdentifiant: 'Type identifiant titulaire', titulaire_nom: 'Titulaire', titulaire_categorie: 'Catégorie titulaire', titulaire_commune_nom: 'Commune titulaire', titulaire_departement_nom: 'Département titulaire', titulaire_region_nom: 'Région titulaire', titulaire_distance: 'Distance acheteur↔titulaire (km)', acheteur_latitude: 'Acheteur latitude', acheteur_longitude: 'Acheteur longitude', titulaire_latitude: 'Titulaire latitude', titulaire_longitude: 'Titulaire longitude', modification_id: 'N° de modification', donneesActuelles: 'Version courante', sourceDataset: 'Source (jeu de données)', sourceFile: 'Source (fichier)' };
+function _decpDetails(raw) {
+  if (!raw || typeof raw !== 'object') return '';
+  const skip = new Set(['__id', 'uid']);
+  const rows = Object.keys(raw).filter(k => !skip.has(k) && raw[k] != null && raw[k] !== '').map(k => {
+    let v = raw[k];
+    if (/latitude|longitude/.test(k) && !isNaN(Number(v))) v = Number(v).toFixed(5);
+    else if (k === 'montant' && !isNaN(Number(v))) v = fmt(Number(v));
+    else if (typeof v === 'boolean') v = v ? 'oui' : 'non';
+    return `<div style="color:var(--t3)">${cmdEsc(DECP_FIELD_LABELS[k] || k)}</div><div>${cmdEsc(String(v))}</div>`;
+  }).join('');
+  return rows;
+}
 
 // Recherche web IA des réalisations d'un client (couvre le privé) — cache navigateur 30 j (coût IA).
 async function openRealisationsWeb(force) {
@@ -13131,6 +13158,7 @@ function _realizRender(j, c, ts) {
         ${x.titulaireNom ? '<div style="font-size:11px;color:var(--t3);margin-top:2px">🏷️ Attributaire : ' + cmdEsc(x.titulaireNom) + (x.titulaireVille ? ' (' + cmdEsc(x.titulaireVille) + ')' : '') + '</div>' : ''}
         ${meta.length ? '<div style="font-size:11px;color:var(--t3);margin-top:4px">' + meta.join(' · ') + '</div>' : ''}
         ${(x.cotraitants && x.cotraitants.length) ? '<div style="font-size:11px;color:var(--t3);margin-top:2px">🤝 Co-traitants : ' + x.cotraitants.map(cmdEsc).join(', ') + '</div>' : ''}
+        ${x.raw ? '<details style="margin-top:4px"><summary style="font-size:11px;color:var(--accent);cursor:pointer;user-select:none">Tous les détails</summary><div style="font-size:11px;margin-top:4px;display:grid;grid-template-columns:auto 1fr;gap:2px 12px">' + _decpDetails(x.raw) + '</div></details>' : ''}
       </div>`;
     }).join('')
       + (decp.total > decp.items.length ? `<div style="font-size:11px;color:var(--t3);margin-top:4px">${decp.total} marché(s) au total — ${decp.items.length} affichés (plus récents).</div>` : '');
