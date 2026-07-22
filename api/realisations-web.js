@@ -5,6 +5,7 @@
 // Variable d'environnement (Vercel) : ANTHROPIC_API_KEY
 
 const MODEL = 'claude-sonnet-4-6';
+const MODEL_EXTRACT = 'claude-haiku-4-5-20251001';
 
 async function callClaude(key, body) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -15,6 +16,28 @@ async function callClaude(key, body) {
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error('anthropic ' + r.status + ': ' + (j.error ? j.error.message : JSON.stringify(j).slice(0, 300)));
   return j;
+}
+
+// 2e appel dédié : extraction JSON structurée à partir de la synthèse (fiable, sans outil)
+async function extractStructured(key, html, typoList, compList) {
+  const sys = "Tu extrais des données structurées d'un texte. Réponds UNIQUEMENT par un objet JSON valide (RFC 8259), sans aucun texte ni balise autour.";
+  const user = [
+    'À partir de la fiche entreprise ci-dessous, renvoie EXACTEMENT ce JSON (mêmes clés) :',
+    '{"role":"architecte|promoteur|entreprise de construction|bailleur|collectivité|BET|maître d\'ouvrage|autre|null","peut_mandataire":true,"typologies":[],"departements":[],"competences":[],"tce_min":null,"tce_max":null,"resume":""}',
+    '- typologies : UNIQUEMENT des valeurs de cette liste (sinon []): ' + JSON.stringify(typoList || []),
+    '- competences : UNIQUEMENT des valeurs de cette liste (sinon []): ' + JSON.stringify(compList || []),
+    '- departements : codes à 2 chiffres (ex. "85","44") des zones d\'intervention, sinon [].',
+    '- tce_min/tce_max : ordre de grandeur en euros des projets si identifiable, sinon null.',
+    '- peut_mandataire : true si structure susceptible d\'être mandataire d\'un groupement, sinon false/null.',
+    "N'INVENTE RIEN : null/[] si non trouvé.",
+    '', 'FICHE :', String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 6000),
+  ].join('\n');
+  const j = await callClaude(key, { model: MODEL_EXTRACT, max_tokens: 800, system: sys, messages: [{ role: 'user', content: user }] });
+  let t = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+  t = t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  try { return JSON.parse(t); } catch (e) {}
+  const m = t.match(/\{[\s\S]*\}/); if (m) { try { return JSON.parse(m[0]); } catch (e) {} }
+  return null;
 }
 
 export default async function handler(req, res) {
@@ -45,15 +68,6 @@ export default async function handler(req, res) {
     '<h4> À retenir pour la prospection</h4> : 2 à 3 puces.',
     'Termine par <p style="font-size:11px;color:#888"> <b>Sources :</b> puis les liens (balises <a>) réellement utilisés.',
     'En français. Reste factuel et concis.',
-    '',
-    'PUIS, tout à la fin, ajoute un bloc JSON (entre ```json et ```) pour exploitation automatique du « profil marchés ». Format STRICT :',
-    '{"role":"architecte|promoteur|entreprise de construction|bailleur|collectivité|BET|maître d\'ouvrage|autre|null","peut_mandataire":true|false|null,"typologies":[],"departements":[],"competences":[],"tce_min":null,"tce_max":null,"resume":""}',
-    '- typologies : UNIQUEMENT des valeurs de cette liste (sinon []): ' + (typoList.length ? JSON.stringify(typoList) : '[]'),
-    '- competences : UNIQUEMENT des valeurs de cette liste (sinon []): ' + (compList.length ? JSON.stringify(compList) : '[]'),
-    '- departements : codes à 2 chiffres des départements où l\'entreprise intervient (ex. ["85","44"]), sinon [].',
-    '- tce_min / tce_max : ordre de grandeur en euros des montants de projets si identifiable, sinon null.',
-    '- peut_mandataire : true si c\'est une structure susceptible d\'être mandataire d\'un groupement (entreprise générale, architecte, BET pilote…), sinon false/null.',
-    'N\'INVENTE RIEN : mets null/[] si l\'info n\'est pas trouvée.',
   ].join('\n');
 
   const messages = [{ role: 'user', content: userPrompt }];
@@ -71,12 +85,11 @@ export default async function handler(req, res) {
       if (j.stop_reason === 'pause_turn' && Array.isArray(j.content)) { messages.push({ role: 'assistant', content: j.content }); continue; }
       break;
     }
-    // Extraire le bloc JSON structuré (```json … ```) puis le retirer du HTML
-    let structured = null;
-    const mJson = text.match(/```json\s*([\s\S]*?)```/i);
-    if (mJson) { try { structured = JSON.parse(mJson[1].trim()); } catch (e) {} text = text.replace(mJson[0], '').trim(); }
     text = text.replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/i, '').trim();
     if (!text) return res.status(502).json({ error: 'Réponse IA vide' });
+    // 2e appel : extraction structurée fiable (non bloquant)
+    let structured = null;
+    try { structured = await extractStructured(key, text, typoList, compList); } catch (e) { console.warn('extractStructured:', e.message); }
     return res.status(200).json({ html: text, structured });
   } catch (e) {
     console.error('realisations-web:', e.message);
