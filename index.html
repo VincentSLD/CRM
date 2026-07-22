@@ -13549,7 +13549,7 @@ function renderClientDetail() {
     </div>
   </div>
   ${renderOppsCard(c.id)}
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
     ${detailSection('Adresse du site', [
       detailRow('Ligne 1', c.adresse_ligne1 || '—'),
       detailRow('Ligne 2', c.adresse_ligne2 || '—'),
@@ -13578,16 +13578,6 @@ function renderClientDetail() {
       detailRow('Mobile', c.mobile ? '<a href="tel:'+c.mobile+'" style="color:var(--accent)">'+formatPhone(c.mobile)+'</a>' : '—'),
       detailRow('Fax', c.fax ? formatPhone(c.fax) : '—'),
       detailRow('Site web', c.site_web ? '<a href="' + (c.site_web.startsWith('http') ? c.site_web : 'https://'+c.site_web) + '" target="_blank" style="color:var(--accent)">' + c.site_web + '</a>' : '—'),
-    ])}
-    ${detailSection('Tarification GPH', [
-      detailRow('Mode de tarification GPH', c.mode_tarification_name || resolvePricingMethod(c.mode_tarification) || '—'),
-      detailRow('RFA applicable', c.rfa_applicable || c.custom_data?.['1-alpha04']?.value || '—'),
-      detailRow('Date de Remise de la convention', (c.date_remise_convention || c.custom_data?.['1-date01']?.value) ? fmtDateFR(c.date_remise_convention || c.custom_data['1-date01'].value) : '—'),
-      detailRow('Date de signature de la convention', (c.date_signature_convention || c.custom_data?.['1-date02']?.value) ? fmtDateFR(c.date_signature_convention || c.custom_data['1-date02'].value) : '—'),
-      detailRow('Commentaires', c.commentaires_tarification || c.custom_data?.['1-alpha01']?.value || '—'),
-      detailRow('Code CODIAL <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.code_codial || '—'),
-      detailRow('Compta CODIAL <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.compta_codial || '—'),
-      detailRow('ID Plateforme <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.id_plateforme || '—'),
     ])}
   </div>
   ${c.siren ? `<div class="card" style="margin-bottom:16px">
@@ -13627,7 +13617,7 @@ function renderClientDetail() {
         ].filter(r=>r).join('')}
       </div>
     </div>
-    ${detailSection('Commercial', [
+    ${detailSection('Commerce', [
       detailRow('Commercial Novam', c.account_manager_name ? '<strong>' + c.account_manager_name + '</strong>' : resolveManagerName(c.account_manager_id) || '—'),
       detailRow('Commercial GPH', c.salesman_name ? '<strong>' + c.salesman_name + '</strong>' + (c.commerciaux_associes && c.commerciaux_associes !== c.salesman_name ? '<br><span style="font-size:11px;color:var(--t3)">' + c.commerciaux_associes + '</span>' : '') : c.commerciaux_associes || '—'),
       detailRow('Importance du compte', (() => {
@@ -13659,6 +13649,16 @@ function renderClientDetail() {
         if (!rp || !Array.isArray(rp) || rp.length === 0) return '—';
         return rp.map(r => '<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:#6366f122;color:#6366f1;margin:1px 4px 1px 0">' + r + '</span>').join('');
       })()),
+      '<details style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px"><summary style="cursor:pointer;user-select:none;font-weight:700;color:var(--accent);font-size:12px">Tarification GPH</summary><div style="margin-top:4px">'
+        + detailRow('Mode de tarification GPH', c.mode_tarification_name || resolvePricingMethod(c.mode_tarification) || '—')
+        + detailRow('RFA applicable', c.rfa_applicable || c.custom_data?.['1-alpha04']?.value || '—')
+        + detailRow('Date de Remise de la convention', (c.date_remise_convention || c.custom_data?.['1-date01']?.value) ? fmtDateFR(c.date_remise_convention || c.custom_data['1-date01'].value) : '—')
+        + detailRow('Date de signature de la convention', (c.date_signature_convention || c.custom_data?.['1-date02']?.value) ? fmtDateFR(c.date_signature_convention || c.custom_data['1-date02'].value) : '—')
+        + detailRow('Commentaires', c.commentaires_tarification || c.custom_data?.['1-alpha01']?.value || '—')
+        + detailRow('Code CODIAL <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.code_codial || '—')
+        + detailRow('Compta CODIAL <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.compta_codial || '—')
+        + detailRow('ID Plateforme <span style="color:var(--t3);font-size:10px;font-weight:400">(local)</span>', c.id_plateforme || '—')
+        + '</div></details>',
     ])}
     ${detailSection('Infos Entreprise', [
       detailRow('Catégorie', c.mk_categorie || '—'),
