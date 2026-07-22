@@ -522,6 +522,11 @@ details[open] > summary span:first-child { transform: rotate(90deg); }
 /* Menus multi-sélection du « Profil marchés » : plus hauts et plus larges pour voir toute la liste */
 #mspop-mpTypo, #mspop-mpSous, #mspop-mpDept, #mspop-mpComp { max-height: 60vh !important; min-width: 260px !important; }
 #mspop-mpDept { min-width: 320px !important; }
+/* Accordéon (details.acc) : triangle qui pivote à l'ouverture */
+details.acc > summary { list-style: none; }
+details.acc > summary::-webkit-details-marker { display: none; }
+details.acc > summary::before { content: '\25B8'; display: inline-block; margin-right: 6px; transition: transform .15s; }
+details.acc[open] > summary::before { transform: rotate(90deg); }
 
 /* ═══════════════════ BUTTONS ═══════════════════ */
 .btn {
@@ -1765,10 +1770,6 @@ tbody tr:last-child td { border-bottom: none; }
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M6.5 7.5l4.5 9M17.5 7.5l-4.5 9M7 6h10"/></svg>
         Analyse / KPI
       </div>
-      <div class="nav-item" data-page="decp-analyse" onclick="go('decp-analyse')">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/></svg>
-        Marchés publics
-      </div>
       <div class="nav-item" data-page="clients" onclick="go('clients')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Clients/Prospects
@@ -1852,6 +1853,10 @@ tbody tr:last-child td { border-bottom: none; }
     <div class="nav-section">
       <details class="nav-accordion">
         <summary class="nav-section-title nav-accordion-title">Paramétrage <span class="nav-accordion-arrow">▾</span></summary>
+        <div class="nav-item" data-page="decp-analyse" onclick="go('decp-analyse')">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/></svg>
+          Marchés publics
+        </div>
         <div class="nav-item" data-page="endev" onclick="goEnDev()">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="14" y1="4" x2="10" y2="20"/></svg>
           En Dev'
@@ -13723,13 +13728,12 @@ function renderClientDetail() {
         add('Cat. Gros-œuvre', c.categorie_gros_oeuvre, c.categorie_gros_oeuvre_rang);
         return out;
       })(),
-      detailRow('Société Akuiteo', c.code_societe || '—'),
       detailRow('Réseaux pro', (() => {
         const rp = c.reseaux_pro;
         if (!rp || !Array.isArray(rp) || rp.length === 0) return '—';
         return rp.map(r => '<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:#6366f122;color:#6366f1;margin:1px 4px 1px 0">' + r + '</span>').join('');
       })()),
-      '<details style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px"><summary style="cursor:pointer;user-select:none;font-weight:700;color:var(--accent);font-size:12px">Tarification GPH</summary><div style="margin-top:4px">'
+      '<details class="acc" style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px"><summary style="cursor:pointer;user-select:none;font-weight:700;color:var(--accent);font-size:12px">Tarification GPH</summary><div style="margin-top:4px">'
         + detailRow('Mode de tarification GPH', c.mode_tarification_name || resolvePricingMethod(c.mode_tarification) || '—')
         + detailRow('RFA applicable', c.rfa_applicable || c.custom_data?.['1-alpha04']?.value || '—')
         + detailRow('Date de Remise de la convention', (c.date_remise_convention || c.custom_data?.['1-date01']?.value) ? fmtDateFR(c.date_remise_convention || c.custom_data['1-date01'].value) : '—')
@@ -13768,16 +13772,15 @@ function renderClientDetail() {
     </div>
   </div>
   ${renderOppsCard(c.id)}
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;align-items:start">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;align-items:start">
     ${renderTachesCard({ client_id: c.id, client_name: c.name })}
     ${renderSollicCard({ client_id: c.id, client_name: c.name })}
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;align-items:start">
     <div class="card" style="margin-bottom:0;overflow:visible">
       <div class="card-header"><div class="card-title">🎯 Profil marchés (sollicitations)</div></div>
       <div class="card-body" style="overflow:visible"><div id="mp-block">${_mpBlockHtml()}</div></div>
     </div>
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;align-items:start">
-    <div class="card" style="margin-bottom:0"><div class="card-header"><div class="card-title">Habitudes Administratives et Commerciales</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes || '—'}</div></div></div>
     <div class="card" style="margin-bottom:0">
       <div class="card-header" style="flex-wrap:wrap;gap:8px">
         <div class="card-title">Concurrents qui travaillent avec ce compte</div>
@@ -13788,6 +13791,7 @@ function renderClientDetail() {
       </div>
     </div>
   </div>
+  <div class="card" style="margin-bottom:16px"><div class="card-header"><div class="card-title">Habitudes Administratives et Commerciales</div></div><div class="card-body"><div style="font-size:13px;white-space:pre-wrap;line-height:1.6;color:var(--t2)">${c.notes || '—'}</div></div></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
     <div class="card"><div class="card-header"><div class="card-title">Habitudes Techniques</div></div><div class="card-body"><div style="font-size:13px;line-height:1.6;color:var(--t2)">${c.habitudes_techniques || '—'}</div></div></div>
     <div class="card"><div class="card-header"><div class="card-title">Habitudes Géotechniques</div></div><div class="card-body"><div style="font-size:13px;line-height:1.6;color:var(--t2)">${c.habitudes_geotechniques || '—'}</div></div></div>
