@@ -7,6 +7,41 @@
 const MODEL = 'claude-sonnet-4-6';
 const MODEL_EXTRACT = 'claude-haiku-4-5-20251001';
 
+// Tarifs Anthropic (USD / million de tokens) + recherche web ($/req)
+const PRICING = {
+  'claude-sonnet-4-6': { in: 3, out: 15 },
+  'claude-haiku-4-5-20251001': { in: 1, out: 5 },
+};
+const WEB_SEARCH_USD = 0.01; // $10 / 1000 requêtes
+const USD_TO_EUR = 0.92;
+// Estimation indicative d'empreinte carbone (aucune donnée officielle par token) :
+// ~0,4 Wh / 1000 tokens, ~0,42 g CO2e / Wh, + ~0,2 g / recherche web.
+const WH_PER_1K_TOKENS = 0.4;
+const G_CO2E_PER_WH = 0.42;
+const G_CO2E_PER_SEARCH = 0.2;
+
+function newUsage() { return { input: 0, output: 0, web_searches: 0, cost_usd: 0 }; }
+function addUsage(acc, model, u) {
+  if (!u) return;
+  const inp = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
+  const out = u.output_tokens || 0;
+  const ws = (u.server_tool_use && u.server_tool_use.web_search_requests) || 0;
+  acc.input += inp; acc.output += out; acc.web_searches += ws;
+  const p = PRICING[model] || { in: 0, out: 0 };
+  acc.cost_usd += inp / 1e6 * p.in + out / 1e6 * p.out + ws * WEB_SEARCH_USD;
+}
+function summarizeUsage(acc) {
+  const total = acc.input + acc.output;
+  const co2 = total / 1000 * WH_PER_1K_TOKENS * G_CO2E_PER_WH + acc.web_searches * G_CO2E_PER_SEARCH;
+  const round = (x, n) => Math.round(x * Math.pow(10, n)) / Math.pow(10, n);
+  return {
+    input_tokens: acc.input, output_tokens: acc.output, total_tokens: total,
+    web_searches: acc.web_searches,
+    cost_usd: round(acc.cost_usd, 4), cost_eur: round(acc.cost_usd * USD_TO_EUR, 4),
+    co2_g: round(co2, 2),
+  };
+}
+
 async function callClaude(key, body) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -19,7 +54,7 @@ async function callClaude(key, body) {
 }
 
 // 2e appel dédié : extraction JSON structurée à partir de la synthèse (fiable, sans outil)
-async function extractStructured(key, html, typoList, compList) {
+async function extractStructured(key, html, typoList, compList, acc) {
   const sys = "Tu extrais des données structurées d'un texte. Réponds UNIQUEMENT par un objet JSON valide (RFC 8259), sans aucun texte ni balise autour.";
   const user = [
     'À partir de la fiche entreprise ci-dessous, renvoie EXACTEMENT ce JSON (mêmes clés) :',
@@ -33,6 +68,7 @@ async function extractStructured(key, html, typoList, compList) {
     '', 'FICHE :', String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 6000),
   ].join('\n');
   const j = await callClaude(key, { model: MODEL_EXTRACT, max_tokens: 800, system: sys, messages: [{ role: 'user', content: user }] });
+  if (acc) addUsage(acc, MODEL_EXTRACT, j.usage);
   let t = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
   t = t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
   try { return JSON.parse(t); } catch (e) {}
@@ -58,7 +94,7 @@ export default async function handler(req, res) {
   if (req.body && req.body.extractOnly) {
     const html = String(req.body.html || '');
     if (!html.trim()) return res.status(400).json({ error: 'html manquant' });
-    try { const structured = await extractStructured(key, html, typoList, compList); return res.status(200).json({ structured }); }
+    try { const acc = newUsage(); const structured = await extractStructured(key, html, typoList, compList, acc); return res.status(200).json({ structured, usage: summarizeUsage(acc) }); }
     catch (e) { console.error('extractOnly:', e.message); return res.status(500).json({ error: e.message }); }
   }
   if (!name || !String(name).trim()) return res.status(400).json({ error: 'name manquant' });
@@ -79,6 +115,7 @@ export default async function handler(req, res) {
   ].join('\n');
 
   const messages = [{ role: 'user', content: userPrompt }];
+  const acc = newUsage();
   try {
     let text = '';
     for (let i = 0; i < 5; i++) {
@@ -88,6 +125,7 @@ export default async function handler(req, res) {
         messages,
         tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
       });
+      addUsage(acc, MODEL, j.usage);
       const t = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
       if (t) text += (text ? '\n' : '') + t;
       if (j.stop_reason === 'pause_turn' && Array.isArray(j.content)) { messages.push({ role: 'assistant', content: j.content }); continue; }
@@ -97,8 +135,8 @@ export default async function handler(req, res) {
     if (!text) return res.status(502).json({ error: 'Réponse IA vide' });
     // 2e appel : extraction structurée fiable (non bloquant)
     let structured = null;
-    try { structured = await extractStructured(key, text, typoList, compList); } catch (e) { console.warn('extractStructured:', e.message); }
-    return res.status(200).json({ html: text, structured });
+    try { structured = await extractStructured(key, text, typoList, compList, acc); } catch (e) { console.warn('extractStructured:', e.message); }
+    return res.status(200).json({ html: text, structured, usage: summarizeUsage(acc) });
   } catch (e) {
     console.error('realisations-web:', e.message);
     return res.status(500).json({ error: e.message });
