@@ -12713,6 +12713,11 @@ function downloadClientListPDF(type) {
     ]);
   }
 
+  if (!body.length) {
+    toast('Aucune ligne dans « ' + title + ' » pour ce client — PDF non généré.', 'info');
+    return;
+  }
+
   doc.autoTable({
     head, body, startY: 34,
     styles: { fontSize: 9, cellPadding: 3 },
