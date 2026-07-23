@@ -2286,12 +2286,16 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
     <div class="modal-body">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="fg"><label class="fl">Civilité</label><select class="fi" id="nco-titre"><option value="">—</option><option value="M.">M.</option><option value="Mme">Mme</option></select></div>
         <div class="fg"><label class="fl">Prénom</label><input class="fi" id="nco-prenom"></div>
         <div class="fg"><label class="fl">Nom *</label><input class="fi" id="nco-nom"></div>
+        <div class="fg"><label class="fl">Fonction</label><input class="fi" id="nco-fonction"></div>
+        <div class="fg"><label class="fl">Service</label><input class="fi" id="nco-service"></div>
         <div class="fg"><label class="fl">Email</label><input class="fi" id="nco-email" type="email"></div>
+        <div class="fg"><label class="fl">Email secondaire</label><input class="fi" id="nco-email2" type="email"></div>
         <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="nco-phone"></div>
         <div class="fg"><label class="fl">Mobile</label><input class="fi" id="nco-mobile"></div>
-        <div class="fg"><label class="fl">Fonction</label><input class="fi" id="nco-fonction"></div>
+        <div class="fg" style="grid-column:1/-1"><label class="fl">Commentaire</label><textarea class="fi" id="nco-commentaire" rows="2" style="resize:vertical"></textarea></div>
       </div>
     </div>
     <div class="modal-foot">
@@ -4237,8 +4241,12 @@ function renderContactDetail() {
             <input type="text" id="ec-nom" value="${(c.nom||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
           <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Fonction</label>
             <input type="text" id="ec-fonction" value="${(c.fonction||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
+          <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Service</label>
+            <input type="text" id="ec-service" value="${(c.service||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
           <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Email</label>
             <input type="email" id="ec-email" value="${(c.email||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
+          <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Email secondaire</label>
+            <input type="email" id="ec-email2" value="${(c.email2||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
           <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Téléphone</label>
             <input type="tel" id="ec-tel" value="${(c.telephone||'').replace(/"/g,'&quot;')}" class="fi" style="padding:6px 8px;font-size:12px"></div>
           <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Mobile</label>
@@ -4269,7 +4277,9 @@ async function saveEditContact() {
     prenom: document.getElementById('ec-prenom')?.value.trim() || null,
     nom: document.getElementById('ec-nom')?.value.trim() || null,
     fonction: document.getElementById('ec-fonction')?.value.trim() || null,
+    service: document.getElementById('ec-service')?.value.trim() || null,
     email: document.getElementById('ec-email')?.value.trim() || null,
+    email2: document.getElementById('ec-email2')?.value.trim() || null,
     telephone: document.getElementById('ec-tel')?.value.trim() || null,
     mobile: document.getElementById('ec-mobile')?.value.trim() || null,
     commentaire: document.getElementById('ec-commentaire')?.value.trim() || null,
@@ -14114,6 +14124,8 @@ function renderClientDetail() {
             <div style="display:grid;gap:8px">
               <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Poste</label>
                 <input type="text" id="nc-ct-fonction" class="fi" style="padding:6px 8px;font-size:12px" placeholder="Ex: Directeur Commercial"></div>
+              <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Service</label>
+                <input type="text" id="nc-ct-service" class="fi" style="padding:6px 8px;font-size:12px" placeholder="Ex: Commercial"></div>
             </div>
           </div>
         </div>
@@ -14123,6 +14135,8 @@ function renderClientDetail() {
             <div style="display:grid;gap:8px">
               <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Email</label>
                 <input type="email" id="nc-ct-email" class="fi" style="padding:6px 8px;font-size:12px"></div>
+              <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Email secondaire</label>
+                <input type="email" id="nc-ct-email2" class="fi" style="padding:6px 8px;font-size:12px"></div>
               <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Téléphone</label>
                 <input type="text" id="nc-ct-tel" class="fi" style="padding:6px 8px;font-size:12px"></div>
               <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Mobile</label>
@@ -14259,7 +14273,9 @@ async function saveNewContact(clientId) {
       nom: nom,
       prenom: prenom,
       fonction: document.getElementById('nc-ct-fonction')?.value.trim() || '',
+      service: document.getElementById('nc-ct-service')?.value.trim() || null,
       email: document.getElementById('nc-ct-email')?.value.trim() || '',
+      email2: document.getElementById('nc-ct-email2')?.value.trim() || null,
       telephone: document.getElementById('nc-ct-tel')?.value.trim() || '',
       mobile: document.getElementById('nc-ct-mobile')?.value.trim() || '',
     };
@@ -14269,7 +14285,7 @@ async function saveNewContact(clientId) {
     // Fermer et vider le formulaire
     const form = document.getElementById('new-contact-form');
     if (form) form.style.display = 'none';
-    ['nc-ct-titre','nc-ct-nom','nc-ct-prenom','nc-ct-fonction','nc-ct-email','nc-ct-tel','nc-ct-mobile','nc-ct-commentaire'].forEach(id => {
+    ['nc-ct-titre','nc-ct-nom','nc-ct-prenom','nc-ct-fonction','nc-ct-service','nc-ct-email','nc-ct-email2','nc-ct-tel','nc-ct-mobile','nc-ct-commentaire'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
     // Proposer la sync Akuiteo AVANT de recharger les contacts pour éviter le doublon
@@ -21486,18 +21502,26 @@ async function submitNewContactFromCR() {
   if (!clientId) { toast('Aucune société sélectionnée','error'); return; }
 
   const prenom = document.getElementById('nco-prenom').value.trim();
+  const titre = document.getElementById('nco-titre')?.value || '';
   const email = document.getElementById('nco-email').value.trim();
+  const email2 = document.getElementById('nco-email2')?.value.trim() || '';
   const phone = document.getElementById('nco-phone').value.trim();
   const mobile = document.getElementById('nco-mobile').value.trim();
   const fonction = document.getElementById('nco-fonction').value.trim();
+  const service = document.getElementById('nco-service')?.value.trim() || '';
+  const commentaire = document.getElementById('nco-commentaire')?.value.trim() || '';
 
   const contactId2 = crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + '_' + Math.random().toString(36).substr(2,9));
   const contactData = { id: contactId2, nom, client_id: clientId };
+  if (titre) contactData.titre = titre;
   if (prenom) contactData.prenom = prenom;
   if (email) contactData.email = email;
+  if (email2) contactData.email2 = email2;
   if (phone) contactData.telephone = phone;
   if (mobile) contactData.mobile = mobile;
   if (fonction) contactData.fonction = fonction;
+  if (service) contactData.service = service;
+  if (commentaire) contactData.commentaire = commentaire;
   console.log('[CR] Insert contact:', contactData);
   const { data, error } = await sb.from('contacts').insert(contactData).select();
 
@@ -21512,7 +21536,7 @@ async function submitNewContactFromCR() {
     selectCRContact(data[0].id, fullName);
   }
   // Reset form
-  ['nco-prenom','nco-nom','nco-email','nco-phone','nco-mobile','nco-fonction'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  ['nco-titre','nco-prenom','nco-nom','nco-email','nco-email2','nco-phone','nco-mobile','nco-fonction','nco-service','nco-commentaire'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
 }
 
 function selectCRContact(id, name) {
