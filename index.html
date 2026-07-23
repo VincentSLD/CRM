@@ -2177,6 +2177,7 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="card">
           <div class="card-header"><div class="card-title">Infos Entreprise <span style="font-weight:400;font-size:11px">(Akuiteo)</span></div></div>
           <div class="card-body">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-bottom:8px;font-weight:600;color:var(--t1)"><input type="checkbox" id="nc-particulier" onchange="ncToggleParticulier(this.checked)"> Particulier</label>
             <div style="display:grid;gap:8px">
               <div class="fg"><label class="fl">Catégorie *</label><select class="fi" id="nc-mk-categorie" onchange="document.getElementById('nc-mk-sous-categorie').innerHTML=akRefSubCatOptions('',this.value)"></select></div>
               <div class="fg"><label class="fl">Sous-Catégorie *</label><select class="fi" id="nc-mk-sous-categorie"></select></div>
@@ -3583,6 +3584,33 @@ async function ncFillFromSirene(auto) {
     if (legal.etat_insee) window._ncEtatInsee = legal.etat_insee;
     toast('Informations légales remplies depuis SIRENE ✅' + (legal.etat_insee === 'C' ? ' — ⚠️ entreprise radiée/cessée' : ''), 'success');
   } catch (e) { showSyncLoading(false); if (!auto) toast('Erreur : ' + e.message, 'error'); }
+}
+// Positionne un <select> sur l'option dont le libellé correspond (exact, puis inclusion, puis chiffres seuls pour « < 1 000 000 »)
+function _ncSetSelectByLabel(selectId, wanted) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return false;
+  const norm = s => String(s || '').toLowerCase().replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
+  const w = norm(wanted), wd = w.replace(/[^0-9]/g, '');
+  const opt = [...sel.options].find(o => norm(o.text) === w)
+    || [...sel.options].find(o => { const t = norm(o.text); return t && (t.includes(w) || w.includes(t)); })
+    || (wd ? [...sel.options].find(o => norm(o.text).replace(/[^0-9]/g, '') === wd) : null);
+  if (opt) { sel.value = opt.value; return true; }
+  return false;
+}
+// Coche « Particulier » (création) : pré-remplit Catégorie/Sous-catégorie/Catégorie prof./Secteur/Type pour une personne physique
+function ncToggleParticulier(checked) {
+  if (!checked) return;
+  const miss = [];
+  if (!_ncSetSelectByLabel('nc-mk-categorie', 'Particulier')) miss.push('Catégorie');
+  // La sous-catégorie dépend de la catégorie : recharger ses options d'abord
+  const catSel = document.getElementById('nc-mk-categorie'), subSel = document.getElementById('nc-mk-sous-categorie');
+  if (catSel && subSel && typeof akRefSubCatOptions === 'function') subSel.innerHTML = akRefSubCatOptions('', catSel.value);
+  if (!_ncSetSelectByLabel('nc-mk-sous-categorie', 'Particulier')) miss.push('Sous-catégorie');
+  if (!_ncSetSelectByLabel('nc-mk-categorie-pro', '< 1 000 000')) miss.push('Catégorie prof.');
+  if (!_ncSetSelectByLabel('nc-mk-secteur', 'Privé')) miss.push('Secteur');
+  if (!_ncSetSelectByLabel('nc-mk-type', 'Personne Physique')) miss.push('Type');
+  if (miss.length) toast('« Particulier » pré-rempli — introuvable dans la liste pour : ' + miss.join(', '), 'warn');
+  else toast('Champs « Particulier » pré-remplis', 'success');
 }
 
 async function loadDB() {
@@ -26560,7 +26588,7 @@ function openModal(id) {
   if(id==='new-devis') document.getElementById('nd-client').innerHTML=clientOpts;
   if(id==='new-commande') document.getElementById('ncm-client').innerHTML=clientOpts;
   if(id==='new-facture') document.getElementById('nf-client').innerHTML=clientOpts;
-  if(id==='new-client') { window._ncEstSiege = null; window._ncEtatInsee = null; window._ncSelectedSireneResult = null; window._ncSecondaryEstablishments = []; const ep = document.getElementById('nc-etablissements-panel'); if(ep) ep.style.display='none'; _rpSelected = []; renderReseauxProChips('nc-reseaux-chips'); }
+  if(id==='new-client') { window._ncEstSiege = null; window._ncEtatInsee = null; window._ncSelectedSireneResult = null; window._ncSecondaryEstablishments = []; const ep = document.getElementById('nc-etablissements-panel'); if(ep) ep.style.display='none'; _rpSelected = []; renderReseauxProChips('nc-reseaux-chips'); const pc = document.getElementById('nc-particulier'); if(pc) pc.checked = false; }
   if(id==='prospect-target') initProspectFilters();
   if(id==='edit-client' && currentClient) {
     const c = currentClient;
