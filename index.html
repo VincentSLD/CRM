@@ -1898,6 +1898,9 @@ tbody tr:last-child td { border-bottom: none; }
         <input type="text" placeholder="Rechercher..." id="globalSearch" oninput="handleSearch(this.value)" onfocus="handleSearch(this.value)" autocomplete="off">
         <div class="search-dropdown" id="searchDropdown"></div>
       </div>
+      <button class="topbar-btn" onclick="openHelp()" title="Aide sur cette page">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </button>
       <button class="topbar-btn" onclick="toggleNotifPanel()" title="Notifications">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         <div class="notif-dot"></div>
@@ -4560,111 +4563,175 @@ function renderEnDev() {
 // ═══════════════════════════════════════════════════════════
 //  MODE D'EMPLOI — guide des fonctionnalités du CRM
 // ═══════════════════════════════════════════════════════════
-function _modeEmploiContenu() {
-  const secs = [
-    ['🏠 Tableau de bord', [
-      "Vue d'ensemble : indicateurs clés (CA, objectifs par agence, listes de clients), alertes et raccourcis.",
-      "Les compteurs du menu (Clients, Contacts, Devis, Commandes, Factures, CR, Tâches, Opportunités…) indiquent le volume en temps réel.",
-    ]],
-    ['👥 Clients / Prospects', [
-      "Liste filtrable et recherche tolérante (insensible à la ponctuation/accents, ex. « 6K » trouve « 6.K ARCHI »).",
-      "Case pour masquer les sociétés radiées (cochée par défaut).",
-      "Fiche société : coordonnées, catégorie ABC (par agence), commercial Novam/GPH, statut (actif/nouveau/dormant), établissements secondaires (même SIREN), CA, contacts, opportunités, comptes-rendus.",
-      "Outil d'analyse du compte (CA par devis/commandes/factures, par rôle client/architecte/apporteur/gros-œuvre, par établissement) avec graphiques et export PDF paysage.",
-      "Création d'un nouveau client/prospect (avec recherche SIRENE et catégorisation).",
-    ]],
-    ['📇 Contacts', [
-      "Liste avec colonnes Commercial Novam / GPH, filtres, et affichage « NOM Prénom » partout.",
-      "Création/édition d'un contact (civilité, fonction, téléphones, emails) rattaché à une société.",
-    ]],
-    ['🎯 Opportunités', [
-      "Synchronisation depuis Akuiteo (bouton « Synchroniser ») et création/modification renvoyées vers Akuiteo.",
-      "Vues Pipeline (Kanban par stade) et Liste ; filtres Portefeuille, Statut, Responsable, et plage de dates de signature.",
-      "Fiche en pleine page : tous les champs (client, contact, établissement, portefeuille, stade, type d'origine, responsables, montant, montant des travaux, probabilité, dates…), tâches liées et comptes-rendus liés.",
-      "Actions : Modifier, Marquer Gagnée / Perdue, Créer une tâche, Créer un CR (pré-remplis).",
-      "Création possible d'un nouveau client directement depuis le formulaire si la société n'existe pas.",
-      "📊 Bouton « Analyser » : KPIs (pipeline, pondéré, taux de réussite), alertes actionnables (signatures dépassées, à signer < 30 j, sans date/responsable/contact, fort enjeu, stratégiques) et graphiques ; filtres Année/Responsable/Portefeuille et export PDF.",
-    ]],
-    ['✅ Tâches commerciales', [
-      "Vues Liste et Pipeline (glisser-déposer entre statuts À faire / En cours / Terminée / Annulée).",
-      "Case « Terminé ? » pour clôturer/réactiver rapidement ; échéance affichée en date.",
-      "Lien vers client, affaire ET opportunité (possible même sans client : la sélection renseigne le client).",
-      "Création/édition en pleine page. À l'enregistrement : tâche Microsoft To Do + email de notification chez l'assigné.",
-      "Rappel email automatique chaque matin pour les tâches arrivées à échéance et non terminées.",
-    ]],
-    ['📝 Comptes-rendus (CR)', [
-      "Éditeur riche (gras, couleurs, surlignage, listes), pièces jointes (compressées), dictée vocale.",
-      "Liaison à une ou plusieurs sociétés, contacts, une affaire et une opportunité.",
-      "Outils IA : Préparer RDV, Reformuler, Synthèse, Compléter.",
-      "Diffusion par email depuis votre boîte Microsoft (objet préfixé « Compte-Rendu CRM : », message complémentaire pré-rempli).",
-    ]],
-    ['📂 Marchés / Affaires / Devis / Commandes / Factures', [
-      "Données reprises d'Akuiteo : marchés, affaires (avec liste des CR liés), devis, commandes (planification/DLR), factures (impayés, retards).",
-      "Filtres par société, date, commercial ; badges de relance des devis.",
-    ]],
-    ['📊 Analyse / KPI & Carte', [
-      "Analyse : indicateurs financiers et commerciaux, cartographie « qui travaille avec qui », carte par département.",
-      "Cartes des sociétés et des affaires (géolocalisation).",
-    ]],
-    ['🔎 Veille & Outils (menu Paramétrage / En Dev)', [
-      "Veille Marchés Publics (BOAMP / DECP / MEF) avec filtres (type marché, procédure, département…).",
-      "Veille Procédures collectives (BODACC).",
-      "SIRETAGE : enrichissement SIREN/SIRET, détection de doublons, import XML, BatiScop' (observatoire construction & démographie).",
-      "Assistant documentaire (GED) : indexation de PDF et recherche sémantique, études de sol autour d'un point GPS.",
-      "Journal de connexions, objectifs par agence, mapping métiers, admin.",
-    ]],
-    ['✦ NOVA — Assistant IA', [
-      "Chat connecté aux données du CRM (clients, contacts, devis, commandes, factures, opportunités, tâches, CR).",
-      "Recherche tolérante de sociétés et contacts ; point complet (360°) d'un client.",
-      "Boutons rapides Opportunités : Prioriser, Risques, Atterrissage, Performance, Relance, Quoi faire ?",
-      "Boutons rapides Clients : Fiche société, Dormants, Top clients, Impayés, Prospects, Rechercher, Nouveau CR, Veille marché, Fiche entreprise, Recherche web, Veille construction, Prospects (activité).",
-      "Actions exécutables (avec confirmation) : créer une tâche, créer une opportunité, préparer un email de relance, créer un CR — l'ordre opportunité → CR → tâche est respecté.",
-      "Sources externes intégrées : recherche web (Tavily), fiche & santé financière d'entreprise, prospection par code NAF, veille marchés publics BOAMP (travaux), veille construction de logements (Sitadel), taux directeur BCE.",
-      "Connaît le groupe NOVAM (entités, codes agences, métiers, secteurs) pour des propositions et ventes croisées pertinentes.",
-      "Fenêtre déplaçable et redimensionnable, dictée et lecture vocales, bouton « Nouvelle conversation ».",
-    ]],
-  ];
-  const procs = [
-    ['Créer une société (client / prospect)', [
-      "Menu « Clients/Prospects » → bouton « + Nouveau client/prospect ».",
-      "Recherchez l'entreprise par nom ou SIRET (SIRENE) pour pré-remplir automatiquement, ou saisissez manuellement.",
-      "Vérifiez/complétez les coordonnées, le commercial et la catégorie ABC si besoin.",
-      "Cliquez « Créer le client/prospect » : la fiche s'ouvre.",
-    ]],
-    ['Créer un contact', [
+// ═══ MODE D'EMPLOI — modèle structuré par partie du CRM (clé + pages liées pour l'aide contextuelle) ═══
+const MODE_EMPLOI = [
+  { key:'dashboard', pages:['dashboard'], icon:'🏠', title:'Tableau de bord', items:[
+    "Vue d'ensemble de votre activité : KPIs (Devis en cours / émis, Taux de conversion, Panier moyen, Devis perdus, CA commandé, CA facturé, Factures en retard), avec tendances vs mois précédent.",
+    "En haut : filtre de période (Du / Au) et filtre par société. Dans la barre du haut : bascule « Mes données / Toutes les données ».",
+    "Accordéon « ✅ Mes tâches à faire » (replié par défaut, avec compteur) : regroupe vos tâches à faire/en cours ET vos sollicitations non finalisées ; boutons « Toutes les tâches » et « Toutes les sollicitations ».",
+    "« Avancement des objectifs par agence », graphiques (CA facturé sur 12 mois, CA par agence), répartition Devis / Factures par statut.",
+    "Listes (accordéons) : Top 100 clients par CA facturé, Nouveaux clients, Clients dormants.",
+  ], astuces:[
+    "Les compteurs du menu latéral (Clients, Devis, Tâches, Sollicitations…) reflètent le volume en temps réel.",
+  ]},
+  { key:'clients', pages:['clients','client-detail'], icon:'👥', title:'Clients / Prospects', items:[
+    "Recherche pertinente : correspondance contiguë (« VM » ne ramène que les vraies sociétés « VM… »), classée par pertinence (exact/préfixe d'abord) et sièges avant établissements secondaires ; repli tolérant aux fautes/ponctuation si aucun résultat.",
+    "Filtre par lettre + accordéon « Filtres & Infos Entreprise » : département, commercial Novam/GPH, statut, synchro Akuiteo, catégorie A/B/C (par rôle), comptes clés ++, catégorie/sous-catégorie/secteur/type/groupe/origine, SIRET présent/absent, siège/établissement, réseau pro, masquer radiées. Les listes d'options sont mises en cache (affichage quasi instantané).",
+    "Fiche société — blocs : Informations légales · Commerce (commerciaux Novam/GPH, Importance du compte A/B/C par agence, réseaux pro, accordéon Tarification GPH) · Infos Entreprise · Adresses (site / facturation) & Coordonnées · Habitudes · Établissements liés · Objectifs annuels · Opportunités · Tâches & Sollicitations · Profil marchés · Concurrents · Contacts · Comptes-rendus.",
+    "« Mettre à jour (SIRET) » : complète les informations légales depuis SIRENE (raison sociale, APE, forme juridique, TVA, adresse, siège/établissement, état INSEE / radiation).",
+    "« 📊 Analyser le compte » : CA par devis/commandes/factures, par rôle (client / apporteur / architecte / gros-œuvre), par établissement, graphiques et export PDF.",
+    "« 🔎 Recherche Réalisations » : marchés publics gagnés (DECP) et/ou recherche web IA des chantiers (couvre le privé). Le coût en tokens et le bilan carbone s'affichent pour la recherche IA.",
+    "Profil marchés (sollicitations) : mandataire, typologies / sous-typologies, départements, compétences BET, fourchette TCE ; pré-remplissage possible depuis les DECP récupérées.",
+    "Détection de doublons : une bannière propose de Fusionner ou de marquer « Pas un doublon » (les deux protégés par le mot de passe admin).",
+    "⬆ Synchroniser : envoie la fiche vers Akuiteo (et écrit les commerciaux Novam/GPH dans les données personnalisées du site). Le Code SITE (SCLI…) est récupéré automatiquement.",
+  ], procedures:[
+    { t:'Créer un client / prospect', steps:[
+      "Menu « Clients/Prospects » → « + Nouveau client/prospect ».",
+      "Remplir automatiquement les infos légales : recherchez l'entreprise par nom (SIRENE) et cliquez un résultat, OU collez un SIRET (remplissage auto), OU bouton « 🏛️ Remplir (SIRENE) » dans le bloc Informations légales.",
+      "Pour un particulier : cochez « Particulier » (bloc Infos Entreprise) → pré-remplit Catégorie/Sous-catégorie = Particulier, Cat. prof. < 1 000 000, Secteur Privé, Type Personne Physique.",
+      "Vérifiez commercial, catégorie, réseaux pro ; cliquez « Créer le client/prospect ».",
+    ]},
+  ], astuces:[
+    "À la création, TVA intracom. et état INSEE sont désormais remplis et enregistrés depuis SIRENE.",
+  ]},
+  { key:'contacts', pages:['contacts','contact-detail'], icon:'📇', title:'Contacts', items:[
+    "Liste avec colonnes Commercial Novam / GPH, filtres et recherche tolérante ; affichage « NOM Prénom » partout.",
+    "Création/édition rattachée à une société (civilité, NOM, prénom, fonction, service, téléphones, emails).",
+  ], procedures:[
+    { t:'Créer un contact', steps:[
       "Depuis la fiche société (recommandé) : section Contacts → « + Contact » ; ou via le menu « Contacts ».",
-      "Saisissez civilité, NOM, prénom, fonction, service, téléphones et emails.",
-      "Enregistrez : le contact est rattaché à la société (affiché « NOM Prénom »).",
-    ]],
-    ['Créer un concurrent', [
-      "Menu « Concurrence » → bouton « + Nouveau concurrent » (possibilité d'import depuis SIRENE).",
-      "Renseignez le nom et les informations connues.",
-      "Enregistrez : le concurrent apparaît dans la liste (fiche d'analyse disponible).",
-    ]],
-    ['Créer une opportunité', [
+      "Saisissez civilité, NOM, prénom, fonction, service, téléphones, emails ; enregistrez.",
+    ]},
+  ]},
+  { key:'opportunites', pages:['opportunites','opportunite-detail','opportunite-analyse'], icon:'🎯', title:'Opportunités', items:[
+    "Synchro depuis Akuiteo ; création/modification renvoyées vers Akuiteo.",
+    "Vues Pipeline (Kanban par stade) et Liste ; filtres Portefeuille, Statut, Responsable, dates de signature ; Typologie / Sous-typologie.",
+    "Fiche : client, contact, établissement, portefeuille, stade, type d'origine, responsables, montant, montant des travaux, probabilité, dates ; tâches et CR liés.",
+    "Agences et honoraires : décomposition par agence ; pour chaque ligne un Stade et un Statut (Gagné/Perdu). Statut global déduit : ≥1 Gagné → Gagnée ; toutes Perdu → Perdue (propagé à Akuiteo avec confirmation).",
+    "Actions : Modifier, Gagnée / Perdue, Créer une tâche, Créer un CR (pré-remplis), et « 🎯 Clients à solliciter » (propose des clients selon leur profil marchés : typologie, département, TCE, mandataire).",
+    "« 📊 Analyser » : KPIs (pipeline, pondéré, taux de réussite), alertes actionnables (signatures dépassées, à signer < 30 j, sans date/responsable/contact, fort enjeu, stratégiques), graphiques ; filtres Année/Responsable/Portefeuille et export PDF.",
+  ], procedures:[
+    { t:'Créer une opportunité', steps:[
       "Menu « Opportunités » → « + Nouvelle opportunité » (ou depuis une fiche client).",
-      "Choisissez le client (créez-le directement s'il n'existe pas), puis le Portefeuille, puis le Stade (filtré selon le portefeuille) et le Type d'origine.",
-      "Complétez contact, établissement, responsables, montant / montant des travaux / probabilité, dates et description.",
-      "Cliquez « Enregistrer et envoyer à Akuiteo » : l'opportunité est créée dans Akuiteo et sa fiche s'ouvre.",
-    ]],
-    ['Créer un compte-rendu (CR)', [
-      "Menu « Comptes-rendus » → nouveau CR (ou depuis une opportunité : bouton « Créer un CR »).",
-      "Renseignez titre, type, date, rédacteur, société(s) et contacts ; liez l'affaire et/ou l'opportunité si besoin.",
-      "Rédigez le contenu (outils IA : Préparer RDV, Reformuler, Synthèse, Compléter) et ajoutez des pièces jointes.",
-      "Enregistrez, puis diffusez par email aux destinataires si nécessaire.",
-    ]],
-    ['Créer une tâche', [
-      "Menu « Tâches » → « + Nouvelle tâche » (ou depuis une opportunité : bouton « Créer une tâche »).",
-      "Saisissez titre, description, échéance et priorité ; assignez à un collaborateur.",
-      "Liez à un client / affaire / opportunité (sélectionner une opportunité renseigne automatiquement le client).",
-      "Enregistrez : une tâche Microsoft To Do + un email de notification sont créés chez l'assigné. Un rappel email part à l'échéance si non terminée.",
-    ]],
-    ['Créer une campagne', [
-      "Menu « Campagnes » → « + Nouvelle campagne ».",
-      "Nommez la campagne et sélectionnez les cibles (clients / contacts) à l'aide des filtres.",
-      "Enregistrez, puis suivez les envois et retombées.",
-    ]],
-  ];
+      "Choisissez le client (créez-le directement s'il n'existe pas), le Portefeuille, le Stade (filtré selon le portefeuille) et le Type d'origine.",
+      "Complétez contact, établissement, responsables, montant / montant des travaux / probabilité, dates, typologie et description.",
+      "« Enregistrer et envoyer à Akuiteo » : l'opportunité est créée dans Akuiteo et sa fiche s'ouvre.",
+    ]},
+  ]},
+  { key:'sollicitations', pages:['sollicitations'], icon:'🤝', title:'Sollicitations', items:[
+    "Relient des comptes clients/prospects à une opportunité, avec suivi de statut : À solliciter → Sollicité → Intéressé → Converti (ou Sans suite).",
+    "Assignation (défaut = responsable de l'opportunité), date « À faire avant », génération d'un email, création d'une tâche Microsoft To Do + rappel automatique.",
+    "Filtres (statut, « Les miennes »), recherche. Création depuis une opportunité (« Solliciter un compte ») ou une fiche client.",
+  ]},
+  { key:'taches', pages:['taches','tache-edit'], icon:'✅', title:'Tâches commerciales', items:[
+    "Vues Liste et Pipeline (glisser-déposer entre À faire / En cours / Terminée / Annulée) ; case « Terminé ? » ; échéance en date.",
+    "Lien vers client, affaire ET opportunité (possible sans client : la sélection renseigne le client).",
+    "À l'enregistrement : tâche Microsoft To Do + email de notification chez l'assigné. Rappel email automatique chaque matin pour les tâches échues non terminées.",
+  ], procedures:[
+    { t:'Créer une tâche', steps:[
+      "Menu « Tâches » → « + Nouvelle tâche » (ou depuis une opportunité : « Créer une tâche »).",
+      "Titre, description, échéance, priorité ; assignez à un collaborateur ; liez client / affaire / opportunité ; enregistrez.",
+    ]},
+  ]},
+  { key:'cr', pages:['cr'], icon:'📝', title:'Comptes-rendus (CR)', items:[
+    "Éditeur riche (gras, couleurs, surlignage, listes), pièces jointes (compressées), dictée vocale.",
+    "Liaison à une ou plusieurs sociétés, contacts, une affaire et une opportunité.",
+    "Outils IA : Préparer RDV, Reformuler, Synthèse, Compléter.",
+    "Diffusion par email depuis votre boîte Microsoft (objet préfixé « Compte-Rendu CRM : », message complémentaire pré-rempli).",
+  ], procedures:[
+    { t:'Créer un compte-rendu', steps:[
+      "Menu « Comptes-rendus » → nouveau CR (ou depuis une opportunité : « Créer un CR »).",
+      "Titre, type, date, rédacteur, société(s), contacts ; liez affaire et/ou opportunité.",
+      "Rédigez (outils IA) + pièces jointes ; enregistrez ; diffusez par email si besoin.",
+    ]},
+  ]},
+  { key:'transactions', pages:['marches','marche-detail','affaires','affaire-detail','devis','commandes','factures'], icon:'📂', title:'Marchés / Affaires / Devis / Commandes / Factures', items:[
+    "Données reprises d'Akuiteo : marchés (typologie/sous-typologie héritée par les affaires et documents), affaires (avec CR liés), devis, commandes (planification/DLR), factures (impayés, retards).",
+    "Filtres par société, date, commercial ; badges de relance des devis ; géolocalisation des marchés (point sur carte).",
+  ]},
+  { key:'concurrence', pages:['concurrence'], icon:'⚔️', title:'Concurrence', items:[
+    "Répertoire de concurrents (import SIRENE possible), fiche d'analyse, couleurs et métiers.",
+    "Liaison aux comptes : carte « Concurrents qui travaillent avec ce compte » sur la fiche client.",
+  ]},
+  { key:'analyse', pages:['analyse'], icon:'📊', title:'Analyse / KPI', items:[
+    "Indicateurs financiers et commerciaux, cartographie « qui travaille avec qui », filtres (dont typologie / sous-typologie), carte par département.",
+  ]},
+  { key:'decp', pages:['decp-analyse'], icon:'🏛️', title:'Marchés publics des clients (DECP)', items:[
+    "Analyse des marchés publics gagnés par vos clients (archive DECP) : KPIs et classements par client, département, CPV, acheteur, année ; filtres.",
+    "Alimenté par la synchro DECP (Admin) + un cron nocturne. Données publiques ouvertes — à vérifier avant exploitation (RGPD/CADA).",
+  ]},
+  { key:'cartes', pages:['carte','carte-affaires'], icon:'🗺️', title:'Cartes (sociétés & affaires)', items:[
+    "Carte des sociétés et carte des affaires (géolocalisation par adresse / point GPS certifié).",
+  ]},
+  { key:'veille-regar', pages:['veille-regar'], icon:'🗺️', title:'Carte des opportunités (veille terrain)', items:[
+    "Sur carte, par département et période : permis de construire (logements / sur bâti existant), DPE F/G (tertiaire / logements), copropriétés (BDNB), marchés publics travaux (BOAMP).",
+    "Calques : aléa argile (RGA) avec opacité, cadastre, études de sol GPH, fond routes/aérien, plein écran.",
+    "Tracer une « zone d'opportunité » (lotissement), afficher les opportunités du CRM ; créer un prospect ou une opportunité depuis un résultat.",
+  ]},
+  { key:'campagnes', pages:['campagnes'], icon:'📣', title:'Campagnes', items:[
+    "Ciblage d'emails : nommez la campagne, sélectionnez les cibles (clients/contacts) via les filtres, suivez les envois.",
+  ]},
+  { key:'alertes', pages:['alertes'], icon:'🔔', title:'Alertes & Relances', items:[
+    "Factures en retard, devis à relancer, clients sans contact récent, échéances… avec accès direct aux fiches concernées.",
+  ]},
+  { key:'newsletter', pages:['newsletter'], icon:'📰', title:'Infolettre hebdomadaire', items:[
+    "Génération IA : veille web récente (< 1 mois, sans doublon), agenda à venir, mention « générée par IA — à vérifier ».",
+    "Abonnement et préférences (ton, agences, sections) dans « Mon espace » ; archive des éditions consultable.",
+  ]},
+  { key:'collaborateurs', pages:['collaborateurs','collaborateurs-lucca','annuaire'], icon:'👤', title:'Collaborateurs & Annuaire', items:[
+    "Collaborateurs Akuiteo / Lucca, annuaire, absences.",
+  ]},
+  { key:'ged', pages:['ged'], icon:'📁', title:'Assistant documentaire (GED)', items:[
+    "Indexation de PDF et recherche sémantique ; études de sol autour d'un point GPS.",
+  ]},
+  { key:'nova', pages:[], icon:'✦', title:'NOVA — Assistant IA', items:[
+    "Chat connecté aux données du CRM (clients, contacts, devis/commandes/factures, opportunités, tâches, CR). Bouton ✦ en bas à droite.",
+    "Recherche tolérante de sociétés/contacts ; point complet (360°) d'un client.",
+    "Boutons rapides Opportunités (Prioriser, Risques, Atterrissage, Relance, Quoi faire ?) et Clients (Fiche société, Dormants, Top clients, Impayés, Prospects, Veille marché, Fiche entreprise, Recherche web, Veille construction…).",
+    "Actions exécutables (avec confirmation) : créer une tâche / opportunité / CR, préparer un email de relance — l'ordre opportunité → CR → tâche est respecté.",
+    "Sources externes : recherche web, fiche & santé financière d'entreprise, prospection par code NAF, veille BOAMP, veille construction (Sitadel), taux BCE. Fenêtre déplaçable/redimensionnable, dictée et lecture vocales.",
+  ]},
+  { key:'objectifs', pages:['objectifs'], icon:'🎯', title:'Objectifs', items:[
+    "Objectifs annuels par agence et par métier (SOL/EXE) ; suivi de l'avancement (visible aussi sur le tableau de bord).",
+  ]},
+  { key:'admin', pages:['admin'], icon:'⚙️', title:'Paramétrage / Admin', items:[
+    "Accès & groupes, mot de passe de suppression (protège fusion/suppression), journal de connexions.",
+    "Référentiels : objectifs par agence, mapping Type de mission → métier, chemins de dossiers, typologies / sous-typologies, compétences BET.",
+    "Outils de données en masse : « Rattraper les Codes SITE » ; « Commerciaux Novam/GPH → site Akuiteo » ; « Informations légales (SIRENE) en masse » (cases par champ, complétion des vides par défaut, plafond de test, ~2 req/s) ; « Marchés publics DECP » (archive + pré-remplit les profils marchés) ; « Recherche web IA en masse » (payant, plafonné).",
+  ]},
+  { key:'veille-outils', pages:['endev','enrich-siren','duplicates','import-xml','marches-publics','procedures-coll','batiscope','pipeline'], icon:'🔧', title:'Veille & Outils (En Dev’)', items:[
+    "SIRETAGE (enrichissement SIREN/SIRET), détection de doublons, import XML (CODIAL legacy), BatiScop’ (observatoire construction & démographie).",
+    "Veille marchés publics (BOAMP/DECP) et procédures collectives (BODACC).",
+  ]},
+];
+function _meRenderSection(s, withAnchor) {
+  let h = `<h2${withAnchor ? ' id="me-' + s.key + '"' : ''} style="font-size:16px;margin:18px 0 6px;color:#4f46e5;border-bottom:2px solid #e0ddd5;padding-bottom:4px">${s.icon} ${s.title}</h2>`;
+  if (s.items && s.items.length) h += `<ul style="margin:0 0 6px 18px;padding:0;font-size:13px;line-height:1.6">${s.items.map(x => '<li style="margin:2px 0">' + x + '</li>').join('')}</ul>`;
+  if (s.procedures && s.procedures.length) h += s.procedures.map(p => `<div style="margin:6px 0 6px 2px"><div style="font-weight:700;font-size:13px;color:#0e9f6e">▸ ${p.t}</div><ol style="margin:2px 0 4px 22px;padding:0;font-size:13px;line-height:1.55">${p.steps.map(x => '<li style="margin:2px 0">' + x + '</li>').join('')}</ol></div>`).join('');
+  if (s.astuces && s.astuces.length) h += `<div style="background:#fff7ed;border-left:3px solid #f59e0b;border-radius:4px;padding:6px 10px;margin:6px 0;font-size:12px;line-height:1.5"><b>💡 Astuce :</b><ul style="margin:2px 0 0 16px;padding:0">${s.astuces.map(x => '<li>' + x + '</li>').join('')}</ul></div>`;
+  return h;
+}
+// Aide contextuelle : ouvre la ou les sections du mode d'emploi correspondant à la page courante.
+function openHelp() {
+  const page = currentPage;
+  const secs = MODE_EMPLOI.filter(s => (s.pages || []).includes(page));
+  const pageLabel = (document.getElementById('pageTitle') || {}).textContent || '';
+  const inner = secs.length
+    ? secs.map(s => _meRenderSection(s, false)).join('')
+    : '<p style="font-size:13px;color:var(--t3)">Pas d\'aide spécifique pour cette page. Ouvrez le mode d\'emploi complet ci-dessous.</p>';
+  _nlOverlay(`
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div style="font-size:16px;font-weight:700">❓ Aide${pageLabel ? ' — ' + cmdEsc(pageLabel) : ''}</div>
+      <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
+    </div>
+    <div style="padding:8px 20px 16px;max-height:70vh;overflow:auto;color:#333">${inner}
+      <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+        <button class="btn btn-primary" onclick="this.closest('.nl-overlay').remove();go('mode-emploi')" style="font-size:12px">📖 Ouvrir le mode d'emploi complet</button>
+      </div>
+    </div>`, 780);
+}
+function _modeEmploiContenu() {
+  const secs = MODE_EMPLOI;
   const usages = [
     ['Préparer un rendez-vous client (avec NOVA)', [
       "Ouvrez NOVA (bouton ✦ en bas à droite) et demandez « point complet sur [société] » (ou bouton « 📇 Fiche société »).",
@@ -4708,22 +4775,16 @@ function _modeEmploiContenu() {
       "L'email part depuis votre boîte Microsoft connectée ; il apparaît dans vos Éléments envoyés.",
     ]],
   ];
-  const id = i => 'me-sec-' + i;
-  const pid = i => 'me-proc-' + i;
   const uid = i => 'me-use-' + i;
   const toc = `<div style="background:#f7f6f2;border:1px solid #e0ddd5;border-radius:8px;padding:10px 14px;margin-bottom:16px">
-    <div style="font-weight:700;font-size:13px;margin-bottom:6px">📑 Sommaire</div>
-    <ol style="margin:0 0 6px 18px;padding:0;font-size:13px;line-height:1.7">${secs.map((s, i) => `<li><a href="#${id(i)}" style="color:#4f46e5;text-decoration:none">${s[0]}</a></li>`).join('')}</ol>
-    <div style="font-weight:700;font-size:13px;margin:8px 0 4px">📝 Procédures pas à pas</div>
-    <ol style="margin:0 0 6px 18px;padding:0;font-size:13px;line-height:1.7">${procs.map((p, i) => `<li><a href="#${pid(i)}" style="color:#0e9f6e;text-decoration:none">${p[0]}</a></li>`).join('')}</ol>
+    <div style="font-weight:700;font-size:13px;margin-bottom:6px">📑 Sommaire — par partie du CRM</div>
+    <ol style="margin:0 0 6px 18px;padding:0;font-size:13px;line-height:1.7">${secs.map(s => `<li><a href="#me-${s.key}" style="color:#4f46e5;text-decoration:none">${s.icon} ${s.title}</a></li>`).join('')}</ol>
     <div style="font-weight:700;font-size:13px;margin:8px 0 4px">💡 Cas d'usage transverses</div>
     <ol style="margin:0 0 0 18px;padding:0;font-size:13px;line-height:1.7">${usages.map((u, i) => `<li><a href="#${uid(i)}" style="color:#b45309;text-decoration:none">${u[0]}</a></li>`).join('')}</ol></div>`;
-  const body = secs.map((s, i) => `<h2 id="${id(i)}" style="font-size:16px;margin:18px 0 6px;color:#4f46e5;border-bottom:2px solid #e0ddd5;padding-bottom:4px">${s[0]}</h2><ul style="margin:0 0 4px 18px;padding:0;font-size:13px;line-height:1.6">${s[1].map(x => '<li>' + x + '</li>').join('')}</ul>`).join('');
-  const procsBody = `<h2 style="font-size:18px;margin:24px 0 8px;color:#0e9f6e;border-bottom:2px solid #bbf7d0;padding-bottom:4px">📝 Procédures pas à pas</h2>`
-    + procs.map((p, i) => `<h3 id="${pid(i)}" style="font-size:14px;margin:14px 0 4px;color:#0e9f6e">${p[0]}</h3><ol style="margin:0 0 4px 20px;padding:0;font-size:13px;line-height:1.6">${p[1].map(x => '<li style="margin:2px 0">' + x + '</li>').join('')}</ol>`).join('');
+  const body = secs.map(s => _meRenderSection(s, true)).join('');
   const usagesBody = `<h2 style="font-size:18px;margin:24px 0 8px;color:#b45309;border-bottom:2px solid #fed7aa;padding-bottom:4px">💡 Cas d'usage transverses</h2>`
     + usages.map((u, i) => `<h3 id="${uid(i)}" style="font-size:14px;margin:14px 0 4px;color:#b45309">${u[0]}</h3><ol style="margin:0 0 4px 20px;padding:0;font-size:13px;line-height:1.6">${u[1].map(x => '<li style="margin:2px 0">' + x + '</li>').join('')}</ol>`).join('');
-  return toc + body + procsBody + usagesBody + `<p style="font-size:11px;color:#888;margin-top:18px">Document généré automatiquement depuis le CRM — ${new Date().toLocaleDateString('fr-FR')}.</p>`;
+  return toc + body + usagesBody + `<p style="font-size:11px;color:#888;margin-top:18px">Document généré automatiquement depuis le CRM — ${new Date().toLocaleDateString('fr-FR')}.</p>`;
 }
 function renderModeEmploi() {
   return `
