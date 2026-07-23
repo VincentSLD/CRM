@@ -26616,7 +26616,7 @@ function selectTone(el) { el.parentElement.querySelectorAll('.chip').forEach(c=>
 function toggleNotifPanel() {
   const p = document.getElementById('notifPanel');
   p.classList.toggle('show');
-  if(p.classList.contains('show')) renderNotifs();
+  if(p.classList.contains('show')) { renderNotifs(); _refreshNotifClientData(); }
 }
 
 // ═══ NOTIFICATIONS — dérivées des données du commercial connecté (tâches, sollicitations, devis, factures, opportunités) ═══
@@ -26624,10 +26624,26 @@ let _notifsCache = [], _notifLoadTried = false;
 function _notifReadKey() { return 'notifRead_' + ((currentCommercial && currentCommercial.email) || 'anon'); }
 function _notifReadSet() { try { return new Set(JSON.parse(localStorage.getItem(_notifReadKey()) || '[]')); } catch (e) { return new Set(); } }
 function _notifSaveRead(set) { try { localStorage.setItem(_notifReadKey(), JSON.stringify([...set].slice(-500))); } catch (e) {} }
+// Données clients pour les notifications (nécessitent des requêtes filtrées sur MES clients) — mises en cache
+let _notifClientCache = null;
+async function _refreshNotifClientData() {
+  const mgr = currentCommercial && currentCommercial.akuiteo_manager_id;
+  if (!mgr) { _notifClientCache = { dormant: 0, newClients: [], risks: [] }; return; }
+  const cache = { dormant: 0, newClients: [], risks: [] };
+  const cutoff14 = new Date(Date.now() - 14 * 864e5).toISOString();
+  try { const { count } = await sb.from('clients').select('id', { count: 'exact', head: true }).eq('account_manager_id', mgr).eq('status', 'dormant'); cache.dormant = count || 0; } catch (e) {}
+  try { const { data } = await sb.from('clients').select('id,name,created_at').eq('account_manager_id', mgr).gte('created_at', cutoff14).order('created_at', { ascending: false }).limit(6); cache.newClients = data || []; } catch (e) {}
+  try { const { data } = await sb.from('clients').select('id,name,procedure_collective,procedure_nature,etat_insee').eq('account_manager_id', mgr).or('procedure_collective.not.is.null,etat_insee.eq.C').limit(10); cache.risks = data || []; } catch (e) {}
+  _notifClientCache = cache;
+  updateNotifBadge();
+  const p = document.getElementById('notifPanel'); if (p && p.classList.contains('show')) renderNotifs();
+}
+function notifGoDormants() { try { clientsFilterStatut = ['dormant']; go('clients'); loadClientsPage(0, '', ''); } catch (e) { go('clients'); } }
 function buildNotifications() {
   const out = [];
   const myEmail = (currentCommercial && currentCommercial.email) || '';
   const todayISO = new Date().toISOString().slice(0, 10);
+  const d14 = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
   // 1) Mes tâches en retard / à échéance aujourd'hui
   (_taches || []).forEach(t => {
     if (!(t.statut === 'a_faire' || t.statut === 'en_cours')) return;
@@ -26668,6 +26684,37 @@ function buildNotifications() {
           action: "oppDetail('" + o.akuiteo_id + "')", time: fmtDateFR(o.date_signature), sort: o.date_signature });
       });
   }
+  // 6) Clients dormants / nouveaux clients attribués / procédures collectives & radiations (depuis _notifClientCache)
+  const cc = _notifClientCache || { dormant: 0, newClients: [], risks: [] };
+  if (cc.dormant > 0) out.push({ id: 'dormants-' + cc.dormant, type: 'info', text: '😴 ' + cc.dormant + ' de vos clients sont dormants (à relancer)', action: 'notifGoDormants()', time: '', sort: 'z9' });
+  (cc.newClients || []).forEach(c => out.push({ id: 'newclient-' + c.id, type: 'success', text: '🆕 Nouveau client qui vous est attribué : ' + cmdEsc(c.name || ''), action: "showClient('" + c.id + "')", time: c.created_at ? fmtDateFR(String(c.created_at).slice(0, 10)) : '', sort: 'n' + (c.created_at || '') }));
+  (cc.risks || []).forEach(c => {
+    const radiee = c.etat_insee === 'C';
+    out.push({ id: 'risk-' + c.id + '-' + (radiee ? 'rad' : (c.procedure_collective || 'proc')), type: 'danger',
+      text: (radiee ? '❌ Client radié : ' : '⚠️ Procédure collective : ') + cmdEsc(c.name || '') + (!radiee && (c.procedure_nature || c.procedure_collective) ? ' — ' + cmdEsc(c.procedure_nature || c.procedure_collective) : ''),
+      action: "showClient('" + c.id + "')", time: '', sort: 'a0' });
+  });
+  // 7) Tâches / sollicitations récemment ASSIGNÉES à moi par quelqu'un d'autre (hors échues, déjà couvertes plus haut)
+  (_taches || []).forEach(t => {
+    if (myEmail && t.assigne_email !== myEmail) return;
+    if (!t.createur_email || t.createur_email === myEmail) return;
+    if (!(t.statut === 'a_faire' || t.statut === 'en_cours')) return;
+    const created = t.created_at ? String(t.created_at).slice(0, 10) : null;
+    if (!created || created < d14) return;
+    const ech = t.echeance ? String(t.echeance).slice(0, 10) : null;
+    if (ech && ech <= todayISO) return; // déjà notifiée comme « à faire / en retard »
+    out.push({ id: 'assign-task-' + t.id, type: 'info', text: '📌 Tâche assignée : « ' + cmdEsc(t.titre || 'sans titre') + ' »' + (t.createur_nom ? ' (par ' + cmdEsc(fmtCommercialName(t.createur_nom)) + ')' : ''), action: 'tacheModalOpen(' + t.id + ')', time: fmtDateFR(created), sort: 'm' + created });
+  });
+  (_sollic || []).forEach(s => {
+    if (typeof _sollicTerminal === 'function' && _sollicTerminal(s.statut)) return;
+    if (myEmail && s.assigne_email !== myEmail) return;
+    if (!s.createur_email || s.createur_email === myEmail) return;
+    const created = s.created_at ? String(s.created_at).slice(0, 10) : null;
+    if (!created || created < d14) return;
+    const dr = s.date_relance ? String(s.date_relance).slice(0, 10) : null;
+    if (dr && dr <= todayISO) return; // déjà notifiée
+    out.push({ id: 'assign-sollic-' + s.id, type: 'info', text: '📌 Sollicitation assignée : ' + cmdEsc(s.client_name || '') + (s.opportunite_nom ? ' — 🎯 ' + cmdEsc(s.opportunite_nom) : ''), action: 'sollicModalOpen(' + s.id + ')', time: fmtDateFR(created), sort: 'm' + created });
+  });
   const rank = { danger: 0, warn: 1, success: 2, info: 3 };
   out.sort((a, b) => (rank[a.type] - rank[b.type]) || String(a.sort || '').localeCompare(String(b.sort || '')));
   return out;
@@ -26700,6 +26747,7 @@ function updateNotifBadge() {
     if (typeof _tachesLoaded !== 'undefined' && !_tachesLoaded && typeof loadTaches === 'function') loaders.push(loadTaches().catch(() => {}));
     if (typeof _sollicLoaded !== 'undefined' && !_sollicLoaded && typeof loadSollicitations === 'function') loaders.push(loadSollicitations().catch(() => {}));
     if (typeof _oppsLoaded !== 'undefined' && !_oppsLoaded && typeof loadOpportunites === 'function') loaders.push(loadOpportunites().catch(() => {}));
+    loaders.push(_refreshNotifClientData().catch(() => {}));
     if (loaders.length) Promise.all(loaders).then(() => updateNotifBadge());
   }
   const read = _notifReadSet();
