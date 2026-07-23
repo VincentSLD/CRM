@@ -3404,6 +3404,17 @@ function getAllSocietes() {
   [...(DB.devis||[]), ...(DB.commandes||[]), ...(DB.factures||[]), ...(DB.marches||[]), ...(DB.affaires||[])].forEach(d => { if (d.societe) s.add(d.societe); });
   return [...s].sort();
 }
+// ═══ Agences par défaut (préférence par utilisateur, éditable dans Mon espace) ═══
+function _defaultAgencesKey() { return 'defaultAgences_' + ((currentCommercial && currentCommercial.email) || 'anon'); }
+function _loadDefaultAgences() { try { const r = localStorage.getItem(_defaultAgencesKey()); return r ? JSON.parse(r) : null; } catch (e) { return null; } }
+function _saveDefaultAgences(arr) { try { if (arr && arr.length) localStorage.setItem(_defaultAgencesKey(), JSON.stringify(arr)); else localStorage.removeItem(_defaultAgencesKey()); } catch (e) {} }
+// Applique la présélection d'agences : le sous-ensemble enregistré (si présent), sinon toutes.
+function _applyDefaultAgences() {
+  const allSoc = getAllSocietes();
+  const def = _loadDefaultAgences();
+  const sel = (def && def.length) ? allSoc.filter(s => def.includes(s)) : allSoc;
+  selectedSocietes = new Set(sel.length ? sel : allSoc);
+}
 
 function filterBySociete(items) {
   if (selectedSocietes.size === 0) return items; // Rien coché = pas de filtre, tout afficher
@@ -3728,7 +3739,7 @@ async function loadDB() {
     DB.commerciaux = coAll;
 
     DB.alerts = generateAlerts();
-    selectedSocietes = new Set(getAllSocietes());
+    _applyDefaultAgences();
     updateNavBadges();
     console.log(`[loadDB] Phase 1 prête (${DB.clients.length} clients / ${clientsTotalCount} total)`);
 
@@ -3778,8 +3789,8 @@ async function loadDB() {
       _navContactsCount = contactsCount;
       _navConcurrentsCount = concurrentsCount;
       _navCampagnesCount = campagnesCount;
-      // Mettre à jour sociétés et badges avec données complètes
-      selectedSocietes = new Set(getAllSocietes());
+      // Mettre à jour sociétés et badges avec données complètes (en respectant les agences par défaut)
+      _applyDefaultAgences();
       updateNavBadges();
       // Regénérer les alertes avec les CR disponibles (alerte "clients sans CR")
       DB.alerts = generateAlerts();
@@ -8938,6 +8949,15 @@ async function monEspaceOpen() {
       <div style="display:grid;grid-template-columns:1fr;gap:4px">
         ${NL_WEB_RUBRIQUES.map(([k, lbl]) => `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" class="nl-sec" data-k="${k}" ${sec[k] !== false ? 'checked' : ''} style="accent-color:#7c3aed"> ${cmdEsc(lbl)}</label>`).join('')}
       </div>
+      <div style="font-size:12px;font-weight:700;margin:18px 0 6px">🏢 Mes agences par défaut</div>
+      <div style="font-size:11px;color:var(--t3);margin-bottom:6px">Cochez les agences qui vous intéressent : elles seront <strong>présélectionnées au chargement du CRM</strong> (filtre « Agences »). Aucune cochée = toutes les agences.</div>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <button class="btn" onclick="_meAgencesAll(true)" style="font-size:11px;padding:3px 8px">Tout cocher</button>
+        <button class="btn" onclick="_meAgencesAll(false)" style="font-size:11px;padding:3px 8px">Tout décocher</button>
+      </div>
+      <div id="me-agences" style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+        ${(() => { const all = getAllSocietes(); if (!all.length) return '<div style="font-size:11px;color:var(--t3)">Aucune agence disponible pour l\'instant (données en cours de chargement).</div>'; const def = _loadDefaultAgences(); return all.map(a => { const checked = def ? def.includes(a) : true; return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" class="me-agence" value="' + cmdEsc(a) + '" ' + (checked ? 'checked' : '') + ' onchange="_meAgencesSave()" style="accent-color:#4f8ff7"> ' + cmdEsc(a) + '</label>'; }).join(''); })()}
+      </div>
     </div>
     <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between">
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -8947,6 +8967,18 @@ async function monEspaceOpen() {
       <button class="btn btn-primary" onclick="nlSavePrefs()">💾 Enregistrer</button>
     </div>`;
   _nlOverlay(html, 560);
+}
+// Enregistre les agences par défaut (préférence utilisateur) et l'applique. Rien coché OU tout coché = toutes (pas de filtre).
+function _meAgencesSave() {
+  const all = getAllSocietes();
+  const checked = [...document.querySelectorAll('.me-agence:checked')].map(c => c.value);
+  _saveDefaultAgences((checked.length === 0 || checked.length === all.length) ? null : checked);
+  _applyDefaultAgences();
+  updateNavBadges();
+}
+function _meAgencesAll(on) {
+  document.querySelectorAll('.me-agence').forEach(c => c.checked = on);
+  _meAgencesSave();
 }
 async function nlSavePrefs() {
   const uid = _nlUserId(); if (!uid) { toast('Profil non identifié', 'error'); return; }
