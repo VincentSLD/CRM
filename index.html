@@ -14655,7 +14655,9 @@ function _mmCertifLabel(certified) {
 function _mmUpdateCertifUi() {
   const cb = document.getElementById('mm-certif'); if (cb) cb.checked = _mmCertifie;
   const hasPt = (_mmLat != null && _mmLng != null);
-  // Indicateur du bloc « Adresse du site » (rafraîchi en direct à la coche)
+  // Bloc « Adresse du site » : rafraîchir Latitude / Longitude / Position GPS en direct (déplacement du point, coche, effacement)
+  const la = document.getElementById('mm-addr-lat'); if (la) la.textContent = _mmLat != null ? Number(_mmLat).toFixed(6) : '—';
+  const lo = document.getElementById('mm-addr-lng'); if (lo) lo.textContent = _mmLng != null ? Number(_mmLng).toFixed(6) : '—';
   const a = document.getElementById('mm-certif-addr'); if (a) a.innerHTML = hasPt ? _mmCertifLabel(_mmCertifie) : '—';
   const h = document.getElementById('mm-certif-hint'); if (!h) return;
   if (!hasPt) { h.innerHTML = ''; return; }
@@ -14781,7 +14783,7 @@ function renderMarcheDetail() {
       detailRow('Montant TTC', fmt(m.montant_ttc)),
       detailRow('Devise', m.devise),
     ])}
-    ${(() => { const addr = affaires.find(a => a.adresse || a.ville || a.code_postal) || {}; const hasGps = (m.lat != null && m.lng != null); if (!addr.adresse && !addr.ville && !addr.code_postal && !hasGps) return ''; return detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region), detailRow('Latitude', m.lat != null ? Number(m.lat).toFixed(6) : '—'), detailRow('Longitude', m.lng != null ? Number(m.lng).toFixed(6) : '—'), detailRow('Position GPS', '<span id="mm-certif-addr">' + (hasGps ? _mmCertifLabel(!!m.gps_certifie) : '—') + '</span>')]); })()}
+    ${(() => { const addr = affaires.find(a => a.adresse || a.ville || a.code_postal) || {}; const hasGps = (m.lat != null && m.lng != null); if (!addr.adresse && !addr.ville && !addr.code_postal && !hasGps) return ''; return detailSection('Adresse du site', [detailRow('Adresse', addr.adresse), detailRow('Code postal', addr.code_postal), detailRow('Ville', addr.ville), detailRow('Département', addr.departement), detailRow('Région', addr.region), detailRow('Latitude', '<span id="mm-addr-lat">' + (m.lat != null ? Number(m.lat).toFixed(6) : '—') + '</span>'), detailRow('Longitude', '<span id="mm-addr-lng">' + (m.lng != null ? Number(m.lng).toFixed(6) : '—') + '</span>'), detailRow('Position GPS', '<span id="mm-certif-addr">' + (hasGps ? _mmCertifLabel(!!m.gps_certifie) : '—') + '</span>')]); })()}
   </div>
 
   <div class="card" style="margin-bottom:20px"><div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">🏷️ Typologie du marché</div>
