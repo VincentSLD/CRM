@@ -423,7 +423,7 @@ CREATE INDEX IF NOT EXISTS idx_contacts_nom_trgm
 CREATE OR REPLACE FUNCTION search_clients(q text, lim int DEFAULT 20)
 RETURNS TABLE (
   id text, name text, code text, city text, code_postal text,
-  status text, account_manager_name text, salesman_name text, siren text, score real
+  status text, account_manager_name text, salesman_name text, siren text, est_siege boolean, score real
 )
 LANGUAGE sql STABLE
 SET search_path = public, extensions, pg_catalog
@@ -434,6 +434,7 @@ AS $$
   )
   SELECT c.id::text, c.name::text, c.code::text, c.city::text, c.code_postal::text,
          c.status::text, c.account_manager_name::text, c.salesman_name::text, c.siren::text,
+         c.est_siege,
          GREATEST(
            similarity(lower(c.name), qn.ql),
            CASE

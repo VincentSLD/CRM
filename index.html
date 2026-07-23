@@ -28301,14 +28301,24 @@ async function doSearch(q) {
   let results = [];
 
   // Recherche clients côté serveur (Supabase) — dédoublonnée par id
-  const _seenCl = new Set();
-  const pushClient = c => {
-    if (!c || !c.id || _seenCl.has(c.id)) return;
-    _seenCl.add(c.id);
+  const _clById = {};
+  const _clMeta = c => {
     const badge = c.est_siege === true ? ' · Siège' : c.est_siege === false ? ' · Étab.' : '';
-    const meta = [c.code, c.sector, c.city].filter(Boolean).join(' · ') + badge;
-    const _score = _searchScore(q, c.name, c.code, c.city, c.sector, c.raison_sociale, c.raison_sociale2);
-    results.push({ type: 'Client', name: c.name, meta, action: `showClient('${c.id}')`, _score, _prio: 0 });
+    return [c.code, c.sector, c.city].filter(Boolean).join(' · ') + badge;
+  };
+  const pushClient = c => {
+    if (!c || !c.id) return;
+    const sVal = c.est_siege === true ? 2 : c.est_siege === false ? 0 : undefined; // undefined = source sans est_siege (RPC)
+    const existing = _clById[c.id];
+    if (existing) {
+      // Fiche déjà présente : enrichir est_siege si une source ultérieure (ilike) le fournit
+      if (sVal !== undefined && existing._siege === 1) { existing._siege = sVal; existing.meta = _clMeta(c); }
+      return;
+    }
+    const r = { type: 'Client', name: c.name, meta: _clMeta(c), action: `showClient('${c.id}')`,
+      _score: _searchScore(q, c.name, c.code, c.city, c.sector, c.raison_sociale, c.raison_sociale2),
+      _prio: 0, _siege: sVal === undefined ? 1 : sVal };
+    _clById[c.id] = r; results.push(r);
   };
   // 1) Recherche TOLÉRANTE par nom (RPC pg_trgm) : insensible à la ponctuation/espaces/casse (ex. « 6K » → « 6.K - SICA »)
   try { const { data } = await sb.rpc('search_clients', { q, lim: 8 }); (data || []).forEach(pushClient); } catch (e) { console.warn('search_clients', e && e.message); }
@@ -28339,8 +28349,9 @@ async function doSearch(q) {
       results.push({type:'Facture',name:f.ref,meta:`${f.client} · ${fmt(f.montant)}`,action:`go('factures')`, _score:_searchScore(q, f.ref, f.client), _prio:1});
   });
 
-  // Tri par pertinence : score décroissant (exact > préfixe > contient), puis clients avant documents, puis alpha
-  results.sort((a, b) => (b._score || 0) - (a._score || 0) || (a._prio || 0) - (b._prio || 0) || String(a.name || '').localeCompare(String(b.name || ''), 'fr'));
+  // Tri par pertinence : score décroissant (exact > préfixe > contient), puis clients avant documents,
+  // puis sièges avant établissements secondaires (à pertinence égale), puis alpha
+  results.sort((a, b) => (b._score || 0) - (a._score || 0) || (a._prio || 0) - (b._prio || 0) || (b._siege || 0) - (a._siege || 0) || String(a.name || '').localeCompare(String(b.name || ''), 'fr'));
 
   if (!results.length) { dd.innerHTML='<div class="search-result"><div class="search-result-meta">Aucun résultat</div></div>'; dd.classList.add('show'); return; }
   dd.innerHTML = results.slice(0,8).map(r => `<div class="search-result" onclick="${r.action};document.getElementById('searchDropdown').classList.remove('show');document.getElementById('globalSearch').value=''">
