@@ -13839,10 +13839,8 @@ function _mpBlockHtml() {
       <div><span style="${lbl}">Compétences</span>${msButton('mpComp', 'Compétences')}</div>
       <div><span style="${lbl}">TCE min (€)</span><input type="number" step="any" style="${fi}" value="${f.tceMin !== '' ? f.tceMin : ''}" oninput="_mpForm.tceMin=this.value" placeholder="ex. 500000"></div>
       <div><span style="${lbl}">TCE max (€)</span><input type="number" step="any" style="${fi}" value="${f.tceMax !== '' ? f.tceMax : ''}" oninput="_mpForm.tceMax=this.value" placeholder="ex. 5000000"></div>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn" onclick="mpPrefillFromDecp()" style="font-size:12px;flex:1;min-width:140px" title="Proposer départements + fourchette TCE (+ typologies) depuis les marchés publics DECP du client">✨ Pré-remplir</button>
-      <button class="btn btn-primary" onclick="saveMarcheProfil()" style="font-size:12px;flex:1;min-width:140px">💾 Enregistrer</button>
+      <div style="display:flex;align-items:flex-end"><button class="btn" onclick="mpPrefillFromDecp()" style="font-size:12px;width:100%" title="Proposer départements + fourchette TCE (+ typologies) depuis les marchés publics DECP du client">✨ Pré-remplir</button></div>
+      <div style="display:flex;align-items:flex-end"><button class="btn btn-primary" onclick="saveMarcheProfil()" style="font-size:12px;width:100%">💾 Enregistrer</button></div>
     </div>
   </div>`;
 }
