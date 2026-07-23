@@ -420,6 +420,8 @@ CREATE INDEX IF NOT EXISTS idx_contacts_nom_trgm
   ON contacts USING gin (lower(nom) gin_trgm_ops);
 
 -- Fonction de recherche tolérante de clients/prospects, classée par pertinence
+-- (DROP nécessaire : on a ajouté la colonne est_siege au retour, CREATE OR REPLACE ne peut pas changer le type de retour)
+DROP FUNCTION IF EXISTS search_clients(text, int);
 CREATE OR REPLACE FUNCTION search_clients(q text, lim int DEFAULT 20)
 RETURNS TABLE (
   id text, name text, code text, city text, code_postal text,
