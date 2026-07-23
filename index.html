@@ -8619,7 +8619,15 @@ async function oppSuggestClients(akId) {
   }
   scored.sort((a, b) => b.score - a.score || (a.c.name || '').localeCompare(b.c.name || '', 'fr'));
 
-  if (!scored.length) { if (body) body.innerHTML = '<div style="padding:16px;color:var(--t3);font-size:13px">Aucun client au profil correspondant. Renseignez le « Profil marchés » de vos clients (fiche client → Profil marchés) pour les voir proposés ici.</div>'; return; }
+  if (!scored.length) {
+    const hasCrit = !!(typo || sous || dept || tce != null);
+    let msg;
+    if (!rows.length) msg = 'Aucun de vos clients n\'a de <b>profil marchés</b> renseigné.<br>➡️ Pré-remplissez-les via <b>Admin → « Marchés publics des clients (DECP) »</b> (remplit départements + fourchette TCE pour les clients ayant des marchés publics), ou renseignez le « Profil marchés » sur une fiche client.';
+    else if (!hasCrit) msg = 'Cette <b>opportunité</b> n\'a aucun critère de rapprochement.<br>➡️ Renseignez sur l\'opportunité au moins l\'un de : <b>typologie</b>, <b>sous-typologie</b>, <b>département du chantier</b> ou <b>montant des travaux</b> — ' + rows.length + ' client(s) ont un profil et pourront alors être proposés.';
+    else msg = 'Aucun client au profil correspondant à cette opportunité (' + rows.length + ' client(s) avec un profil examinés).<br>➡️ Élargissez le profil marchés de vos clients (départements, typologies, fourchette TCE) pour couvrir les critères de cette opportunité.';
+    if (body) body.innerHTML = '<div style="padding:16px;color:var(--t3);font-size:13px;line-height:1.6">' + msg + '</div>';
+    return;
+  }
   const badge = (on, txt, col) => on ? `<span style="background:${col}22;color:${col};border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-right:4px">${txt}</span>` : '';
   const oppNomEsc = (o.nom || '').replace(/'/g, "\\'");
   if (body) body.innerHTML = `<div style="font-size:12px;color:var(--t3);margin-bottom:10px">${scored.length} client(s) correspondant(s)</div>` + scored.slice(0, 80).map(x => {
