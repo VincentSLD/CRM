@@ -2132,6 +2132,9 @@ tbody tr:last-child td { border-bottom: none; }
             </div>
           </div>
         </div>
+      </div>
+      <!-- Informations légales | Commerce | Infos Entreprise (aligné sur la fiche) -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
         <div class="card">
           <div class="card-header"><div class="card-title">Informations légales</div></div>
           <div class="card-body">
@@ -2143,11 +2146,8 @@ tbody tr:last-child td { border-bottom: none; }
             </div>
           </div>
         </div>
-      </div>
-      <!-- Commercial | Infos Entreprise | Tarification GPH -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
         <div class="card">
-          <div class="card-header"><div class="card-title">Commercial</div></div>
+          <div class="card-header"><div class="card-title">Commerce</div></div>
           <div class="card-body">
             <div style="display:grid;gap:8px">
               <div class="fg"><label class="fl">Commercial Novam</label><select class="fi" id="nc-mk-manager"></select></div>
@@ -2162,6 +2162,16 @@ tbody tr:last-child td { border-bottom: none; }
                 <div id="nc-reseaux-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.15)"></div>
               </div>
             </div>
+            <details class="acc" style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+              <summary style="cursor:pointer;user-select:none;font-weight:700;color:var(--accent);font-size:12px">Tarification GPH</summary>
+              <div style="margin-top:8px;display:grid;gap:8px">
+                <div class="fg"><label class="fl">Mode de tarification GPH</label><select class="fi" id="nc-mk-tarification"></select></div>
+                <div class="fg"><label class="fl">RFA applicable</label><input class="fi" id="nc-rfa-applicable" placeholder=""></div>
+                <div class="fg"><label class="fl">Date Remise convention</label><input class="fi" type="date" id="nc-date-remise-convention"></div>
+                <div class="fg"><label class="fl">Date Signature convention</label><input class="fi" type="date" id="nc-date-signature-convention"></div>
+                <div class="fg"><label class="fl">Commentaires tarif.</label><input class="fi" id="nc-commentaires-tarification" placeholder=""></div>
+              </div>
+            </details>
           </div>
         </div>
         <div class="card">
@@ -2175,18 +2185,6 @@ tbody tr:last-child td { border-bottom: none; }
               <div class="fg"><label class="fl">Type *</label><select class="fi" id="nc-mk-type"></select></div>
               <div class="fg"><label class="fl">Groupe</label><select class="fi" id="nc-mk-groupe"><option value="">Groupe...</option></select></div>
               <div class="fg"><label class="fl">Origine</label><select class="fi" id="nc-mk-origine"><option value="">Origine...</option></select></div>
-            </div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header"><div class="card-title">Tarification GPH</div></div>
-          <div class="card-body">
-            <div style="display:grid;gap:8px">
-              <div class="fg"><label class="fl">Mode de tarification GPH</label><select class="fi" id="nc-mk-tarification"></select></div>
-              <div class="fg"><label class="fl">RFA applicable</label><input class="fi" id="nc-rfa-applicable" placeholder=""></div>
-              <div class="fg"><label class="fl">Date Remise convention</label><input class="fi" type="date" id="nc-date-remise-convention"></div>
-              <div class="fg"><label class="fl">Date Signature convention</label><input class="fi" type="date" id="nc-date-signature-convention"></div>
-              <div class="fg"><label class="fl">Commentaires tarif.</label><input class="fi" id="nc-commentaires-tarification" placeholder=""></div>
             </div>
           </div>
         </div>
