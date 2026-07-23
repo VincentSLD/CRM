@@ -14589,15 +14589,16 @@ function _mmInitMap() {
   const el = document.getElementById('mm-map'); if (!el || !window.L) return;
   if (_mmMap) { try { _mmMap.remove(); } catch (e) {} _mmMap = null; _mmMarker = null; }
   const lat = _mmLat, lng = _mmLng;
-  _mmMap = L.map('mm-map', { zoomControl: true }).setView((lat && lng) ? [lat, lng] : [46.8, 2.5], (lat && lng) ? 15 : 6);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(_mmMap);
-  L.tileLayer.wms('https://data.geopf.fr/wms-r/wms', { layers: 'CADASTRALPARCELS.PARCELLAIRE_EXPRESS', format: 'image/png', transparent: true, version: '1.3.0', zIndex: 450 }).addTo(_mmMap);
+  _mmMap = L.map('mm-map', { zoomControl: true, maxZoom: 20 }).setView((lat && lng) ? [lat, lng] : [46.8, 2.5], (lat && lng) ? 18 : 6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, maxNativeZoom: 19, attribution: '© OpenStreetMap' }).addTo(_mmMap);
+  // Parcelles cadastrales (visibles nettement à partir du zoom ~17)
+  L.tileLayer.wms('https://data.geopf.fr/wms-r/wms', { layers: 'CADASTRALPARCELS.PARCELLAIRE_EXPRESS', format: 'image/png', transparent: true, version: '1.3.0', maxZoom: 20, zIndex: 450 }).addTo(_mmMap);
   if (lat && lng) _mmSetMarker(lat, lng);
   else if (_mmAddr) {
     // Par défaut : géocoder l'adresse du site (BAN) pour centrer et placer un point de départ
     fetch('https://api-adresse.data.gouv.fr/search/?limit=1&q=' + encodeURIComponent(_mmAddr)).then(r => r.json()).then(j => {
       const f = j && j.features && j.features[0];
-      if (f && f.geometry && f.geometry.coordinates && !_mmLat) { const [lo, la] = f.geometry.coordinates; _mmMap.setView([la, lo], 16); _mmSet(la, lo); }
+      if (f && f.geometry && f.geometry.coordinates && !_mmLat) { const [lo, la] = f.geometry.coordinates; _mmMap.setView([la, lo], 18); _mmSet(la, lo); }
     }).catch(() => {});
   }
   _mmMap.on('click', e => { if (_mmLocked) return; _mmSet(e.latlng.lat, e.latlng.lng); });
@@ -14636,7 +14637,16 @@ function _mmSet(lat, lng) {
   // Le point a bougé → la certification manuelle n'est plus valable, on la réinitialise
   _mmCertifie = false; _mmUpdateCertifUi();
 }
-function _mmToggleCertif(checked) { _mmCertifie = !!checked; _mmUpdateCertifUi(); }
+async function _mmToggleCertif(checked) {
+  _mmCertifie = !!checked; _mmUpdateCertifUi();
+  // Enregistrement AUTOMATIQUE de la certification (elle ne déplace pas le point → pas besoin de déverrouiller)
+  if (_mmLat == null || _mmLng == null) return; // rien à certifier sans point
+  const m = DB.marches.find(x => x.id === currentMarcheId); if (!m) return;
+  const { error } = await sb.from('marches').update({ gps_certifie: _mmCertifie }).eq('id', m.id);
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  m.gps_certifie = _mmCertifie;
+  toast(_mmCertifie ? 'Position certifiée conforme ✅ (enregistré)' : 'Certification retirée (enregistré)', _mmCertifie ? 'success' : 'info');
+}
 function _mmCertifLabel(certified) {
   return certified
     ? '<span style="color:var(--green,#16a34a);font-weight:600">✓ Certifiée conforme</span>'
@@ -14720,7 +14730,7 @@ function renderMarcheDetail() {
   const m = DB.marches.find(x => x.id === currentMarcheId);
   if (!m) return '<p>Marché non trouvé</p>';
   _mmLat = (m.lat != null ? Number(m.lat) : null); _mmLng = (m.lng != null ? Number(m.lng) : null);
-  _mmLocked = (_mmLat != null && _mmLng != null); // point existant → verrouillé par défaut
+  _mmLocked = true; // toujours verrouillé au chargement (cliquez 🔓 pour modifier)
   _mmCertifie = !!m.gps_certifie;
   const affaires = DB.affaires.filter(a => a.marche_id === m.id);
   // Adresse du site par défaut (Adresse, Code Postal, Ville) — marché puis 1re affaire renseignée
