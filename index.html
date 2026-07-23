@@ -22980,6 +22980,24 @@ function renderAdmin() {
     </div>
   </div>
   <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><div class="card-title">Informations légales (SIRENE) — mise à jour en masse</div></div>
+    <div class="card-body" style="font-size:13px;color:var(--t3)">
+      Interroge <strong>SIRENE</strong> (API publique) pour tous les clients ayant un <strong>SIRET valide</strong> et met à jour leurs <strong>informations légales</strong> — même logique que le bouton <em>« Mettre à jour (SIRET) »</em> de la fiche, mais en masse. Par défaut, seules les <strong>informations manquantes</strong> sont complétées (rien n'est écrasé).
+      <div style="margin-top:10px;display:flex;gap:6px 16px;flex-wrap:wrap;color:var(--t2)">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="blf-raison" checked> Raison sociale</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="blf-siren" checked> SIREN</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="blf-ape" checked> Code APE</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="blf-forme" checked> Forme juridique</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="blf-tva" checked> TVA intracom.</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="blf-etat" checked> État INSEE (radiée)</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="blf-siege" checked> Siège / Établissement</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="blf-adresse" checked> Adresse</label>
+      </div>
+      <div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#b45309"><input type="checkbox" id="blf-overwrite"> ⚠️ Écraser aussi les valeurs existantes (par défaut : compléter uniquement les champs vides)</label></div>
+      <div style="margin-top:10px"><button class="btn btn-primary" onclick="bulkUpdateLegalFromSiret()" style="font-size:12px">🏛️ Mettre à jour les informations légales</button></div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:16px">
     <div class="card-header"><div class="card-title">Marchés publics des clients (DECP)</div></div>
     <div class="card-body" style="font-size:13px;color:var(--t3)">
       Interroge la base <strong>DECP</strong> (open data, sans clé) pour tous les clients ayant un SIREN, <strong>archive</strong> leurs marchés publics gagnés (table <code>decp_marches</code>, pour analyses) et <strong>pré-remplit</strong> les profils marchés (départements + fourchette TCE) <strong>sans écraser</strong> vos saisies.
@@ -24182,6 +24200,94 @@ async function pushAllSitesCommerciaux() {
     showSyncLoading(false);
     toast('Transfert terminé : ' + ok + ' écrit(s), ' + skip + ' ignoré(s), ' + errors + ' erreur(s).', errors ? 'warn' : 'success');
     if (errList.length) console.warn('[pushAllSitesCommerciaux] erreurs :', errList);
+  } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
+}
+
+// ═══ Mise à jour des informations légales via SIRENE (même source que le bouton fiche « Mettre à jour (SIRET) »), en masse ═══
+// Lecture légère : 1 seul appel à l'API publique recherche-entreprises par SIRET.
+async function _fetchLegalForSiret(siret, attempt = 0) {
+  if (!/^\d{14}$/.test(siret)) return null;
+  const siren = siret.slice(0, 9);
+  let ent = null;
+  try {
+    const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + siret + '&per_page=5');
+    if (r.status === 429 && attempt < 4) { await new Promise(x => setTimeout(x, 1200 * (attempt + 1))); return _fetchLegalForSiret(siret, attempt + 1); }
+    if (!r.ok) return null;
+    const d = await r.json();
+    ent = (d.results || []).find(e => e.siren === siren) || (d.results || [])[0] || null;
+  } catch (e) { return null; }
+  if (!ent) return null;
+  const siege = ent.siege || {};
+  let etab = (siege.siret === siret) ? { ...siege, est_siege: true } : ((ent.matching_etablissements || []).find(e => e.siret === siret) || null);
+  const src = etab || siege;
+  const etat = (etab && etab.etat_administratif) || siege.etat_administratif || 'A';
+  const adr = [src.numero_voie, src.indice_repetition, src.type_voie, src.libelle_voie].filter(Boolean).join(' ') || null;
+  return {
+    raison_sociale: ent.nom_raison_sociale || ent.nom_complet || null,
+    siren: ent.siren || null,
+    ape: src.activite_principale || ent.activite_principale || null,
+    forme_juridique: ent.nature_juridique || null,
+    tva_intracommunautaire: computeTVA(ent.siren) || null,
+    est_siege: etab ? (etab.est_siege === true || etab.siret === siege.siret) : null,
+    etat_insee: (etat === 'F' || etat === 'C') ? 'C' : 'A',
+    adresse_ligne1: adr,
+    code_postal: src.code_postal || null,
+    city: src.libelle_commune || null,
+    departement: src.code_postal ? deptName(src.code_postal.substring(0, 2)) : null,
+    region: src.code_postal ? regionFromDept(src.code_postal.substring(0, 2)) : null,
+  };
+}
+// Outil admin : met à jour en masse les informations légales des clients ayant un SIRET valide.
+async function bulkUpdateLegalFromSiret() {
+  const chk = id => { const el = document.getElementById(id); return el ? el.checked : true; };
+  const overwrite = chk('blf-overwrite');
+  const want = { raison: chk('blf-raison'), siren: chk('blf-siren'), ape: chk('blf-ape'), forme: chk('blf-forme'), tva: chk('blf-tva'), etat: chk('blf-etat'), siege: chk('blf-siege'), adresse: chk('blf-adresse') };
+  if (!Object.values(want).some(Boolean)) { toast('Cochez au moins un champ à mettre à jour.', 'warn'); return; }
+  if (!confirm('Mettre à jour les informations légales (SIRENE) de tous les clients ayant un SIRET valide ?\n\n' + (overwrite ? '⚠️ Les valeurs existantes seront ÉCRASÉES par les données SIRENE.' : 'Seules les informations MANQUANTES seront complétées (valeurs existantes conservées).') + '\n\nL\'API publique SIRENE est interrogée pour chaque société — plusieurs minutes possibles.')) return;
+  showSyncLoading(true); setSyncText('Chargement des clients…');
+  try {
+    let clients = []; const PAGE = 1000;
+    const cols = 'id,name,siret,siren,raison_sociale,ape,forme_juridique,tva_intracommunautaire,est_siege,etat_insee,adresse_ligne1,code_postal,city,departement,region';
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await sb.from('clients').select(cols).not('siret', 'is', null).neq('siret', '').range(from, from + PAGE - 1);
+      if (error) { showSyncLoading(false); toast('Erreur lecture clients : ' + error.message, 'error'); return; }
+      clients = clients.concat(data || []);
+      if (!data || data.length < PAGE) break;
+    }
+    const todo = clients.filter(c => _siretValide(c.siret));
+    if (!todo.length) { showSyncLoading(false); toast('Aucun client avec SIRET valide.', 'warn'); return; }
+    const total = todo.length;
+    let idx = 0, done = 0, updated = 0, unchanged = 0, notFound = 0, errors = 0;
+    const empty = v => v == null || v === '';
+    async function worker() {
+      while (idx < total) {
+        const c = todo[idx++];
+        try {
+          const legal = await _fetchLegalForSiret(String(c.siret).replace(/\s/g, ''));
+          if (!legal) { notFound++; }
+          else {
+            const upd = {};
+            const set = (field, val) => { if (val != null && val !== '' && (overwrite || empty(c[field]))) upd[field] = val; };
+            if (want.raison) set('raison_sociale', legal.raison_sociale);
+            if (want.siren) set('siren', legal.siren);
+            if (want.ape) set('ape', legal.ape);
+            if (want.forme) set('forme_juridique', legal.forme_juridique);
+            if (want.tva) set('tva_intracommunautaire', legal.tva_intracommunautaire);
+            if (want.adresse) { set('adresse_ligne1', legal.adresse_ligne1); set('code_postal', legal.code_postal); set('city', legal.city); set('departement', legal.departement); set('region', legal.region); }
+            if (want.siege && legal.est_siege != null && (overwrite || c.est_siege == null)) upd.est_siege = legal.est_siege;
+            if (want.etat && legal.etat_insee && (overwrite || empty(c.etat_insee))) upd.etat_insee = legal.etat_insee;
+            if (Object.keys(upd).length) { await sb.from('clients').update(upd).eq('id', c.id); updated++; } else unchanged++;
+          }
+        } catch (e) { errors++; }
+        done++;
+        if (done % 5 === 0 || done === total) setSyncText('Mise à jour légale : ' + done + ' / ' + total + ' (mis à jour ' + updated + ', inchangés ' + unchanged + ', introuvables ' + notFound + ', erreurs ' + errors + ')');
+        await new Promise(r => setTimeout(r, 110)); // ménage l'API publique
+      }
+    }
+    await Promise.all(Array.from({ length: 3 }, worker));
+    showSyncLoading(false);
+    toast('Terminé : ' + updated + ' mis à jour, ' + unchanged + ' inchangé(s), ' + notFound + ' introuvable(s), ' + errors + ' erreur(s).', errors ? 'warn' : 'success');
+    if (currentPage === 'clients') loadClientsPage(clientsPage || 0, clientsLetter, clientsSearch);
   } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
 }
 
