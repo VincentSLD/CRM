@@ -4177,7 +4177,7 @@ function renderContactDetail() {
   const fullName = [c.titre, c.prenom, c.nom].filter(Boolean).join(' ');
   return `
   <div style="margin-bottom:16px">
-    <button class="btn" onclick="go('contacts')" style="font-size:12px">← Retour aux contacts</button>
+    <button class="btn" onclick="contactBack()" style="font-size:12px">← Retour ${_contactReturnClient ? 'à ' + cmdEsc(c._clientName || 'la société') : 'aux contacts'}</button>
   </div>
   <div class="card" style="margin-bottom:16px">
     <div class="card-body" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
@@ -4268,6 +4268,11 @@ function renderContactDetail() {
 function toggleEditContact() {
   const f = document.getElementById('editContactForm');
   if (f) f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+// Retour depuis la fiche contact : vers la société d'origine si le contact a été ouvert depuis une fiche société, sinon vers la liste des contacts.
+function contactBack() {
+  if (_contactReturnClient) { const rc = _contactReturnClient; _contactReturnClient = null; showClient(rc); }
+  else go('contacts');
 }
 
 async function saveEditContact() {
