@@ -3764,70 +3764,71 @@ async function loadClientsPage(page, letter, search) {
   clientsPage = page;
   clientsLetter = letter || '';
   clientsSearch = search || '';
+  const q = (search || '').trim();
+  const isSearch = !!q;
   // Si filtre catégorie compte (post-filtrage JSONB) : charger plus de lignes côté serveur
   const pageSize = clientsFilterCatCompte.length ? 500 : CLIENTS_PER_PAGE;
-  const from = page * pageSize;
-  const to = from + pageSize - 1;
-
-  let query = sb.from('clients').select('*', { count: 'exact' });
-  if (viewMyData && currentCommercial && currentCommercial.akuiteo_manager_id) {
-    query = query.eq('account_manager_id', currentCommercial.akuiteo_manager_id);
-  }
-  if (letter) {
-    query = query.ilike('name', letter + '%');
-  }
-  if (search) {
-    // Recherche tolérante à la ponctuation/espaces (ex. "6K" trouve "6.K ARCHI")
-    const _cols = ['name', 'code', 'city', 'sector', 'email', 'raison_sociale', 'raison_sociale2'];
-    for (const w of search.trim().split(/\s+/).filter(Boolean)) query = query.or(_looseIlikeOr(_cols, w));
-  }
-  // Filtres complémentaires (server-side) — multi-sélection
-  if (clientsFilterDept.length) {
-    const ors = [];
-    for (const raw of clientsFilterDept) { const d = String(raw).trim(); if (!d) continue; if (/^\d{1,3}[A-B]?$/i.test(d)) ors.push(`code_postal.ilike.${d}%`); else ors.push(`departement.ilike.%${d}%`); }
-    if (ors.length) query = query.or(ors.join(','));
-  }
-  if (clientsFilterNovam.length) {
-    const ors = [];
-    for (const key of clientsFilterNovam) { const vs = (clientsNovamVariants[key] && clientsNovamVariants[key].length) ? clientsNovamVariants[key] : [key]; for (const v of vs) { const ve = String(v).replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim(); if (ve) ors.push(`account_manager_name.ilike.%${ve}%`); } }
-    if (ors.length) query = query.or(ors.join(','));
-  }
-  if (clientsFilterGph.length) {
-    const ors = [];
-    for (const key of clientsFilterGph) { const vs = (clientsGphVariants[key] && clientsGphVariants[key].length) ? clientsGphVariants[key] : [key]; for (const v of vs) { const ve = String(v).replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim(); if (ve) ors.push(`salesman_name.ilike.%${ve}%`, `commerciaux_associes.ilike.%${ve}%`); } }
-    if (ors.length) query = query.or(ors.join(','));
-  }
-  if (clientsFilterStatut.length) query = query.in('status', clientsFilterStatut);
-  if (clientsFilterSync === 'yes') query = query.not('akuiteo_id', 'is', null);
-  if (clientsFilterSync === 'no') query = query.is('akuiteo_id', null);
-  // Filtres Infos Entreprise (in avec variants pour gérer les quasi-doublons de casse/accents) — union des variantes des valeurs sélectionnées
-  const _expandMulti = (field, arr) => [...new Set(arr.flatMap(v => _expandFilterVariants(field, v)))];
-  if (clientsFilterCategorie.length) query = query.in('mk_categorie', _expandMulti('categorie', clientsFilterCategorie));
-  if (clientsFilterSousCategorie.length) query = query.in('mk_sous_categorie', _expandMulti('sousCategorie', clientsFilterSousCategorie));
-  if (clientsFilterCategoriePro.length) query = query.in('mk_categorie_pro', _expandMulti('categoriePro', clientsFilterCategoriePro));
-  if (clientsFilterSecteur.length) query = query.in('mk_secteur', _expandMulti('secteur', clientsFilterSecteur));
-  if (clientsFilterType.length) query = query.in('mk_type', _expandMulti('type', clientsFilterType));
-  if (clientsFilterGroupe.length) query = query.in('mk_groupe', _expandMulti('groupe', clientsFilterGroupe));
-  if (clientsFilterOrigine.length) query = query.in('mk_origine', _expandMulti('origine', clientsFilterOrigine));
-  // SIRET présent / absent
-  if (clientsFilterSiret === 'yes') query = query.not('siret', 'is', null).neq('siret', '');
-  if (clientsFilterSiret === 'no') query = query.or('siret.is.null,siret.eq.');
-  // Siège / Établissement
-  if (clientsFilterSiege === 'siege') query = query.eq('est_siege', true);
-  if (clientsFilterSiege === 'etablissement') query = query.eq('est_siege', false);
-  // Réseaux pro (array contains)
-  if (clientsFilterReseauxPro) query = query.contains('reseaux_pro', [clientsFilterReseauxPro]);
-  // Masquer les entreprises radiées INSEE (etat_insee = 'C')
-  if (clientsHideRadiees) query = query.or('etat_insee.is.null,etat_insee.neq.C');
-  // Comptes clés (++)
-  if (clientsFilterPlus === 'yes') query = query.not('categorie_compte_plus', 'is', null);
-  if (clientsFilterPlus === 'no') query = query.is('categorie_compte_plus', null);
-  // Catégorie du compte / par rôle (JSONB — filtre côté client après requête)
+  // En RECHERCHE, le tri SQL est alphabétique → on récupère un lot élargi et on classe par PERTINENCE côté client
+  const SEARCH_CAP = 500;
+  const from = isSearch ? 0 : page * pageSize;
+  const to = isSearch ? (SEARCH_CAP - 1) : (from + pageSize - 1);
+  const _searchCols = ['name', 'code', 'city', 'sector', 'email', 'raison_sociale', 'raison_sociale2'];
   const _catCol = { apporteur: 'categorie_apporteur', architecte: 'categorie_architecte', gros_oeuvre: 'categorie_gros_oeuvre' }[clientsFilterCatRole] || 'categorie_compte';
-  if (clientsFilterCatCompte.length) query = query.not(_catCol, 'is', null);
-  query = query.order('name', {ascending: true}).range(from, to);
+  const _expandMulti = (field, arr) => [...new Set(arr.flatMap(v => _expandFilterVariants(field, v)))];
 
-  const { data, count } = await query;
+  // Construit la requête (loose = repli tolérant %v%m% ; sinon match contigu %vm%)
+  const buildQuery = (loose) => {
+    let query = sb.from('clients').select('*', { count: 'exact' });
+    if (viewMyData && currentCommercial && currentCommercial.akuiteo_manager_id) {
+      query = query.eq('account_manager_id', currentCommercial.akuiteo_manager_id);
+    }
+    if (letter) query = query.ilike('name', letter + '%');
+    if (q) {
+      // Match CONTIGU (« VM » → %VM%) pour la pertinence ; repli tolérant seulement si 0 résultat
+      for (const w of q.split(/\s+/).filter(Boolean)) query = query.or(loose ? _looseIlikeOr(_searchCols, w) : _strictIlikeOr(_searchCols, w));
+    }
+    // Filtres complémentaires (server-side) — multi-sélection
+    if (clientsFilterDept.length) {
+      const ors = [];
+      for (const raw of clientsFilterDept) { const d = String(raw).trim(); if (!d) continue; if (/^\d{1,3}[A-B]?$/i.test(d)) ors.push(`code_postal.ilike.${d}%`); else ors.push(`departement.ilike.%${d}%`); }
+      if (ors.length) query = query.or(ors.join(','));
+    }
+    if (clientsFilterNovam.length) {
+      const ors = [];
+      for (const key of clientsFilterNovam) { const vs = (clientsNovamVariants[key] && clientsNovamVariants[key].length) ? clientsNovamVariants[key] : [key]; for (const v of vs) { const ve = String(v).replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim(); if (ve) ors.push(`account_manager_name.ilike.%${ve}%`); } }
+      if (ors.length) query = query.or(ors.join(','));
+    }
+    if (clientsFilterGph.length) {
+      const ors = [];
+      for (const key of clientsFilterGph) { const vs = (clientsGphVariants[key] && clientsGphVariants[key].length) ? clientsGphVariants[key] : [key]; for (const v of vs) { const ve = String(v).replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim(); if (ve) ors.push(`salesman_name.ilike.%${ve}%`, `commerciaux_associes.ilike.%${ve}%`); } }
+      if (ors.length) query = query.or(ors.join(','));
+    }
+    if (clientsFilterStatut.length) query = query.in('status', clientsFilterStatut);
+    if (clientsFilterSync === 'yes') query = query.not('akuiteo_id', 'is', null);
+    if (clientsFilterSync === 'no') query = query.is('akuiteo_id', null);
+    if (clientsFilterCategorie.length) query = query.in('mk_categorie', _expandMulti('categorie', clientsFilterCategorie));
+    if (clientsFilterSousCategorie.length) query = query.in('mk_sous_categorie', _expandMulti('sousCategorie', clientsFilterSousCategorie));
+    if (clientsFilterCategoriePro.length) query = query.in('mk_categorie_pro', _expandMulti('categoriePro', clientsFilterCategoriePro));
+    if (clientsFilterSecteur.length) query = query.in('mk_secteur', _expandMulti('secteur', clientsFilterSecteur));
+    if (clientsFilterType.length) query = query.in('mk_type', _expandMulti('type', clientsFilterType));
+    if (clientsFilterGroupe.length) query = query.in('mk_groupe', _expandMulti('groupe', clientsFilterGroupe));
+    if (clientsFilterOrigine.length) query = query.in('mk_origine', _expandMulti('origine', clientsFilterOrigine));
+    if (clientsFilterSiret === 'yes') query = query.not('siret', 'is', null).neq('siret', '');
+    if (clientsFilterSiret === 'no') query = query.or('siret.is.null,siret.eq.');
+    if (clientsFilterSiege === 'siege') query = query.eq('est_siege', true);
+    if (clientsFilterSiege === 'etablissement') query = query.eq('est_siege', false);
+    if (clientsFilterReseauxPro) query = query.contains('reseaux_pro', [clientsFilterReseauxPro]);
+    if (clientsHideRadiees) query = query.or('etat_insee.is.null,etat_insee.neq.C');
+    if (clientsFilterPlus === 'yes') query = query.not('categorie_compte_plus', 'is', null);
+    if (clientsFilterPlus === 'no') query = query.is('categorie_compte_plus', null);
+    if (clientsFilterCatCompte.length) query = query.not(_catCol, 'is', null);
+    return query.order('name', { ascending: true }).range(from, to);
+  };
+
+  let { data, count } = await buildQuery(false);
+  // Repli tolérant (ex. « 6K » → « 6.K ARCHI ») si la recherche contiguë ne donne rien
+  if (isSearch && (!data || !data.length)) ({ data, count } = await buildQuery(true));
+
   clientsTotalCount = count || 0;
   let mappedClients = (data || []).map(mapClient);
   // Post-filtrage catégorie (on vérifie si une agence a une des valeurs sélectionnées) sur la colonne du rôle choisi
@@ -3838,6 +3839,15 @@ async function loadClientsPage(page, letter, search) {
       return cc && typeof cc === 'object' && Object.values(cc).some(v => wanted.has(v));
     });
     clientsTotalCount = mappedClients.length;
+  }
+  // En RECHERCHE : classer par pertinence (exact/préfixe d'abord, sièges avant établissements) puis paginer côté client
+  if (isSearch) {
+    mappedClients.sort((a, b) =>
+      (_searchScore(q, b.name, b.code, b.city, b.raison_sociale, b.raison_sociale2) - _searchScore(q, a.name, a.code, a.city, a.raison_sociale, a.raison_sociale2))
+      || ((a.est_siege === true ? 0 : 1) - (b.est_siege === true ? 0 : 1))
+      || String(a.name || '').localeCompare(String(b.name || ''), 'fr'));
+    clientsTotalCount = mappedClients.length;
+    mappedClients = mappedClients.slice(page * pageSize, page * pageSize + pageSize);
   }
   DB.clients = mappedClients;
   // Compter les devis par client
@@ -21094,6 +21104,11 @@ function _looseAlnum(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9
 function _looseIlikeOr(cols, word) {
   const n = String(word).replace(/[^a-zA-Z0-9]/g, '');
   const pat = n ? '%' + n.split('').join('%') + '%' : '%' + word + '%';
+  return cols.map(c => c + '.ilike.' + pat).join(',');
+}
+// Match CONTIGU (chaque mot en sous-chaîne exacte) : « VM » → %VM% — bien plus pertinent que _looseIlikeOr (%v%m%, trop de bruit)
+function _strictIlikeOr(cols, word) {
+  const pat = '%' + String(word).replace(/[%,()]/g, ' ').replace(/\s+/g, ' ').trim() + '%';
   return cols.map(c => c + '.ilike.' + pat).join(',');
 }
 // Vrai si chaque mot de la requête (alnum) est contenu, dans l'ordre des lettres, dans le texte cible
