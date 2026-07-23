@@ -522,6 +522,9 @@ details.filtres-acc[open] > summary span:first-child { transform: rotate(90deg);
 /* Menus multi-sélection du « Profil marchés » : plus hauts et plus larges pour voir toute la liste */
 #mspop-mpTypo, #mspop-mpSous, #mspop-mpDept, #mspop-mpComp { max-height: 60vh !important; min-width: 260px !important; }
 #mspop-mpDept { min-width: 320px !important; }
+/* Profil marchés (fiche client) : champs multi-sélection en pleine largeur dans la grille responsive */
+#mp-block .ms-wrap { display: block; width: 100%; }
+#mp-block .ms-wrap > button { width: 100%; min-width: 0; }
 /* Accordéon (details.acc) : triangle qui pivote à l'ouverture */
 details.acc > summary { list-style: none; }
 details.acc > summary::-webkit-details-marker { display: none; }
@@ -13825,22 +13828,21 @@ function _mpBlockHtml() {
   msDef('mpDept', deptOpts, f.departements, arr => { f.departements = arr; }, false);
   msDef('mpComp', compOpts, f.competences, arr => { f.competences = arr; }, false);
   const lbl = 'font-size:11px;color:var(--t3);display:block;margin-bottom:3px';
-  const fi = 'padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)';
-  return `<div style="display:flex;flex-direction:column;gap:12px">
-    <div style="font-size:11px;color:var(--t3)">Renseignez les souhaits de ce client pour qu'il soit proposé automatiquement à la sollicitation quand une opportunité correspond.</div>
+  const fi = 'padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1);width:100%;box-sizing:border-box';
+  return `<div style="display:flex;flex-direction:column;gap:10px">
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
       <input type="checkbox" ${f.mandataire ? 'checked' : ''} onchange="_mpForm.mandataire=this.checked" style="width:16px;height:16px;accent-color:var(--accent)"> Ce client peut être <b>mandataire</b></label>
-    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
-      <div><span style="${lbl}">Typologies souhaitées</span>${msButton('mpTypo', 'Typologies')}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+      <div><span style="${lbl}">Typologies</span>${msButton('mpTypo', 'Typologies')}</div>
       <div><span style="${lbl}">Sous-typologies</span>${msButton('mpSous', 'Sous-typologies')}</div>
-      <div><span style="${lbl}">Départements souhaités</span>${msButton('mpDept', 'Départements')}</div>
-      <div><span style="${lbl}">Compétences souhaitées</span>${msButton('mpComp', 'Compétences')}</div>
+      <div><span style="${lbl}">Départements</span>${msButton('mpDept', 'Départements')}</div>
+      <div><span style="${lbl}">Compétences</span>${msButton('mpComp', 'Compétences')}</div>
+      <div><span style="${lbl}">TCE min (€)</span><input type="number" step="any" style="${fi}" value="${f.tceMin !== '' ? f.tceMin : ''}" oninput="_mpForm.tceMin=this.value" placeholder="ex. 500000"></div>
+      <div><span style="${lbl}">TCE max (€)</span><input type="number" step="any" style="${fi}" value="${f.tceMax !== '' ? f.tceMax : ''}" oninput="_mpForm.tceMax=this.value" placeholder="ex. 5000000"></div>
     </div>
-    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
-      <div><span style="${lbl}">Montant TCE souhaité — min (€)</span><input type="number" step="any" style="${fi};width:150px" value="${f.tceMin !== '' ? f.tceMin : ''}" oninput="_mpForm.tceMin=this.value" placeholder="ex. 500000"></div>
-      <div><span style="${lbl}">max (€)</span><input type="number" step="any" style="${fi};width:150px" value="${f.tceMax !== '' ? f.tceMax : ''}" oninput="_mpForm.tceMax=this.value" placeholder="ex. 5000000"></div>
-      <button class="btn" onclick="mpPrefillFromDecp()" style="font-size:12px" title="Proposer départements + fourchette TCE (+ typologies) depuis les marchés publics DECP du client">✨ Pré-remplir selon les données récupérées</button>
-      <button class="btn btn-primary" onclick="saveMarcheProfil()" style="font-size:12px">💾 Enregistrer le profil</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="mpPrefillFromDecp()" style="font-size:12px;flex:1;min-width:140px" title="Proposer départements + fourchette TCE (+ typologies) depuis les marchés publics DECP du client">✨ Pré-remplir</button>
+      <button class="btn btn-primary" onclick="saveMarcheProfil()" style="font-size:12px;flex:1;min-width:140px">💾 Enregistrer</button>
     </div>
   </div>`;
 }
