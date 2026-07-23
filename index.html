@@ -1899,6 +1899,10 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="search-dropdown" id="searchDropdown"></div>
       </div>
       <button class="topbar-btn" onclick="openHelp()" title="Aide sur cette page" style="font-weight:800;font-size:17px;line-height:1">?</button>
+      <button class="topbar-btn" onclick="toggleNotifPanel()" title="Notifications" style="position:relative">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span id="notifBadge" style="display:none;position:absolute;top:-3px;right:-3px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:var(--red);color:#fff;font-size:9px;font-weight:800;align-items:center;justify-content:center"></span>
+      </button>
       <div style="position:relative;display:inline-block" id="syncDropdownWrap">
         <button class="topbar-btn" onclick="document.getElementById('syncDropdownMenu').style.display=document.getElementById('syncDropdownMenu').style.display==='block'?'none':'block'" title="Synchroniser Akuiteo">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -3817,6 +3821,7 @@ function updateNavBadges() {
       el.style.display = 'none';
     }
   }
+  if (typeof updateNotifBadge === 'function') updateNotifBadge();
 }
 
 // Charger une page de clients depuis Supabase
@@ -26614,23 +26619,100 @@ function toggleNotifPanel() {
   if(p.classList.contains('show')) renderNotifs();
 }
 
+// ═══ NOTIFICATIONS — dérivées des données du commercial connecté (tâches, sollicitations, devis, factures, opportunités) ═══
+let _notifsCache = [], _notifLoadTried = false;
+function _notifReadKey() { return 'notifRead_' + ((currentCommercial && currentCommercial.email) || 'anon'); }
+function _notifReadSet() { try { return new Set(JSON.parse(localStorage.getItem(_notifReadKey()) || '[]')); } catch (e) { return new Set(); } }
+function _notifSaveRead(set) { try { localStorage.setItem(_notifReadKey(), JSON.stringify([...set].slice(-500))); } catch (e) {} }
+function buildNotifications() {
+  const out = [];
+  const myEmail = (currentCommercial && currentCommercial.email) || '';
+  const todayISO = new Date().toISOString().slice(0, 10);
+  // 1) Mes tâches en retard / à échéance aujourd'hui
+  (_taches || []).forEach(t => {
+    if (!(t.statut === 'a_faire' || t.statut === 'en_cours')) return;
+    if (myEmail && t.assigne_email !== myEmail) return;
+    const ech = t.echeance ? String(t.echeance).slice(0, 10) : null;
+    if (!ech || ech > todayISO) return;
+    const retard = ech < todayISO;
+    out.push({ id: 'task-' + t.id, type: retard ? 'danger' : 'warn',
+      text: (retard ? '⏰ Tâche en retard' : '⏰ Tâche à faire aujourd’hui') + ' : « ' + cmdEsc(t.titre || 'sans titre') + ' »' + (t.client_name ? ' — ' + cmdEsc(t.client_name) : ''),
+      action: 'tacheModalOpen(' + t.id + ')', time: (typeof _tEcheanceTxt === 'function' ? _tEcheanceTxt(t.echeance) : fmtDateFR(ech)), sort: ech });
+  });
+  // 2) Mes sollicitations à traiter (date « à faire avant » atteinte)
+  (_sollic || []).forEach(s => {
+    if (typeof _sollicTerminal === 'function' && _sollicTerminal(s.statut)) return;
+    const mine = (s.assigne_email === myEmail) || (!s.assigne_email && s.createur_email === myEmail);
+    if (!mine) return;
+    const dr = s.date_relance ? String(s.date_relance).slice(0, 10) : null;
+    if (!dr || dr > todayISO) return;
+    out.push({ id: 'sollic-' + s.id, type: dr < todayISO ? 'danger' : 'warn',
+      text: '🤝 Sollicitation à traiter : ' + cmdEsc(s.client_name || '') + (s.opportunite_nom ? ' — 🎯 ' + cmdEsc(s.opportunite_nom) : ''),
+      action: 'sollicModalOpen(' + s.id + ')', time: fmtDateFR(dr), sort: dr });
+  });
+  // 3) Devis à relancer (agrégé — id incluant le nombre pour re-alerter quand ça évolue)
+  try { const dr = (typeof getDevisARelancer === 'function' ? getDevisARelancer() : []) || []; if (dr.length) { const tot = dr.reduce((a, d) => a + Number(d.montant || 0), 0);
+    out.push({ id: 'devis-relance-' + dr.length, type: 'warn', text: '📄 ' + dr.length + ' devis à relancer' + (tot ? ' (' + fmt(tot) + ')' : ''), action: "go('devis')", time: '', sort: '0000-00-00' }); } } catch (e) {}
+  // 4) Factures en retard (agrégé)
+  const factR = filterByCommercial(DB.factures || []).filter(f => f.statut === 'retard');
+  if (factR.length) { const tot = factR.reduce((a, f) => a + Number(f.montant || 0), 0);
+    out.push({ id: 'factures-retard-' + factR.length, type: 'danger', text: '💰 ' + factR.length + ' facture(s) en retard' + (tot ? ' (' + fmt(tot) + ')' : ''), action: "go('factures')", time: '', sort: '0000-00-00' }); }
+  // 5) Opportunités dont la signature est prévue < 30 j ou dépassée (si chargées)
+  if (typeof _oppsLoaded !== 'undefined' && _oppsLoaded) {
+    const in30 = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+    (_opps || []).filter(o => o.statut === 'IN_PROGRESS' && o.date_signature && o.date_signature <= in30)
+      .sort((a, b) => (a.date_signature || '').localeCompare(b.date_signature || '')).slice(0, 6).forEach(o => {
+        const late = o.date_signature < todayISO;
+        out.push({ id: 'opp-' + o.akuiteo_id, type: late ? 'danger' : 'warn',
+          text: '🎯 ' + cmdEsc(o.nom || 'Opportunité') + ' — signature ' + (late ? 'dépassée' : 'prévue') + ' le ' + fmtDateFR(o.date_signature),
+          action: "oppDetail('" + o.akuiteo_id + "')", time: fmtDateFR(o.date_signature), sort: o.date_signature });
+      });
+  }
+  const rank = { danger: 0, warn: 1, success: 2, info: 3 };
+  out.sort((a, b) => (rank[a.type] - rank[b.type]) || String(a.sort || '').localeCompare(String(b.sort || '')));
+  return out;
+}
 function renderNotifs() {
-  document.getElementById('notifList').innerHTML = DB.notifications.map(n => `
-    <div class="notif-item" style="${n.read?'opacity:0.5':''}">
-      <div class="notif-dot-sm" style="background:var(--${n.type==='danger'?'red':n.type==='success'?'green':n.type==='warn'?'amber':'accent'})"></div>
-      <div><div class="notif-text">${n.text}</div><div class="notif-time">${n.time}</div></div>
+  const list = document.getElementById('notifList'); if (!list) return;
+  _notifsCache = buildNotifications();
+  const read = _notifReadSet();
+  if (!_notifsCache.length) { list.innerHTML = '<div style="padding:18px;text-align:center;color:var(--t3);font-size:13px">🎉 Aucune notification — tout est à jour !</div>'; return; }
+  const col = t => t === 'danger' ? 'red' : t === 'success' ? 'green' : t === 'warn' ? 'amber' : 'accent';
+  list.innerHTML = _notifsCache.map(n => `
+    <div class="notif-item" style="cursor:pointer;${read.has(n.id) ? 'opacity:0.5' : ''}" onclick="notifClick('${n.id}')">
+      <div class="notif-dot-sm" style="background:var(--${col(n.type)})"></div>
+      <div><div class="notif-text">${n.text}</div>${n.time ? '<div class="notif-time">' + n.time + '</div>' : ''}</div>
     </div>`).join('');
 }
-
-async function markAllRead() {
-  const unread = DB.notifications.filter(n=>!n.read);
-  for (const n of unread) {
-    await sb.from('notifications').update({read:true}).eq('id',n.id);
+function notifClick(id) {
+  const n = _notifsCache.find(x => x.id === id);
+  const set = _notifReadSet(); set.add(id); _notifSaveRead(set);
+  const p = document.getElementById('notifPanel'); if (p) p.classList.remove('show');
+  updateNotifBadge();
+  if (n && n.action) { try { (new Function(n.action))(); } catch (e) { console.warn('notif action', e); } }
+}
+function updateNotifBadge() {
+  const el = document.getElementById('notifBadge'); if (!el) return;
+  // Charger tâches / sollicitations / opportunités une seule fois si nécessaire (pour des notifications complètes)
+  if (!_notifLoadTried) {
+    _notifLoadTried = true;
+    const loaders = [];
+    if (typeof _tachesLoaded !== 'undefined' && !_tachesLoaded && typeof loadTaches === 'function') loaders.push(loadTaches().catch(() => {}));
+    if (typeof _sollicLoaded !== 'undefined' && !_sollicLoaded && typeof loadSollicitations === 'function') loaders.push(loadSollicitations().catch(() => {}));
+    if (typeof _oppsLoaded !== 'undefined' && !_oppsLoaded && typeof loadOpportunites === 'function') loaders.push(loadOpportunites().catch(() => {}));
+    if (loaders.length) Promise.all(loaders).then(() => updateNotifBadge());
   }
-  DB.notifications.forEach(n=>n.read=true);
-  renderNotifs();
-  document.querySelector('.notif-dot').style.display='none';
-  toast('Notifications marquées lues','info');
+  const read = _notifReadSet();
+  const unread = buildNotifications().filter(n => !read.has(n.id)).length;
+  if (unread > 0) { el.textContent = unread > 99 ? '99+' : String(unread); el.style.display = 'flex'; }
+  else el.style.display = 'none';
+}
+function markAllRead() {
+  const set = _notifReadSet();
+  buildNotifications().forEach(n => set.add(n.id));
+  _notifSaveRead(set);
+  renderNotifs(); updateNotifBadge();
+  toast('Notifications marquées lues', 'info');
 }
 
 // ═══ MODALS ═══
