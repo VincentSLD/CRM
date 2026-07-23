@@ -22992,6 +22992,11 @@ function renderAdmin() {
         <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="blf-adresse" checked> Adresse</label>
       </div>
       <div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#b45309"><input type="checkbox" id="blf-overwrite"> ⚠️ Écraser aussi les valeurs existantes (par défaut : compléter uniquement les champs vides)</label></div>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--t2)">
+        <label>Limiter à</label>
+        <input id="blf-limit" type="number" min="1" placeholder="tous" style="width:90px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+        <span style="color:var(--t3)">clients (vide = tous) — pour tester progressivement. Débit ~2 req/s.</span>
+      </div>
       <div style="margin-top:10px"><button class="btn btn-primary" onclick="bulkUpdateLegalFromSiret()" style="font-size:12px">🏛️ Mettre à jour les informations légales</button></div>
     </div>
   </div>
@@ -24202,12 +24207,22 @@ async function pushAllSitesCommerciaux() {
 }
 
 // ═══ Mise à jour des informations légales via SIRENE (même source que le bouton fiche « Mettre à jour (SIRET) »), en masse ═══
+// Limiteur de débit GLOBAL pour l'API publique recherche-entreprises (~2 appels/seconde, quelle que soit la concurrence)
+let _sireneNextAt = 0;
+async function _sireneThrottle(minGapMs = 500) {
+  const now = Date.now();
+  const slot = Math.max(now, _sireneNextAt);
+  _sireneNextAt = slot + minGapMs;   // réserve le créneau suivant
+  const wait = slot - now;
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+}
 // Lecture légère : 1 seul appel à l'API publique recherche-entreprises par SIRET.
 async function _fetchLegalForSiret(siret, attempt = 0) {
   if (!/^\d{14}$/.test(siret)) return null;
   const siren = siret.slice(0, 9);
   let ent = null;
   try {
+    await _sireneThrottle();
     const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + siret + '&per_page=5');
     if (r.status === 429 && attempt < 4) { await new Promise(x => setTimeout(x, 1200 * (attempt + 1))); return _fetchLegalForSiret(siret, attempt + 1); }
     if (!r.ok) return null;
@@ -24241,7 +24256,7 @@ async function bulkUpdateLegalFromSiret() {
   const overwrite = chk('blf-overwrite');
   const want = { raison: chk('blf-raison'), siren: chk('blf-siren'), ape: chk('blf-ape'), forme: chk('blf-forme'), tva: chk('blf-tva'), etat: chk('blf-etat'), siege: chk('blf-siege'), adresse: chk('blf-adresse') };
   if (!Object.values(want).some(Boolean)) { toast('Cochez au moins un champ à mettre à jour.', 'warn'); return; }
-  if (!confirm('Mettre à jour les informations légales (SIRENE) de tous les clients ayant un SIRET valide ?\n\n' + (overwrite ? '⚠️ Les valeurs existantes seront ÉCRASÉES par les données SIRENE.' : 'Seules les informations MANQUANTES seront complétées (valeurs existantes conservées).') + '\n\nL\'API publique SIRENE est interrogée pour chaque société — plusieurs minutes possibles.')) return;
+  if (!confirm('Mettre à jour les informations légales (SIRENE) de tous les clients ayant un SIRET valide ?\n\n' + (overwrite ? '⚠️ Les valeurs existantes seront ÉCRASÉES par les données SIRENE.' : 'Seules les informations MANQUANTES seront complétées (valeurs existantes conservées).') + '\n\nL\'API publique est interrogée à ~2 requêtes/seconde (limite SIRENE) — comptez ~30 s pour 60 clients, plusieurs minutes pour tout le portefeuille. Un plafond est disponible pour tester progressivement.')) return;
   showSyncLoading(true); setSyncText('Chargement des clients…');
   try {
     let clients = []; const PAGE = 1000;
@@ -24252,7 +24267,10 @@ async function bulkUpdateLegalFromSiret() {
       clients = clients.concat(data || []);
       if (!data || data.length < PAGE) break;
     }
-    const todo = clients.filter(c => _siretValide(c.siret));
+    let todo = clients.filter(c => _siretValide(c.siret));
+    const _limEl = document.getElementById('blf-limit');
+    const _limit = _limEl && _limEl.value ? Math.max(1, parseInt(_limEl.value, 10) || 0) : 0;
+    if (_limit) todo = todo.slice(0, _limit);
     if (!todo.length) { showSyncLoading(false); toast('Aucun client avec SIRET valide.', 'warn'); return; }
     const total = todo.length;
     let idx = 0, done = 0, updated = 0, unchanged = 0, notFound = 0, errors = 0;
@@ -24279,7 +24297,6 @@ async function bulkUpdateLegalFromSiret() {
         } catch (e) { errors++; }
         done++;
         if (done % 5 === 0 || done === total) setSyncText('Mise à jour légale : ' + done + ' / ' + total + ' (mis à jour ' + updated + ', inchangés ' + unchanged + ', introuvables ' + notFound + ', erreurs ' + errors + ')');
-        await new Promise(r => setTimeout(r, 110)); // ménage l'API publique
       }
     }
     await Promise.all(Array.from({ length: 3 }, worker));
