@@ -2136,11 +2136,11 @@ tbody tr:last-child td { border-bottom: none; }
       <!-- Informations légales | Commerce | Infos Entreprise (aligné sur la fiche) -->
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">
         <div class="card">
-          <div class="card-header"><div class="card-title">Informations légales</div></div>
+          <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">Informations légales</div><button class="btn btn-sm" type="button" onclick="ncFillFromSirene()" title="Compléter automatiquement toutes les informations légales depuis SIRENE, à partir du SIRET ou SIREN saisi" style="font-size:11px">🏛️ Remplir (SIRENE)</button></div>
           <div class="card-body">
             <div style="display:grid;gap:8px">
               <div class="fg"><label class="fl">SIREN</label><input class="fi" id="nc-siren" oninput="const t=document.getElementById('nc-tva');if(t)t.value=computeTVA(this.value)||''"></div>
-              <div class="fg"><label class="fl">SIRET</label><input class="fi" id="nc-siret"></div>
+              <div class="fg"><label class="fl">SIRET</label><input class="fi" id="nc-siret" onchange="if(/^\d{14}$/.test(this.value.replace(/\s/g,'')))ncFillFromSirene(true)"></div>
               <div class="fg"><label class="fl">TVA intracommunautaire</label><input class="fi" id="nc-tva" readonly style="background:var(--bg-3)"></div>
               <div class="fg"><label class="fl">Code APE</label><input class="fi" id="nc-ape"></div>
             </div>
@@ -3544,6 +3544,45 @@ function mapClient(c) {
 function _ncSyncNomCommercial() {
   const n = document.getElementById('nc-name'), r = document.getElementById('nc-raison2');
   if (n && r && r.dataset.manual !== '1') r.value = n.value;
+}
+// Création client : remplit automatiquement toutes les informations légales depuis SIRENE à partir du SIRET (ou SIREN) saisi.
+// auto=true : appelé automatiquement quand un SIRET valide est saisi (messages d'erreur silencieux).
+async function ncFillFromSirene(auto) {
+  const g = id => document.getElementById(id);
+  let siret = ((g('nc-siret') || {}).value || '').replace(/\s/g, '');
+  const sirenIn = ((g('nc-siren') || {}).value || '').replace(/\s/g, '');
+  if (!/^\d{14}$/.test(siret) && !/^\d{9}$/.test(sirenIn)) { if (!auto) toast('Saisissez d\'abord un SIRET (14 chiffres) ou un SIREN (9 chiffres).', 'warn'); return; }
+  showSyncLoading(true); setSyncText('Recherche SIRENE…');
+  try {
+    let legal = null;
+    if (/^\d{14}$/.test(siret)) legal = await _fetchLegalForSiret(siret);
+    else {
+      await _sireneThrottle();
+      const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + sirenIn + '&per_page=1');
+      const d = r.ok ? await r.json() : {};
+      const ent = (d.results || [])[0];
+      if (ent && ent.siege && ent.siege.siret) { siret = ent.siege.siret; legal = await _fetchLegalForSiret(siret); }
+    }
+    showSyncLoading(false);
+    if (!legal) { if (!auto) toast('Aucune entreprise trouvée dans SIRENE pour ce numéro.', 'error'); return; }
+    const setVal = (id, val, force) => { const el = g(id); if (el && val != null && val !== '' && (force || !el.value)) el.value = val; };
+    setVal('nc-siret', siret, true);
+    setVal('nc-name', legal.raison_sociale);          // nom : seulement si vide (on garde ce qui est saisi)
+    setVal('nc-raison', legal.raison_sociale, true);
+    setVal('nc-raison2', legal.raison_sociale);       // Nom Commercial : si vide
+    setVal('nc-siren', legal.siren, true);
+    setVal('nc-ape', legal.ape, true);
+    setVal('nc-forme', legal.forme_juridique, true);
+    setVal('nc-tva', legal.tva_intracommunautaire, true);
+    setVal('nc-addr1', legal.adresse_ligne1);
+    setVal('nc-cp', legal.code_postal);
+    setVal('nc-city', legal.city);
+    setVal('nc-dept', legal.departement);
+    setVal('nc-region', legal.region);
+    if (legal.est_siege != null) window._ncEstSiege = legal.est_siege;
+    if (legal.etat_insee) window._ncEtatInsee = legal.etat_insee;
+    toast('Informations légales remplies depuis SIRENE ✅' + (legal.etat_insee === 'C' ? ' — ⚠️ entreprise radiée/cessée' : ''), 'success');
+  } catch (e) { showSyncLoading(false); if (!auto) toast('Erreur : ' + e.message, 'error'); }
 }
 
 async function loadDB() {
@@ -26521,7 +26560,7 @@ function openModal(id) {
   if(id==='new-devis') document.getElementById('nd-client').innerHTML=clientOpts;
   if(id==='new-commande') document.getElementById('ncm-client').innerHTML=clientOpts;
   if(id==='new-facture') document.getElementById('nf-client').innerHTML=clientOpts;
-  if(id==='new-client') { window._ncEstSiege = null; window._ncSelectedSireneResult = null; window._ncSecondaryEstablishments = []; const ep = document.getElementById('nc-etablissements-panel'); if(ep) ep.style.display='none'; _rpSelected = []; renderReseauxProChips('nc-reseaux-chips'); }
+  if(id==='new-client') { window._ncEstSiege = null; window._ncEtatInsee = null; window._ncSelectedSireneResult = null; window._ncSecondaryEstablishments = []; const ep = document.getElementById('nc-etablissements-panel'); if(ep) ep.style.display='none'; _rpSelected = []; renderReseauxProChips('nc-reseaux-chips'); }
   if(id==='prospect-target') initProspectFilters();
   if(id==='edit-client' && currentClient) {
     const c = currentClient;
@@ -27240,6 +27279,9 @@ function fillFromSirene(index) {
   document.getElementById('nc-dept').value = deptName(siege.departement);
   document.getElementById('nc-region').value = regionFromDept(siege.departement) || regionName(siege.region);
   document.getElementById('nc-pays').value = 'FR';
+  { const tvaEl = document.getElementById('nc-tva'); if (tvaEl) tvaEl.value = computeTVA(r.siren) || ''; }
+  { const nc2 = document.getElementById('nc-raison2'); if (nc2 && !nc2.value) nc2.value = r.nom_complet || r.nom_raison_sociale || ''; }
+  { const etat = siege.etat_administratif || r.etat_administratif || 'A'; window._ncEtatInsee = (etat === 'C' || etat === 'F') ? 'C' : 'A'; }
 
   // Effectif
   const tranche = r.tranche_effectif_salarie || '';
@@ -27626,6 +27668,7 @@ async function submitNewClient() {
       site_web: document.getElementById('nc-web').value.trim() || null,
       siren: document.getElementById('nc-siren').value.trim() || null,
       siret: document.getElementById('nc-siret').value.trim() || null,
+      tva_intracommunautaire: document.getElementById('nc-tva').value.trim() || null,
       ape: document.getElementById('nc-ape').value.trim() || null,
       reference_externe: document.getElementById('nc-refext')?.value?.trim() || null,
       categorie_compte: readCategorieCompte('nc'),
@@ -27645,6 +27688,7 @@ async function submitNewClient() {
       ini, color: colors[Math.floor(Math.random()*colors.length)],
       status: 'nouveau',
       est_siege: window._ncEstSiege ?? null,
+      etat_insee: window._ncEtatInsee ?? null,
     });
     invalidateReseauxProCache();
     invalidateGroupeOrigineCache();
@@ -27711,6 +27755,7 @@ async function submitNewClient() {
     // 4. Rechargement des données
     setStep('Rechargement des données…', 85);
     window._ncEstSiege = null;
+    window._ncEtatInsee = null;
     window._ncSelectedSireneResult = null;
     window._ncSecondaryEstablishments = [];
     closeModal('new-client');
