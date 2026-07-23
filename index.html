@@ -28307,7 +28307,8 @@ async function doSearch(q) {
     _seenCl.add(c.id);
     const badge = c.est_siege === true ? ' · Siège' : c.est_siege === false ? ' · Étab.' : '';
     const meta = [c.code, c.sector, c.city].filter(Boolean).join(' · ') + badge;
-    results.push({ type: 'Client', name: c.name, meta, action: `showClient('${c.id}')` });
+    const _score = _searchScore(q, c.name, c.code, c.city, c.sector, c.raison_sociale, c.raison_sociale2);
+    results.push({ type: 'Client', name: c.name, meta, action: `showClient('${c.id}')`, _score, _prio: 0 });
   };
   // 1) Recherche TOLÉRANTE par nom (RPC pg_trgm) : insensible à la ponctuation/espaces/casse (ex. « 6K » → « 6.K - SICA »)
   try { const { data } = await sb.rpc('search_clients', { q, lim: 8 }); (data || []).forEach(pushClient); } catch (e) { console.warn('search_clients', e && e.message); }
@@ -28316,7 +28317,7 @@ async function doSearch(q) {
     const qs = q.replace(/[,()]/g, ' ').trim();
     if (qs) {
       const { data } = await sb.from('clients')
-        .select('id,name,code,sector,city,est_siege')
+        .select('id,name,code,sector,city,est_siege,raison_sociale,raison_sociale2')
         .or(`name.ilike.%${qs}%,code.ilike.%${qs}%,city.ilike.%${qs}%,sector.ilike.%${qs}%,raison_sociale.ilike.%${qs}%,raison_sociale2.ilike.%${qs}%`)
         .order('est_siege', { ascending: false, nullsFirst: false })
         .limit(8);
@@ -28327,16 +28328,19 @@ async function doSearch(q) {
   // Recherche devis/commandes/factures en local (déjà chargés, filtrés par commercial)
   filterByCommercial(DB.devis).forEach(d => {
     if (d.ref?.toLowerCase().includes(ql)||d.client?.toLowerCase().includes(ql)||(d.sujet||'').toLowerCase().includes(ql))
-      results.push({type:'Devis',name:d.ref,meta:`${d.client} · ${d.sujet||''}`,action:`go('devis')`});
+      results.push({type:'Devis',name:d.ref,meta:`${d.client} · ${d.sujet||''}`,action:`go('devis')`, _score:_searchScore(q, d.ref, d.client, d.sujet), _prio:1});
   });
   filterByCommercial(DB.commandes).forEach(c => {
     if (c.ref?.toLowerCase().includes(ql)||c.client?.toLowerCase().includes(ql))
-      results.push({type:'Commande',name:c.ref,meta:`${c.client} · ${fmt(c.montant)}`,action:`go('commandes')`});
+      results.push({type:'Commande',name:c.ref,meta:`${c.client} · ${fmt(c.montant)}`,action:`go('commandes')`, _score:_searchScore(q, c.ref, c.client), _prio:1});
   });
   filterByCommercial(DB.factures).forEach(f => {
     if (f.ref?.toLowerCase().includes(ql)||f.client?.toLowerCase().includes(ql))
-      results.push({type:'Facture',name:f.ref,meta:`${f.client} · ${fmt(f.montant)}`,action:`go('factures')`});
+      results.push({type:'Facture',name:f.ref,meta:`${f.client} · ${fmt(f.montant)}`,action:`go('factures')`, _score:_searchScore(q, f.ref, f.client), _prio:1});
   });
+
+  // Tri par pertinence : score décroissant (exact > préfixe > contient), puis clients avant documents, puis alpha
+  results.sort((a, b) => (b._score || 0) - (a._score || 0) || (a._prio || 0) - (b._prio || 0) || String(a.name || '').localeCompare(String(b.name || ''), 'fr'));
 
   if (!results.length) { dd.innerHTML='<div class="search-result"><div class="search-result-meta">Aucun résultat</div></div>'; dd.classList.add('show'); return; }
   dd.innerHTML = results.slice(0,8).map(r => `<div class="search-result" onclick="${r.action};document.getElementById('searchDropdown').classList.remove('show');document.getElementById('globalSearch').value=''">
