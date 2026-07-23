@@ -9885,17 +9885,33 @@ function initAnalyse() {
 function anSetDates(from, to) { anFrom = from; anTo = to; _anData = null; _anNetwork = null; _anMap = null; renderPage('analyse'); }
 function anReset() { const r = _anDefaultRange(); anFrom = r.from; anTo = r.to; anAgences = []; anMetiers = []; anTypologies = []; anSousTypologies = []; _anNetFocus = ''; _anData = null; _anNetwork = null; _anMap = null; renderPage('analyse'); }
 // ═══ ANALYSE DES MARCHÉS PUBLICS (DECP archivés — table decp_marches) ═══
-let _decpData = null, _decpLoading = false, _decpNames = {};
+let _decpData = null, _decpLoading = false, _decpNames = {}, _decpLoadProgress = '';
 let decpFDept = [], decpFCpv = [], decpFYear = [], decpFClient = [];
 async function loadDecpAnalyseData() {
-  _decpLoading = true;
+  _decpLoading = true; _decpLoadProgress = '';
+  const COLS = 'client_id,acheteur_dept,acheteur_nom,montant,cpv,groupement,date_notification,titulaire_nom';
+  const setProg = t => { _decpLoadProgress = t; const el = document.getElementById('decp-load-progress'); if (el) el.textContent = t; };
+  const page = from => sb.from('decp_marches').select(COLS).order('date_notification', { ascending: false, nullsFirst: false }).range(from, from + 999).then(r => r.data || []).catch(() => []);
   let rows = [];
   try {
-    for (let from = 0; from < 60000; from += 1000) {
-      const { data, error } = await sb.from('decp_marches').select('client_id,acheteur_dept,acheteur_nom,montant,cpv,groupement,date_notification,titulaire_nom').order('date_notification', { ascending: false, nullsFirst: false }).range(from, from + 999);
-      if (error) { console.warn('[decp analyse]', error.message); break; }
-      rows = rows.concat(data || []);
-      if (!data || data.length < 1000) break;
+    let total = 0;
+    try { const { count } = await sb.from('decp_marches').select('client_id', { count: 'exact', head: true }); total = count || 0; } catch (e) {}
+    if (total > 0) {
+      // Chargement PARALLÈLE des pages (6 en concurrence) → temps divisé par ~6 vs séquentiel
+      const pages = Math.min(Math.ceil(total / 1000), 200), CONC = 6;
+      for (let p = 0; p < pages; p += CONC) {
+        const batch = [];
+        for (let k = p; k < Math.min(p + CONC, pages); k++) batch.push(page(k * 1000));
+        (await Promise.all(batch)).forEach(d => { rows = rows.concat(d); });
+        setProg(rows.length.toLocaleString('fr-FR') + ' / ' + total.toLocaleString('fr-FR') + ' marchés…');
+      }
+    } else {
+      // Repli séquentiel si le comptage est indisponible
+      for (let from = 0; from < 60000; from += 1000) {
+        const d = await page(from); rows = rows.concat(d);
+        setProg(rows.length.toLocaleString('fr-FR') + ' marchés…');
+        if (d.length < 1000) break;
+      }
     }
   } catch (e) { console.warn('[decp analyse]', e); }
   const ids = [...new Set(rows.map(r => r.client_id).filter(Boolean))];
@@ -9935,7 +9951,7 @@ function renderDecpAnalyse() {
     ${anyF ? '<button class="btn" style="font-size:12px;color:var(--red)" onclick="decpAnaReset()">Effacer</button>' : ''}
     <button class="btn" style="font-size:12px" onclick="decpAnaReload()" title="Recharger depuis la base">↻ Actualiser</button>
   </div>`;
-  if (_decpLoading || !_decpData) return filters + `<div style="text-align:center;padding:50px;color:var(--t3)">Chargement des marchés publics archivés…</div>`;
+  if (_decpLoading || !_decpData) return filters + `<div style="text-align:center;padding:50px;color:var(--t3)"><span class="hg-spin" style="font-size:20px">⏳</span><div style="margin-top:8px">Chargement des marchés publics archivés… <span id="decp-load-progress" style="color:var(--accent);font-weight:600">${_decpLoadProgress || ''}</span></div></div>`;
   if (!data.length) return filters + `<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--t3)">Aucun marché archivé pour l'instant.<br>Lancez la synchro depuis <b>Admin → Marchés publics des clients (DECP)</b>.</div></div>`;
   const rows = _decpFiltered();
   const num = v => Number(v) || 0;
