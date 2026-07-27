@@ -24588,8 +24588,9 @@ async function webResearchBulk(force) {
 }
 
 // ═══ OBJECTIFS PAR AGENCE ═══
-// Agences avec split SOL/EXE (paramétrable). Les autres = objectif global (métier='GLOBAL')
-const AGENCES_AVEC_METIERS = ['GPH64','GPH85'];
+// Métiers proposés dans le formulaire d'objectif, dispo pour toutes les agences.
+// (SOL/EXE pour un objectif par métier, GLOBAL pour un objectif global sans split)
+const AGENCES_AVEC_METIERS = ['GPH64','GPH85']; // historique : agences ayant démarré le split (non restrictif)
 const METIERS_DISPO = ['SOL','EXE','GLOBAL'];
 
 // Agences disponibles : on les charge dynamiquement depuis les commandes
@@ -24665,12 +24666,10 @@ function objectifFormHTML(prefix, values, agences) {
 }
 
 function updateMetierOptions(prefix, selectedMetier) {
-  const agSel = document.getElementById(prefix + '-agence');
   const mSel = document.getElementById(prefix + '-metier');
-  if (!agSel || !mSel) return;
-  const agence = agSel.value;
-  const hasMetiers = AGENCES_AVEC_METIERS.includes(agence);
-  const options = hasMetiers ? ['SOL','EXE'] : ['GLOBAL'];
+  if (!mSel) return;
+  // Tous les métiers dispo pour toutes les agences (SOL / EXE / Global)
+  const options = METIERS_DISPO;
   const sel = selectedMetier || mSel.value;
   mSel.innerHTML = options.map(m => `<option value="${m}"${sel===m?' selected':''}>${m === 'GLOBAL' ? 'Global (sans split)' : m}</option>`).join('');
 }
