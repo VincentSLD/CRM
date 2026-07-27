@@ -7,6 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <title>CRM NOVAM — Tableau de Bord Commercial</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="apple-touch-icon" href="favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="leaflet.css" />
@@ -204,8 +206,8 @@ details.filtres-acc[open] > summary span:first-child { transform: rotate(90deg);
 
 .nav-badge {
   margin-left: auto;
-  background: var(--yellow);
-  color: #1a1a1a;
+  background: var(--magenta);
+  color: #fff;
   font-size: 10px;
   font-weight: 700;
   padding: 1px 6px;
@@ -1853,11 +1855,11 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
       <div class="nav-item" data-page="taches" onclick="go('taches')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-        Tâches <span class="nav-badge" id="navBadgeTaches" style="display:none;background:var(--accent)"></span>
+        Tâches <span class="nav-badge" id="navBadgeTaches" style="display:none"></span>
       </div>
       <div class="nav-item" data-page="sollicitations" onclick="go('sollicitations')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        Sollicitations <span class="nav-badge" id="navBadgeSollic" style="display:none;background:var(--accent)"></span>
+        Sollicitations <span class="nav-badge" id="navBadgeSollic" style="display:none"></span>
       </div>
       <div class="nav-item" data-page="campagnes" onclick="go('campagnes')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M2 10l3 3"/><path d="M22 10l-3 3"/></svg>
@@ -1884,10 +1886,6 @@ tbody tr:last-child td { border-bottom: none; }
     </div>
   </nav>
   <div class="sidebar-footer">
-    <div class="sync-status">
-      <div class="sync-dot" id="syncDot"></div>
-      <span id="syncLabel">Akuiteo</span>
-    </div>
     <div class="offline-badge" id="offlineBadge">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/></svg>
       Mode hors-ligne actif
@@ -32768,9 +32766,10 @@ async function checkAdminPending(user) {
 }
 
 function updateSyncLabel() {
-  const now = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
-  document.getElementById('syncDot').style.background = 'var(--green)';
-  document.getElementById('syncLabel').innerHTML = 'Akuiteo synchronisé — <span style="font-family:JetBrains Mono,monospace">' + now + '</span>';
+  // Indicateur de synchro retiré de la sidebar — no-op sécurisé (éléments absents)
+  const dot = document.getElementById('syncDot'); if (dot) dot.style.background = 'var(--green)';
+  const lbl = document.getElementById('syncLabel');
+  if (lbl) { const now = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'}); lbl.innerHTML = 'Akuiteo synchronisé — <span style="font-family:JetBrains Mono,monospace">' + now + '</span>'; }
 }
 
 async function doLogout() {
