@@ -9776,7 +9776,7 @@ function renderPage(page) {
     _clientsServerLoaded = true;
     loadClientsPage(clientsPage || 0, clientsLetter, clientsSearch);
   }
-  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); }, 50);
+  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); renderMetiersConfig(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); }, 50);
   if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); }, 50);
   if (page === 'analyse') setTimeout(initAnalyse, 30);
   if (page === 'decp-analyse') setTimeout(initDecpAnalyse, 30);
@@ -23329,11 +23329,22 @@ function renderAdmin() {
 
   <div class="card" style="margin-top:16px">
     <div class="card-header" style="flex-wrap:wrap;gap:8px">
-      <div class="card-title">Mapping Type de Mission → Métier (SOL / EXE)</div>
+      <div class="card-title">Métiers & affectation aux agences</div>
+      <button class="btn" onclick="renderMetiersConfig()" style="font-size:12px">↻ Rafraîchir</button>
+    </div>
+    <div class="card-body">
+      <p style="font-size:12px;color:var(--t2);margin-bottom:12px">Définissez la liste des métiers, puis cochez ceux qui s'appliquent à chaque agence. Les objectifs par agence ne proposeront que les métiers affectés à l'agence choisie.</p>
+      <div id="metiersConfigBox" style="font-size:13px;color:var(--t3)">Chargement...</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <div class="card-title">Mapping Type de Mission → Métier</div>
       <button class="btn" onclick="loadMissionTypes()" style="font-size:12px">Charger les types depuis les commandes</button>
     </div>
     <div class="card-body">
-      <p style="font-size:12px;color:var(--t2);margin-bottom:10px">Associez chaque "Type de Mission" Akuiteo à un métier (SOL ou EXE). Ces mappings sont utilisés pour calculer le CA réalisé par métier dans le suivi des objectifs.</p>
+      <p style="font-size:12px;color:var(--t2);margin-bottom:10px">Associez chaque "Type de Mission" Akuiteo à un métier du référentiel. Ces mappings servent à calculer le CA réalisé par métier dans le suivi des objectifs.</p>
       <div id="missionMetierList" style="font-size:13px;color:var(--t3)">Cliquez sur "Charger" pour afficher les types de mission existants.</div>
     </div>
   </div>
@@ -24138,7 +24149,7 @@ async function loadMissionTypes() {
   const el = document.getElementById('missionMetierList');
   if (!el) return;
   el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t3)">Chargement des types de mission...</div>';
-  await loadMissionMapping();
+  await Promise.all([loadMissionMapping(), loadMetiersConfig()]);
   // Charger toutes les commandes (custom_data + societe + montant)
   let all = [], off = 0;
   while (true) {
@@ -24182,8 +24193,7 @@ async function loadMissionTypes() {
         <td style="padding:6px 10px;text-align:center">
           <select onchange="setMissionMetier('${tmEsc}', this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px">
             <option value="" ${!current?'selected':''}>—</option>
-            <option value="SOL" ${current==='SOL'?'selected':''}>SOL</option>
-            <option value="EXE" ${current==='EXE'?'selected':''}>EXE</option>
+            ${(_metiersRef || []).map(m => `<option value="${m.code}" ${current===m.code?'selected':''}>${m.code}</option>`).join('')}
           </select>
         </td>
       </tr>`;
@@ -24588,10 +24598,103 @@ async function webResearchBulk(force) {
 }
 
 // ═══ OBJECTIFS PAR AGENCE ═══
-// Métiers proposés dans le formulaire d'objectif, dispo pour toutes les agences.
-// (SOL/EXE pour un objectif par métier, GLOBAL pour un objectif global sans split)
-const AGENCES_AVEC_METIERS = ['GPH64','GPH85']; // historique : agences ayant démarré le split (non restrictif)
-const METIERS_DISPO = ['SOL','EXE','GLOBAL'];
+// Référentiel des métiers (paramétrable) + affectation métiers → agences.
+// Chaque agence peut avoir sa propre liste de métiers ; 'GLOBAL' reste toujours proposé (objectif sans split).
+let _metiersRef = null;      // [{code, libelle, ordre}]
+let _agenceMetiers = null;   // { agence: [codeMetier, ...] }
+async function loadMetiersConfig(force) {
+  if (_metiersRef && _agenceMetiers && !force) return;
+  const [{ data: mets }, { data: am }] = await Promise.all([
+    sb.from('metiers').select('*').order('ordre').order('code'),
+    sb.from('agence_metiers').select('*')
+  ]);
+  _metiersRef = mets || [];
+  const map = {};
+  for (const r of (am || [])) (map[r.agence] = map[r.agence] || []).push(r.metier);
+  _agenceMetiers = map;
+}
+// Métiers affectés à une agence, ordonnés selon le référentiel
+function _metiersForAgence(agence) {
+  const list = (_agenceMetiers && _agenceMetiers[agence]) ? _agenceMetiers[agence].slice() : [];
+  const order = {}; (_metiersRef || []).forEach((m, i) => order[m.code] = (m.ordre != null ? m.ordre : i));
+  list.sort((a, b) => (order[a] != null ? order[a] : 99) - (order[b] != null ? order[b] : 99));
+  return list;
+}
+
+// ═══ ADMIN : référentiel des métiers + affectation aux agences ═══
+async function renderMetiersConfig() {
+  const el = document.getElementById('metiersConfigBox');
+  if (!el) return;
+  await loadMetiersConfig(true);
+  const agences = await getAgencesDispo();
+  const mets = _metiersRef || [];
+  const eh = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const jq = s => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  let html = '<div style="font-weight:600;font-size:13px;margin-bottom:8px">Liste des métiers</div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
+  html += mets.length ? mets.map(m => `<span style="display:inline-flex;align-items:center;gap:7px;padding:4px 10px;border:1px solid var(--border);border-radius:16px;background:var(--bg-2)">
+      <b style="font-size:12px">${eh(m.code)}</b>${m.libelle ? '<span style="color:var(--t3);font-size:11px">' + eh(m.libelle) + '</span>' : ''}
+      <span onclick="deleteMetier('${jq(m.code)}')" title="Supprimer ce métier" style="cursor:pointer;color:var(--red);font-weight:700;font-size:15px;line-height:1">×</span>
+    </span>`).join('') : '<span style="color:var(--t3);font-size:12px">Aucun métier défini pour l\'instant.</span>';
+  html += '</div>';
+  html += `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:18px">
+      <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Code *</label><input id="newMetierCode" placeholder="Ex: GO" maxlength="12" class="fi" style="padding:6px 8px;font-size:12px;width:110px;text-transform:uppercase" onkeydown="if(event.key==='Enter')addMetier()"></div>
+      <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Libellé (facultatif)</label><input id="newMetierLabel" placeholder="Ex: Gros oeuvre" class="fi" style="padding:6px 8px;font-size:12px;width:220px" onkeydown="if(event.key==='Enter')addMetier()"></div>
+      <button class="btn btn-primary" onclick="addMetier()" style="font-size:12px">+ Ajouter le métier</button>
+    </div>`;
+  html += '<div style="font-weight:600;font-size:13px;margin-bottom:8px">Affectation aux agences</div>';
+  if (!mets.length) {
+    html += '<div style="color:var(--t3);font-size:12px">Ajoutez d\'abord au moins un métier ci-dessus.</div>';
+  } else if (!agences.length) {
+    html += '<div style="color:var(--t3);font-size:12px">Aucune agence détectée. Chargez des commandes/factures d\'abord.</div>';
+  } else {
+    html += '<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12px"><thead><tr>';
+    html += '<th style="padding:6px 12px;text-align:left;border-bottom:2px solid var(--border)">Agence</th>';
+    html += mets.map(m => `<th style="padding:6px 12px;text-align:center;border-bottom:2px solid var(--border)">${eh(m.code)}</th>`).join('');
+    html += '</tr></thead><tbody>';
+    html += agences.map(a => {
+      const set = new Set(_agenceMetiers[a] || []);
+      return `<tr style="border-bottom:1px solid var(--border)"><td style="padding:6px 12px;font-weight:500">${eh(a)}</td>` +
+        mets.map(m => `<td style="padding:6px 12px;text-align:center"><input type="checkbox" ${set.has(m.code) ? 'checked' : ''} onchange="toggleAgenceMetier('${jq(a)}','${jq(m.code)}',this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)"></td>`).join('') +
+        '</tr>';
+    }).join('');
+    html += '</tbody></table></div>';
+  }
+  el.innerHTML = html;
+}
+
+async function addMetier() {
+  const codeEl = document.getElementById('newMetierCode');
+  const labelEl = document.getElementById('newMetierLabel');
+  if (!codeEl) return;
+  const code = (codeEl.value || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+  if (!code) { toast('Code métier invalide (lettres/chiffres uniquement)', 'error'); return; }
+  if (code === 'GLOBAL') { toast('« GLOBAL » est réservé (objectif sans split)', 'error'); return; }
+  if ((_metiersRef || []).some(m => m.code === code)) { toast('Ce code métier existe déjà', 'error'); return; }
+  const libelle = ((labelEl && labelEl.value) || '').trim() || null;
+  const ordre = (_metiersRef || []).reduce((mx, m) => Math.max(mx, m.ordre || 0), 0) + 1;
+  const { error } = await sb.from('metiers').insert({ code, libelle, ordre });
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  toast('Métier « ' + code + ' » ajouté', 'success');
+  await renderMetiersConfig();
+}
+
+async function deleteMetier(code) {
+  if (!confirm('Supprimer le métier « ' + code + ' » ?\nIl sera retiré de toutes les agences. Les objectifs déjà saisis sur ce métier ne sont pas supprimés.')) return;
+  await sb.from('agence_metiers').delete().eq('metier', code);
+  const { error } = await sb.from('metiers').delete().eq('code', code);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  toast('Métier supprimé', 'success');
+  await renderMetiersConfig();
+}
+
+async function toggleAgenceMetier(agence, metier, on) {
+  let error;
+  if (on) ({ error } = await sb.from('agence_metiers').upsert({ agence, metier }, { onConflict: 'agence,metier' }));
+  else ({ error } = await sb.from('agence_metiers').delete().eq('agence', agence).eq('metier', metier));
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  await loadMetiersConfig(true); // met à jour le cache pour le formulaire d'objectif
+}
 
 // Agences disponibles : on les charge dynamiquement depuis les commandes
 let _agencesDispo = null;
@@ -24666,11 +24769,14 @@ function objectifFormHTML(prefix, values, agences) {
 }
 
 function updateMetierOptions(prefix, selectedMetier) {
+  const agSel = document.getElementById(prefix + '-agence');
   const mSel = document.getElementById(prefix + '-metier');
-  if (!mSel) return;
-  // Tous les métiers dispo pour toutes les agences (SOL / EXE / Global)
-  const options = METIERS_DISPO;
-  const sel = selectedMetier || mSel.value;
+  if (!agSel || !mSel) return;
+  // Métiers affectés à l'agence choisie + toujours 'GLOBAL' (objectif sans split)
+  const options = [..._metiersForAgence(agSel.value), 'GLOBAL'];
+  const sel = selectedMetier || mSel.value || options[0];
+  // Conserver un métier déjà enregistré même s'il n'est plus affecté à l'agence (édition)
+  if (sel && !options.includes(sel)) options.unshift(sel);
   mSel.innerHTML = options.map(m => `<option value="${m}"${sel===m?' selected':''}>${m === 'GLOBAL' ? 'Global (sans split)' : m}</option>`).join('');
 }
 
@@ -24686,7 +24792,7 @@ async function addObjectifAgence() {
   const list = document.getElementById('objectifsAgencesList');
   if (!list) return;
   if (document.getElementById('newObjForm')) return;
-  const agences = await getAgencesDispo();
+  const [agences] = await Promise.all([getAgencesDispo(), loadMetiersConfig()]);
   list.insertAdjacentHTML('afterbegin', objectifFormHTML('newObj', null, agences));
   updateMetierOptions('newObj');
 }
@@ -24696,7 +24802,7 @@ async function editObjectifAgence(id) {
   if (!data) return;
   const row = document.getElementById('obj-row-' + id);
   if (!row || document.getElementById('editObjForm')) return;
-  const agences = await getAgencesDispo();
+  const [agences] = await Promise.all([getAgencesDispo(), loadMetiersConfig()]);
   row.insertAdjacentHTML('beforebegin', '<tr><td colspan="5" style="padding:0">' + objectifFormHTML('editObj', data, agences) + '</td></tr>');
   updateMetierOptions('editObj', data.metier);
 }
@@ -24803,7 +24909,7 @@ async function renderClientObjectifs(clientId) {
 async function addObjectifClient(clientId) {
   const el = document.getElementById('clientObjectifsList');
   if (!el || document.getElementById('newCObjForm')) return;
-  const agences = await getAgencesDispo();
+  const [agences] = await Promise.all([getAgencesDispo(), loadMetiersConfig()]);
   el.insertAdjacentHTML('afterbegin', objectifFormHTML('newCObj', null, agences));
   updateMetierOptions('newCObj');
   // Stocker le clientId pour le save
@@ -24815,7 +24921,7 @@ async function editObjectifClient(id, clientId) {
   if (!data) return;
   const row = document.getElementById('cobj-row-' + id);
   if (!row || document.getElementById('editCObjForm')) return;
-  const agences = await getAgencesDispo();
+  const [agences] = await Promise.all([getAgencesDispo(), loadMetiersConfig()]);
   row.insertAdjacentHTML('beforebegin', '<tr><td colspan="7" style="padding:0">' + objectifFormHTML('editCObj', data, agences) + '</td></tr>');
   updateMetierOptions('editCObj', data.metier);
   document.getElementById('editCObjForm').dataset.clientId = clientId;
@@ -25220,7 +25326,7 @@ async function autoLinkCommerciaux() {
   if (linkedAk > 0) msgs.push(`${linkedAk} ID Akuiteo rempli(s)`);
   toast(msgs.length > 0 ? msgs.join(', ') : 'Aucune nouvelle liaison trouvée', msgs.length > 0 ? 'success' : 'info');
   renderPage('admin');
-  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); }, 50);
+  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); renderMetiersConfig(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); }, 50);
 }
 
 let linkCommercialLuccaForId = null;
@@ -25236,7 +25342,7 @@ function openManualLinkCommercialLucca(commId, commName) {
     closeModal('link-lucca');
     toast('Liaison effectuée', 'success');
     renderPage('admin');
-    setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); }, 50);
+    setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); renderMetiersConfig(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); }, 50);
   };
   renderLinkLuccaList();
   openModal('link-lucca');
@@ -25249,7 +25355,7 @@ async function unlinkCommercialLucca(commId) {
   if (comm) comm.lucca_id = null;
   toast('Liaison supprimée', 'success');
   renderPage('admin');
-  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); }, 50);
+  setTimeout(() => { loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); renderMetiersConfig(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); }, 50);
 }
 
 async function updateCommercialRole(commercialId, role) {

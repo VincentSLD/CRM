@@ -100,7 +100,37 @@ ALTER TABLE contacts ADD COLUMN IF NOT EXISTS commentaire TEXT;
 
 -- ═══ Objectifs et mapping métier ═══
 
--- Mapping Type de Mission → Métier (SOL / EXE)
+-- Référentiel des métiers (paramétrable) — liste de métiers affectables aux agences
+CREATE TABLE IF NOT EXISTS metiers (
+  code TEXT PRIMARY KEY,
+  libelle TEXT,
+  ordre INT DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE metiers ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "metiers_all" ON metiers;
+CREATE POLICY "metiers_all" ON metiers FOR ALL USING (true) WITH CHECK (true);
+
+-- Affectation des métiers aux agences (chaque agence peut avoir sa propre liste de métiers)
+CREATE TABLE IF NOT EXISTS agence_metiers (
+  agence TEXT NOT NULL,
+  metier TEXT NOT NULL,
+  PRIMARY KEY (agence, metier)
+);
+ALTER TABLE agence_metiers ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "agence_metiers_all" ON agence_metiers;
+CREATE POLICY "agence_metiers_all" ON agence_metiers FOR ALL USING (true) WITH CHECK (true);
+
+-- Amorçage : SOL / EXE affectés à GPH64 et GPH85 (existant) — ne rien écraser si déjà présent
+INSERT INTO metiers (code, libelle, ordre) VALUES
+  ('SOL', 'Etudes de sol / Geotechnique', 1),
+  ('EXE', 'Structure / Execution', 2)
+ON CONFLICT (code) DO NOTHING;
+INSERT INTO agence_metiers (agence, metier) VALUES
+  ('GPH64','SOL'), ('GPH64','EXE'), ('GPH85','SOL'), ('GPH85','EXE')
+ON CONFLICT DO NOTHING;
+
+-- Mapping Type de Mission → Métier (utilise les codes du référentiel metiers)
 CREATE TABLE IF NOT EXISTS mission_metier_mapping (
   type_mission TEXT PRIMARY KEY,
   metier TEXT NOT NULL,
