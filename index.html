@@ -13214,7 +13214,7 @@ async function syncSitesVersAkuiteo() {
 //  Rôles : client (client_id) / architecte / apporteur / gros-œuvre (par nom)
 // ═══════════════════════════════════════════════════════════
 let ccaRows = null, ccaCharts = {}, ccaFsBound = false;
-let ccaF = { roles: [], dt: { devis: true, commandes: true, factures: true }, from: '', to: '', agences: [], metiers: [], prestas: [], statuts: [], estabs: [] };
+let ccaF = { roles: [], dt: { devis: true, commandes: true, factures: true }, from: '', to: '', agences: [], metiers: [], prestas: [], statuts: [], estabs: [], compare: [] };
 
 const CCA_COLS = {
   devis: 'id,ref,montant,date,statut,societe,type_prestation,gros_oeuvre,architecte,apporteur_affaire,client_id,client_name,sujet',
@@ -13285,13 +13285,14 @@ async function _ccaFetch(c) {
   return [...map.values()];
 }
 
-function _ccaFiltered() {
+// Filtrage complet mais avec une plage de dates paramétrable (sert à la période courante ET aux périodes N-1/N-2)
+function _ccaFilteredRange(from, to) {
   const inArr = (a, v) => !a || !a.length || a.includes(v);
   return (ccaRows || []).filter(r => {
     if (!ccaF.dt[r.type]) return false;
     if (ccaF.roles && ccaF.roles.length && !ccaF.roles.some(ro => r.roles.has(ro))) return false;
-    if (ccaF.from && r.date && r.date < ccaF.from) return false;
-    if (ccaF.to && r.date && r.date > ccaF.to) return false;
+    if (from && r.date && r.date < from) return false;
+    if (to && r.date && r.date > to) return false;
     if (!inArr(ccaF.agences, r.agence)) return false;
     if (!inArr(ccaF.metiers, r.metier)) return false;
     if (!inArr(ccaF.prestas, r.type_prestation)) return false;
@@ -13300,11 +13301,33 @@ function _ccaFiltered() {
     return true;
   });
 }
+function _ccaFiltered() { return _ccaFilteredRange(ccaF.from, ccaF.to); }
+
+// Décale une date ISO 'YYYY-MM-DD' de n années en arrière (conserve MM-DD)
+function _ccaShiftYears(dateStr, n) {
+  if (!dateStr || dateStr.length < 4) return dateStr;
+  const y = parseInt(dateStr.slice(0, 4), 10);
+  if (isNaN(y)) return dateStr;
+  return (y - n) + dateStr.slice(4);
+}
+
+// Indicateurs agrégés d'une plage de dates (documents datés uniquement, pour une comparaison juste)
+function _ccaStatsForRange(from, to) {
+  const rows = _ccaFilteredRange(from, to).filter(r => r.date);
+  const caDevis = rows.filter(r => r.type === 'devis').reduce((a, r) => a + r.montant, 0);
+  const caCmd = rows.filter(r => r.type === 'commandes').reduce((a, r) => a + r.montant, 0);
+  const caFact = rows.filter(r => r.type === 'factures').reduce((a, r) => a + r.montant, 0);
+  const nDevis = rows.filter(r => r.type === 'devis').length;
+  const nCmd = rows.filter(r => r.type === 'commandes').length;
+  const nbDocs = rows.length;
+  const caTotal = caDevis + caCmd + caFact;
+  return { caDevis, caCmd, caFact, nDevis, nCmd, nbDocs, caTotal, panier: nbDocs ? caTotal / nbDocs : 0 };
+}
 
 async function ccaOpen() {
   const c = currentClient;
   if (!c) return;
-  ccaF = { roles: [], dt: { devis: true, commandes: true, factures: true }, from: '', to: '', agences: [], metiers: [], prestas: [], statuts: [], estabs: [] };
+  ccaF = { roles: [], dt: { devis: true, commandes: true, factures: true }, from: '', to: '', agences: [], metiers: [], prestas: [], statuts: [], estabs: [], compare: [] };
   let ov = document.getElementById('ccaOverlay');
   if (!ov) { ov = document.createElement('div'); ov.id = 'ccaOverlay'; document.body.appendChild(ov); }
   ov.style.cssText = 'position:fixed;inset:0;z-index:2000;background:var(--bg-1);display:flex;flex-direction:column';
@@ -13362,6 +13385,9 @@ function _ccaRenderFilters() {
         <label style="cursor:pointer"><input type="checkbox" id="ccaDtFact" checked onchange="ccaApply()"> Factures</label></div>`) +
     fld('Du', `<input type="date" class="fi" id="ccaFrom" onchange="ccaApply()" style="font-size:12px;padding:4px 8px;width:auto">`) +
     fld('au', `<input type="date" class="fi" id="ccaTo" onchange="ccaApply()" style="font-size:12px;padding:4px 8px;width:auto">`) +
+    fld('Comparer', `<div style="display:flex;gap:8px;font-size:12px;padding-top:4px">
+        <label style="cursor:pointer" title="Comparer avec la même période l'an dernier"><input type="checkbox" id="ccaCmp1" ${(ccaF.compare || []).includes(1) ? 'checked' : ''} onchange="ccaApply()"> N-1</label>
+        <label style="cursor:pointer" title="Comparer avec la même période il y a 2 ans"><input type="checkbox" id="ccaCmp2" ${(ccaF.compare || []).includes(2) ? 'checked' : ''} onchange="ccaApply()"> N-2</label></div>`) +
     fld('Agence', msButton('ccaAgence', 'Agences')) +
     fld('Métier', msButton('ccaMetier', 'Métiers')) +
     fld('Type de mission', msButton('ccaPresta', 'Missions')) +
@@ -13373,6 +13399,9 @@ function ccaApply() {
   ccaF.dt = { devis: !!document.getElementById('ccaDtDevis')?.checked, commandes: !!document.getElementById('ccaDtCmd')?.checked, factures: !!document.getElementById('ccaDtFact')?.checked };
   ccaF.from = document.getElementById('ccaFrom')?.value || '';
   ccaF.to = document.getElementById('ccaTo')?.value || '';
+  ccaF.compare = [];
+  if (document.getElementById('ccaCmp1')?.checked) ccaF.compare.push(1);
+  if (document.getElementById('ccaCmp2')?.checked) ccaF.compare.push(2);
   _ccaRenderBody();
 }
 
@@ -13400,6 +13429,55 @@ function _ccaRenderBody() {
     ? Object.entries(_rcObj).map(([ag, v]) => { const r = _rcRang && _rcRang[ag]; return ag + ': ' + String(v).charAt(0) + (r ? ' (' + r + ')' : ''); }).join(' · ')
     : '—';
 
+  // ─── Comparaison annuelle N-1 / N-2 (même période décalée, mêmes filtres) ───
+  const cmp = (ccaF.compare || []).filter(n => n === 1 || n === 2).sort((a, b) => a - b);
+  const canCompare = cmp.length && ccaF.from && ccaF.to;
+  let cmpHtml = '', _cmpPstats = null;
+  if (cmp.length && (!ccaF.from || !ccaF.to)) {
+    cmpHtml = `<div style="background:var(--card);border:1px dashed var(--border);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--t3)">📅 Renseignez une date « Du » <b>et</b> « au » pour comparer avec N-1${cmp.includes(2) ? ' / N-2' : ''} sur la même période décalée.</div>`;
+  } else if (canCompare) {
+    const periods = [{ label: 'Période', from: ccaF.from, to: ccaF.to }];
+    cmp.forEach(n => periods.push({ label: 'N-' + n, from: _ccaShiftYears(ccaF.from, n), to: _ccaShiftYears(ccaF.to, n) }));
+    _cmpPstats = periods.map(p => ({ ...p, s: _ccaStatsForRange(p.from, p.to) }));
+    const cur = _cmpPstats[0].s;
+    const evo = (curV, pastV) => {
+      if (!pastV) return curV ? '<span style="color:#10b981">nouveau</span>' : '<span style="color:var(--t3)">—</span>';
+      const d = (curV - pastV) / pastV * 100;
+      const col = d >= 0 ? '#10b981' : '#ef4444';
+      return `<span style="color:${col}">${d >= 0 ? '▲ +' : '▼ '}${d.toFixed(0)} %</span>`;
+    };
+    const fmtDates = p => (p.from || '…') + ' → ' + (p.to || '…');
+    const metricRows = [
+      ['CA total (HT)', s => fmt(s.caTotal), s => s.caTotal],
+      ['CA devis', s => fmt(s.caDevis), s => s.caDevis],
+      ['CA commandes', s => fmt(s.caCmd), s => s.caCmd],
+      ['CA factures', s => fmt(s.caFact), s => s.caFact],
+      ['Nb documents', s => String(s.nbDocs), s => s.nbDocs],
+      ['Panier moyen', s => fmt(s.panier), s => s.panier]
+    ];
+    cmpHtml = `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:2px">Comparaison annuelle</div>
+      <div style="font-size:11px;color:var(--t3);margin-bottom:10px">Même période décalée, à filtres identiques. Le pourcentage compare la <b>Période</b> à chaque année passée.</div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
+        <div style="flex:1;min-width:300px;overflow:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="color:var(--t3);border-bottom:1px solid var(--border)">
+              <th style="padding:6px 8px;text-align:left">Indicateur</th>
+              ${_cmpPstats.map(p => `<th style="padding:6px 8px;text-align:right">${p.label}<div style="font-size:10px;font-weight:400;color:var(--t3)">${fmtDates(p)}</div></th>`).join('')}
+            </tr></thead>
+            <tbody>
+              ${metricRows.map(([lbl, fmtFn, valFn]) => `<tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:6px 8px;text-align:left">${lbl}</td>
+                ${_cmpPstats.map((p, i) => `<td style="padding:6px 8px;text-align:right">${fmtFn(p.s)}${i > 0 ? '<div style="font-size:10px">' + evo(valFn(cur), valFn(p.s)) + '</div>' : ''}</td>`).join('')}
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div style="flex:1;min-width:300px"><div style="position:relative;height:240px"><canvas id="ccaChartCompare"></canvas></div></div>
+      </div>
+    </div>`;
+  }
+
   const kpi = (label, val, sub) => `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;min-width:150px;flex:1">
       <div style="font-size:11px;color:var(--t3)">${label}</div><div style="font-size:20px;font-weight:700;color:var(--t1)">${val}</div>${sub ? '<div style="font-size:11px;color:var(--t3)">' + sub + '</div>' : ''}</div>`;
   const chartCard = (title, id, h) => `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;flex:1;min-width:300px"><div style="font-size:13px;font-weight:600;margin-bottom:8px">${title}</div><div style="position:relative;height:${h || 220}px"><canvas id="${id}"></canvas></div></div>`;
@@ -13418,6 +13496,7 @@ function _ccaRenderBody() {
       ${kpi('Taux transfo devis→cmd', transfo + ' %')}
       ${kpi('Catégorie ABC (' + _roleLbl + ')', '<span style="font-size:13px">' + _roleCatStr + '</span>')}
     </div>
+    ${cmpHtml}
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
       ${chartCard('CA par type de document', 'ccaChartType')}
       ${chartCard('CA dans le temps (par an)', 'ccaChartTime')}
@@ -13450,7 +13529,25 @@ function _ccaRenderBody() {
     </div>`;
 
   _ccaBuildCharts(rows, { caDevis, caCmd, caFact });
+  if (_cmpPstats) _ccaBuildCompareChart(_cmpPstats);
   ccaUpdateSelCount();
+}
+
+// Graphe groupé : CA total / devis / commandes / factures par période (Période, N-1, N-2)
+function _ccaBuildCompareChart(pstats) {
+  const el = document.getElementById('ccaChartCompare');
+  if (!el || !window.Chart) return;
+  const colors = ['#4f8ff7', '#f59e0b', '#94a3b8'];
+  const datasets = pstats.map((p, i) => ({
+    label: p.label,
+    data: [p.s.caTotal, p.s.caDevis, p.s.caCmd, p.s.caFact],
+    backgroundColor: colors[i % colors.length]
+  }));
+  _ccaMkChart('ccaChartCompare', {
+    type: 'bar',
+    data: { labels: ['CA total', 'Devis', 'Commandes', 'Factures'], datasets },
+    options: { plugins: { legend: { display: true, labels: { font: { size: 10 } } } }, scales: { x: { ticks: { font: { size: 10 } } }, y: { ticks: { font: { size: 10 } } } }, maintainAspectRatio: false }
+  });
 }
 
 function ccaUpdateSelCount() {
@@ -13540,7 +13637,7 @@ function ccaExportPDF() {
     doc.text(periode + '   |   ' + roleTxt, 14, 22);
     doc.text('CA total HT : ' + fmt(caDevis + caCmd + caFact) + '  (devis ' + fmt(caDevis) + ' · commandes ' + fmt(caCmd) + ' · factures ' + fmt(caFact) + ')', 14, 27);
     let y = 34;
-    const imgs = ['ccaChartType', 'ccaChartTime', 'ccaChartPresta', 'ccaChartMetier', 'ccaChartAgence', 'ccaChartEtab'];
+    const imgs = ['ccaChartCompare', 'ccaChartType', 'ccaChartTime', 'ccaChartPresta', 'ccaChartMetier', 'ccaChartAgence', 'ccaChartEtab'];
     for (let i = 0; i < imgs.length; i++) {
       const ch = ccaCharts[imgs[i]]; if (!ch) continue;
       const img = ch.toBase64Image('image/png', 1);
