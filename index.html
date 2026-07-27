@@ -23,28 +23,35 @@
   --bg-3: #f7f6f2;
   --bg-4: #e0ddd5;
   --bg-glass: rgba(255, 255, 255, 0.88);
-  --yellow: #f5c518;
-  --yellow-light: #fef9e7;
-  --yellow-dark: #c9a000;
-  --yellow-pale: #fef9e7;
-  --yellow-glow: rgba(245,197,24,0.25);
-  --accent: #f5c518;
-  --accent-2: #c9a000;
-  --accent-glow: rgba(245, 197, 24, 0.12);
-  --accent-glow-2: rgba(245, 197, 24, 0.08);
+  /* ═══ Charte graphique NOVAM ═══
+     Violet #772471 = couleur principale · Magenta #ED1651 = signature · Marine #000043 · secondaires charte */
+  --magenta: #ED1651;
+  --magenta-dark: #c1123f;
+  --magenta-bg: rgba(237, 22, 81, 0.10);
+  --navy: #000043;
+  /* Anciennes variables "yellow" conservées (nom) mais remappées sur le violet NOVAM */
+  --yellow: #772471;
+  --yellow-light: #f7edf5;
+  --yellow-dark: #5a1a56;
+  --yellow-pale: #f7edf5;
+  --yellow-glow: rgba(119, 36, 113, 0.22);
+  --accent: #772471;
+  --accent-2: #5a1a56;
+  --accent-glow: rgba(119, 36, 113, 0.14);
+  --accent-glow-2: rgba(119, 36, 113, 0.08);
   --green: #2e7d32;
   --green-bg: rgba(46, 125, 50, 0.10);
   --amber: #f5a623;
   --amber-bg: rgba(245, 166, 35, 0.12);
-  --red: #d32f2f;
-  --red-bg: rgba(211, 47, 47, 0.10);
-  --cyan: #5c6bc0;
-  --cyan-bg: rgba(92, 107, 192, 0.10);
+  --red: #C11F39;
+  --red-bg: rgba(193, 31, 57, 0.10);
+  --cyan: #524FA1;
+  --cyan-bg: rgba(82, 79, 161, 0.10);
   --t1: #1a1a1a;
   --t2: #4a4a4a;
   --t3: #8a8a80;
   --border: #e0ddd5;
-  --border-h: rgba(245, 197, 24, 0.5);
+  --border-h: rgba(119, 36, 113, 0.5);
   --r: 14px;
   --r-sm: 10px;
   --r-lg: 14px;
@@ -71,7 +78,7 @@ body::before {
   position: fixed;
   top: 0; left: 0; right: 0;
   height: 4px;
-  background: linear-gradient(90deg, #1a1a1a 0%, var(--yellow) 100%);
+  background: linear-gradient(90deg, var(--accent) 0%, var(--magenta) 100%);
   z-index: 200;
   pointer-events: none;
 }
@@ -108,7 +115,7 @@ body::before {
   font-size: 12px;
   color: #1a1a1a;
   flex-shrink: 0;
-  box-shadow: 0 2px 16px rgba(245,197,24,0.12);
+  box-shadow: 0 2px 16px rgba(119,36,113,0.12);
 }
 
 .sidebar-brand,
@@ -557,7 +564,7 @@ details.acc[open] > summary::before { transform: rotate(90deg); }
 }
 
 .btn:hover { color: var(--t1); border-color: rgba(26,26,26,0.3); background: rgba(26,26,26,0.05); }
-.btn.active { background: var(--yellow-pale); color: #1a1a1a; border-color: rgba(245,197,24,0.4); }
+.btn.active { background: var(--yellow-pale); color: #1a1a1a; border-color: rgba(119,36,113,0.4); }
 
 .btn-primary { background: linear-gradient(135deg, #1a1a1a 0%, #333333 100%); color: var(--yellow); border: 2px solid var(--yellow); font-weight: 700; letter-spacing: 0.02em; }
 .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(26,26,26,0.25); }
@@ -931,7 +938,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 .ai-box {
   background: var(--yellow-pale);
-  border: 1px solid rgba(245,197,24,0.3);
+  border: 1px solid rgba(119,36,113,0.3);
   border-left: 3px solid #1a1a1a;
   border-radius: var(--r);
   padding: 14px;
@@ -14747,7 +14754,7 @@ async function initMarchesMap() {
   for (const m of marches) {
     if (!m.lat || !m.lng) { noCoords++; continue; }
     const nbAff = DB.affaires.filter(a => a.marche_id === m.id).length;
-    const color = m.statut === 'termine' ? '#4CAF50' : m.statut === 'suspendu' ? '#FF9800' : m.statut === 'annule' ? '#D94040' : '#f5c518';
+    const color = m.statut === 'termine' ? '#4CAF50' : m.statut === 'suspendu' ? '#FF9800' : m.statut === 'annule' ? '#D94040' : '#772471';
     const certified = !!m.gps_certifie;
     const marker = L.circleMarker([m.lat, m.lng], {
       radius: Math.min(6 + Math.sqrt(Number(m.montant || 0) / 5000), 20),
@@ -14764,7 +14771,7 @@ async function initMarchesMap() {
         <div style="font-size:12px;display:flex;justify-content:space-between"><span>Période</span><span>${m.date_debut ? fmtDateFR(m.date_debut) : '?'} → ${m.date_fin ? fmtDateFR(m.date_fin) : '?'}</span></div>
         <div style="margin-top:6px">${marcheStatutBadge(m.statut)}</div>
         <div style="font-size:11px;margin-top:6px">${certified ? '<span style="color:#16a34a;font-weight:600">✓ Position certifiée conforme</span>' : '<span style="color:#d97706;font-weight:600">⚠ Position non certifiée (à vérifier)</span>'}</div>
-        <button onclick="showMarcheDetail('${m.id}')" style="margin-top:8px;width:100%;padding:6px;border:none;background:#f5c518;color:#000;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px">Voir le marché →</button>
+        <button onclick="showMarcheDetail('${m.id}')" style="margin-top:8px;width:100%;padding:6px;border:none;background:#772471;color:#fff;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px">Voir le marché →</button>
       </div>
     `, { maxWidth: 300 });
   }
@@ -26820,7 +26827,7 @@ async function aiAssist(action) {
     // Envelopper la sélection dans un span identifiable
     const wrapper = document.createElement('span');
     wrapper.id = 'aiSelectedOriginal';
-    wrapper.style.cssText = 'background:rgba(245,197,24,0.18);border-radius:3px;';
+    wrapper.style.cssText = 'background:rgba(119,36,113,0.18);border-radius:3px;';
     try {
       selRange.surroundContents(wrapper);
     } catch (_e) {
