@@ -13436,10 +13436,12 @@ function _ccaRenderBody() {
   if (cmp.length && (!ccaF.from || !ccaF.to)) {
     cmpHtml = `<div style="background:var(--card);border:1px dashed var(--border);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--t3)">📅 Renseignez une date « Du » <b>et</b> « au » pour comparer avec N-1${cmp.includes(2) ? ' / N-2' : ''} sur la même période décalée.</div>`;
   } else if (canCompare) {
-    const periods = [{ label: 'Période', from: ccaF.from, to: ccaF.to }];
-    cmp.forEach(n => periods.push({ label: 'N-' + n, from: _ccaShiftYears(ccaF.from, n), to: _ccaShiftYears(ccaF.to, n) }));
+    // Ordre d'affichage : du plus ancien (gauche) au plus récent (droite) → N-2, N-1, Période
+    const periods = [];
+    cmp.slice().sort((a, b) => b - a).forEach(n => periods.push({ label: 'N-' + n, from: _ccaShiftYears(ccaF.from, n), to: _ccaShiftYears(ccaF.to, n), cur: false }));
+    periods.push({ label: 'Période', from: ccaF.from, to: ccaF.to, cur: true });
     _cmpPstats = periods.map(p => ({ ...p, s: _ccaStatsForRange(p.from, p.to) }));
-    const cur = _cmpPstats[0].s;
+    const cur = (_cmpPstats.find(p => p.cur) || _cmpPstats[_cmpPstats.length - 1]).s;
     const evo = (curV, pastV) => {
       if (!pastV) return curV ? '<span style="color:#10b981">nouveau</span>' : '<span style="color:var(--t3)">—</span>';
       const d = (curV - pastV) / pastV * 100;
@@ -13468,7 +13470,7 @@ function _ccaRenderBody() {
             <tbody>
               ${metricRows.map(([lbl, fmtFn, valFn]) => `<tr style="border-bottom:1px solid var(--border)">
                 <td style="padding:6px 8px;text-align:left">${lbl}</td>
-                ${_cmpPstats.map((p, i) => `<td style="padding:6px 8px;text-align:right">${fmtFn(p.s)}${i > 0 ? '<div style="font-size:10px">' + evo(valFn(cur), valFn(p.s)) + '</div>' : ''}</td>`).join('')}
+                ${_cmpPstats.map(p => `<td style="padding:6px 8px;text-align:right">${fmtFn(p.s)}${!p.cur ? '<div style="font-size:10px">' + evo(valFn(cur), valFn(p.s)) + '</div>' : ''}</td>`).join('')}
               </tr>`).join('')}
             </tbody>
           </table>
@@ -13537,11 +13539,12 @@ function _ccaRenderBody() {
 function _ccaBuildCompareChart(pstats) {
   const el = document.getElementById('ccaChartCompare');
   if (!el || !window.Chart) return;
-  const colors = ['#4f8ff7', '#f59e0b', '#94a3b8'];
-  const datasets = pstats.map((p, i) => ({
+  const pastColors = ['#cbd5e1', '#94a3b8', '#64748b']; // années passées, du plus clair (plus ancien) au plus foncé
+  let pi = 0;
+  const datasets = pstats.map(p => ({
     label: p.label,
     data: [p.s.caTotal, p.s.caDevis, p.s.caCmd, p.s.caFact],
-    backgroundColor: colors[i % colors.length]
+    backgroundColor: p.cur ? '#4f8ff7' : pastColors[pi++ % pastColors.length]
   }));
   _ccaMkChart('ccaChartCompare', {
     type: 'bar',
