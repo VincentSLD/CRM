@@ -45,13 +45,13 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: 'CRM Akuiteo <onboarding@resend.dev>',
+        from: 'CRM NOVAM <onboarding@resend.dev>',
         to: [ADMIN_EMAIL],
         subject: `CRM — Nouvelle demande d'accès : ${displayName}`,
         html: `
           <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:500px;margin:0 auto;padding:20px">
             <div style="background:#1A1A1A;border-radius:12px;padding:24px;text-align:center;margin-bottom:20px">
-              <h1 style="color:#ED1651;margin:0;font-size:24px">CRM Akuiteo</h1>
+              <h1 style="color:#FF1E63;margin:0;font-size:24px">CRM NOVAM</h1>
               <p style="color:rgba(255,255,255,0.5);font-size:11px;margin:4px 0 0;text-transform:uppercase;letter-spacing:0.05em">by GPH</p>
             </div>
             <h2 style="margin:0 0 16px;font-size:18px;color:#1A1A1A">Nouvelle demande d'accès</h2>

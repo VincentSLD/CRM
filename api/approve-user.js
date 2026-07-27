@@ -49,8 +49,8 @@ export default async function handler(req, res) {
 function page(title, message, success) {
   const color = success ? '#4CAF50' : '#D94040';
   return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title} — CRM Akuiteo</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#1A1A1A;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh}
+<title>${title} — CRM NOVAM</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#241130;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh}
 .card{background:#fff;color:#1A1A1A;border-radius:16px;padding:40px;max-width:420px;width:90%;text-align:center;border-top:4px solid ${color};box-shadow:0 16px 64px rgba(0,0,0,0.4)}
 h1{font-size:1.5rem;margin-bottom:12px}p{font-size:14px;color:#666;line-height:1.5}
 .icon{font-size:48px;margin-bottom:16px}</style></head>

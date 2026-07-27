@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#1A1A1A">
+<meta name="theme-color" content="#241130">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<title>CRM Akuiteo — Tableau de Bord Commercial</title>
+<title>CRM NOVAM — Tableau de Bord Commercial</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="leaflet.css" />
@@ -24,11 +24,13 @@
   --bg-4: #e0ddd5;
   --bg-glass: rgba(255, 255, 255, 0.88);
   /* ═══ Charte graphique NOVAM ═══
-     Violet #772471 = couleur principale · Magenta #ED1651 = signature · Marine #000043 · secondaires charte */
-  --magenta: #ED1651;
-  --magenta-dark: #c1123f;
-  --magenta-bg: rgba(237, 22, 81, 0.10);
+     Violet #772471 = couleur principale · Rose vif #FF1E63 = signature · Aubergine #241130 = blocs sombres · secondaires charte */
+  --magenta: #FF1E63;
+  --magenta-dark: #d81552;
+  --magenta-bg: rgba(255, 30, 99, 0.12);
   --navy: #000043;
+  --ink: #241130;    /* aubergine tres fonce : remplace le noir des blocs sombres (sidebar, boutons, en-tetes) */
+  --ink-2: #3a1f4d;  /* aubergine plus clair : fin des degrades sombres */
   /* Anciennes variables "yellow" conservées (nom) mais remappées sur le violet NOVAM */
   --yellow: #772471;
   --yellow-light: #f7edf5;
@@ -89,7 +91,7 @@ body::before {
   left: 0; top: 0;
   width: 264px;
   height: 100vh;
-  background: #1A1A1A;
+  background: var(--ink);
   border-right: none;
   z-index: 100;
   display: flex;
@@ -362,7 +364,7 @@ details.filtres-acc[open] > summary span:first-child { transform: rotate(90deg);
 .avatar {
   width: 32px; height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #1a1a1a 0%, #333333 100%);
+  background: linear-gradient(135deg, var(--ink) 0%, var(--ink-2) 100%);
   display: flex; align-items: center; justify-content: center;
   font-weight: 700;
   font-size: 12px;
@@ -566,7 +568,7 @@ details.acc[open] > summary::before { transform: rotate(90deg); }
 .btn:hover { color: var(--t1); border-color: rgba(26,26,26,0.3); background: rgba(26,26,26,0.05); }
 .btn.active { background: var(--yellow-pale); color: #1a1a1a; border-color: rgba(119,36,113,0.4); }
 
-.btn-primary { background: linear-gradient(135deg, #1a1a1a 0%, #333333 100%); color: var(--yellow); border: 2px solid var(--yellow); font-weight: 700; letter-spacing: 0.02em; }
+.btn-primary { background: linear-gradient(135deg, var(--ink) 0%, var(--ink-2) 100%); color: var(--magenta); border: 2px solid var(--magenta); font-weight: 700; letter-spacing: 0.02em; }
 .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(26,26,26,0.25); }
 
 .btn-success { background: var(--green); color: #fff; border-color: var(--green); font-weight: 700; }
@@ -1006,7 +1008,7 @@ tbody tr:last-child td { border-bottom: none; }
   display: flex; align-items: center; justify-content: center;
   font-weight: 800;
   font-size: 20px;
-  background: linear-gradient(135deg, #1a1a1a 0%, #333333 100%);
+  background: linear-gradient(135deg, var(--ink) 0%, var(--ink-2) 100%);
   color: var(--yellow);
   flex-shrink: 0;
 }
@@ -1145,7 +1147,7 @@ tbody tr:last-child td { border-bottom: none; }
   width: 100%;
   margin-top: .75rem;
   padding: .5rem;
-  background: linear-gradient(135deg, #1a1a1a 0%, #333333 100%);
+  background: linear-gradient(135deg, var(--ink) 0%, var(--ink-2) 100%);
   color: var(--yellow);
   border: 2px solid var(--yellow);
   border-radius: 8px;
@@ -1594,21 +1596,21 @@ tbody tr:last-child td { border-bottom: none; }
 }
 
 .login-header {
-  background: #1A1A1A;
+  background: var(--ink);
   padding: 32px 32px 28px;
   text-align: center;
-  border-bottom: 3px solid var(--yellow);
+  border-bottom: 3px solid var(--magenta);
 }
 .login-header .login-logo {
   width: 56px; height: 56px;
-  background: var(--yellow);
+  background: var(--magenta);
   border-radius: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 20px;
   font-weight: 800;
-  color: #1A1A1A;
+  color: #fff;
   margin-bottom: 14px;
 }
 .login-header h1 {
@@ -1641,7 +1643,7 @@ tbody tr:last-child td { border-bottom: none; }
 .login-body .btn-login {
   width: 100%;
   padding: 12px;
-  background: linear-gradient(135deg, #1a1a1a 0%, #333 100%);
+  background: linear-gradient(135deg, var(--ink) 0%, var(--ink-2) 100%);
   color: var(--yellow);
   border: 2px solid var(--yellow);
   border-radius: var(--r-sm);
@@ -1725,7 +1727,7 @@ tbody tr:last-child td { border-bottom: none; }
   <div class="login-card">
     <div class="login-header">
       <div class="login-logo">CRM</div>
-      <h1>CRM Akuiteo</h1>
+      <h1>CRM NOVAM</h1>
       <p>Connectez-vous pour accéder au tableau de bord</p>
     </div>
     <div class="login-body">
@@ -1773,7 +1775,7 @@ tbody tr:last-child td { border-bottom: none; }
   <div class="sidebar-header">
     <div class="sidebar-logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="21" x2="21" y2="21"/><line x1="3" y1="3" x2="3" y2="21"/><rect x="6" y="13" width="3" height="6" fill="#fff" stroke="none"/><rect x="11" y="9" width="3" height="10" fill="#fff" stroke="none"/><rect x="16" y="5" width="3" height="14" fill="#fff" stroke="none"/></svg></div>
     <div class="sidebar-brand">
-      <span>CRM Akuiteo</span>
+      <span>CRM NOVAM</span>
     </div>
   </div>
   <nav class="sidebar-nav">
@@ -21342,7 +21344,7 @@ function getCREditorHTML(r) {
           <div style="display:flex;gap:6px">
             <button class="btn" onclick="backToCRList()">Annuler</button>
             ${r ? '<button class="btn" style="color:var(--red)" onclick="deleteReport()">Supprimer</button>' : ''}
-            <button class="btn" onclick="saveReport()" style="background:#1a1a1a;color:#ffd600;border-color:#ffd600;font-weight:600">${r ? 'Mettre à jour' : 'Enregistrer'}</button>
+            <button class="btn" onclick="saveReport()" style="background:var(--ink);color:var(--magenta);border-color:var(--magenta);font-weight:600">${r ? 'Mettre à jour' : 'Enregistrer'}</button>
             <button class="btn btn-primary" onclick="openSendModal()"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Envoyer</button>
           </div>
         </div>
