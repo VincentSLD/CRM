@@ -570,7 +570,7 @@ details.acc[open] > summary::before { transform: rotate(90deg); }
 .btn:hover { color: var(--t1); border-color: rgba(26,26,26,0.3); background: rgba(26,26,26,0.05); }
 .btn.active { background: var(--yellow-pale); color: #1a1a1a; border-color: rgba(119,36,113,0.4); }
 
-.btn-primary { background: linear-gradient(135deg, var(--ink) 0%, var(--ink-2) 100%); color: var(--magenta); border: 2px solid var(--magenta); font-weight: 700; letter-spacing: 0.02em; }
+.btn-primary { background: linear-gradient(135deg, var(--ink) 0%, var(--ink-2) 100%); color: #fff; border: 2px solid var(--magenta); font-weight: 700; letter-spacing: 0.02em; }
 .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(26,26,26,0.25); }
 
 .btn-success { background: var(--green); color: #fff; border-color: var(--green); font-weight: 700; }
@@ -21342,7 +21342,7 @@ function getCREditorHTML(r) {
           <div style="display:flex;gap:6px">
             <button class="btn" onclick="backToCRList()">Annuler</button>
             ${r ? '<button class="btn" style="color:var(--red)" onclick="deleteReport()">Supprimer</button>' : ''}
-            <button class="btn" onclick="saveReport()" style="background:var(--ink);color:var(--magenta);border-color:var(--magenta);font-weight:600">${r ? 'Mettre à jour' : 'Enregistrer'}</button>
+            <button class="btn" onclick="saveReport()" style="background:var(--ink);color:#fff;border-color:var(--magenta);font-weight:600">${r ? 'Mettre à jour' : 'Enregistrer'}</button>
             <button class="btn btn-primary" onclick="openSendModal()"><svg style="width:14px;height:14px;vertical-align:-2px;margin-right:4px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Envoyer</button>
           </div>
         </div>
