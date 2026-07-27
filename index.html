@@ -13668,6 +13668,18 @@ async function openRechercheRealisations() {
   const c = currentClient; if (!c) return;
   const name = (c.name || c.raison_sociale || '').trim();
   const siretOk = _siretValide(c.siret);
+  // Recherche(s) déjà effectuée(s) : on les propose à l'ouverture, avec leur date, sans relancer d'appel (IA payante)
+  const prev = _rrPrevInfo(c);
+  const _dfr = t => t ? fmtDateFR(new Date(t).toISOString().slice(0, 10)) : 'date inconnue';
+  const prevBits = [];
+  if (prev.decp) prevBits.push('🏛️ Marchés publics (DECP) — <b>' + _dfr(prev.decp.t) + '</b>');
+  if (prev.web) prevBits.push('🌐 Réalisations web (IA) — <b>' + _dfr(prev.web.t) + '</b> <span style="color:var(--t3)">(' + (prev.web.src === 'base' ? 'base de connaissance' : 'cache navigateur') + ')</span>');
+  const prevBanner = prevBits.length ? `<div style="margin-bottom:14px;border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--bg-2)">
+      <div style="font-weight:700;font-size:13px;margin-bottom:6px">📂 Recherche(s) précédente(s)</div>
+      <div style="font-size:12px;line-height:1.7;margin-bottom:10px">${prevBits.map(b => '<div>' + b + '</div>').join('')}</div>
+      <button class="btn btn-primary" style="font-size:12px" onclick="rrOpenPrevious()">📂 Ouvrir la recherche précédente</button>
+      <div style="font-size:11px;color:var(--t3);margin-top:6px">Affichage instantané, sans nouvel appel. Pour rafraîchir, utilisez « Lancer la recherche » ci-dessus.</div>
+    </div>` : '';
   _nlOverlay(`
     <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px">
       <div style="font-size:16px;font-weight:700">🔎 Recherche Réalisations — ${cmdEsc(name)}</div>
@@ -13688,7 +13700,54 @@ async function openRechercheRealisations() {
         <label style="font-size:12px;color:var(--t3);display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="rr-force"> Ignorer le cache (relancer)</label>
       </div>
     </div>
-    <div id="rr-body" style="padding:6px 20px 20px;max-height:62vh;overflow:auto"></div>`, 900);
+    <div id="rr-body" style="padding:6px 20px 20px;max-height:62vh;overflow:auto">${prevBanner}</div>`, 900);
+}
+// Clés de cache DECP / web pour un client (mêmes règles que _rrDecp / _rrWeb)
+function _rrDecpKey(c) {
+  const siren = String(c.siren || (c.siret ? String(c.siret).slice(0, 9) : '') || '').replace(/\D/g, '');
+  if (!siren || siren.length < 9) return null;
+  const dept = String(c.departement || (c.code_postal ? String(c.code_postal).replace(/\s/g, '').slice(0, 2) : '') || '').trim();
+  return 'realiz_' + siren + '_' + dept;
+}
+function _rrWebKey(c) {
+  const name = (c.name || c.raison_sociale || '').trim();
+  const siren = String(c.siren || '').replace(/\D/g, '');
+  return 'realizweb_' + (siren || name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24));
+}
+// Recherches déjà effectuées (DECP en cache navigateur, web IA en base ou cache) avec leur date — quel que soit l'âge
+function _rrPrevInfo(c) {
+  const info = { decp: null, web: null };
+  try { const k = _rrDecpKey(c); if (k) { const o = JSON.parse(localStorage.getItem(k) || 'null'); if (o && o.t && o.d) info.decp = { t: o.t }; } } catch (e) {}
+  try {
+    if (c.web_research && c.web_research.html) {
+      info.web = { t: c.web_research.generated_at ? new Date(c.web_research.generated_at).getTime() : null, src: 'base' };
+    } else {
+      const o = JSON.parse(localStorage.getItem(_rrWebKey(c)) || 'null');
+      if (o && o.html) info.web = { t: o.t || null, src: 'cache' };
+    }
+  } catch (e) {}
+  return info;
+}
+// Rouvre la dernière recherche (DECP + web) depuis le cache/base, sans nouvel appel réseau
+function rrOpenPrevious() {
+  const c = currentClient; if (!c) return;
+  const prev = _rrPrevInfo(c);
+  if (!prev.decp && !prev.web) { toast('Aucune recherche précédente enregistrée pour ce client.', 'info'); return; }
+  const body = document.getElementById('rr-body'); if (!body) return;
+  body.innerHTML =
+    (prev.decp ? '<div id="rr-decp-sec" style="margin-bottom:16px"></div>' : '')
+    + (prev.web ? '<div id="rr-web-sec"></div>' : '')
+    + '<div id="rr-usage"></div>';
+  if (prev.decp) {
+    try { const o = JSON.parse(localStorage.getItem(_rrDecpKey(c))); const s = document.getElementById('rr-decp-sec'); if (s && o) s.innerHTML = _realizRender(o.d, c, o.t); } catch (e) {}
+  }
+  if (prev.web) {
+    let html, structured, t, src;
+    if (c.web_research && c.web_research.html) { html = c.web_research.html; structured = c.web_research.structured; t = c.web_research.generated_at ? new Date(c.web_research.generated_at).getTime() : null; src = 'base'; }
+    else { try { const o = JSON.parse(localStorage.getItem(_rrWebKey(c))); if (o) { html = o.html; structured = o.structured; t = o.t; src = 'cache'; } } catch (e) {} }
+    if (html) { _realizWebLast = { html, structured: structured || null }; const s = document.getElementById('rr-web-sec'); if (s) s.innerHTML = _realizWebRender(html, structured, t, src); }
+  }
+  const goBtn = document.getElementById('rr-go'); if (goBtn && goBtn.textContent.indexOf('Relancer') === -1) goBtn.textContent = '🔄 Relancer';
 }
 async function rrRun(force) {
   const c = currentClient; if (!c) return;
