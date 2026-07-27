@@ -370,7 +370,7 @@ details.filtres-acc[open] > summary span:first-child { transform: rotate(90deg);
   display: flex; align-items: center; justify-content: center;
   font-weight: 700;
   font-size: 12px;
-  color: var(--yellow);
+  color: var(--magenta);
   cursor: pointer;
 }
 
@@ -11044,7 +11044,7 @@ function renderTopClients() {
   return `<table><thead><tr><th>Société</th><th>Ville</th><th>Secteur</th></tr></thead>
   <tbody>${sorted.map(c => {
     return `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
-      <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div><div><div class="cell-name">${c.name}</div><div class="cell-code">${c.code}</div></div></div></td>
+      <td><div class="cell-client"><div class="av" style="${_avStyle(c)}" title="${_avTitle(c)}"></div><div><div class="cell-name">${c.name}</div><div class="cell-code">${c.code}</div></div></div></td>
       <td style="font-size:12px">${c.city||''}</td>
       <td style="font-size:12px">${c.sector||''}</td>
     </tr>`;
@@ -11971,7 +11971,7 @@ function renderClients(filter='all') {
       const catCompte = (() => { const cc = c.categorie_compte; if (!cc || typeof cc !== 'object') return ''; return [...new Set(Object.values(cc).map(v => (String(v || '').trim()[0] || '')).filter(x => /[ABC]/.test(x)))].sort().join(', '); })();
       const catBadge = catCompte ? '<span style="font-weight:700;color:var(--t2)">' + catCompte + '</span>' : '<span style="color:var(--t3)">—</span>';
       return `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
-        <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${color})">${ini}</div><div><div class="cell-name">${c.name||''} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'};margin-left:4px;vertical-align:middle" title="${c.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span></div><div class="cell-code">${code}</div></div></div></td>
+        <td><div class="cell-client"><div class="av" style="${_avStyle(c)}" title="${_avTitle(c)}"></div><div><div class="cell-name">${c.name||''} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'};margin-left:4px;vertical-align:middle" title="${c.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span></div><div class="cell-code">${code}</div></div></div></td>
         <td class="mono" style="font-size:12px">${dept}</td>
         <td style="font-size:12px">${c.city||''}</td>
         <td style="font-size:12px">${novam}</td>
@@ -12669,6 +12669,35 @@ async function switchEtablissement(newSiret) {
   if (!document.getElementById('modal-legal-update')) {
     currentClient.siret = origSiret;
   }
+}
+
+// ═══ Avatar société : carré bicolore (Catégorie ABC × Statut) + cadre rose vif si compte clé « ++ » ═══
+// Moitié haut-gauche = catégorie ABC, moitié bas-droite = statut. Aucun texte dans le carré.
+const _ABC_COLORS = { A: '#772471', B: '#2f6fed', C: '#8a94a6' };                       // A stratégique / B tactique / C listé
+const _STATUT_COLORS = { actif: '#16a34a', nouveau: '#06b6d4', dormant: '#f59e0b', prospect: '#94a3b8' };
+const _AV_NEUTRAL = '#d1d5db';                                                           // non renseigné
+function _clientABC(c) {
+  const v = c && c.categorie_compte; if (!v) return null;
+  if (typeof v === 'string') { const ch = v.trim().charAt(0).toUpperCase(); return 'ABC'.includes(ch) ? ch : null; }
+  if (typeof v === 'object') { let best = null; for (const k in v) { const ch = String(v[k] || '').trim().charAt(0).toUpperCase(); if ('ABC'.includes(ch) && (!best || ch < best)) best = ch; } return best; }
+  return null;
+}
+function _clientPlus(c) {
+  const v = c && c.categorie_compte_plus; if (!v) return false;
+  if (typeof v === 'object') { for (const k in v) if (v[k]) return true; return false; }
+  return !!v;
+}
+function _avStyle(c) {
+  const abcCol = _ABC_COLORS[_clientABC(c)] || _AV_NEUTRAL;
+  const stCol = _STATUT_COLORS[(c && c.status) || ''] || _AV_NEUTRAL;
+  let s = `background:linear-gradient(135deg, ${abcCol} 0%, ${abcCol} 50%, ${stCol} 50%, ${stCol} 100%)`;
+  if (_clientPlus(c)) s += ';box-shadow:0 0 0 2px var(--magenta)';
+  return s;
+}
+function _avTitle(c) {
+  const abc = _clientABC(c);
+  const stLbl = { actif: 'Actif', nouveau: 'Nouveau', dormant: 'Dormant', prospect: 'Prospect' }[(c && c.status) || ''] || 'Statut non défini';
+  return 'Catégorie ' + (abc || '?') + ' · ' + stLbl + (_clientPlus(c) ? ' · Compte clé ++' : '');
 }
 
 function downloadClientListPDF(type) {
@@ -14099,7 +14128,7 @@ function renderClientDetail() {
   ${alertBanner}
   <div id="dup-alert"></div>
   <div class="client-hero">
-    <div class="client-big-av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div>
+    <div class="client-big-av" style="${_avStyle(c)}" title="${_avTitle(c)}"></div>
     <div class="client-info">
       <h2>${c.name} <span class="badge ${s.cls}" style="font-size:11px;vertical-align:middle;margin-left:8px">${s.label}</span></h2>
       <div class="client-meta">
@@ -15493,7 +15522,7 @@ function renderCarte() {
     <div class="card-body" style="padding:0"><div class="table-wrap">
       <table><thead><tr><th>Société</th><th>Ville</th><th>Secteur</th></tr></thead>
       <tbody>${DB.clients.map(c => `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
-        <td><div class="cell-client"><div class="av" style="background:linear-gradient(135deg,${c.color})">${c.ini}</div><div class="cell-name">${c.name}</div></div></td>
+        <td><div class="cell-client"><div class="av" style="${_avStyle(c)}" title="${_avTitle(c)}"></div><div class="cell-name">${c.name}</div></div></td>
         <td>${c.city}</td><td>${c.sector||''}</td>
       </tr>`).join('')}</tbody></table>
     </div></div>
