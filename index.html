@@ -110,13 +110,15 @@ body::before {
 }
 
 .sidebar-logo {
-  width: 38px; height: 38px;
-  border-radius: 10px;
-  overflow: hidden;
+  width: 40px; height: 40px;
+  background: #fff;
+  border-radius: 50%;
+  padding: 3px;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.28);
 }
-.sidebar-logo img { width: 100%; height: 100%; display: block; }
+.sidebar-logo img { width: 100%; height: 100%; display: block; border-radius: 50%; }
 
 .sidebar-brand,
 .sidebar-brand span {
@@ -2963,14 +2965,14 @@ body.nova-only #aiChatPanel{ display:flex !important; inset:0 !important; top:0 
 body.nova-only #aiChatHeader{ cursor:default !important; }
 </style>
 <!-- Chatbot IA flottant -->
-<div id="aiChatBtn" onclick="toggleAIChat()" title="NOVA" style="position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 6px 20px rgba(139,92,246,.4);z-index:900;transition:transform .2s;font-weight:800;font-size:11px;letter-spacing:1px" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform=''">
+<div id="aiChatBtn" onclick="toggleAIChat()" title="NOVA" style="position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#772471,#FF1E63);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 6px 20px rgba(119,36,113,.45);z-index:900;transition:transform .2s;font-weight:800;font-size:11px;letter-spacing:1px" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform=''">
   NOVA
-  <span id="novaHideBadge" onclick="event.stopPropagation();novaSetHidden(true)" title="Masquer NOVA" style="position:absolute;top:-5px;right:-5px;width:22px;height:22px;border-radius:50%;background:#fff;color:#6366f1;border:1px solid rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;line-height:1;box-shadow:0 2px 6px rgba(0,0,0,.25)">−</span>
+  <span id="novaHideBadge" onclick="event.stopPropagation();novaSetHidden(true)" title="Masquer NOVA" style="position:absolute;top:-5px;right:-5px;width:22px;height:22px;border-radius:50%;background:#fff;color:#772471;border:1px solid rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;line-height:1;box-shadow:0 2px 6px rgba(0,0,0,.25)">−</span>
 </div>
 <!-- Languette pour réafficher NOVA quand il est masqué -->
-<div id="novaShowHandle" onclick="novaSetHidden(false)" title="Afficher NOVA" style="display:none;position:fixed;bottom:80px;right:0;width:20px;height:48px;border-radius:12px 0 0 12px;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;align-items:center;justify-content:center;cursor:pointer;box-shadow:-2px 2px 12px rgba(0,0,0,.25);z-index:900;font-size:13px;opacity:.9">✦</div>
+<div id="novaShowHandle" onclick="novaSetHidden(false)" title="Afficher NOVA" style="display:none;position:fixed;bottom:80px;right:0;width:20px;height:48px;border-radius:12px 0 0 12px;background:linear-gradient(135deg,#772471,#FF1E63);color:#fff;align-items:center;justify-content:center;cursor:pointer;box-shadow:-2px 2px 12px rgba(0,0,0,.25);z-index:900;font-size:13px;opacity:.9">✦</div>
 <div id="aiChatPanel" style="display:none;position:fixed;bottom:90px;right:24px;width:720px;max-width:calc(100vw - 32px);height:680px;max-height:calc(100vh - 120px);min-width:340px;min-height:380px;background:var(--card,#fff);border:1px solid var(--border);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.2);z-index:900;flex-direction:column;overflow:hidden;resize:both">
-  <div id="aiChatHeader" onmousedown="novaDragStart(event)" style="padding:14px 16px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;display:flex;align-items:center;justify-content:space-between;cursor:move;user-select:none">
+  <div id="aiChatHeader" onmousedown="novaDragStart(event)" style="padding:14px 16px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#772471,#FF1E63);color:#fff;display:flex;align-items:center;justify-content:space-between;cursor:move;user-select:none">
     <div><div style="font-weight:700;font-size:14px">✦ NOVA</div><div style="font-size:11px;opacity:.85">Ton assistant IA — dis "Hey Nova"</div></div>
     <div style="display:flex;align-items:center;gap:8px">
       <button onclick="novaNewConversation()" title="Nouvelle conversation" style="background:none;border:none;color:#fff;cursor:pointer;font-size:16px;opacity:.7;padding:4px" onmousedown="event.preventDefault()">
@@ -26270,7 +26272,7 @@ function addAIMsg(role, html) {
   if (!box) return;
   const isUser = role === 'user';
   const div = document.createElement('div');
-  div.style.cssText = 'max-width:85%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.5;position:relative;' + (isUser ? 'align-self:flex-end;background:#6366f1;color:#fff;border-bottom-right-radius:4px' : 'align-self:flex-start;background:var(--card);border:1px solid var(--border);color:var(--t1);border-bottom-left-radius:4px');
+  div.style.cssText = 'max-width:85%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.5;position:relative;' + (isUser ? 'align-self:flex-end;background:#772471;color:#fff;border-bottom-right-radius:4px' : 'align-self:flex-start;background:var(--card);border:1px solid var(--border);color:var(--t1);border-bottom-left-radius:4px');
   div.innerHTML = html;
   if (!isUser) {
     const mid = ++_aiMsgIdx;
