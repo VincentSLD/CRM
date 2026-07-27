@@ -13765,8 +13765,10 @@ async function rrRun(force) {
   const tasks = [];
   if (wantDecp) tasks.push(_rrDecp(c, f));
   if (wantWeb) tasks.push(_rrWeb(c, f));
+  // Garantit un sablier visible au moins ~600 ms, même quand les résultats viennent du cache (feedback « recherche en cours »)
+  tasks.push(new Promise(r => setTimeout(r, 600)));
   await Promise.all(tasks);
-  if (goBtn) { goBtn.disabled = false; goBtn.textContent = '🔄 Relancer'; }
+  if (goBtn) { goBtn.disabled = false; goBtn.innerHTML = '🔄 Relancer'; }
 }
 async function _rrDecp(c, force) {
   const sec = () => document.getElementById('rr-decp-sec');
@@ -26990,6 +26992,8 @@ function buildNotifications() {
   const myEmail = (currentCommercial && currentCommercial.email) || '';
   const todayISO = new Date().toISOString().slice(0, 10);
   const d14 = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
+  const nowTs = Date.now();
+  const _ts = d => { const t = d ? new Date(d).getTime() : 0; return isNaN(t) ? 0 : t; }; // horodatage (ms) pour trier « plus récent en haut »
   // 1) Mes tâches en retard / à échéance aujourd'hui
   (_taches || []).forEach(t => {
     if (!(t.statut === 'a_faire' || t.statut === 'en_cours')) return;
@@ -26999,7 +27003,7 @@ function buildNotifications() {
     const retard = ech < todayISO;
     out.push({ id: 'task-' + t.id, type: retard ? 'danger' : 'warn',
       text: (retard ? '⏰ Tâche en retard' : '⏰ Tâche à faire aujourd’hui') + ' : « ' + cmdEsc(t.titre || 'sans titre') + ' »' + (t.client_name ? ' — ' + cmdEsc(t.client_name) : ''),
-      action: 'tacheModalOpen(' + t.id + ')', time: (typeof _tEcheanceTxt === 'function' ? _tEcheanceTxt(t.echeance) : fmtDateFR(ech)), sort: ech });
+      action: 'tacheModalOpen(' + t.id + ')', time: (typeof _tEcheanceTxt === 'function' ? _tEcheanceTxt(t.echeance) : fmtDateFR(ech)), sort: ech, ts: _ts(ech) });
   });
   // 2) Mes sollicitations à traiter (date « à faire avant » atteinte)
   (_sollic || []).forEach(s => {
@@ -27010,15 +27014,15 @@ function buildNotifications() {
     if (!dr || dr > todayISO) return;
     out.push({ id: 'sollic-' + s.id, type: dr < todayISO ? 'danger' : 'warn',
       text: '🤝 Sollicitation à traiter : ' + cmdEsc(s.client_name || '') + (s.opportunite_nom ? ' — 🎯 ' + cmdEsc(s.opportunite_nom) : ''),
-      action: 'sollicModalOpen(' + s.id + ')', time: fmtDateFR(dr), sort: dr });
+      action: 'sollicModalOpen(' + s.id + ')', time: fmtDateFR(dr), sort: dr, ts: _ts(dr) });
   });
   // 3) Devis à relancer (agrégé — id incluant le nombre pour re-alerter quand ça évolue)
   try { const dr = (typeof getDevisARelancer === 'function' ? getDevisARelancer() : []) || []; if (dr.length) { const tot = dr.reduce((a, d) => a + Number(d.montant || 0), 0);
-    out.push({ id: 'devis-relance-' + dr.length, type: 'warn', text: '📄 ' + dr.length + ' devis à relancer' + (tot ? ' (' + fmt(tot) + ')' : ''), action: "go('devis')", time: '', sort: '0000-00-00' }); } } catch (e) {}
+    out.push({ id: 'devis-relance-' + dr.length, type: 'warn', text: '📄 ' + dr.length + ' devis à relancer' + (tot ? ' (' + fmt(tot) + ')' : ''), action: "go('devis')", time: '', sort: '0000-00-00', ts: nowTs }); } } catch (e) {}
   // 4) Factures en retard (agrégé)
   const factR = filterByCommercial(DB.factures || []).filter(f => f.statut === 'retard');
   if (factR.length) { const tot = factR.reduce((a, f) => a + Number(f.montant || 0), 0);
-    out.push({ id: 'factures-retard-' + factR.length, type: 'danger', text: '💰 ' + factR.length + ' facture(s) en retard' + (tot ? ' (' + fmt(tot) + ')' : ''), action: "go('factures')", time: '', sort: '0000-00-00' }); }
+    out.push({ id: 'factures-retard-' + factR.length, type: 'danger', text: '💰 ' + factR.length + ' facture(s) en retard' + (tot ? ' (' + fmt(tot) + ')' : ''), action: "go('factures')", time: '', sort: '0000-00-00', ts: nowTs }); }
   // 5) Opportunités dont la signature est prévue < 30 j ou dépassée (si chargées)
   if (typeof _oppsLoaded !== 'undefined' && _oppsLoaded) {
     const in30 = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
@@ -27027,18 +27031,18 @@ function buildNotifications() {
         const late = o.date_signature < todayISO;
         out.push({ id: 'opp-' + o.akuiteo_id, type: late ? 'danger' : 'warn',
           text: '🎯 ' + cmdEsc(o.nom || 'Opportunité') + ' — signature ' + (late ? 'dépassée' : 'prévue') + ' le ' + fmtDateFR(o.date_signature),
-          action: "oppDetail('" + o.akuiteo_id + "')", time: fmtDateFR(o.date_signature), sort: o.date_signature });
+          action: "oppDetail('" + o.akuiteo_id + "')", time: fmtDateFR(o.date_signature), sort: o.date_signature, ts: _ts(o.date_signature) });
       });
   }
   // 6) Clients dormants / nouveaux clients attribués / procédures collectives & radiations (depuis _notifClientCache)
   const cc = _notifClientCache || { dormant: 0, newClients: [], risks: [] };
-  if (cc.dormant > 0) out.push({ id: 'dormants-' + cc.dormant, type: 'info', text: '😴 ' + cc.dormant + ' de vos clients sont dormants (à relancer)', action: 'notifGoDormants()', time: '', sort: 'z9' });
-  (cc.newClients || []).forEach(c => out.push({ id: 'newclient-' + c.id, type: 'success', text: '🆕 Nouveau client qui vous est attribué : ' + cmdEsc(c.name || ''), action: "showClient('" + c.id + "')", time: c.created_at ? fmtDateFR(String(c.created_at).slice(0, 10)) : '', sort: 'n' + (c.created_at || '') }));
+  if (cc.dormant > 0) out.push({ id: 'dormants-' + cc.dormant, type: 'info', text: '😴 ' + cc.dormant + ' de vos clients sont dormants (à relancer)', action: 'notifGoDormants()', time: '', sort: 'z9', ts: nowTs });
+  (cc.newClients || []).forEach(c => out.push({ id: 'newclient-' + c.id, type: 'success', text: '🆕 Nouveau client qui vous est attribué : ' + cmdEsc(c.name || ''), action: "showClient('" + c.id + "')", time: c.created_at ? fmtDateFR(String(c.created_at).slice(0, 10)) : '', sort: 'n' + (c.created_at || ''), ts: _ts(c.created_at) || nowTs }));
   (cc.risks || []).forEach(c => {
     const radiee = c.etat_insee === 'C';
     out.push({ id: 'risk-' + c.id + '-' + (radiee ? 'rad' : (c.procedure_collective || 'proc')), type: 'danger',
       text: (radiee ? '❌ Client radié : ' : '⚠️ Procédure collective : ') + cmdEsc(c.name || '') + (!radiee && (c.procedure_nature || c.procedure_collective) ? ' — ' + cmdEsc(c.procedure_nature || c.procedure_collective) : ''),
-      action: "showClient('" + c.id + "')", time: '', sort: 'a0' });
+      action: "showClient('" + c.id + "')", time: c.procedure_date ? fmtDateFR(String(c.procedure_date).slice(0, 10)) : '', sort: 'a0', ts: _ts(c.procedure_date) || nowTs });
   });
   // 7) Tâches / sollicitations récemment ASSIGNÉES à moi par quelqu'un d'autre (hors échues, déjà couvertes plus haut)
   (_taches || []).forEach(t => {
@@ -27049,7 +27053,7 @@ function buildNotifications() {
     if (!created || created < d14) return;
     const ech = t.echeance ? String(t.echeance).slice(0, 10) : null;
     if (ech && ech <= todayISO) return; // déjà notifiée comme « à faire / en retard »
-    out.push({ id: 'assign-task-' + t.id, type: 'info', text: '📌 Tâche assignée : « ' + cmdEsc(t.titre || 'sans titre') + ' »' + (t.createur_nom ? ' (par ' + cmdEsc(fmtCommercialName(t.createur_nom)) + ')' : ''), action: 'tacheModalOpen(' + t.id + ')', time: fmtDateFR(created), sort: 'm' + created });
+    out.push({ id: 'assign-task-' + t.id, type: 'info', text: '📌 Tâche assignée : « ' + cmdEsc(t.titre || 'sans titre') + ' »' + (t.createur_nom ? ' (par ' + cmdEsc(fmtCommercialName(t.createur_nom)) + ')' : ''), action: 'tacheModalOpen(' + t.id + ')', time: fmtDateFR(created), sort: 'm' + created, ts: _ts(created) });
   });
   (_sollic || []).forEach(s => {
     if (typeof _sollicTerminal === 'function' && _sollicTerminal(s.statut)) return;
@@ -27059,10 +27063,11 @@ function buildNotifications() {
     if (!created || created < d14) return;
     const dr = s.date_relance ? String(s.date_relance).slice(0, 10) : null;
     if (dr && dr <= todayISO) return; // déjà notifiée
-    out.push({ id: 'assign-sollic-' + s.id, type: 'info', text: '📌 Sollicitation assignée : ' + cmdEsc(s.client_name || '') + (s.opportunite_nom ? ' — 🎯 ' + cmdEsc(s.opportunite_nom) : ''), action: 'sollicModalOpen(' + s.id + ')', time: fmtDateFR(created), sort: 'm' + created });
+    out.push({ id: 'assign-sollic-' + s.id, type: 'info', text: '📌 Sollicitation assignée : ' + cmdEsc(s.client_name || '') + (s.opportunite_nom ? ' — 🎯 ' + cmdEsc(s.opportunite_nom) : ''), action: 'sollicModalOpen(' + s.id + ')', time: fmtDateFR(created), sort: 'm' + created, ts: _ts(created) });
   });
   const rank = { danger: 0, warn: 1, success: 2, info: 3 };
-  out.sort((a, b) => (rank[a.type] - rank[b.type]) || String(a.sort || '').localeCompare(String(b.sort || '')));
+  // Plus récentes en haut (date décroissante) ; à date égale, on garde la priorité par gravité
+  out.sort((a, b) => ((b.ts || 0) - (a.ts || 0)) || (rank[a.type] - rank[b.type]) || String(b.sort || '').localeCompare(String(a.sort || '')));
   return out;
 }
 function renderNotifs() {
