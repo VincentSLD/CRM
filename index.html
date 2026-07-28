@@ -5289,7 +5289,7 @@ function renderVeilleRegar() {
             <button class="btn" style="font-size:11px;padding:3px 8px;margin-left:auto" onclick="vrMapFullscreen()" title="Afficher la carte en plein écran">⛶ Plein écran</button>
           </div>
           ${_vrPALoading ? '<div style="padding:6px 12px;font-size:12px;color:var(--t3);border-bottom:1px solid var(--border)">⏳ Chargement…</div>' : (_vrShowMap && !_vrPA.length ? '<div style="padding:6px 12px;font-size:12px;color:#d97706;border-bottom:1px solid var(--border)">Aucun résultat pour ce département (sur la période choisie).</div>' : '')}
-          <div id="vr-map" style="height:460px"></div>
+          <div id="vr-map" style="height:575px"></div>
         </div>
       </div>
       <div style="padding:8px 12px;font-size:11px;color:var(--t3)">${_vrPermisType === 'veilleco'
