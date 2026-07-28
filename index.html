@@ -12267,7 +12267,6 @@ function renderClients(filter='all') {
       <span style="font-size:13px;color:var(--t2)">${clientsTotalCount} clients/prospects</span>
       <button class="btn btn-primary" onclick="_ncReturnCtx=null;openModal('new-client')">+ Nouveau client/prospect</button>
       <button class="btn" onclick="openModal('prospect-target')" style="background:linear-gradient(135deg,#772471,#FF1E63);color:#fff;border:none">🎯 Cibler prospects</button>
-      <button class="btn" onclick="exportCSV('clients')">⤓ Export CSV</button>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       <input type="text" id="clientSearchInput" placeholder="Rechercher un client/prospect..." value="${clientsSearch}"
