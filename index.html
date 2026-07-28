@@ -5181,7 +5181,7 @@ let _vrZonePendingGeo = null, _vrZoneEditId = null, _vrZoneDraftColor = VR_ZONE_
 let _vrBaseType = 'routes', _vrBaseLayer = null, _vrFsBound = false;       // fond de carte (routes / aérien) + plein écran
 let _vrEdsOn = false, _vrEdsLayer = null, _vrEdsData = [], _vrEdsLoaded = false, _vrEdsCols = null, _vrEdsSample = null; // études de sol GPH (GEOCARTO)
 let _vrOppsOn = true, _vrOppsLayer = null, _vrOppsData = [], _vrOppsLoaded = false; // opportunités géolocalisées (via client) — affichées par défaut
-let _vrOppsFResp = '', _vrOppsFStatut = '', _vrOppsFPipe = ''; // filtres opportunités sur la carte (responsable / statut / portefeuille)
+let _vrOppsFResp = '', _vrOppsFStatut = '', _vrOppsFPipe = '', _vrOppsFAgence = ''; // filtres opportunités sur la carte (responsable / statut / portefeuille / agence)
 // Options de responsables distincts présents dans les opportunités (hors perdues)
 function _vrOppRespOptions() {
   const set = new Set();
@@ -5192,6 +5192,12 @@ function _vrOppPipeOptions() {
   const set = new Set();
   (_opps || []).forEach(o => { if (o.statut !== 'LOST' && o.pipe) set.add(o.pipe); });
   return [...set].sort((a, b) => a.localeCompare(b, 'fr')).map(p => `<option value="${cmdEsc(p)}"${_vrOppsFPipe === p ? ' selected' : ''}>${cmdEsc(p)}</option>`).join('');
+}
+// Agences concernées présentes dans les opportunités (via honoraires_agences)
+function _vrOppAgenceOptions() {
+  const set = new Set();
+  (_opps || []).forEach(o => { if (o.statut !== 'LOST' && Array.isArray(o.honoraires_agences)) o.honoraires_agences.forEach(h => { if (h && h.agence) set.add(h.agence); }); });
+  return [...set].sort((a, b) => a.localeCompare(b, 'fr')).map(a => `<option value="${cmdEsc(a)}"${_vrOppsFAgence === a ? ' selected' : ''}>${cmdEsc(a)}</option>`).join('');
 }
 // Recalcule l'affichage des opportunités (carte + liste) après changement de filtre
 function vrOppsRefresh() {
@@ -5261,6 +5267,7 @@ function renderVeilleRegar() {
             <select id="vr-opps-resp" onchange="_vrOppsFResp=this.value;vrOppsRefresh()" title="Filtrer les opportunités par responsable commercial" style="padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card,#fff);color:var(--t1);max-width:170px"><option value="">👤 Tous responsables</option>${_vrOppRespOptions()}</select>
             <select id="vr-opps-statut" onchange="_vrOppsFStatut=this.value;vrOppsRefresh()" title="Filtrer les opportunités par statut" style="padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card,#fff);color:var(--t1)"><option value="">Tous statuts</option>${Object.entries(OPP_STATUTS).filter(([k]) => k !== 'LOST').map(([k, v]) => `<option value="${k}"${_vrOppsFStatut === k ? ' selected' : ''}>${cmdEsc(v[0] || k)}</option>`).join('')}</select>
             <select id="vr-opps-pipe" onchange="_vrOppsFPipe=this.value;vrOppsRefresh()" title="Filtrer par portefeuille" style="padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card,#fff);color:var(--t1);max-width:150px"><option value="">Tous portefeuilles</option>${_vrOppPipeOptions()}</select>
+            <select id="vr-opps-agence" onchange="_vrOppsFAgence=this.value;vrOppsRefresh()" title="Filtrer par agence concernée" style="padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card,#fff);color:var(--t1);max-width:140px"><option value="">🏢 Toutes agences</option>${_vrOppAgenceOptions()}</select>
             <button class="btn" style="font-size:11px;padding:3px 8px;margin-left:auto" onclick="vrMapFullscreen()" title="Afficher la carte en plein écran">⛶ Plein écran</button>
           </div>
           ${_vrPALoading ? '<div style="padding:6px 12px;font-size:12px;color:var(--t3);border-bottom:1px solid var(--border)">⏳ Chargement…</div>' : (_vrShowMap && !_vrPA.length ? '<div style="padding:6px 12px;font-size:12px;color:#d97706;border-bottom:1px solid var(--border)">Aucun résultat pour ce département (sur la période choisie).</div>' : '')}
@@ -5970,11 +5977,12 @@ async function _vrEnsureOpps() {
   // Toujours reconstruire à partir des opportunités en mémoire (pas de cache figé) → données fraîches à chaque affichage
   try { if (!_oppsLoaded) await loadOpportunites(); } catch (e) {}
   {
-    // On exclut les opportunités PERDUES (statut LOST) + filtres responsable / statut / portefeuille
+    // On exclut les opportunités PERDUES (statut LOST) + filtres responsable / statut / portefeuille / agence
     const rows = (_opps || []).filter(o => o.statut !== 'LOST'
         && (!_vrOppsFResp || (o.responsable || '') === _vrOppsFResp)
         && (!_vrOppsFStatut || o.statut === _vrOppsFStatut)
         && (!_vrOppsFPipe || (o.pipe || '') === _vrOppsFPipe)
+        && (!_vrOppsFAgence || (Array.isArray(o.honoraires_agences) && o.honoraires_agences.some(h => h && h.agence === _vrOppsFAgence)))
       ).map(o => ({
       akId: o.akuiteo_id, nom: o.nom, client_name: o.client_name, montant: o.montant,
       stage: o.stage, statut: o.statut, dept: o.chantier_dept || '',
