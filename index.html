@@ -4604,7 +4604,7 @@ function renderEnDev() {
 // ═══════════════════════════════════════════════════════════
 //  TEST — Veille Marchés « Veilleco » (lecture/exploitation d'un CSV ; futur dépôt FTP journalier)
 // ═══════════════════════════════════════════════════════════
-let _veilcoRows = [], _veilcoHeader = [], _veilcoSearch = '', _veilcoFileName = '';
+let _veilcoRows = [], _veilcoHeader = [], _veilcoSearch = '', _veilcoFileName = '', _veilcoAfterLoad = null;
 // Parseur CSV robuste : délimiteur « ; », guillemets doublés (""), champs multi-lignes, BOM
 function _csvParse(text, delim) {
   delim = delim || ';';
@@ -4666,7 +4666,8 @@ function veilcoLoadFile(input) {
       });
       _veilcoSearch = '';
       toast(_veilcoRows.length + ' projet(s) lus depuis ' + f.name, 'success');
-      renderPage('veilleco');
+      if (typeof _veilcoAfterLoad === 'function') { const cb = _veilcoAfterLoad; _veilcoAfterLoad = null; cb(); }
+      else renderPage('veilleco');
     } catch (e) { toast('Erreur de lecture : ' + e.message, 'error'); }
   };
   rd.onerror = () => toast('Impossible de lire le fichier.', 'error');
@@ -5232,7 +5233,9 @@ function renderVeilleRegar() {
             <option value="dpe_log"${_vrPermisType === 'dpe_log' ? ' selected' : ''}>DPE logements F/G (passoires)</option>
             <option value="copro"${_vrPermisType === 'copro' ? ' selected' : ''}>Copropriétés (BDNB)</option>
             <option value="boamp"${_vrPermisType === 'boamp' ? ' selected' : ''}>Marchés publics travaux (BOAMP)</option>
+            <option value="veilleco"${_vrPermisType === 'veilleco' ? ' selected' : ''}>🔎 Veilleco (veille marchés)</option>
           </select>
+          <input type="file" id="vr-veilco-file" accept=".csv,text/csv" style="display:none" onchange="veilcoLoadFile(this)">
           <select id="vr-nblgt" title="Filtre logements (s'applique aux permis de construire)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
             <option value=""${_vrNbLgt === '' ? ' selected' : ''}>Tous</option>
             <option value="1"${_vrNbLgt === '1' ? ' selected' : ''}>1 Logt</option>
@@ -5284,7 +5287,9 @@ function renderVeilleRegar() {
           <div id="vr-map" style="height:460px"></div>
         </div>
       </div>
-      <div style="padding:8px 12px;font-size:11px;color:var(--t3)">${_vrIsBoamp
+      <div style="padding:8px 12px;font-size:11px;color:var(--t3)">${_vrPermisType === 'veilleco'
+        ? 'Marqueurs : <span style="color:#772471">●</span> projet issu de la veille <b>Veilleco</b> (position GPS du projet). FTP à venir ; en attendant, fichier CSV de test. Cliquez « 🎯 + Opportunité » pour créer une opportunité pré-remplie.'
+        : _vrIsBoamp
         ? 'Marqueurs : <span style="color:#2563eb">●</span> marché public de travaux en cours (BOAMP), position approximative (commune du lieu d\'exécution). Date limite de réponse indiquée.'
         : _vrIsCopro
         ? 'Marqueurs : <span style="color:#772471">●</span> copropriété (source BDNB / registre national, position approximative). Cible syndics/bailleurs pour rénovation globale.'
@@ -5299,9 +5304,18 @@ function renderVeilleRegar() {
 function _vrDataTableHtml() {
   if (!_vrPA.length) return '';
   const k = _vrPermisType;
-  const lbl = { pa: "Permis d'aménager", pc: 'Permis de construire', pc_existant: 'Permis sur bâti existant', dpe_ter: 'DPE tertiaire F/G', dpe_log: 'DPE logements F/G', copro: 'Copropriétés' }[k] || 'Résultats';
+  const lbl = { pa: "Permis d'aménager", pc: 'Permis de construire', pc_existant: 'Permis sur bâti existant', dpe_ter: 'DPE tertiaire F/G', dpe_log: 'DPE logements F/G', copro: 'Copropriétés', veilleco: 'Veille Veilleco' }[k] || 'Résultats';
   let head, rows;
-  if (k === 'dpe_ter' || k === 'dpe_log') {
+  if (k === 'veilleco') {
+    head = '<tr><th>Projet</th><th>Commune</th><th>Budget</th><th>Avancement</th><th>Maître d\'ouvrage</th><th></th></tr>';
+    rows = _vrPA.map(d => `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 8px;font-size:12px;max-width:320px;white-space:normal;overflow-wrap:anywhere">${cmdEsc(d.demandeur || '—')}</td>
+      <td style="padding:6px 8px;font-size:11px">${cmdEsc(d.commune || '')}${d.dep ? ' (' + cmdEsc(d.dep) + ')' : ''}</td>
+      <td style="padding:6px 8px;font-size:11px;white-space:nowrap">${d.budget ? cmdEsc(d.budget) + ' M€' : '—'}</td>
+      <td style="padding:6px 8px;font-size:11px">${cmdEsc(d.avance || '—')}</td>
+      <td style="padding:6px 8px;font-size:11px;max-width:200px;white-space:normal;overflow-wrap:anywhere">${cmdEsc(d.mo || '—')}</td>
+      <td style="padding:6px 8px;white-space:nowrap">${d.lien ? '<a href="' + cmdEsc(d.lien) + '" target="_blank" rel="noopener" class="btn" style="font-size:10px;padding:2px 6px">🔗</a> ' : ''}<button class="btn" style="font-size:10px;padding:2px 6px" title="Créer une opportunité pré-remplie" onclick="veilcoToOpp(${d.veilcoIdx})">🎯</button></td></tr>`).join('');
+  } else if (k === 'dpe_ter' || k === 'dpe_log') {
     head = '<tr><th>Adresse</th><th>Classe</th><th>Surface</th><th>Construction</th><th></th></tr>';
     rows = _vrPA.map((d, i) => `<tr style="border-bottom:1px solid var(--border)">
       <td style="padding:6px 8px;font-size:12px;max-width:340px">${cmdEsc(d.adresse || d.commune || '—')}</td>
@@ -5453,7 +5467,35 @@ function vrCreateProspect(i) {
 }
 
 // ─ Carte des permis (aménager / construire) récents (Sitadel) ─
+// Veille Veilleco sur la carte : chaque projet géolocalisé devient un marqueur. FTP à venir ; en attendant, fichier test.
+async function vrLoadVeilleco() {
+  _vrPermisType = 'veilleco';
+  if (!_veilcoRows || !_veilcoRows.length) {
+    toast('FTP Veilleco pas encore disponible — sélectionnez le fichier CSV de test.', 'info');
+    _veilcoAfterLoad = () => vrLoadVeilleco();
+    const inp = document.getElementById('vr-veilco-file'); if (inp) inp.click();
+    return;
+  }
+  _vrDept = ''; _vrShowMap = true; _vrPALoading = false; _vrListPage = 0;
+  _vrPA = _veilcoRows.map((o, i) => {
+    const lat = parseFloat(String(_vco(o, 'gps_lat')).replace(',', '.'));
+    const lon = parseFloat(String(_vco(o, 'gps_long')).replace(',', '.'));
+    if (isNaN(lat) || isNaN(lon)) return null;
+    return {
+      kind: 'veilleco', lat, lon, veilcoIdx: i,
+      demandeur: _vco(o, 'titre') || 'Projet Veilleco',
+      commune: _vco(o, 'commune'), dep: _vco(o, 'dep_exe'),
+      budget: _vco(o, 'buget en M€', 'budget en M€'), avance: _vco(o, 'Avancée du projet'),
+      mo: _vco(o, "Maître d'ouvrage"), lien: _vco(o, 'lien vers le projet'),
+    };
+  }).filter(Boolean);
+  const total = _veilcoRows.length;
+  toast(_vrPA.length + ' projet(s) Veilleco géolocalisé(s)' + (total > _vrPA.length ? ' — ' + (total - _vrPA.length) + ' sans GPS' : ''), 'success');
+  renderPage('veille-regar');
+}
 async function vrLoadPA() {
+  // Veille Veilleco : données nationales (pas de département requis) — fichier test tant que le FTP n'existe pas
+  if ((document.getElementById('vr-permis-type')?.value || '') === 'veilleco') return vrLoadVeilleco();
   const dept = (document.getElementById('vr-dept')?.value || '').trim().toUpperCase();
   if (!/^(\d{2,3}|2A|2B)$/.test(dept)) { toast('Saisissez un n° de département valide (ex. 85)', 'error'); return; }
   _vrPaFrom = (document.getElementById('vr-pa-from')?.value || '').trim();
@@ -5889,6 +5931,17 @@ async function _vrInitMap() {
         d.numero ? `<div style="color:#888;font-size:11px">N° ${cmdEsc(d.numero)}</div>` : '',
       ].filter(Boolean).join('');
       buttons = `<button onclick="vrPAOpportunity(${idx})" style="font-size:11px;padding:2px 6px;cursor:pointer">🎯 + Opportunité (rénovation)</button>`;
+    } else if (d.kind === 'veilleco') {
+      color = '#772471';
+      rows = [
+        `<div style="color:#772471;font-size:11px;font-weight:600">Projet — veille Veilleco</div>`,
+        (d.commune || d.dep) ? `<div style="color:#555">${cmdEsc([d.commune, d.dep ? '(' + d.dep + ')' : ''].filter(Boolean).join(' '))}</div>` : '',
+        d.budget ? `<div style="color:#555">Budget : <strong>${cmdEsc(d.budget)} M€</strong></div>` : '',
+        d.avance ? `<div style="color:#555;font-size:11px">Avancement : ${cmdEsc(d.avance)}</div>` : '',
+        d.mo ? `<div style="color:#555;font-size:11px">Maître d'ouvrage : ${cmdEsc(d.mo)}</div>` : '',
+      ].filter(Boolean).join('');
+      buttons = `<button onclick="veilcoToOpp(${d.veilcoIdx})" style="font-size:11px;padding:2px 6px;cursor:pointer">🎯 + Opportunité</button>
+        ${d.lien ? `<a href="${cmdEsc(d.lien)}" target="_blank" rel="noopener" style="font-size:11px">Fiche Veilleco ↗</a>` : ''}`;
     } else {
       const statut = d.dateDaact ? '✅ Travaux achevés' : (d.dateDoc ? '🚧 Chantier ouvert' : '📋 Autorisé');
       color = d.dateDaact ? '#6b7280' : (d.dateDoc ? '#f59e0b' : '#10b981');
