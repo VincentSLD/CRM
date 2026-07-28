@@ -4695,7 +4695,7 @@ function _veilcoTableCard(rows) {
       <td style="${td}">${esc(avance) || '—'}</td>
       <td style="${td}">${esc(mo) || '—'}</td>
       <td style="${td};font-size:11px">${esc(maj)}</td>
-      <td style="${td};text-align:center">${lien ? '<a href="' + esc(lien) + '" target="_blank" rel="noopener" class="btn" style="font-size:10px;padding:2px 6px;margin-bottom:3px" title="Voir la fiche Veilleco">🔗</a> ' : ''}<button class="btn" style="font-size:10px;padding:2px 6px" onclick="veilcoToOpp(${gi})" title="Créer une opportunité pré-remplie">→ Opp.</button></td>
+      <td style="${td};text-align:center">${lien ? '<a href="' + esc(lien) + '" target="_blank" rel="noopener" class="btn" style="font-size:10px;padding:2px 6px;margin-bottom:3px" title="Voir la fiche Veilleco">🔗</a> ' : ''}<button class="btn" style="font-size:12px;padding:2px 7px" onclick="veilcoToOpp(${gi})" title="Créer une opportunité pré-remplie">🎯</button></td>
     </tr>`;
   }).join('');
   return `<div class="card"><div class="card-body" style="padding:0">
