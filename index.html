@@ -8900,12 +8900,21 @@ function _oppListe(rows) {
   </div></div></div>`;
 }
 
+// Ordre d'affichage des colonnes du pipeline (gauche → droite), tous portefeuilles confondus.
+// Marchés privés : Prise de contact → Proposition commerciale → Négociation ; Marchés publics : Opportunité → Candidature.
+// Les statuts terminaux (Perdue / Gagnée) sont des colonnes dédiées, placées en fin.
+const OPP_COL_ORDER = ['prise de contact', 'proposition commerciale', 'négociation', 'opportunité', 'candidature', 'abandonnée', 'archivée', 'opportunité perdue', 'opportunité gagnée'];
+function _oppColRank(name) { const i = OPP_COL_ORDER.indexOf(String(name || '').trim().toLowerCase()); return i < 0 ? 500 : i; }
 function _oppKanban(rows) {
-  // Colonnes = étapes (ou statut si pas d'étape)
-  const colKey = o => o.stage || OPP_STATUTS[o.statut]?.[0] || o.statut || 'Autres';
+  // Colonnes = stade (opp en cours) ; statuts terminaux → colonne dédiée (Perdue / Gagnée / Abandonnée / Archivée)
+  const colKey = o => o.statut === 'WON' ? 'Opportunité Gagnée'
+    : o.statut === 'LOST' ? 'Opportunité Perdue'
+    : o.statut === 'DISCARD' ? 'Abandonnée'
+    : o.statut === 'ARCHIVED' ? 'Archivée'
+    : (o.stage || OPP_STATUTS[o.statut]?.[0] || o.statut || 'Autres');
   const cols = {};
   rows.forEach(o => { const k = colKey(o); (cols[k] = cols[k] || []).push(o); });
-  const keys = Object.keys(cols).sort((a, b) => a.localeCompare(b, 'fr'));
+  const keys = Object.keys(cols).sort((a, b) => (_oppColRank(a) - _oppColRank(b)) || a.localeCompare(b, 'fr'));
   return `<div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px">${keys.map(k => {
     const list = cols[k]; const tot = list.reduce((s, o) => s + (Number(o.montant) || 0), 0);
     return `<div style="min-width:260px;max-width:300px;flex:0 0 auto;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;padding:8px">
