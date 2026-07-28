@@ -5221,10 +5221,10 @@ function renderVeilleRegar() {
   <div style="max-width:1600px;margin:0 auto">
     <div style="margin-bottom:14px"><button class="btn btn-sm" onclick="go(_vrReturn)">← Retour</button></div>
     <div class="card" style="margin-bottom:14px">
-      <div class="card-header"><div class="card-title">Recherche d'opportunités</div></div>
       <div class="card-body">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <input id="vr-dept" value="${cmdEsc(_vrDept)}" placeholder="Département (ex. 85)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:150px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrLoadPA()">
+          <span style="font-size:14px;font-weight:700;white-space:nowrap;margin-right:2px">Recherche d'opportunités</span>
+          <input id="vr-dept" value="${cmdEsc(_vrDept)}" placeholder="Dép. (85)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:90px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrLoadPA()">
           <select id="vr-permis-type" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
             <option value="pc"${_vrPermisType === 'pc' ? ' selected' : ''}>Permis de construire (logements)</option>
             <option value="pc_existant"${_vrPermisType === 'pc_existant' ? ' selected' : ''}>Permis sur bâti existant (réhab/extension)</option>
@@ -5244,13 +5244,13 @@ function renderVeilleRegar() {
             <option value="FOURNITURES"${_vrBoampType === 'FOURNITURES' ? ' selected' : ''}>Fournitures</option>
             <option value=""${_vrBoampType === '' ? ' selected' : ''}>Tous types</option>
           </select>
-          <input id="vr-boamp-kw" value="${cmdEsc(_vrBoampKw)}" placeholder="Mot-clé objet (ex. construction)" title="Filtrer l'objet du marché par mot-clé (BOAMP)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:200px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrLoadPA()">
+          <input id="vr-boamp-kw" value="${cmdEsc(_vrBoampKw)}" placeholder="Mot-clé objet (BOAMP)" title="Filtrer l'objet du marché par mot-clé (BOAMP)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:160px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrLoadPA()">
           <span style="font-size:11px;color:var(--t3)">autorisés du</span>
           <input type="date" id="vr-pa-from" value="${cmdEsc(_vrPaFrom)}" title="À partir du" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
           <span style="font-size:11px;color:var(--t3)">au</span>
           <input type="date" id="vr-pa-to" value="${cmdEsc(_vrPaTo)}" title="Jusqu'au" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
           <button class="btn btn-primary" onclick="vrLoadPA()">🗺️ Afficher sur la carte</button>
-          <button class="btn" onclick="vrResetMap()" title="Vider la carte (aucune donnée, aucun département)">↺ Réinitialiser</button>
+          <button class="btn" onclick="vrResetMap()" title="Réinitialiser — vider la carte (aucune donnée, aucun département)" style="font-size:14px;line-height:1;padding:6px 9px">↺</button>
         </div>
       </div>
     </div>
