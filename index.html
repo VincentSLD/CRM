@@ -4692,16 +4692,17 @@ function _veilcoResultHtml() {
     const gi = _veilcoRows.indexOf(o);
     const titre = _vco(o, 'titre'), commune = _vco(o, 'commune'), dep = _vco(o, 'dep_exe');
     const budget = _vco(o, 'buget en M€', 'budget en M€'), avance = _vco(o, 'Avancée du projet');
-    const mo = _vco(o, "Maître d'ouvrage"), maj = _vco(o, 'Dt MAJ', 'Mise à jour'), fam = _vco(o, 'Famille projet', 'type_operation');
+    const mo = _vco(o, "Maître d'ouvrage"), maj = _vco(o, 'Dt MAJ'), fam = _vco(o, 'Famille projet', 'type_operation');
     const lien = _vco(o, 'lien vers le projet');
+    const td = 'padding:6px 8px;font-size:12px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-break:break-word';
     return `<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:6px 8px;max-width:340px"><div style="font-weight:600;font-size:12px">${esc(titre) || '—'}</div>${fam ? '<div style="font-size:10px;color:var(--t3)">' + esc(fam) + '</div>' : ''}</td>
-      <td style="padding:6px 8px;font-size:12px;white-space:nowrap">${esc(commune)}${dep ? ' <span style="color:var(--t3)">(' + esc(dep) + ')</span>' : ''}</td>
-      <td style="padding:6px 8px;font-size:12px;text-align:right;white-space:nowrap">${budget ? esc(budget) + ' M€' : '—'}</td>
-      <td style="padding:6px 8px;font-size:12px">${esc(avance) || '—'}</td>
-      <td style="padding:6px 8px;font-size:12px;max-width:220px">${esc(mo) || '—'}</td>
-      <td style="padding:6px 8px;font-size:11px;white-space:nowrap">${esc(maj)}</td>
-      <td style="padding:6px 8px;white-space:nowrap">${lien ? '<a href="' + esc(lien) + '" target="_blank" rel="noopener" class="btn" style="font-size:10px;padding:2px 6px" title="Voir la fiche Veilleco">🔗</a> ' : ''}<button class="btn" style="font-size:10px;padding:2px 6px" onclick="veilcoToOpp(${gi})" title="Créer une opportunité pré-remplie">→ Opp.</button></td>
+      <td style="${td}"><div style="font-weight:600">${esc(titre) || '—'}</div>${fam ? '<div style="font-size:10px;color:var(--t3)">' + esc(fam) + '</div>' : ''}</td>
+      <td style="${td}">${esc(commune)}${dep ? ' <span style="color:var(--t3)">(' + esc(dep) + ')</span>' : ''}</td>
+      <td style="${td};text-align:right">${budget ? esc(budget) + ' M€' : '—'}</td>
+      <td style="${td}">${esc(avance) || '—'}</td>
+      <td style="${td}">${esc(mo) || '—'}</td>
+      <td style="${td};font-size:11px">${esc(maj)}</td>
+      <td style="${td};text-align:center">${lien ? '<a href="' + esc(lien) + '" target="_blank" rel="noopener" class="btn" style="font-size:10px;padding:2px 6px;margin-bottom:3px" title="Voir la fiche Veilleco">🔗</a> ' : ''}<button class="btn" style="font-size:10px;padding:2px 6px" onclick="veilcoToOpp(${gi})" title="Créer une opportunité pré-remplie">→ Opp.</button></td>
     </tr>`;
   }).join('');
   return `
@@ -4718,10 +4719,10 @@ function _veilcoResultHtml() {
     </div></div>
     <div class="card"><div class="card-body" style="padding:0">
       <div style="padding:10px 12px;font-weight:700;font-size:13px">Projets (${rows.length}${rows.length > 400 ? ' — 400 premiers affichés' : ''})</div>
-      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+      <div style="overflow-x:auto"><table style="width:100%;min-width:900px;border-collapse:collapse;font-size:12px;table-layout:fixed">
+        <colgroup><col style="width:28%"><col style="width:13%"><col style="width:8%"><col style="width:15%"><col style="width:20%"><col style="width:8%"><col style="width:8%"></colgroup>
         <thead><tr style="background:var(--bg-3);text-align:left">
-          <th style="padding:6px 8px">Projet</th><th style="padding:6px 8px">Commune</th><th style="padding:6px 8px;text-align:right">Budget</th><th style="padding:6px 8px">Avancement</th><th style="padding:6px 8px">Maître d'ouvrage</th><th style="padding:6px 8px">MàJ</th><th style="padding:6px 8px"></th>
-        </tr></thead><tbody>${trs}</tbody>
+          <th style="padding:6px 8px">Projet</th><th style="padding:6px 8px">Commune</th><th style="padding:6px 8px;text-align:right">Budget</th><th style="padding:6px 8px">Avancement</th><th style="padding:6px 8px">Maître d'ouvrage</th><th style="padding:6px 8px">MàJ</th><th style="padding:6px 8px;text-align:center">Action</th></tr></thead><tbody>${trs}</tbody>
       </table></div>
     </div></div>`;
 }
