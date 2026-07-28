@@ -5228,10 +5228,10 @@ function renderVeilleRegar() {
     <div class="card" style="margin-bottom:14px">
       <div class="card-body">
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-          <button class="btn" title="Retour" onclick="go(_vrReturn)" style="font-size:13px;line-height:1;padding:4px 8px">←</button>
+          <button class="btn" title="Retour" onclick="go(_vrReturn)" style="font-size:12px;line-height:1;padding:5px 10px;margin-right:8px">← Retour</button>
           <span style="font-size:13px;font-weight:700;white-space:nowrap">Recherche d'opportunités</span>
           <input id="vr-dept" value="${cmdEsc(_vrDept)}" placeholder="Dép." style="padding:5px 7px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:64px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrLoadPA()">
-          <select id="vr-permis-type" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;max-width:185px;background:var(--card,#fff);color:var(--t1)">
+          <select id="vr-permis-type" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;max-width:231px;background:var(--card,#fff);color:var(--t1)">
             <option value="pc"${_vrPermisType === 'pc' ? ' selected' : ''}>Permis de construire (logements)</option>
             <option value="pc_existant"${_vrPermisType === 'pc_existant' ? ' selected' : ''}>Permis sur bâti existant (réhab/extension)</option>
             <option value="dpe_ter"${_vrPermisType === 'dpe_ter' ? ' selected' : ''}>DPE tertiaire F/G (à rénover)</option>
