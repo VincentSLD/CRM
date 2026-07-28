@@ -4678,6 +4678,35 @@ function _veilcoFiltered() {
   const q = (_veilcoSearch || '').toLowerCase();
   return q ? _veilcoRows.filter(o => Object.values(o).some(v => String(v).toLowerCase().includes(q))) : _veilcoRows;
 }
+// Tableau des projets Veilleco (mêmes colonnes/lignes partout : En Dev' + carte des opportunités)
+function _veilcoTableCard(rows) {
+  const esc = cmdEsc;
+  const td = 'padding:6px 8px;font-size:12px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-break:break-word';
+  const trs = (rows || []).slice(0, 400).map(o => {
+    const gi = _veilcoRows.indexOf(o);
+    const titre = _vco(o, 'titre'), commune = _vco(o, 'commune'), dep = _vco(o, 'dep_exe');
+    const budget = _vco(o, 'buget en M€', 'budget en M€'), avance = _vco(o, 'Avancée du projet');
+    const mo = _vco(o, "Maître d'ouvrage"), maj = _vco(o, 'Dt MAJ'), fam = _vco(o, 'Famille projet', 'type_operation');
+    const lien = _vco(o, 'lien vers le projet');
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="${td}"><div style="font-weight:600">${esc(titre) || '—'}</div>${fam ? '<div style="font-size:10px;color:var(--t3)">' + esc(fam) + '</div>' : ''}</td>
+      <td style="${td}">${esc(commune)}${dep ? ' <span style="color:var(--t3)">(' + esc(dep) + ')</span>' : ''}</td>
+      <td style="${td};text-align:right">${budget ? esc(budget) + ' M€' : '—'}</td>
+      <td style="${td}">${esc(avance) || '—'}</td>
+      <td style="${td}">${esc(mo) || '—'}</td>
+      <td style="${td};font-size:11px">${esc(maj)}</td>
+      <td style="${td};text-align:center">${lien ? '<a href="' + esc(lien) + '" target="_blank" rel="noopener" class="btn" style="font-size:10px;padding:2px 6px;margin-bottom:3px" title="Voir la fiche Veilleco">🔗</a> ' : ''}<button class="btn" style="font-size:10px;padding:2px 6px" onclick="veilcoToOpp(${gi})" title="Créer une opportunité pré-remplie">→ Opp.</button></td>
+    </tr>`;
+  }).join('');
+  return `<div class="card"><div class="card-body" style="padding:0">
+      <div style="padding:10px 12px;font-weight:700;font-size:13px">Projets (${(rows || []).length}${(rows || []).length > 400 ? ' — 400 premiers affichés' : ''})</div>
+      <div style="overflow-x:auto"><table style="width:100%;min-width:900px;border-collapse:collapse;font-size:12px;table-layout:fixed">
+        <colgroup><col style="width:28%"><col style="width:13%"><col style="width:8%"><col style="width:15%"><col style="width:20%"><col style="width:8%"><col style="width:8%"></colgroup>
+        <thead><tr style="background:var(--bg-3);text-align:left">
+          <th style="padding:6px 8px">Projet</th><th style="padding:6px 8px">Commune</th><th style="padding:6px 8px;text-align:right">Budget</th><th style="padding:6px 8px">Avancement</th><th style="padding:6px 8px">Maître d'ouvrage</th><th style="padding:6px 8px">MàJ</th><th style="padding:6px 8px;text-align:center">Action</th></tr></thead><tbody>${trs}</tbody>
+      </table></div>
+    </div></div>`;
+}
 function _veilcoResultHtml() {
   if (!_veilcoRows.length) return '<div class="card"><div class="card-body" style="padding:18px;color:var(--t3);font-size:13px">Aucune donnée chargée. Choisissez un fichier CSV Veilleco ci-dessus.</div></div>';
   const rows = _veilcoFiltered();
@@ -4689,23 +4718,6 @@ function _veilcoResultHtml() {
   const byType = cnt(o => _vco(o, 'Famille projet', 'type_operation')).slice(0, 10);
   const chip = (label, n) => `<span style="display:inline-block;padding:3px 9px;border-radius:14px;background:var(--bg-3);border:1px solid var(--border);font-size:11px;margin:2px">${esc(label)} <b>${n}</b></span>`;
   const kpi = (val, lbl) => `<div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:20px;font-weight:700;color:var(--accent)">${val}</div><div style="font-size:11px;color:var(--t3)">${lbl}</div></div></div>`;
-  const trs = rows.slice(0, 400).map(o => {
-    const gi = _veilcoRows.indexOf(o);
-    const titre = _vco(o, 'titre'), commune = _vco(o, 'commune'), dep = _vco(o, 'dep_exe');
-    const budget = _vco(o, 'buget en M€', 'budget en M€'), avance = _vco(o, 'Avancée du projet');
-    const mo = _vco(o, "Maître d'ouvrage"), maj = _vco(o, 'Dt MAJ'), fam = _vco(o, 'Famille projet', 'type_operation');
-    const lien = _vco(o, 'lien vers le projet');
-    const td = 'padding:6px 8px;font-size:12px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-break:break-word';
-    return `<tr style="border-bottom:1px solid var(--border)">
-      <td style="${td}"><div style="font-weight:600">${esc(titre) || '—'}</div>${fam ? '<div style="font-size:10px;color:var(--t3)">' + esc(fam) + '</div>' : ''}</td>
-      <td style="${td}">${esc(commune)}${dep ? ' <span style="color:var(--t3)">(' + esc(dep) + ')</span>' : ''}</td>
-      <td style="${td};text-align:right">${budget ? esc(budget) + ' M€' : '—'}</td>
-      <td style="${td}">${esc(avance) || '—'}</td>
-      <td style="${td}">${esc(mo) || '—'}</td>
-      <td style="${td};font-size:11px">${esc(maj)}</td>
-      <td style="${td};text-align:center">${lien ? '<a href="' + esc(lien) + '" target="_blank" rel="noopener" class="btn" style="font-size:10px;padding:2px 6px;margin-bottom:3px" title="Voir la fiche Veilleco">🔗</a> ' : ''}<button class="btn" style="font-size:10px;padding:2px 6px" onclick="veilcoToOpp(${gi})" title="Créer une opportunité pré-remplie">→ Opp.</button></td>
-    </tr>`;
-  }).join('');
   return `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px">
       ${kpi(_veilcoRows.length, 'Projets')}
@@ -4718,14 +4730,7 @@ function _veilcoResultHtml() {
       <div style="font-size:12px;font-weight:700;margin:10px 0 4px">Top départements</div><div>${byDep.map(([k, n]) => chip('dép. ' + k, n)).join('')}</div>
       <div style="font-size:12px;font-weight:700;margin:10px 0 4px">Familles / types</div><div>${byType.map(([k, n]) => chip(k, n)).join('')}</div>
     </div></div>
-    <div class="card"><div class="card-body" style="padding:0">
-      <div style="padding:10px 12px;font-weight:700;font-size:13px">Projets (${rows.length}${rows.length > 400 ? ' — 400 premiers affichés' : ''})</div>
-      <div style="overflow-x:auto"><table style="width:100%;min-width:900px;border-collapse:collapse;font-size:12px;table-layout:fixed">
-        <colgroup><col style="width:28%"><col style="width:13%"><col style="width:8%"><col style="width:15%"><col style="width:20%"><col style="width:8%"><col style="width:8%"></colgroup>
-        <thead><tr style="background:var(--bg-3);text-align:left">
-          <th style="padding:6px 8px">Projet</th><th style="padding:6px 8px">Commune</th><th style="padding:6px 8px;text-align:right">Budget</th><th style="padding:6px 8px">Avancement</th><th style="padding:6px 8px">Maître d'ouvrage</th><th style="padding:6px 8px">MàJ</th><th style="padding:6px 8px;text-align:center">Action</th></tr></thead><tbody>${trs}</tbody>
-      </table></div>
-    </div></div>`;
+    ${_veilcoTableCard(rows)}`;
 }
 function veilcoToOpp(idx) {
   const o = _veilcoRows[idx]; if (!o) return;
@@ -5302,20 +5307,13 @@ function renderVeilleRegar() {
   </div>`;
 }
 function _vrDataTableHtml() {
+  // Veilleco : même tableau que l'outil « En Dev' » (toutes les lignes, mêmes colonnes), pas seulement les projets géolocalisés
+  if (_vrPermisType === 'veilleco') return _veilcoRows.length ? _veilcoTableCard(_veilcoRows) : '';
   if (!_vrPA.length) return '';
   const k = _vrPermisType;
-  const lbl = { pa: "Permis d'aménager", pc: 'Permis de construire', pc_existant: 'Permis sur bâti existant', dpe_ter: 'DPE tertiaire F/G', dpe_log: 'DPE logements F/G', copro: 'Copropriétés', veilleco: 'Veille Veilleco' }[k] || 'Résultats';
+  const lbl = { pa: "Permis d'aménager", pc: 'Permis de construire', pc_existant: 'Permis sur bâti existant', dpe_ter: 'DPE tertiaire F/G', dpe_log: 'DPE logements F/G', copro: 'Copropriétés' }[k] || 'Résultats';
   let head, rows;
-  if (k === 'veilleco') {
-    head = '<tr><th>Projet</th><th>Commune</th><th>Budget</th><th>Avancement</th><th>Maître d\'ouvrage</th><th></th></tr>';
-    rows = _vrPA.map(d => `<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:6px 8px;font-size:12px;max-width:320px;white-space:normal;overflow-wrap:anywhere">${cmdEsc(d.demandeur || '—')}</td>
-      <td style="padding:6px 8px;font-size:11px">${cmdEsc(d.commune || '')}${d.dep ? ' (' + cmdEsc(d.dep) + ')' : ''}</td>
-      <td style="padding:6px 8px;font-size:11px;white-space:nowrap">${d.budget ? cmdEsc(d.budget) + ' M€' : '—'}</td>
-      <td style="padding:6px 8px;font-size:11px">${cmdEsc(d.avance || '—')}</td>
-      <td style="padding:6px 8px;font-size:11px;max-width:200px;white-space:normal;overflow-wrap:anywhere">${cmdEsc(d.mo || '—')}</td>
-      <td style="padding:6px 8px;white-space:nowrap">${d.lien ? '<a href="' + cmdEsc(d.lien) + '" target="_blank" rel="noopener" class="btn" style="font-size:10px;padding:2px 6px">🔗</a> ' : ''}<button class="btn" style="font-size:10px;padding:2px 6px" title="Créer une opportunité pré-remplie" onclick="veilcoToOpp(${d.veilcoIdx})">🎯</button></td></tr>`).join('');
-  } else if (k === 'dpe_ter' || k === 'dpe_log') {
+  if (k === 'dpe_ter' || k === 'dpe_log') {
     head = '<tr><th>Adresse</th><th>Classe</th><th>Surface</th><th>Construction</th><th></th></tr>';
     rows = _vrPA.map((d, i) => `<tr style="border-bottom:1px solid var(--border)">
       <td style="padding:6px 8px;font-size:12px;max-width:340px">${cmdEsc(d.adresse || d.commune || '—')}</td>
@@ -5717,6 +5715,8 @@ function _vrListRowData(d, i, k) {
     <td><button class="btn" style="font-size:10px;padding:2px 6px" title="Créer un prospect" onclick="vrPAProspect(${i})">+ Prospect</button> <button class="btn" style="font-size:10px;padding:2px 6px" title="Créer une opportunité" onclick="vrPAOpportunity(${i})">🎯</button></td>`;
 }
 function _vrListHtml() {
+  // Veilleco : même tableau que l'outil « En Dev' » (toutes les lignes, mêmes colonnes)
+  if (_vrPermisType === 'veilleco') return _veilcoRows.length ? _veilcoTableCard(_veilcoRows) : '';
   const { kind, all } = _vrListData();
   if (!all || !all.length) return '';
   const isB = kind === 'boamp';
