@@ -5225,10 +5225,10 @@ function renderVeilleRegar() {
   const _vrIsBoamp = (_vrPermisType === 'boamp');
   return `
   <div style="max-width:1600px;margin:0 auto">
-    <div style="margin-bottom:14px"><button class="btn btn-sm" onclick="go(_vrReturn)">← Retour</button></div>
     <div class="card" style="margin-bottom:14px">
       <div class="card-body">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-sm" onclick="go(_vrReturn)">← Retour</button>
           <span style="font-size:14px;font-weight:700;white-space:nowrap;margin-right:2px">Recherche d'opportunités</span>
           <input id="vr-dept" value="${cmdEsc(_vrDept)}" placeholder="Dép. (85)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:90px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrLoadPA()">
           <select id="vr-permis-type" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
