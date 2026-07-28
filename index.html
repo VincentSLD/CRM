@@ -6958,7 +6958,7 @@ function renderTaches() {
         <option value="">— Statut —</option>${Object.entries(TACHE_STATUTS).map(([k, v]) => `<option value="${k}"${_tachesFStatut === k ? ' selected' : ''}>${v[0]}</option>`).join('')}
       </select>
       <select onchange="_tachesFAssigne=this.value;renderPage('taches')" style="padding:5px 8px;border:1px solid ${_tachesFAssigne ? '#FF1E63' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);max-width:200px">
-        <option value="">— Assigné —</option>${comm.map(c => `<option value="${c.id}"${_tachesFAssigne === c.id ? ' selected' : ''}>${cmdEsc(fmtCommercialName(c.nom || c.email || ''))}</option>`).join('')}
+        <option value="">— Assigné —</option>${commOptionsLinked(_tachesFAssigne)}
       </select>
       <button class="btn" onclick="_tachesView=(_tachesView==='pipeline'?'liste':'pipeline');renderPage('taches')" style="font-size:12px">${_tachesView === 'pipeline' ? '☰ Liste' : '▦ Pipeline'}</button>
     </div>
@@ -7083,7 +7083,7 @@ function renderTacheEditPage() {
       <div class="fg" style="flex:1;min-width:120px"><label class="fl">Priorité</label><select class="fi" id="t-prio">${Object.entries(TACHE_PRIOS).map(([k, v]) => `<option value="${k}"${prioVal === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></div>
       <div class="fg" style="flex:1;min-width:120px"><label class="fl">Statut</label><select class="fi" id="t-statut">${Object.entries(TACHE_STATUTS).map(([k, v]) => `<option value="${k}"${(t ? t.statut : 'a_faire') === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></div>
     </div>
-    <div class="fg"><label class="fl">Assigné à *</label><select class="fi" id="t-assigne">${comm.map(c => `<option value="${c.id}"${String(assigneVal) === String(c.id) ? ' selected' : ''}>${cmdEsc(fmtCommercialName(c.nom || c.email || ''))}${c.email ? '' : ' (sans email)'}</option>`).join('')}</select>
+    <div class="fg"><label class="fl">Assigné à *</label><select class="fi" id="t-assigne">${commOptionsLinked(assigneVal, t ? t.assigne_nom : '')}</select>
       <div style="font-size:11px;color:var(--t3);margin-top:3px">Une tâche Microsoft To Do + un email seront créés chez l'assigné (si compte Microsoft).</div></div>
     <div class="fg" style="position:relative"><label class="fl">Client lié</label>
       <div id="t-client-chip" style="margin-bottom:4px"></div>
@@ -7450,7 +7450,7 @@ function renderSollicEditPage() {
     <div class="fg"><label class="fl">Contact (interlocuteur)</label><select class="fi" id="sol-contact" onchange="sollicPickContact(this.value)"><option value="">— Chargement… —</option></select>
       <div style="font-size:11px;color:var(--t3);margin-top:3px">Contact de la société sollicitée — servira de destinataire par défaut du mail.</div></div>
     <div class="fg"><label class="fl">Opportunité</label><select class="fi" id="sol-opp" onchange="sollicPickOpp(this.value)">${_sollicOppOptions()}</select></div>
-    <div class="fg"><label class="fl">Assigné à *</label><select class="fi" id="sol-assigne">${comm.map(c => `<option value="${c.id}"${String(_sollicSel.assigne_id) === String(c.id) ? ' selected' : ''}>${cmdEsc(fmtCommercialName(c.nom || c.email || ''))}${c.email ? '' : ' (sans email)'}</option>`).join('')}</select>
+    <div class="fg"><label class="fl">Assigné à *</label><select class="fi" id="sol-assigne">${commOptionsLinked(_sollicSel.assigne_id, _sollicSel.assigne_nom)}</select>
       <div style="font-size:11px;color:var(--t3);margin-top:3px">Par défaut le responsable de l'opportunité. Un rappel email lui sera envoyé à la date « À faire avant ».</div></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <div class="fg" style="flex:1;min-width:150px"><label class="fl">Statut</label><select class="fi" id="sol-statut">${Object.entries(SOLLIC_STATUTS).map(([k, v]) => `<option value="${k}"${statut === k ? ' selected' : ''}>${v[0]}</option>`).join('')}</select></div>
@@ -7719,6 +7719,20 @@ function empOptionsLinked(sel) {
   let html = '<option value="">—</option>' + list.map(c => `<option value="${c.akuiteoId}"${selStr === c.akuiteoId ? ' selected' : ''}>${cmdEsc(fmtCommercialName(c.name))}</option>`).join('');
   if (selStr && !list.some(c => c.akuiteoId === selStr)) {
     const nm = _empDisplayName(selStr) || selStr;
+    html += `<option value="${selStr}" selected>${cmdEsc(fmtCommercialName(nm))} (ancien)</option>`;
+  }
+  return html;
+}
+// Collaborateurs liés au format {id, name} attendu par akRefOptionsKeep (Commercial Novam/GPH…)
+function getLinkedEmployees() { return getLinkedCollaborateurs().map(c => ({ id: c.akuiteoId, name: c.name })); }
+// Options <option> pour un sélecteur d'assigné (valeur = id commercial DB.commerciaux) : commerciaux liés Akuiteo↔Lucca + valeur historique
+function commOptionsLinked(selectedId, selectedName) {
+  const linked = (typeof getCRRedacteurOptions === 'function') ? getCRRedacteurOptions() : [];
+  const selStr = (selectedId == null ? '' : String(selectedId));
+  let html = linked.map(c => `<option value="${c.id}"${selStr === String(c.id) ? ' selected' : ''}>${cmdEsc(c.label)}</option>`).join('');
+  if (selStr && !linked.some(c => String(c.id) === selStr)) {
+    const co = (DB.commerciaux || []).find(c => String(c.id) === selStr);
+    const nm = (co ? (co.nom || co.email) : '') || selectedName || selStr;
     html += `<option value="${selStr}" selected>${cmdEsc(fmtCommercialName(nm))} (ancien)</option>`;
   }
   return html;
@@ -27500,8 +27514,8 @@ async function fillAkuiteoDropdowns(prefix, client) {
   setHtml('secteur', akRefOptionsKeep(akRef.sectors, c.mk_secteur_id, c.mk_secteur, 'Secteur...'));
   setHtml('type', akRefOptionsKeep(akRef.linkTypes, c.mk_type_id, c.mk_type, 'Type...'));
   setHtml('tarification', akRefOptionsKeep(akRef.pricingMethods, c.mode_tarification, c.mode_tarification_name, 'Mode de tarification GPH...'));
-  setHtml('manager', akRefOptionsKeep(akRef.employees, c.account_manager_id, c.account_manager_name, 'Commercial Novam...'));
-  setHtml('salesman', akRefOptionsKeep(akRef.employees, c.salesman_id, c.salesman_name, 'Commercial GPH...'));
+  setHtml('manager', akRefOptionsKeep(getLinkedEmployees(), c.account_manager_id, c.account_manager_name, 'Commercial Novam...'));
+  setHtml('salesman', akRefOptionsKeep(getLinkedEmployees(), c.salesman_id, c.salesman_name, 'Commercial GPH...'));
   // Groupe / Origine (dropdowns dynamiques)
   const [groupes, origines] = await Promise.all([loadDistinctValues('mk_groupe'), loadDistinctValues('mk_origine')]);
   setHtml('groupe', buildDistinctOptions(groupes, c.mk_groupe, 'Groupe...'));
