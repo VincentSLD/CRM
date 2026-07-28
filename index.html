@@ -4544,7 +4544,7 @@ function go(page) {
   const titles = {dashboard:'Tableau de bord',analyse:'Analyse / KPI',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing','marches-publics':'Veille marchés publics','procedures-coll':'Veille procédures collectives (BODACC)',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
     cr:'Comptes-rendus',taches:ICON_TACHE+' Tâches commerciales',sollicitations:ICON_SOLLIC+' Sollicitations',opportunites:'🎯 Opportunités',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
-    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'",'mode-emploi':"Mode d'emploi",'cahier-charges':'Cahier des charges','veille-regar':'Carte des opportunités',newsletter:'Infolettre hebdomadaire','decp-analyse':'Marchés publics (DECP)'};
+    'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'",veilleco:'Veille Marchés (Veilleco) — test','mode-emploi':"Mode d'emploi",'cahier-charges':'Cahier des charges','veille-regar':'Carte des opportunités',newsletter:'Infolettre hebdomadaire','decp-analyse':'Marchés publics (DECP)'};
   document.getElementById('pageTitle').innerHTML = titles[page]||page;
   renderPage(page);
   if(window.innerWidth<=768) toggleSidebar(false);
@@ -4565,6 +4565,7 @@ function renderEnDev() {
     { page: 'pipeline', label: 'Pipeline', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>' },
     { page: 'batiscope', label: "BatiScop'", icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>' },
     { page: 'marches-publics', label: 'Veille Marchés Publics', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' },
+    { page: 'veilleco', label: 'Veille Marchés (Veilleco) — test', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>' },
     { page: 'objectifs', label: 'Objectifs', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>' },
     { page: 'carte-affaires', label: 'Carte des Affaires', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>' },
     { page: 'veille-regar', label: 'Carte des opportunités', icon: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6l9-3 9 3v12l-9 3-9-3z"/><path d="M3 6l9 3 9-3M12 9v12"/></svg>' },
@@ -4598,6 +4599,147 @@ function renderEnDev() {
         </div>
       </div>
     </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TEST — Veille Marchés « Veilleco » (lecture/exploitation d'un CSV ; futur dépôt FTP journalier)
+// ═══════════════════════════════════════════════════════════
+let _veilcoRows = [], _veilcoHeader = [], _veilcoSearch = '', _veilcoFileName = '';
+// Parseur CSV robuste : délimiteur « ; », guillemets doublés (""), champs multi-lignes, BOM
+function _csvParse(text, delim) {
+  delim = delim || ';';
+  if (text && text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const rows = []; let row = [], field = '', inQ = false, i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i += 2; continue; } inQ = false; i++; continue; }
+      field += c; i++; continue;
+    }
+    if (c === '"') { inQ = true; i++; continue; }
+    if (c === delim) { row.push(field); field = ''; i++; continue; }
+    if (c === '\r') { i++; continue; }
+    if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+    field += c; i++;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+// Accès tolérant à une colonne (par nom exact puis insensible casse/espaces)
+function _vco(o, ...names) {
+  for (const n of names) if (o[n] != null && o[n] !== '') return o[n];
+  const keys = Object.keys(o);
+  for (const n of names) { const k = keys.find(k => k.toLowerCase().replace(/\s+/g, ' ').trim() === n.toLowerCase()); if (k && o[k]) return o[k]; }
+  return '';
+}
+function renderVeilleco() {
+  _vrReturn = 'endev';
+  return `
+    <div style="max-width:1500px;margin:0 auto">
+      <div style="margin-bottom:14px"><button class="btn btn-sm" onclick="go('endev')">← Retour En Dev'</button></div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-header"><div class="card-title">📡 Veille Marchés — Veilleco (test lecture CSV)</div></div>
+        <div class="card-body">
+          <p style="font-size:13px;color:var(--t2);margin-bottom:10px">Prototype d'intégration de la veille <b>Veilleco</b>. À terme, le prestataire déposera un CSV journalier sur un <b>FTP</b> que le CRM récupérera automatiquement. En attendant, chargez ici le fichier CSV de test pour vérifier la lecture et l'exploitation des données (séparateur « ; », UTF-8).</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+            <label class="btn btn-primary" style="cursor:pointer">📂 Choisir le fichier CSV<input type="file" accept=".csv,text/csv" style="display:none" onchange="veilcoLoadFile(this)"></label>
+            ${_veilcoRows.length ? `<input type="text" id="veilco-search" placeholder="Rechercher (titre, commune, MOA…)" value="${cmdEsc(_veilcoSearch)}" oninput="_veilcoSearch=this.value;_veilcoRenderResult()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:280px;background:var(--card,#fff);color:var(--t1)">` : ''}
+            ${_veilcoFileName ? '<span style="font-size:12px;color:var(--t3)">Fichier : <b>' + cmdEsc(_veilcoFileName) + '</b> — ' + _veilcoRows.length + ' projet(s)</span>' : ''}
+          </div>
+        </div>
+      </div>
+      <div id="veilco-result">${_veilcoResultHtml()}</div>
+    </div>`;
+}
+function veilcoLoadFile(input) {
+  const f = input && input.files && input.files[0];
+  if (!f) return;
+  _veilcoFileName = f.name;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const grid = _csvParse(String(rd.result || ''), ';');
+      if (!grid.length) { toast('Fichier vide ou illisible.', 'error'); return; }
+      _veilcoHeader = grid[0].map(h => (h || '').trim());
+      _veilcoRows = grid.slice(1).filter(r => r.some(v => (v || '').trim() !== '')).map(r => {
+        const o = {}; _veilcoHeader.forEach((h, i) => o[h] = (r[i] != null ? String(r[i]).trim() : '')); return o;
+      });
+      _veilcoSearch = '';
+      toast(_veilcoRows.length + ' projet(s) lus depuis ' + f.name, 'success');
+      renderPage('veilleco');
+    } catch (e) { toast('Erreur de lecture : ' + e.message, 'error'); }
+  };
+  rd.onerror = () => toast('Impossible de lire le fichier.', 'error');
+  rd.readAsText(f, 'UTF-8');
+}
+function _veilcoRenderResult() { const el = document.getElementById('veilco-result'); if (el) el.innerHTML = _veilcoResultHtml(); }
+function _veilcoFiltered() {
+  const q = (_veilcoSearch || '').toLowerCase();
+  return q ? _veilcoRows.filter(o => Object.values(o).some(v => String(v).toLowerCase().includes(q))) : _veilcoRows;
+}
+function _veilcoResultHtml() {
+  if (!_veilcoRows.length) return '<div class="card"><div class="card-body" style="padding:18px;color:var(--t3);font-size:13px">Aucune donnée chargée. Choisissez un fichier CSV Veilleco ci-dessus.</div></div>';
+  const rows = _veilcoFiltered();
+  const esc = cmdEsc;
+  const budM = _veilcoRows.reduce((a, o) => a + (parseFloat(String(_vco(o, 'buget en M€', 'budget en M€')).replace(',', '.')) || 0), 0);
+  const cnt = fn => { const m = {}; _veilcoRows.forEach(o => { const k = (fn(o) || '—').trim() || '—'; m[k] = (m[k] || 0) + 1; }); return Object.entries(m).sort((a, b) => b[1] - a[1]); };
+  const byAvance = cnt(o => _vco(o, 'Avancée du projet'));
+  const byDep = cnt(o => _vco(o, 'dep_exe')).slice(0, 10);
+  const byType = cnt(o => _vco(o, 'Famille projet', 'type_operation')).slice(0, 10);
+  const chip = (label, n) => `<span style="display:inline-block;padding:3px 9px;border-radius:14px;background:var(--bg-3);border:1px solid var(--border);font-size:11px;margin:2px">${esc(label)} <b>${n}</b></span>`;
+  const kpi = (val, lbl) => `<div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:20px;font-weight:700;color:var(--accent)">${val}</div><div style="font-size:11px;color:var(--t3)">${lbl}</div></div></div>`;
+  const trs = rows.slice(0, 400).map(o => {
+    const gi = _veilcoRows.indexOf(o);
+    const titre = _vco(o, 'titre'), commune = _vco(o, 'commune'), dep = _vco(o, 'dep_exe');
+    const budget = _vco(o, 'buget en M€', 'budget en M€'), avance = _vco(o, 'Avancée du projet');
+    const mo = _vco(o, "Maître d'ouvrage"), maj = _vco(o, 'Dt MAJ', 'Mise à jour'), fam = _vco(o, 'Famille projet', 'type_operation');
+    const lien = _vco(o, 'lien vers le projet');
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 8px;max-width:340px"><div style="font-weight:600;font-size:12px">${esc(titre) || '—'}</div>${fam ? '<div style="font-size:10px;color:var(--t3)">' + esc(fam) + '</div>' : ''}</td>
+      <td style="padding:6px 8px;font-size:12px;white-space:nowrap">${esc(commune)}${dep ? ' <span style="color:var(--t3)">(' + esc(dep) + ')</span>' : ''}</td>
+      <td style="padding:6px 8px;font-size:12px;text-align:right;white-space:nowrap">${budget ? esc(budget) + ' M€' : '—'}</td>
+      <td style="padding:6px 8px;font-size:12px">${esc(avance) || '—'}</td>
+      <td style="padding:6px 8px;font-size:12px;max-width:220px">${esc(mo) || '—'}</td>
+      <td style="padding:6px 8px;font-size:11px;white-space:nowrap">${esc(maj)}</td>
+      <td style="padding:6px 8px;white-space:nowrap">${lien ? '<a href="' + esc(lien) + '" target="_blank" rel="noopener" class="btn" style="font-size:10px;padding:2px 6px" title="Voir la fiche Veilleco">🔗</a> ' : ''}<button class="btn" style="font-size:10px;padding:2px 6px" onclick="veilcoToOpp(${gi})" title="Créer une opportunité pré-remplie">→ Opp.</button></td>
+    </tr>`;
+  }).join('');
+  return `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px">
+      ${kpi(_veilcoRows.length, 'Projets')}
+      ${kpi(budM ? budM.toFixed(1) + ' M€' : '—', 'Budget cumulé (renseigné)')}
+      ${kpi(byDep.length, 'Départements')}
+      ${kpi(_veilcoHeader.length, 'Colonnes lues')}
+    </div>
+    <div class="card" style="margin-bottom:14px"><div class="card-body" style="padding:12px">
+      <div style="font-size:12px;font-weight:700;margin-bottom:4px">Avancement</div><div>${byAvance.map(([k, n]) => chip(k, n)).join('')}</div>
+      <div style="font-size:12px;font-weight:700;margin:10px 0 4px">Top départements</div><div>${byDep.map(([k, n]) => chip('dép. ' + k, n)).join('')}</div>
+      <div style="font-size:12px;font-weight:700;margin:10px 0 4px">Familles / types</div><div>${byType.map(([k, n]) => chip(k, n)).join('')}</div>
+    </div></div>
+    <div class="card"><div class="card-body" style="padding:0">
+      <div style="padding:10px 12px;font-weight:700;font-size:13px">Projets (${rows.length}${rows.length > 400 ? ' — 400 premiers affichés' : ''})</div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:var(--bg-3);text-align:left">
+          <th style="padding:6px 8px">Projet</th><th style="padding:6px 8px">Commune</th><th style="padding:6px 8px;text-align:right">Budget</th><th style="padding:6px 8px">Avancement</th><th style="padding:6px 8px">Maître d'ouvrage</th><th style="padding:6px 8px">MàJ</th><th style="padding:6px 8px"></th>
+        </tr></thead><tbody>${trs}</tbody>
+      </table></div>
+    </div></div>`;
+}
+function veilcoToOpp(idx) {
+  const o = _veilcoRows[idx]; if (!o) return;
+  const titre = _vco(o, 'titre') || 'Projet Veilleco';
+  const commune = _vco(o, 'commune'), dep = _vco(o, 'dep_exe'), mo = _vco(o, "Maître d'ouvrage");
+  const budget = parseFloat(String(_vco(o, 'buget en M€', 'budget en M€')).replace(',', '.')) || 0;
+  const detail = _vco(o, 'détail du projet'), avance = _vco(o, 'Avancée du projet'), lien = _vco(o, 'lien vers le projet');
+  const desc = [
+    commune ? 'Localisation : ' + commune + (dep ? ' (' + dep + ')' : '') : '',
+    mo ? "Maître d'ouvrage : " + mo : '',
+    avance ? 'Avancement : ' + avance : '',
+    detail || '',
+    lien ? 'Source : ' + lien : '',
+    '— Source : veille Veilleco'
+  ].filter(Boolean).join('\n');
+  oppModalOpen(null, { name: titre, description: desc, clientHint: mo || '', montant: budget ? Math.round(budget * 1e6) : undefined });
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -9804,6 +9946,7 @@ function renderPage(page) {
     annuaire: renderAnnuaire,
     admin: renderAdmin,
     endev: renderEnDev,
+    veilleco: renderVeilleco,
     'mode-emploi': renderModeEmploi,
     'cahier-charges': renderCahierCharges,
     'veille-regar': renderVeilleRegar,

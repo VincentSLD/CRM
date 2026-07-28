@@ -4,3 +4,6 @@ node_modules/
 # Gros exports Akuiteo/Codial (>100 Mo, hors GitHub)
 XML/
 *.xlsx
+
+# Fichiers de test veille Veilleco (donnees prestataire, ne pas publier)
+Veilleco_*.csv
