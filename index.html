@@ -9194,7 +9194,6 @@ function _nlOverlay(innerHtml, maxw) {
 async function monEspaceOpen() {
   await _nlLoadPrefs();
   const p = _nlPrefs || {};
-  const sec = p.sections || _nlDefaultSections();
   const nom = (currentCommercial && currentCommercial.nom) || (p.email || 'Mon espace');
   const html = `
     <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
@@ -9214,25 +9213,9 @@ async function monEspaceOpen() {
           <input type="checkbox" id="nl-brief" ${p.brief_perso ? 'checked' : ''} style="width:18px;height:18px;accent-color:#7c3aed"> 📊 M'envoyer aussi mon brief commercial perso
         </label>
         <div style="font-size:12px;color:var(--t3);margin-top:6px">Un 2ᵉ email, rien que pour vous : vos tâches & signatures de la semaine, vos relances de devis, votre avancement objectif, vos nouveaux clients attribués et vos dormants à réveiller.</div>
-        <button class="btn" onclick="nlBriefPreview()" style="margin-top:10px;font-size:12px">👁️ M'envoyer mon brief maintenant</button>
       </div></div>
-      <div style="font-size:12px;font-weight:700;margin:12px 0 6px">Ton de la newsletter</div>
-      <select id="nl-ton" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)">
-        <option value="convivial"${(p.ton || 'convivial') === 'convivial' ? ' selected' : ''}>Convivial</option>
-        <option value="fun"${p.ton === 'fun' ? ' selected' : ''}>Fun (humour + emojis)</option>
-        <option value="pro"${p.ton === 'pro' ? ' selected' : ''}>Professionnel (sobre)</option>
-      </select>
       <div style="font-size:12px;font-weight:700;margin:14px 0 6px">Date de naissance (pour les anniversaires, optionnel)</div>
       <input type="date" id="nl-naissance" value="${p.date_naissance || ''}" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card,#fff);color:var(--t1)">
-      <div style="font-size:12px;font-weight:700;margin:14px 0 6px">Sections du CRM</div>
-      <div style="display:grid;grid-template-columns:1fr;gap:4px">
-        ${NL_SECTIONS.map(([k, lbl]) => `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" class="nl-sec" data-k="${k}" ${sec[k] !== false ? 'checked' : ''} style="accent-color:#7c3aed"> ${cmdEsc(lbl)}</label>`).join('')}
-      </div>
-      <div style="font-size:12px;font-weight:700;margin:16px 0 6px">🌐 Rubriques de veille web</div>
-      <div style="font-size:11px;color:var(--t3);margin-bottom:6px">Infos externes récupérées sur le web (avec sources).</div>
-      <div style="display:grid;grid-template-columns:1fr;gap:4px">
-        ${NL_WEB_RUBRIQUES.map(([k, lbl]) => `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" class="nl-sec" data-k="${k}" ${sec[k] !== false ? 'checked' : ''} style="accent-color:#7c3aed"> ${cmdEsc(lbl)}</label>`).join('')}
-      </div>
       <div style="font-size:12px;font-weight:700;margin:18px 0 6px">🏢 Mes agences par défaut</div>
       <div style="font-size:11px;color:var(--t3);margin-bottom:6px">Cochez les agences qui vous intéressent : elles seront <strong>présélectionnées au chargement du CRM</strong> (filtre « Agences »). Aucune cochée = toutes les agences.</div>
       <div style="display:flex;gap:6px;margin-bottom:6px">
@@ -9245,8 +9228,6 @@ async function monEspaceOpen() {
     </div>
     <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between">
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn" onclick="nlPreview()">👁️ M'envoyer un aperçu</button>
-        <button class="btn" onclick="this.closest('.nl-overlay').remove();go('newsletter')">📰 Éditions</button>
         <button class="btn" onclick="this.closest('.nl-overlay').remove();doLogout()" title="Se déconnecter" style="color:var(--red);border-color:rgba(193,31,57,0.5)">🚪 Se déconnecter</button>
       </div>
       <button class="btn btn-primary" onclick="nlSavePrefs()">💾 Enregistrer</button>
@@ -9267,8 +9248,7 @@ function _meAgencesAll(on) {
 }
 async function nlSavePrefs() {
   const uid = _nlUserId(); if (!uid) { toast('Profil non identifié', 'error'); return; }
-  const sections = {};
-  document.querySelectorAll('.nl-sec').forEach(c => sections[c.dataset.k] = c.checked);
+  // Le ton et les sections sont désormais une config GLOBALE (Admin) commune à tous les abonnés — plus lues ici.
   const row = {
     user_id: String(uid),
     email: (currentCommercial && currentCommercial.email) || (_nlPrefs && _nlPrefs.email) || null,
@@ -9276,9 +9256,7 @@ async function nlSavePrefs() {
     abonne: !!document.getElementById('nl-abonne')?.checked,
     brief_perso: !!document.getElementById('nl-brief')?.checked,
     manager_id: (currentCommercial && currentCommercial.akuiteo_manager_id) || null,
-    ton: document.getElementById('nl-ton')?.value || 'convivial',
     date_naissance: document.getElementById('nl-naissance')?.value || null,
-    sections,
     updated_at: new Date().toISOString(),
   };
   // upsert Supabase ne "throw" pas : on lit l'erreur retournée ET on relit la ligne pour confirmer l'écriture
@@ -9373,8 +9351,49 @@ async function nlBuildData() {
 // ─ Génération + aperçu ─
 const NL_AI_DISCLAIMER = '<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:9px 13px;margin:0 0 14px;font-size:12px;color:#9a3412;line-height:1.5">ℹ️ <b>Infolettre générée automatiquement par l\'IA (NOVA).</b> Certaines informations, notamment la veille web, peuvent contenir des erreurs ou des imprécisions&nbsp;: <b>merci de les vérifier</b> avant toute utilisation ou diffusion.</div>';
 function _nlWrap(inner) { return `<div style="max-width:640px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#222">${NL_AI_DISCLAIMER}${inner}</div>`; }
+// ─ Config globale de l'infolettre (commune à tous les abonnés) : ton + sections/rubriques — stockée dans app_config ─
+let _nlGlobalCfg = null;
+async function loadNlGlobalConfig(force) {
+  if (_nlGlobalCfg && !force) return _nlGlobalCfg;
+  try {
+    const { data } = await sb.from('app_config').select('value').eq('key', 'newsletter_config').maybeSingle();
+    const v = (data && data.value) || {};
+    _nlGlobalCfg = { ton: v.ton || 'convivial', sections: (v.sections && Object.keys(v.sections).length) ? v.sections : _nlDefaultSections() };
+  } catch (e) { _nlGlobalCfg = { ton: 'convivial', sections: _nlDefaultSections() }; }
+  return _nlGlobalCfg;
+}
+async function saveNlGlobalConfig() {
+  const sections = {};
+  document.querySelectorAll('.nl-adm-sec').forEach(c => sections[c.dataset.k] = c.checked);
+  const ton = document.getElementById('nl-adm-ton')?.value || 'convivial';
+  const value = { ton, sections };
+  const { error } = await sb.from('app_config').upsert({ key: 'newsletter_config', value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  _nlGlobalCfg = value;
+  toast('Configuration de l\'infolettre enregistrée (commune à tous les abonnés) ✅', 'success');
+}
+async function renderNlAdminConfig() {
+  const box = document.getElementById('nl-adm-box'); if (!box) return;
+  const cfg = await loadNlGlobalConfig(true);
+  const sec = cfg.sections || _nlDefaultSections();
+  const ton = cfg.ton || 'convivial';
+  const chk = ([k, lbl]) => `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" class="nl-adm-sec" data-k="${k}" ${sec[k] !== false ? 'checked' : ''} style="accent-color:#772471"> ${cmdEsc(lbl)}</label>`;
+  box.innerHTML = `
+    <div style="font-size:12px;font-weight:700;margin:0 0 6px">Ton de l'infolettre</div>
+    <select id="nl-adm-ton" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card);color:var(--t1)">
+      <option value="convivial"${ton === 'convivial' ? ' selected' : ''}>Convivial</option>
+      <option value="fun"${ton === 'fun' ? ' selected' : ''}>Fun (humour + emojis)</option>
+      <option value="pro"${ton === 'pro' ? ' selected' : ''}>Professionnel (sobre)</option>
+    </select>
+    <div style="font-size:12px;font-weight:700;margin:14px 0 6px">Sections du CRM</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">${NL_SECTIONS.map(chk).join('')}</div>
+    <div style="font-size:12px;font-weight:700;margin:16px 0 4px">🌐 Rubriques de veille web</div>
+    <div style="font-size:11px;color:var(--t3);margin-bottom:6px">Infos externes récupérées sur le web (avec sources).</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">${NL_WEB_RUBRIQUES.map(chk).join('')}</div>`;
+}
 async function nlGenerate() {
   await _nlLoadPrefs();
+  const cfg = await loadNlGlobalConfig();
   const p = _nlPrefs || {};
   const data = await nlBuildData();
   // Anti-doublon inter-éditions : on transmet la veille des dernières infolettres pour ne pas répéter les mêmes infos.
@@ -9386,9 +9405,9 @@ async function nlGenerate() {
     body: JSON.stringify({
       data,
       recipientName: ((currentCommercial && currentCommercial.nom) || '').split(' ')[0] || '',
-      ton: (p.ton || 'convivial'),
-      sections: p.sections || _nlDefaultSections(),
-      useWeb: NL_WEB_KEYS.some(k => (p.sections ? p.sections[k] !== false : true)),
+      ton: (cfg.ton || 'convivial'),
+      sections: cfg.sections || _nlDefaultSections(),
+      useWeb: NL_WEB_KEYS.some(k => (cfg.sections ? cfg.sections[k] !== false : true)),
       crmUrl: data.meta.crmUrl,
       previousWeb,
     }),
@@ -10059,7 +10078,7 @@ function renderPage(page) {
     _clientsServerLoaded = true;
     loadClientsPage(clientsPage || 0, clientsLetter, clientsSearch);
   }
-  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); renderMetiersConfig(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); }, 50);
+  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); renderMetiersConfig(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); renderNlAdminConfig(); }, 50);
   if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); }, 50);
   if (page === 'analyse') setTimeout(initAnalyse, 30);
   if (page === 'decp-analyse') setTimeout(initDecpAnalyse, 30);
@@ -23855,6 +23874,23 @@ function renderAdmin() {
     </div>
     <div class="card-body" style="padding:0">
       <div id="adminGroupsList" style="padding:16px;color:var(--t3);font-size:13px">Chargement...</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <div class="card-title">📰 Infolettre — configuration commune (tous les abonnés)</div>
+      <button class="btn" onclick="renderNlAdminConfig()" style="font-size:12px">↻ Rafraîchir</button>
+    </div>
+    <div class="card-body">
+      <p style="font-size:12px;color:var(--t2);margin-bottom:12px">Le ton, les sections du CRM et les rubriques de veille web ci-dessous s'appliquent à <strong>l'infolettre envoyée à tous les abonnés</strong> (configuration unique, commune — ce n'est plus réglé par chaque utilisateur).</p>
+      <div id="nl-adm-box" style="font-size:13px;color:var(--t3)">Chargement...</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <button class="btn btn-primary" onclick="saveNlGlobalConfig()">💾 Enregistrer la configuration</button>
+        <button class="btn" onclick="nlPreview()">👁️ M'envoyer un aperçu</button>
+        <button class="btn" onclick="go('newsletter')">📰 Éditions</button>
+        <button class="btn" onclick="nlBriefPreview()">👁️ M'envoyer mon brief maintenant</button>
+      </div>
     </div>
   </div>
 

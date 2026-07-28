@@ -325,6 +325,11 @@ export default async function handler(req, res) {
   try {
     // Abonnés (newsletter groupe, avec leurs préférences) + abonnés (brief perso)
     const groupSubs = (await sbGet('newsletter_prefs', 'select=email,nom,ton,sections&abonne=eq.true&email=not.is.null')) || [];
+    // Configuration GLOBALE de l'infolettre (commune à tous les abonnés) : ton + sections/rubriques (réglée dans Admin, table app_config)
+    const _gcfgRows = await sbGet('app_config', 'select=value&key=eq.newsletter_config&limit=1');
+    const _gcfg = (Array.isArray(_gcfgRows) && _gcfgRows[0] && _gcfgRows[0].value) || {};
+    const GLOBAL_SECTIONS = (_gcfg.sections && typeof _gcfg.sections === 'object') ? _gcfg.sections : {};
+    const GLOBAL_TON = _gcfg.ton || 'convivial';
     const briefSubs = (await sbGet('newsletter_prefs', 'select=email,nom,manager_id&brief_perso=eq.true&email=not.is.null&manager_id=not.is.null')) || [];
     const force = req.query && (req.query.force === '1' || req.query.test === '1');
     if (!groupSubs.length && !briefSubs.length && !force) return res.status(200).json({ ok: true, message: 'Aucun abonné', envoyes: 0 });
@@ -345,23 +350,18 @@ export default async function handler(req, res) {
     let sent = 0; const errors = []; let firstHtml = null;
     if (groupSubs.length) {
       const data = await aggregateWeek();
-      // Recherche web : une seule fois pour l'UNION des rubriques sélectionnées par les abonnés
+      // Recherche web : rubriques issues de la config GLOBALE (commune à tous les abonnés)
       const union = new Set();
-      groupSubs.forEach(s => { const sec = selOf(s.sections); WEB_KEYS.forEach(k => { if (sec[k] !== false) union.add(k); }); });
+      WEB_KEYS.forEach(k => { if (GLOBAL_SECTIONS[k] !== false) union.add(k); });
       // Anti-doublon inter-éditions : on exclut les infos déjà diffusées dans les 5 dernières veilles archivées.
       const prevEd = await sbGet('newsletters', 'select=veille&order=created_at.desc&limit=5');
       const previousWeb = (Array.isArray(prevEd) ? prevEd : []).map(e => e && e.veille).filter(Boolean);
       const veille = union.size ? await fetchWebVeille([...union], veilleCtx(previousWeb)) : '';
       const subject = '📰 Infolettre CRM — semaine du ' + new Date().toLocaleDateString('fr-FR');
 
-      // Regrouper les abonnés par signature (mêmes sections/rubriques + même ton) → 1 seule génération par groupe
-      const groups = {};
-      for (const s of groupSubs) {
-        const sec = selOf(s.sections);
-        const norm = {}; ALL_SECTION_KEYS.forEach(k => norm[k] = sec[k] !== false);
-        const sig = JSON.stringify(norm) + '|' + (s.ton || 'convivial');
-        (groups[sig] = groups[sig] || { sec: norm, ton: s.ton || 'convivial', emails: [] }).emails.push(s.email);
-      }
+      // Config commune → 1 seule génération pour TOUS les abonnés (mêmes sections/rubriques + même ton)
+      const norm = {}; ALL_SECTION_KEYS.forEach(k => norm[k] = GLOBAL_SECTIONS[k] !== false);
+      const groups = { all: { sec: norm, ton: GLOBAL_TON, emails: groupSubs.map(s => s.email) } };
       for (const sig of Object.keys(groups)) {
         const g = groups[sig];
         try {
