@@ -5193,6 +5193,12 @@ function _vrOppPipeOptions() {
   (_opps || []).forEach(o => { if (o.statut !== 'LOST' && o.pipe) set.add(o.pipe); });
   return [...set].sort((a, b) => a.localeCompare(b, 'fr')).map(p => `<option value="${cmdEsc(p)}"${_vrOppsFPipe === p ? ' selected' : ''}>${cmdEsc(p)}</option>`).join('');
 }
+// Statuts réellement présents dans les opportunités (hors perdues) — libellés via OPP_STATUTS
+function _vrOppStatutOptions() {
+  const set = new Set();
+  (_opps || []).forEach(o => { if (o.statut && o.statut !== 'LOST') set.add(o.statut); });
+  return [...set].sort((a, b) => a.localeCompare(b, 'fr')).map(k => `<option value="${k}"${_vrOppsFStatut === k ? ' selected' : ''}>${cmdEsc((OPP_STATUTS[k] && OPP_STATUTS[k][0]) || k)}</option>`).join('');
+}
 // Agences concernées présentes dans les opportunités (via honoraires_agences) — multi-sélection cumulable
 function _vrOppAgenceOptionsList() {
   const set = new Set();
@@ -5269,7 +5275,7 @@ function renderVeilleRegar() {
             </div>
             <label style="font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer" title="Opportunités des agences (hors perdues) — sur le chantier si géolocalisé, sinon sur le département ; les non localisées figurent dans la liste sous la carte"><input type="checkbox" ${_vrOppsOn ? 'checked' : ''} onchange="vrToggleOpps(this.checked)"> 🎯 Opportunités du CRM (<span id="vr-opps-count">${_vrOppsCount()}</span> localisés)</label>
             <select id="vr-opps-resp" onchange="_vrOppsFResp=this.value;vrOppsRefresh()" title="Filtrer les opportunités par responsable commercial" style="padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card,#fff);color:var(--t1);max-width:170px"><option value="">👤 Tous responsables</option>${_vrOppRespOptions()}</select>
-            <select id="vr-opps-statut" onchange="_vrOppsFStatut=this.value;vrOppsRefresh()" title="Filtrer les opportunités par statut" style="padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card,#fff);color:var(--t1)"><option value="">Tous statuts</option>${Object.entries(OPP_STATUTS).filter(([k]) => k !== 'LOST').map(([k, v]) => `<option value="${k}"${_vrOppsFStatut === k ? ' selected' : ''}>${cmdEsc(v[0] || k)}</option>`).join('')}</select>
+            <select id="vr-opps-statut" onchange="_vrOppsFStatut=this.value;vrOppsRefresh()" title="Filtrer les opportunités par statut" style="padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card,#fff);color:var(--t1)"><option value="">Tous statuts</option>${_vrOppStatutOptions()}</select>
             <select id="vr-opps-pipe" onchange="_vrOppsFPipe=this.value;vrOppsRefresh()" title="Filtrer par portefeuille" style="padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card,#fff);color:var(--t1);max-width:150px"><option value="">Tous portefeuilles</option>${_vrOppPipeOptions()}</select>
             ${(() => { msDef('vrOppsAgence', _vrOppAgenceOptionsList(), _vrOppsFAgences, arr => { _vrOppsFAgences = arr; vrOppsRefresh(); }, false); return msButton('vrOppsAgence', '🏢 Agences'); })()}
             <button class="btn" style="font-size:11px;padding:3px 8px;margin-left:auto" onclick="vrMapFullscreen()" title="Afficher la carte en plein écran">⛶ Plein écran</button>
