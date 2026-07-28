@@ -3787,7 +3787,7 @@ async function loadDB() {
       // Config typologies (opportunités & marchés) + compétences + seuils de relance par agence — non bloquant
       loadTypologies().catch(() => {});
       loadCompetences().catch(() => {});
-      loadRelanceSeuils().then(() => { if (currentPage === 'dashboard') renderDashRelancesDevis(); }).catch(() => {});
+      loadRelanceSeuils().then(() => { if (currentPage === 'dashboard') renderDashMesTaches(); }).catch(() => {});
       // Précharge la correspondance société → commercial + le mapping métier, enrichit les documents, puis rafraîchit si besoin (non bloquant)
       Promise.all([loadApporteurCommMap(), loadMissionMapping().catch(() => {})]).then(() => {
         _ensureDocsCommercial();
@@ -10080,7 +10080,7 @@ function renderPage(page) {
     loadClientsPage(clientsPage || 0, clientsLetter, clientsSearch);
   }
   if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); renderMetiersConfig(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); renderNlAdminConfig(); renderRelanceSeuilsConfig(); }, 50);
-  if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); renderDashRelancesDevis(); }, 50);
+  if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); }, 50);
   if (page === 'analyse') setTimeout(initAnalyse, 30);
   if (page === 'decp-analyse') setTimeout(initDecpAnalyse, 30);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
@@ -10646,7 +10646,7 @@ function buildAnalyseNetwork() {
 function renderDashboardRefresh() {
   document.getElementById('contentArea').innerHTML = '<div class="page active">' + renderDashboard() + '</div>';
   // Charger les objectifs par agence et les listes clients en async
-  setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); renderDashRelancesDevis(); }, 50);
+  setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); }, 50);
 }
 function renderDashboard() {
   const myDevis = filterBySociete(filterByDateRange(filterByCommercial(DB.devis), dashDateFrom, dashDateTo));
@@ -10756,7 +10756,7 @@ function renderDashboard() {
   <details class="card acc" id="dashTodo" style="margin-bottom:16px">
     <summary class="card-header" style="cursor:pointer;user-select:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px">
       <span class="card-title" style="display:inline-flex;align-items:center;gap:8px;white-space:nowrap">
-        <span style="white-space:nowrap">${ICON_TACHE} Mes tâches à faire</span>
+        <span style="white-space:nowrap">${ICON_TACHE} Mes tâches/relances à faire</span>
         <span id="dashTodoCount" style="display:none;flex:none;white-space:nowrap;background:var(--accent);color:#fff;border-radius:10px;padding:1px 8px;font-size:12px;font-weight:700;line-height:1.6"></span>
       </span>
       <span style="display:inline-flex;gap:6px;flex:none;flex-wrap:wrap;margin-left:auto">
@@ -10765,15 +10765,6 @@ function renderDashboard() {
       </span>
     </summary>
     <div class="card-body" id="dashMesTaches" style="padding:0;font-size:13px;color:var(--t3)">Chargement…</div>
-  </details>
-  <details class="card acc" id="dashRelances" style="margin-bottom:16px" open>
-    <summary class="card-header" style="cursor:pointer;user-select:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px">
-      <span class="card-title" style="display:inline-flex;align-items:center;gap:8px;white-space:nowrap">📄 Relances devis à faire <span style="font-weight:400;font-size:12px;color:var(--t3)">— par commercial</span></span>
-      <span style="display:inline-flex;gap:6px;flex:none;flex-wrap:wrap;margin-left:auto">
-        <button class="btn btn-sm" onclick="event.preventDefault();event.stopPropagation();go('devis')" style="font-size:12px">Tous les devis →</button>
-      </span>
-    </summary>
-    <div class="card-body" id="dashRelancesDevis" style="padding:0;font-size:13px;color:var(--t3)">Chargement…</div>
   </details>
   <div class="kpi-grid">
     <div class="kpi-card green">
@@ -10862,6 +10853,7 @@ async function renderDashMesTaches() {
   if (!el) return;
   if (!_tachesLoaded) { try { await loadTaches(); } catch (e) {} }
   if (!_sollicLoaded) { try { await loadSollicitations(); } catch (e) {} }
+  await loadRelanceSeuils(); // seuils de relance par agence
   const myEmail = (currentCommercial && currentCommercial.email) || '';
   if (!myEmail) { el.innerHTML = '<div style="padding:14px;color:var(--t3)">Connectez-vous pour voir vos tâches.</div>'; if (cnt) cnt.style.display = 'none'; return; }
 
@@ -10880,7 +10872,16 @@ async function renderDashMesTaches() {
   const _sdue = s => s.date_relance ? new Date(s.date_relance).getTime() : Infinity;
   mySollic.sort((a, b) => _sdue(a) - _sdue(b));
 
-  const total = mine.length + mySollic.length;
+  // 3) Mes devis à relancer (dont je suis responsable/commercial, ou de mes clients) — seuil par agence
+  const myId = (currentCommercial && currentCommercial.akuiteo_manager_id) || null;
+  let myRelances = [];
+  if (myId) {
+    const myClientIds = new Set((DB.clients || []).filter(c => c.account_manager_id === myId).map(c => c.id));
+    myRelances = (DB.devis || []).filter(isDevisARelancer).filter(d => d.responsable_id === myId || d.commercial_id === myId || (d.client_id && myClientIds.has(d.client_id)));
+    myRelances.sort((a, b) => (a.date_raw || '').localeCompare(b.date_raw || ''));
+  }
+
+  const total = mine.length + mySollic.length + myRelances.length;
   if (cnt) { if (total > 0) { cnt.textContent = total; cnt.style.display = ''; } else { cnt.style.display = 'none'; } }
   if (!total) { el.innerHTML = '<div style="padding:14px;color:var(--t3)">🎉 Rien à faire — tout est à jour !</div>'; return; }
 
@@ -10918,8 +10919,20 @@ async function renderDashMesTaches() {
       ${dueTxt ? '<div style="font-size:12px;white-space:nowrap;flex:none;' + (enRetard ? 'color:var(--red);font-weight:600' : 'color:var(--t3)') + '">' + dueTxt + (enRetard ? ' ⚠' : '') + '</div>' : ''}
     </div>`;
   };
+  const ligneD = d => {
+    const j = joursDepuis(d.date_raw);
+    const seuil = getRelanceSeuil(d.societe);
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border)">
+      <span title="Devis à relancer" style="flex:none;width:16px;text-align:center">📄</span>
+      <div style="flex:1;min-width:0;cursor:pointer" onclick="showDevisDetail('${d.id}')">
+        <div style="font-size:13px;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cmdEsc(d.ref || d.id)} — ${cmdEsc(d.client || '')}</div>
+        <div style="font-size:11px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cmdEsc(d.societe || '—')} · ${fmt(d.montant)} · émis le ${d.date} · ${j} j (seuil ${seuil} j)</div>
+      </div>
+      <button class="btn" onclick="event.stopPropagation();openRelanceDevis('${d.id}')" style="font-size:10px;padding:2px 8px;background:var(--red);color:#fff;border:none;white-space:nowrap;flex:none">Relancer</button>
+    </div>`;
+  };
 
-  const showT = mine.slice(0, 8), showS = mySollic.slice(0, 8);
+  const showT = mine.slice(0, 8), showS = mySollic.slice(0, 8), showD = myRelances.slice(0, 8);
   const subHdr = t => '<div style="padding:9px 14px 4px;font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.4px;border-top:1px solid var(--border)">' + t + '</div>';
   let html = '';
   if (showT.length) {
@@ -10930,56 +10943,9 @@ async function renderDashMesTaches() {
     html += subHdr(ICON_SOLLIC + ' Sollicitations à traiter (' + mySollic.length + ')') + showS.map(ligneS).join('');
     if (mySollic.length > showS.length) html += '<div style="padding:8px 14px;text-align:center"><a href="#" onclick="go(\'sollicitations\');return false" style="color:var(--accent);font-size:12px;text-decoration:none">Voir mes ' + mySollic.length + ' sollicitations →</a></div>';
   }
-  el.innerHTML = html;
-}
-
-// Relances devis à faire, regroupées par commercial lié (Akuiteo∩Lucca) — respecte le filtre agences du tableau de bord
-async function renderDashRelancesDevis() {
-  const el = document.getElementById('dashRelancesDevis');
-  if (!el) return;
-  await loadRelanceSeuils(); // seuils par agence
-  const linked = getLinkedCollaborateurs();
-  const nameById = new Map(linked.map(c => [String(c.akuiteoId), c.name]));
-  const list = filterBySociete(DB.devis).filter(isDevisARelancer);
-  if (!list.length) { el.innerHTML = '<div style="padding:14px;color:var(--t3)">🎉 Aucun devis à relancer.</div>'; return; }
-  // Regrouper par commercial (id Akuiteo du devis) ; ceux hors périmètre lié → « Autres »
-  const groups = new Map();
-  for (const d of list) {
-    const cid = String(d.commercial_id || d.responsable_id || '');
-    const key = nameById.has(cid) ? cid : '_autres';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(d);
-  }
-  const keys = [...groups.keys()].filter(k => k !== '_autres').sort((a, b) => (nameById.get(a) || '').localeCompare(nameById.get(b) || '', 'fr'));
-  if (groups.has('_autres')) keys.push('_autres');
-
-  const ligne = d => {
-    const j = joursDepuis(d.date_raw);
-    const seuil = getRelanceSeuil(d.societe);
-    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 14px 7px 26px;border-bottom:1px solid var(--border)">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;color:var(--t1);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="showDevisDetail('${d.id}')">${cmdEsc(d.ref || d.id)} — ${cmdEsc(d.client || '')}</div>
-        <div style="font-size:11px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cmdEsc(d.societe || '—')} · ${fmt(d.montant)} · émis le ${d.date} · <span style="color:var(--red);font-weight:600">${j} j</span> (seuil ${seuil} j)</div>
-      </div>
-      <button class="btn" onclick="event.stopPropagation();openRelanceDevis('${d.id}')" style="font-size:10px;padding:2px 8px;background:var(--red);color:#fff;border:none;white-space:nowrap;flex:none">Relancer</button>
-    </div>`;
-  };
-
-  let html = '';
-  for (const k of keys) {
-    const arr = groups.get(k).sort((a, b) => (a.date_raw || '').localeCompare(b.date_raw || ''));
-    const nom = k === '_autres' ? 'Autres commerciaux / non rattachés' : fmtCommercialName(nameById.get(k));
-    const montant = arr.reduce((a, d) => a + Number(d.montant || 0), 0);
-    const show = arr.slice(0, 6);
-    html += `<details style="border-bottom:1px solid var(--border)">
-      <summary style="cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;padding:9px 14px;font-size:13px;font-weight:700">
-        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cmdEsc(nom)}</span>
-        <span style="background:var(--red);color:#fff;border-radius:10px;padding:1px 8px;font-size:12px;flex:none">${arr.length}</span>
-        <span style="font-size:11px;color:var(--t3);font-weight:500;flex:none">${fmt(montant)}</span>
-      </summary>
-      ${show.map(ligne).join('')}
-      ${arr.length > show.length ? '<div style="padding:6px 14px 6px 26px;font-size:11px;color:var(--t3)">+ ' + (arr.length - show.length) + ' autre(s) devis…</div>' : ''}
-    </details>`;
+  if (showD.length) {
+    html += subHdr('📄 Devis à relancer (' + myRelances.length + ')') + showD.map(ligneD).join('');
+    if (myRelances.length > showD.length) html += '<div style="padding:8px 14px;text-align:center"><a href="#" onclick="go(\'devis\');return false" style="color:var(--accent);font-size:12px;text-decoration:none">Voir tous les devis →</a></div>';
   }
   el.innerHTML = html;
 }
@@ -19512,7 +19478,7 @@ async function saveRelanceSeuils() {
   _relanceSeuils = cfg;
   toast('Seuils de relance par agence enregistrés ✅', 'success');
   DB.alerts = generateAlerts(); updateNavBadges();
-  if (currentPage === 'dashboard') renderDashRelancesDevis();
+  if (currentPage === 'dashboard') renderDashMesTaches();
 }
 
 // Cellule "Relance" d'une ligne de devis : badge si déjà relancé, bouton si à relancer, sinon —
@@ -23826,11 +23792,11 @@ function renderAdmin() {
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:16px">
-    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+  <details class="card acc" style="margin-bottom:16px">
+    <summary class="card-header" style="cursor:pointer;user-select:none;flex-wrap:wrap;gap:8px">
       <div class="card-title">Typologies / sous-typologies <span style="font-weight:400;font-size:11px;color:var(--t3)">(opportunités & marchés)</span></div>
-      <button class="btn btn-primary" onclick="saveTypologies()" style="font-size:12px">💾 Enregistrer</button>
-    </div>
+      <button class="btn btn-primary" onclick="event.preventDefault();event.stopPropagation();saveTypologies()" style="font-size:12px">💾 Enregistrer</button>
+    </summary>
     <div class="card-body">
       <div style="font-size:12px;color:var(--t3);margin-bottom:10px">Ajoutez / supprimez des typologies et leurs sous-typologies, puis cliquez sur <strong>Enregistrer</strong>. Ces listes alimentent les opportunités et les marchés.</div>
       <div style="display:flex;gap:6px;margin-bottom:12px">
@@ -23839,7 +23805,7 @@ function renderAdmin() {
       </div>
       <div id="typoAdminBox" style="color:var(--t3);font-size:13px">Chargement…</div>
     </div>
-  </div>
+  </details>
   <div class="card" style="margin-bottom:16px">
     <div class="card-header" style="flex-wrap:wrap;gap:8px">
       <div class="card-title">Compétences souhaitées <span style="font-weight:400;font-size:11px;color:var(--t3)">(profil marchés des clients)</span></div>
@@ -23944,11 +23910,11 @@ function renderAdmin() {
       </details>
     </div>
   </div>
-  <div class="card">
-    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+  <details class="card acc">
+    <summary class="card-header" style="cursor:pointer;user-select:none;flex-wrap:wrap;gap:8px">
       <div class="card-title">Commerciaux — Liaisons Akuiteo & Lucca</div>
-      <button class="btn" onclick="autoLinkCommerciaux()" style="font-size:12px" title="Lier automatiquement par email">Lier auto Lucca</button>
-    </div>
+      <button class="btn" onclick="event.preventDefault();event.stopPropagation();autoLinkCommerciaux()" style="font-size:12px" title="Lier automatiquement par email">Lier auto Lucca</button>
+    </summary>
     <div class="card-body" style="padding:0"><div class="table-wrap">
       <table><thead><tr><th>Commercial</th><th>Email</th><th>Rôle</th><th>ID Akuiteo</th><th>Lien Lucca</th><th>Action</th></tr></thead>
       <tbody>${DB.commerciaux.map(c => {
@@ -23976,22 +23942,22 @@ function renderAdmin() {
         </td>
       </tr>`;}).join('')}</tbody></table>
     </div></div>
-  </div>
-  <div class="card" style="margin-top:16px">
-    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+  </details>
+  <details class="card acc" style="margin-top:16px">
+    <summary class="card-header" style="cursor:pointer;user-select:none;flex-wrap:wrap;gap:8px">
       <div class="card-title">Groupes de diffusion</div>
-      <button class="btn btn-primary" onclick="openNewGroupForm()" style="font-size:12px">+ Nouveau groupe</button>
-    </div>
+      <button class="btn btn-primary" onclick="event.preventDefault();event.stopPropagation();openNewGroupForm()" style="font-size:12px">+ Nouveau groupe</button>
+    </summary>
     <div class="card-body" style="padding:0">
       <div id="adminGroupsList" style="padding:16px;color:var(--t3);font-size:13px">Chargement...</div>
     </div>
-  </div>
+  </details>
 
-  <div class="card" style="margin-top:16px">
-    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+  <details class="card acc" style="margin-top:16px">
+    <summary class="card-header" style="cursor:pointer;user-select:none;flex-wrap:wrap;gap:8px">
       <div class="card-title">📰 Infolettre — configuration commune (tous les abonnés)</div>
-      <button class="btn" onclick="renderNlAdminConfig()" style="font-size:12px">↻ Rafraîchir</button>
-    </div>
+      <button class="btn" onclick="event.preventDefault();event.stopPropagation();renderNlAdminConfig()" style="font-size:12px">↻ Rafraîchir</button>
+    </summary>
     <div class="card-body">
       <p style="font-size:12px;color:var(--t2);margin-bottom:12px">Le ton, les sections du CRM et les rubriques de veille web ci-dessous s'appliquent à <strong>l'infolettre envoyée à tous les abonnés</strong> (configuration unique, commune — ce n'est plus réglé par chaque utilisateur).</p>
       <div id="nl-adm-box" style="font-size:13px;color:var(--t3)">Chargement...</div>
@@ -24002,19 +23968,19 @@ function renderAdmin() {
         <button class="btn" onclick="nlBriefPreview()">👁️ M'envoyer mon brief maintenant</button>
       </div>
     </div>
-  </div>
+  </details>
 
-  <div class="card" style="margin-top:16px">
-    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+  <details class="card acc" style="margin-top:16px">
+    <summary class="card-header" style="cursor:pointer;user-select:none;flex-wrap:wrap;gap:8px">
       <div class="card-title">📄 Relances devis — seuils par agence</div>
-      <button class="btn" onclick="renderRelanceSeuilsConfig()" style="font-size:12px">↻ Rafraîchir</button>
-    </div>
+      <button class="btn" onclick="event.preventDefault();event.stopPropagation();renderRelanceSeuilsConfig()" style="font-size:12px">↻ Rafraîchir</button>
+    </summary>
     <div class="card-body">
       <p style="font-size:12px;color:var(--t2);margin-bottom:10px">Nombre de jours après émission d'un devis « envoyé » sans réponse au-delà duquel il apparaît comme <strong>à relancer</strong> (dans le tableau de bord et la liste des devis). Réglez une valeur par agence — ex. <strong>GPH85 = 7 jours</strong>. Laissez vide pour utiliser la valeur par défaut.</p>
       <div id="relance-seuils-box" style="font-size:13px;color:var(--t3)">Chargement...</div>
       <div style="margin-top:12px"><button class="btn btn-primary" onclick="saveRelanceSeuils()">💾 Enregistrer les seuils</button></div>
     </div>
-  </div>
+  </details>
 
   <div class="card" style="margin-top:16px">
     <div class="card-header"><div class="card-title">Mot de passe de suppression</div></div>
@@ -24038,16 +24004,16 @@ function renderAdmin() {
     </div>
   </div>
 
-  <div class="card" style="margin-top:16px">
-    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+  <details class="card acc" style="margin-top:16px">
+    <summary class="card-header" style="cursor:pointer;user-select:none;flex-wrap:wrap;gap:8px">
       <div class="card-title">Métiers & affectation aux agences</div>
-      <button class="btn" onclick="renderMetiersConfig()" style="font-size:12px">↻ Rafraîchir</button>
-    </div>
+      <button class="btn" onclick="event.preventDefault();event.stopPropagation();renderMetiersConfig()" style="font-size:12px">↻ Rafraîchir</button>
+    </summary>
     <div class="card-body">
       <p style="font-size:12px;color:var(--t2);margin-bottom:12px">Définissez la liste des métiers, puis cochez ceux qui s'appliquent à chaque agence. Les objectifs par agence ne proposeront que les métiers affectés à l'agence choisie.</p>
       <div id="metiersConfigBox" style="font-size:13px;color:var(--t3)">Chargement...</div>
     </div>
-  </div>
+  </details>
 
   <div class="card" style="margin-top:16px">
     <div class="card-header" style="flex-wrap:wrap;gap:8px">
@@ -24060,15 +24026,15 @@ function renderAdmin() {
     </div>
   </div>
 
-  <div class="card" style="margin-top:16px">
-    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+  <details class="card acc" style="margin-top:16px">
+    <summary class="card-header" style="cursor:pointer;user-select:none;flex-wrap:wrap;gap:8px">
       <div class="card-title">Objectifs annuels par agence</div>
-      <button class="btn btn-primary" onclick="addObjectifAgence()" style="font-size:12px">+ Ajouter</button>
-    </div>
+      <button class="btn btn-primary" onclick="event.preventDefault();event.stopPropagation();addObjectifAgence()" style="font-size:12px">+ Ajouter</button>
+    </summary>
     <div class="card-body" style="padding:0">
       <div id="objectifsAgencesList" style="padding:14px;font-size:13px;color:var(--t3)">Chargement...</div>
     </div>
-  </div>
+  </details>
   <div class="card" style="margin-top:16px">
     <div class="card-header" style="flex-wrap:wrap;gap:8px">
       <div class="card-title">Catégorisation ABC des clients</div>
