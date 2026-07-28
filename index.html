@@ -4740,7 +4740,7 @@ function veilcoToOpp(idx) {
     lien ? 'Source : ' + lien : '',
     '— Source : veille Veilleco'
   ].filter(Boolean).join('\n');
-  oppModalOpen(null, { name: titre, description: desc, clientHint: mo || '', montant: budget ? Math.round(budget * 1e6) : undefined });
+  oppModalOpen(null, { name: titre, description: desc, clientHint: mo || '', montantTravaux: budget ? Math.round(budget * 1e6) : undefined });
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -7974,8 +7974,9 @@ async function oppModalOpen(akId, prefill) {
     if (!akId && prefill) {
       if (prefill.name) _oppForm.name = prefill.name;
       if (prefill.description) _oppForm.description = prefill.description;
-      if (prefill.montant != null && prefill.montant !== '') _oppForm.montant = prefill.montant;
+      // Remplissage auto : un montant reçu correspond quasi toujours au MONTANT DES TRAVAUX (pas aux prestations)
       if (prefill.montantTravaux != null && prefill.montantTravaux !== '') _oppForm.montantTravaux = prefill.montantTravaux;
+      else if (prefill.montant != null && prefill.montant !== '') _oppForm.montantTravaux = prefill.montant;
       if (prefill.dateSignature) _oppForm.dateSignature = prefill.dateSignature;
       _oppForm._novaOrigin = !!prefill.novaOrigin;
     }
