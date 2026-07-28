@@ -3784,9 +3784,10 @@ async function loadDB() {
       DB.notifications = nAll.map(n => ({ ...n, time: n.time_label }));
       DB.relancesDevis = {};
       for (const r of (relancesAll || [])) { if (r.devis_id) DB.relancesDevis[r.devis_id] = r; }
-      // Config typologies (opportunités & marchés) + compétences — non bloquant
+      // Config typologies (opportunités & marchés) + compétences + seuils de relance par agence — non bloquant
       loadTypologies().catch(() => {});
       loadCompetences().catch(() => {});
+      loadRelanceSeuils().then(() => { if (currentPage === 'dashboard') renderDashRelancesDevis(); }).catch(() => {});
       // Précharge la correspondance société → commercial + le mapping métier, enrichit les documents, puis rafraîchit si besoin (non bloquant)
       Promise.all([loadApporteurCommMap(), loadMissionMapping().catch(() => {})]).then(() => {
         _ensureDocsCommercial();
@@ -10078,8 +10079,8 @@ function renderPage(page) {
     _clientsServerLoaded = true;
     loadClientsPage(clientsPage || 0, clientsLetter, clientsSearch);
   }
-  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); renderMetiersConfig(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); renderNlAdminConfig(); }, 50);
-  if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); }, 50);
+  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); renderMetiersConfig(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); renderNlAdminConfig(); renderRelanceSeuilsConfig(); }, 50);
+  if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); renderDashRelancesDevis(); }, 50);
   if (page === 'analyse') setTimeout(initAnalyse, 30);
   if (page === 'decp-analyse') setTimeout(initDecpAnalyse, 30);
   if (page === 'collaborateurs') setTimeout(async () => { await Promise.all([loadCollaborateurs(), loadCollaborateursLucca()]); renderCollaborateursRefresh(); }, 50);
@@ -10645,7 +10646,7 @@ function buildAnalyseNetwork() {
 function renderDashboardRefresh() {
   document.getElementById('contentArea').innerHTML = '<div class="page active">' + renderDashboard() + '</div>';
   // Charger les objectifs par agence et les listes clients en async
-  setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); }, 50);
+  setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); renderDashRelancesDevis(); }, 50);
 }
 function renderDashboard() {
   const myDevis = filterBySociete(filterByDateRange(filterByCommercial(DB.devis), dashDateFrom, dashDateTo));
@@ -10764,6 +10765,15 @@ function renderDashboard() {
       </span>
     </summary>
     <div class="card-body" id="dashMesTaches" style="padding:0;font-size:13px;color:var(--t3)">Chargement…</div>
+  </details>
+  <details class="card acc" id="dashRelances" style="margin-bottom:16px" open>
+    <summary class="card-header" style="cursor:pointer;user-select:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+      <span class="card-title" style="display:inline-flex;align-items:center;gap:8px;white-space:nowrap">📄 Relances devis à faire <span style="font-weight:400;font-size:12px;color:var(--t3)">— par commercial</span></span>
+      <span style="display:inline-flex;gap:6px;flex:none;flex-wrap:wrap;margin-left:auto">
+        <button class="btn btn-sm" onclick="event.preventDefault();event.stopPropagation();go('devis')" style="font-size:12px">Tous les devis →</button>
+      </span>
+    </summary>
+    <div class="card-body" id="dashRelancesDevis" style="padding:0;font-size:13px;color:var(--t3)">Chargement…</div>
   </details>
   <div class="kpi-grid">
     <div class="kpi-card green">
@@ -10919,6 +10929,57 @@ async function renderDashMesTaches() {
   if (showS.length) {
     html += subHdr(ICON_SOLLIC + ' Sollicitations à traiter (' + mySollic.length + ')') + showS.map(ligneS).join('');
     if (mySollic.length > showS.length) html += '<div style="padding:8px 14px;text-align:center"><a href="#" onclick="go(\'sollicitations\');return false" style="color:var(--accent);font-size:12px;text-decoration:none">Voir mes ' + mySollic.length + ' sollicitations →</a></div>';
+  }
+  el.innerHTML = html;
+}
+
+// Relances devis à faire, regroupées par commercial lié (Akuiteo∩Lucca) — respecte le filtre agences du tableau de bord
+async function renderDashRelancesDevis() {
+  const el = document.getElementById('dashRelancesDevis');
+  if (!el) return;
+  await loadRelanceSeuils(); // seuils par agence
+  const linked = getLinkedCollaborateurs();
+  const nameById = new Map(linked.map(c => [String(c.akuiteoId), c.name]));
+  const list = filterBySociete(DB.devis).filter(isDevisARelancer);
+  if (!list.length) { el.innerHTML = '<div style="padding:14px;color:var(--t3)">🎉 Aucun devis à relancer.</div>'; return; }
+  // Regrouper par commercial (id Akuiteo du devis) ; ceux hors périmètre lié → « Autres »
+  const groups = new Map();
+  for (const d of list) {
+    const cid = String(d.commercial_id || d.responsable_id || '');
+    const key = nameById.has(cid) ? cid : '_autres';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(d);
+  }
+  const keys = [...groups.keys()].filter(k => k !== '_autres').sort((a, b) => (nameById.get(a) || '').localeCompare(nameById.get(b) || '', 'fr'));
+  if (groups.has('_autres')) keys.push('_autres');
+
+  const ligne = d => {
+    const j = joursDepuis(d.date_raw);
+    const seuil = getRelanceSeuil(d.societe);
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 14px 7px 26px;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--t1);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="showDevisDetail('${d.id}')">${cmdEsc(d.ref || d.id)} — ${cmdEsc(d.client || '')}</div>
+        <div style="font-size:11px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cmdEsc(d.societe || '—')} · ${fmt(d.montant)} · émis le ${d.date} · <span style="color:var(--red);font-weight:600">${j} j</span> (seuil ${seuil} j)</div>
+      </div>
+      <button class="btn" onclick="event.stopPropagation();openRelanceDevis('${d.id}')" style="font-size:10px;padding:2px 8px;background:var(--red);color:#fff;border:none;white-space:nowrap;flex:none">Relancer</button>
+    </div>`;
+  };
+
+  let html = '';
+  for (const k of keys) {
+    const arr = groups.get(k).sort((a, b) => (a.date_raw || '').localeCompare(b.date_raw || ''));
+    const nom = k === '_autres' ? 'Autres commerciaux / non rattachés' : fmtCommercialName(nameById.get(k));
+    const montant = arr.reduce((a, d) => a + Number(d.montant || 0), 0);
+    const show = arr.slice(0, 6);
+    html += `<details style="border-bottom:1px solid var(--border)">
+      <summary style="cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;padding:9px 14px;font-size:13px;font-weight:700">
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cmdEsc(nom)}</span>
+        <span style="background:var(--red);color:#fff;border-radius:10px;padding:1px 8px;font-size:12px;flex:none">${arr.length}</span>
+        <span style="font-size:11px;color:var(--t3);font-weight:500;flex:none">${fmt(montant)}</span>
+      </summary>
+      ${show.map(ligne).join('')}
+      ${arr.length > show.length ? '<div style="padding:6px 14px 6px 26px;font-size:11px;color:var(--t3)">+ ' + (arr.length - show.length) + ' autre(s) devis…</div>' : ''}
+    </details>`;
   }
   el.innerHTML = html;
 }
@@ -19384,10 +19445,26 @@ function renderBatiscope() {
 
 // ═══ DEVIS / COMMANDES / FACTURES / OBJECTIFS ═══
 // ═══ RELANCE DE DEVIS ═══
-// Seuil (en jours) au-delà duquel un devis "Envoyé" sans réponse est à relancer
+// Seuil (en jours) au-delà duquel un devis "Envoyé" sans réponse est à relancer — valeur PAR DÉFAUT (surchargée par agence via Admin)
 const DEVIS_RELANCE_SEUIL_JOURS = 15;
 // Statuts de devis considérés comme "en attente de réponse" (donc relançables)
 const DEVIS_STATUTS_RELANCABLES = ['sent'];
+
+// Seuils de relance PAR AGENCE (réglés dans Admin, stockés dans app_config['relance_devis_seuils']) : { _default: 15, GPH85: 7, ... }
+let _relanceSeuils = null;
+async function loadRelanceSeuils(force) {
+  if (_relanceSeuils && !force) return _relanceSeuils;
+  try { const { data } = await sb.from('app_config').select('value').eq('key', 'relance_devis_seuils').maybeSingle(); _relanceSeuils = (data && data.value) || {}; }
+  catch (e) { _relanceSeuils = {}; }
+  return _relanceSeuils;
+}
+// Seuil (jours) applicable à une agence : valeur agence si définie, sinon défaut config, sinon constante
+function getRelanceSeuil(societe) {
+  const cfg = _relanceSeuils || {};
+  let v = (societe != null && cfg[societe] != null && cfg[societe] !== '') ? cfg[societe] : cfg._default;
+  const n = Number(v);
+  return (Number.isFinite(n) && n > 0) ? n : DEVIS_RELANCE_SEUIL_JOURS;
+}
 
 function getDevisRelance(devisId) { return DB.relancesDevis ? DB.relancesDevis[devisId] : null; }
 function joursDepuis(dateIso) { return dateIso ? Math.round((Date.now() - new Date(dateIso)) / 86400000) : 0; }
@@ -19397,13 +19474,46 @@ function isDevisARelancer(d) {
   if (!d || !DEVIS_STATUTS_RELANCABLES.includes(d.statut)) return false;
   if (getDevisRelance(d.id)) return false; // déjà relancé ou clôturé
   if (!d.date_raw) return false;
-  return joursDepuis(d.date_raw) >= DEVIS_RELANCE_SEUIL_JOURS;
+  return joursDepuis(d.date_raw) >= getRelanceSeuil(d.societe);
 }
 function getDevisARelancer() {
   return filterBySociete(filterByCommercial(DB.devis)).filter(isDevisARelancer)
     .sort((a, b) => (a.date_raw || '').localeCompare(b.date_raw || ''));
 }
 const RELANCE_STATUT_LABELS = { en_attente: 'En attente de réponse', cloture: 'Clôturé (sans suite)' };
+
+// ── Admin : configuration des seuils de relance par agence ──
+async function renderRelanceSeuilsConfig() {
+  const box = document.getElementById('relance-seuils-box'); if (!box) return;
+  const cfg = await loadRelanceSeuils(true);
+  const def = (cfg._default != null && cfg._default !== '') ? cfg._default : DEVIS_RELANCE_SEUIL_JOURS;
+  const socs = getAllSocietes();
+  const rowDef = `<label style="display:flex;align-items:center;gap:8px;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border);margin-bottom:6px">
+      <span style="min-width:150px;font-weight:700">Par défaut (toutes agences)</span>
+      <input type="number" min="1" step="1" class="rel-seuil-def" value="${def}" style="width:80px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)"> <span style="color:var(--t3)">jours</span>
+    </label>`;
+  const rowSoc = code => `<label style="display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0">
+      <span style="min-width:150px;font-weight:600">${cmdEsc(code)}</span>
+      <input type="number" min="1" step="1" class="rel-seuil" data-code="${cmdEsc(code)}" value="${(cfg[code] != null && cfg[code] !== '') ? cfg[code] : ''}" placeholder="${def}" style="width:80px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card);color:var(--t1)"> <span style="color:var(--t3)">jours</span>
+    </label>`;
+  box.innerHTML = rowDef + (socs.length ? socs.map(rowSoc).join('') : '<div style="font-size:11px;color:var(--t3)">Les agences apparaîtront une fois les devis chargés.</div>');
+}
+async function saveRelanceSeuils() {
+  const cfg = {};
+  const defEl = document.querySelector('.rel-seuil-def');
+  const defV = defEl ? parseInt(defEl.value, 10) : NaN;
+  cfg._default = (Number.isFinite(defV) && defV > 0) ? defV : DEVIS_RELANCE_SEUIL_JOURS;
+  document.querySelectorAll('.rel-seuil').forEach(inp => {
+    const code = inp.dataset.code; const v = parseInt(inp.value, 10);
+    if (code && Number.isFinite(v) && v > 0) cfg[code] = v;
+  });
+  const { error } = await sb.from('app_config').upsert({ key: 'relance_devis_seuils', value: cfg, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  _relanceSeuils = cfg;
+  toast('Seuils de relance par agence enregistrés ✅', 'success');
+  DB.alerts = generateAlerts(); updateNavBadges();
+  if (currentPage === 'dashboard') renderDashRelancesDevis();
+}
 
 // Cellule "Relance" d'une ligne de devis : badge si déjà relancé, bouton si à relancer, sinon —
 function renderDevisRelanceCell(d) {
@@ -23891,6 +24001,18 @@ function renderAdmin() {
         <button class="btn" onclick="go('newsletter')">📰 Éditions</button>
         <button class="btn" onclick="nlBriefPreview()">👁️ M'envoyer mon brief maintenant</button>
       </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header" style="flex-wrap:wrap;gap:8px">
+      <div class="card-title">📄 Relances devis — seuils par agence</div>
+      <button class="btn" onclick="renderRelanceSeuilsConfig()" style="font-size:12px">↻ Rafraîchir</button>
+    </div>
+    <div class="card-body">
+      <p style="font-size:12px;color:var(--t2);margin-bottom:10px">Nombre de jours après émission d'un devis « envoyé » sans réponse au-delà duquel il apparaît comme <strong>à relancer</strong> (dans le tableau de bord et la liste des devis). Réglez une valeur par agence — ex. <strong>GPH85 = 7 jours</strong>. Laissez vide pour utiliser la valeur par défaut.</p>
+      <div id="relance-seuils-box" style="font-size:13px;color:var(--t3)">Chargement...</div>
+      <div style="margin-top:12px"><button class="btn btn-primary" onclick="saveRelanceSeuils()">💾 Enregistrer les seuils</button></div>
     </div>
   </div>
 
