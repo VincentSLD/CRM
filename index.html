@@ -6049,7 +6049,7 @@ async function _vrEnsureOpps() {
       ).map(o => ({
       akId: o.akuiteo_id, nom: o.nom, client_name: o.client_name, montant: o.montant,
       stage: o.stage, statut: o.statut, dept: o.chantier_dept || '',
-      responsable: o.responsable || '', pipe: o.pipe || '',
+      responsable: o.responsable || '', pipe: o.pipe || '', strategic: _oppStrategic(o),
       lat: (o.chantier_lat != null ? Number(o.chantier_lat) : null),
       lon: (o.chantier_lng != null ? Number(o.chantier_lng) : null),
       geo: 'none',
@@ -6074,9 +6074,10 @@ function _vrAddOppsLayer() {
   _vrOppsLayer = _vrClusterGroup({ maxClusterRadius: 30 });
   _vrOppsData.filter(d => d.lat != null && d.lon != null).forEach(d => {
     const approx = d.geo === 'dept';
-    const m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#4338ca', fillColor: '#524FA1', fillOpacity: approx ? 0.35 : 0.85, weight: 2, dashArray: approx ? '3,3' : null });
+    const strat = d.strategic;
+    const m = L.circleMarker([d.lat, d.lon], { radius: strat ? 9 : 7, color: strat ? '#FF1E63' : '#4338ca', fillColor: strat ? '#FF1E63' : '#524FA1', fillOpacity: approx ? 0.35 : 0.85, weight: strat ? 3 : 2, dashArray: approx ? '3,3' : null });
     const stLbl = (OPP_STATUTS[d.statut] && OPP_STATUTS[d.statut][0]) || d.statut || '';
-    m.bindPopup(`<div style="font-size:12px;min-width:200px"><div style="font-weight:700">🎯 ${cmdEsc(d.nom || 'Opportunité')}</div>${d.client_name ? `<div style="color:#555">${cmdEsc(d.client_name)}</div>` : ''}<div style="color:#555;font-size:11px;margin-top:2px">${cmdEsc(stLbl)}${d.stage ? ' · ' + cmdEsc(d.stage) : ''}${d.montant != null ? ' · ' + fmt(d.montant) : ''}</div>${d.responsable ? '<div style="color:#555;font-size:11px">👤 ' + cmdEsc(fmtCommercialName(d.responsable)) + '</div>' : ''}${approx ? '<div style="color:#b45309;font-size:11px;margin-top:2px">📍 Localisation approximative (chef-lieu ' + cmdEsc(d.dept) + ')</div>' : ''}<div style="margin-top:6px;display:flex;gap:8px"><button onclick="oppDetail('${d.akId}')" style="font-size:11px;cursor:pointer">Voir la fiche</button><button onclick="oppModalOpen('${d.akId}')" style="font-size:11px;cursor:pointer">✎ Modifier</button></div></div>`);
+    m.bindPopup(`<div style="font-size:12px;min-width:200px"><div style="font-weight:700">${strat ? OPP_STAR + ' ' : ''}🎯 ${cmdEsc(d.nom || 'Opportunité')}</div>${d.client_name ? `<div style="color:#555">${cmdEsc(d.client_name)}</div>` : ''}<div style="color:#555;font-size:11px;margin-top:2px">${cmdEsc(stLbl)}${d.stage ? ' · ' + cmdEsc(d.stage) : ''}${d.montant != null ? ' · ' + fmt(d.montant) : ''}</div>${d.responsable ? '<div style="color:#555;font-size:11px">👤 ' + cmdEsc(fmtCommercialName(d.responsable)) + '</div>' : ''}${approx ? '<div style="color:#b45309;font-size:11px;margin-top:2px">📍 Localisation approximative (chef-lieu ' + cmdEsc(d.dept) + ')</div>' : ''}<div style="margin-top:6px;display:flex;gap:8px"><button onclick="oppDetail('${d.akId}')" style="font-size:11px;cursor:pointer">Voir la fiche</button><button onclick="oppModalOpen('${d.akId}')" style="font-size:11px;cursor:pointer">✎ Modifier</button></div></div>`);
     m.addTo(_vrOppsLayer);
   });
   _vrOppsLayer.addTo(_vrMap);
@@ -9067,9 +9068,9 @@ function _oppListe(rows) {
   if (window.innerWidth <= 768) {
     if (!rows.length) return '<div style="text-align:center;padding:30px;color:var(--t3)">Aucune opportunité</div>';
     return '<div>' + rows.map(o => `
-      <div onclick="oppDetail('${o.akuiteo_id}')" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">
+      <div onclick="oppDetail('${o.akuiteo_id}')" style="background:var(--card);border:1px solid var(--border);${_oppStratBorder(o)}border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px">
-          <strong style="font-size:14px">${_oppGeoIcon(o)} ${cmdEsc(o.nom || '')}</strong>${_oppStatutBadge(o.statut)}
+          <strong style="font-size:14px">${_oppStar(o)}${_oppGeoIcon(o)} ${cmdEsc(o.nom || '')}</strong>${_oppStatutBadge(o.statut)}
         </div>
         <div style="font-size:12px;color:var(--accent);margin-bottom:2px">${cmdEsc(o.client_name || '—')}</div>
         ${o.contact_name ? '<div style="font-size:11px;color:var(--t3);margin-bottom:2px">👤 ' + cmdEsc(o.contact_name) + '</div>' : ''}
@@ -9085,8 +9086,8 @@ function _oppListe(rows) {
   return `<div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
     <table><thead><tr><th>Opportunité</th><th>Client</th><th>Contact(s)</th><th>Stade</th><th>Statut</th><th style="text-align:right">Montant</th><th style="text-align:right">Prob.</th><th>Signature</th><th>Responsable</th></tr></thead>
     <tbody>${rows.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3)">Aucune opportunité</td></tr>' : rows.map(o => `
-      <tr style="cursor:pointer" onclick="oppDetail('${o.akuiteo_id}')">
-        <td style="padding:6px 8px"><strong style="font-size:12px">${_oppGeoIcon(o)} ${cmdEsc(o.nom || '')}</strong>${o.code ? '<div style="font-size:10px;color:var(--t3)">' + cmdEsc(o.code) + '</div>' : ''}</td>
+      <tr style="cursor:pointer${_oppStrategic(o) ? ';box-shadow:inset 3px 0 0 #FF1E63' : ''}" onclick="oppDetail('${o.akuiteo_id}')">
+        <td style="padding:6px 8px"><strong style="font-size:12px">${_oppStar(o)}${_oppGeoIcon(o)} ${cmdEsc(o.nom || '')}</strong>${o.code ? '<div style="font-size:10px;color:var(--t3)">' + cmdEsc(o.code) + '</div>' : ''}</td>
         <td style="padding:6px 8px;font-size:12px">${o.client_id ? '<a href="#" onclick="event.stopPropagation();showClient(\'' + o.client_id + '\');return false" style="color:var(--accent)">' + cmdEsc(o.client_name || '') + '</a>' : cmdEsc(o.client_name || '—')}</td>
         <td style="padding:6px 8px;font-size:12px">${cmdEsc(o.contact_name || '—')}</td>
         <td style="padding:6px 8px;font-size:12px">${cmdEsc(o.stage || '—')}</td>
@@ -9104,6 +9105,11 @@ function _oppListe(rows) {
 // Les statuts terminaux (Perdue / Gagnée) sont des colonnes dédiées, placées en fin.
 const OPP_COL_ORDER = ['prise de contact', 'proposition commerciale', 'négociation', 'opportunité', 'candidature', 'abandonnée', 'archivée', 'opportunité perdue', 'opportunité gagnée'];
 function _oppColRank(name) { const i = OPP_COL_ORDER.indexOf(String(name || '').trim().toLowerCase()); return i < 0 ? 500 : i; }
+// Opportunité « stratégique » (raw.strategic) → mise en avant : étoile rose + liseré rose
+function _oppStrategic(o) { return !!(o && ((o.raw && o.raw.strategic) || o.strategic)); }
+const OPP_STAR = '<svg width="14" height="14" viewBox="0 0 24 24" fill="#FF1E63" stroke="#FF1E63" stroke-width="1" stroke-linejoin="round" style="vertical-align:-2px" aria-label="Stratégique"><polygon points="12 2 15.1 8.3 22 9.3 17 14.1 18.2 21 12 17.8 5.8 21 7 14.1 2 9.3 8.9 8.3"/></svg>';
+function _oppStar(o) { return _oppStrategic(o) ? OPP_STAR + ' ' : ''; }
+function _oppStratBorder(o) { return _oppStrategic(o) ? 'border-left:3px solid #FF1E63;' : ''; }
 function _oppKanban(rows) {
   // Colonnes = stade (opp en cours) ; statuts terminaux → colonne dédiée (Perdue / Gagnée / Abandonnée / Archivée)
   const colKey = o => o.statut === 'WON' ? 'Opportunité Gagnée'
@@ -9118,8 +9124,8 @@ function _oppKanban(rows) {
     const list = cols[k]; const tot = list.reduce((s, o) => s + (Number(o.montant) || 0), 0);
     return `<div style="min-width:260px;max-width:300px;flex:0 0 auto;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;padding:8px">
       <div style="font-weight:700;font-size:12px;margin-bottom:6px;display:flex;justify-content:space-between"><span>${cmdEsc(k)}</span><span style="color:var(--t3);font-weight:400">${list.length} · ${fmt(tot)}</span></div>
-      ${list.map(o => `<div onclick="oppDetail('${o.akuiteo_id}')" style="background:var(--card,#fff);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer">
-        <div style="font-weight:600;font-size:12px">${_oppGeoIcon(o)} ${cmdEsc(o.nom || '')}</div>
+      ${list.map(o => `<div onclick="oppDetail('${o.akuiteo_id}')" style="background:var(--card,#fff);border:1px solid var(--border);${_oppStratBorder(o)}border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer">
+        <div style="font-weight:600;font-size:12px">${_oppStar(o)}${_oppGeoIcon(o)} ${cmdEsc(o.nom || '')}</div>
         <div style="font-size:11px;color:var(--t3)">${cmdEsc(o.client_name || '—')}</div>
         ${o.contact_name ? '<div style="font-size:11px;color:var(--t3)">👤 ' + cmdEsc(o.contact_name) + '</div>' : ''}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px"><span style="font-size:12px;font-weight:600">${o.montant != null ? fmt(o.montant) : '—'}</span>${o.probabilite != null ? '<span style="font-size:10px;color:var(--t3)">' + o.probabilite + '%</span>' : ''}${_oppStatutBadge(o.statut)}</div>
@@ -9699,7 +9705,7 @@ function renderOppDetailPage() {
     ${row('Typologie', cmdEsc(o.typologie || ''))}
     ${row('Sous-typologie', cmdEsc(o.sous_typologie || ''))}
     ${row('Statut', _oppStatutBadge(o.statut))}
-    ${row('Stratégique', raw.strategic ? '⭐ Oui' : 'Non')}
+    ${row('Stratégique', raw.strategic ? OPP_STAR + ' <b style="color:#FF1E63">Oui</b>' : 'Non')}
     ${row('Montant Prestations (HT)', o.montant != null ? fmt(o.montant) : '')}
     ${(Array.isArray(o.honoraires_agences) && o.honoraires_agences.length) ? row('Décomposition par agence', o.honoraires_agences.map(h => { const st = stageName(h.stade); const stat = h.statut === 'WON' ? '<span style="color:#10b981;font-weight:700">Gagné</span>' : h.statut === 'LOST' ? '<span style="color:#ef4444;font-weight:700">Perdu</span>' : ''; return `<div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><span style="color:var(--t3)">${cmdEsc(h.agence || '')}</span><span style="display:flex;gap:10px;align-items:center">${st ? '<span style="color:var(--t3);font-size:11px">' + cmdEsc(st) + '</span>' : ''}${stat}<strong>${fmt(Number(h.montant) || 0)}</strong></span></div>`; }).join('')) : ''}
     ${(() => { const v = (raw.customData && raw.customData[OPP_CD_TRAVAUX] && raw.customData[OPP_CD_TRAVAUX].value) != null ? raw.customData[OPP_CD_TRAVAUX].value : o.montant_travaux; return row('Montant des travaux', v != null && v !== '' ? fmt(v) : ''); })()}
