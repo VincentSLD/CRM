@@ -5822,7 +5822,7 @@ async function _vrInitMap() {
   try { await _loadMarkerCluster(); } catch (e) { /* fallback layerGroup */ }
   if (!document.getElementById('vr-map')) return; // page changée pendant le chargement
   if (_vrMap) { try { _vrMap.remove(); } catch (e) {} _vrMap = null; }
-  _vrMap = L.map('vr-map', { zoomControl: true }).setView([46.8, 2.5], 6);
+  _vrMap = L.map('vr-map', { zoomControl: false }).setView([46.8, 2.5], 6);
   _vrBaseLayer = _vrMakeBase(_vrBaseType);
   _vrBaseLayer.addTo(_vrMap);
   _vrArgileLayer = null;
