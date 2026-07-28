@@ -5180,7 +5180,7 @@ let _vrZones = [], _vrZonesOn = true, _vrZonesLayer = null, _vrZonesLoaded = fal
 let _vrZonePendingGeo = null, _vrZoneEditId = null, _vrZoneDraftColor = VR_ZONE_COLORS[0], _drawLoading = null;
 let _vrBaseType = 'routes', _vrBaseLayer = null, _vrFsBound = false;       // fond de carte (routes / aérien) + plein écran
 let _vrEdsOn = false, _vrEdsLayer = null, _vrEdsData = [], _vrEdsLoaded = false, _vrEdsCols = null, _vrEdsSample = null; // études de sol GPH (GEOCARTO)
-let _vrOppsOn = false, _vrOppsLayer = null, _vrOppsData = [], _vrOppsLoaded = false; // opportunités géolocalisées (via client)
+let _vrOppsOn = true, _vrOppsLayer = null, _vrOppsData = [], _vrOppsLoaded = false; // opportunités géolocalisées (via client) — affichées par défaut
 let _vrOppsFResp = '', _vrOppsFStatut = '', _vrOppsFPipe = ''; // filtres opportunités sur la carte (responsable / statut / portefeuille)
 // Options de responsables distincts présents dans les opportunités (hors perdues)
 function _vrOppRespOptions() {
@@ -5209,6 +5209,7 @@ function renderVeilleRegar() {
   <div style="max-width:1600px;margin:0 auto">
     <div style="margin-bottom:14px"><button class="btn btn-sm" onclick="go(_vrReturn)">← Retour</button></div>
     <div class="card" style="margin-bottom:14px">
+      <div class="card-header"><div class="card-title">Recherche d'opportunités</div></div>
       <div class="card-body">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <input id="vr-dept" value="${cmdEsc(_vrDept)}" placeholder="Département (ex. 85)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:150px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrLoadPA()">
