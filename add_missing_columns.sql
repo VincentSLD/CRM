@@ -332,6 +332,7 @@ ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS chantier_lat NUMERIC;     -- C
 ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS chantier_lng NUMERIC;     -- CRM-only : longitude du chantier
 ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS chantier_adresse TEXT;    -- CRM-only : adresse/repère du chantier (optionnel)
 ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS chantier_dept TEXT;       -- CRM-only : numéro de département du chantier (01-95, 2A/2B, DOM, « Autres »)
+ALTER TABLE opportunites ADD COLUMN IF NOT EXISTS notes_internes TEXT;      -- CRM-only : notes internes (texte enrichi HTML, non synchronisé Akuiteo)
 ALTER TABLE opportunites ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "opportunites_all" ON opportunites;
 CREATE POLICY "opportunites_all" ON opportunites FOR ALL TO authenticated USING (true) WITH CHECK (true);
