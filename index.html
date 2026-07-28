@@ -10950,6 +10950,14 @@ async function renderDashMesTaches() {
   el.innerHTML = html;
 }
 
+// Couleur d'avancement d'un objectif : dégradé continu ROUGE (faible) → VERT (objectif atteint).
+// Teinte HSL interpolée de 0° (rouge) à 130° (vert) selon le pourcentage (plafonné à 100 %).
+function objPctColor(pct) {
+  const p = Math.max(0, Math.min(100, Number(pct) || 0));
+  const hue = Math.round(p * 1.3); // 0 % → 0° (rouge) ... 100 % → 130° (vert)
+  return `hsl(${hue}, 70%, 44%)`;
+}
+
 async function renderDashObjectifsAgences() {
   const el = document.getElementById('dashObjectifsAgences');
   if (!el) return;
@@ -11012,9 +11020,7 @@ async function renderDashObjectifsAgences() {
         </div>
         ${items.map(o => {
           const pctVal = o.objectif_ht > 0 ? Math.round(o.ca / o.objectif_ht * 100) : 0;
-          const onTrack = pctVal >= 100;
-          const ahead = pctVal >= 90 && pctVal < 100;
-          const color = onTrack ? '#22c55e' : ahead ? '#3b82f6' : pctVal >= 60 ? '#f59e0b' : '#ef4444';
+          const color = objPctColor(pctVal);
           const label = o.metier === 'GLOBAL' ? 'Global' : o.metier;
           const badgeBg = o.metier==='SOL'?'rgba(245,158,11,.2)':o.metier==='EXE'?'rgba(99,102,241,.2)':'rgba(107,114,128,.2)';
           const badgeColor = o.metier==='SOL'?'#f59e0b':o.metier==='EXE'?'#524FA1':'#6b7280';
@@ -11030,7 +11036,7 @@ async function renderDashObjectifsAgences() {
         }).join('')}
         ${items.length > 1 ? `<div style="border-top:1px dashed var(--border);padding-top:6px;margin-top:6px;display:flex;justify-content:space-between;align-items:center;font-size:12px">
           <span style="font-weight:700">Total ${ag}</span>
-          <span style="color:var(--t3)">${fmt(totalCa)} / ${fmt(totalObj)} — <strong style="color:${totalPct>=100?'#22c55e':totalPct>=60?'#f59e0b':'#ef4444'}">${totalPct}%</strong></span>
+          <span style="color:var(--t3)">${fmt(totalCa)} / ${fmt(totalObj)} — <strong style="color:${objPctColor(totalPct)}">${totalPct}%</strong></span>
         </div>` : ''}
       </div>`;
     }).join('') + '</div>';
