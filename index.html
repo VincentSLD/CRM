@@ -8645,7 +8645,7 @@ async function _oppNotifyDiffusion(o, agences, honoArr, isNew) {
     await loadDiffLists();
     const to = _diffEmailsFor(agences);
     if (!to.length) { toast((isNew ? 'Opportunité créée' : 'Opportunité modifiée') + ' (aucun email de diffusion pour ' + agences.join(', ') + ')', 'info'); return; }
-    const honoHtml = (honoArr && honoArr.length) ? '<ul style="margin:4px 0 0;padding-left:18px">' + honoArr.map(h => '<li>' + cmdEsc(h.agence) + ' : ' + fmt(Number(h.montant) || 0) + '</li>').join('') + '</ul>' : '';
+    const honoHtml = (honoArr && honoArr.length) ? '<ul style="margin:4px 0 0;padding-left:18px">' + honoArr.map(h => '<li>' + cmdEsc(agenceLabel(h.agence)) + ' : ' + fmt(Number(h.montant) || 0) + '</li>').join('') + '</ul>' : '';
     const intro = isNew ? 'Une nouvelle opportunité a été créée dans le CRM :' : 'Votre agence vient d\'être ajoutée à une opportunité du CRM :';
     const agLabel = isNew ? 'Agences concernées' : 'Agence(s) ajoutée(s)';
     const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;line-height:1.5">
@@ -13834,7 +13834,7 @@ function _ccaRenderFilters() {
   const fld = (lbl, inner) => `<div><label class="fl" style="font-size:11px">${lbl}</label><div>${inner}</div></div>`;
   const optsOf = fn => _ccaUniq(fn).map(v => ({ v, label: v }));
   msDef('ccaRole', [{ v: 'client', label: 'Client' }, { v: 'architecte', label: 'Architecte' }, { v: 'apporteur', label: "Apporteur d'affaire" }, { v: 'gros_oeuvre', label: 'Gros-œuvre' }], ccaF.roles, arr => { ccaF.roles = arr; ccaApply(); });
-  msDef('ccaAgence', optsOf(r => r.agence), ccaF.agences, arr => { ccaF.agences = arr; ccaApply(); });
+  msDef('ccaAgence', _ccaUniq(r => r.agence).map(v => ({ v, label: agenceLabel(v) })), ccaF.agences, arr => { ccaF.agences = arr; ccaApply(); });
   msDef('ccaMetier', optsOf(r => r.metier), ccaF.metiers, arr => { ccaF.metiers = arr; ccaApply(); });
   msDef('ccaPresta', optsOf(r => r.type_prestation), ccaF.prestas, arr => { ccaF.prestas = arr; ccaApply(); });
   msDef('ccaStatut', optsOf(r => r.statut), ccaF.statuts, arr => { ccaF.statuts = arr; ccaApply(); });
@@ -13986,7 +13986,7 @@ function _ccaRenderBody() {
           </tr></thead>
           <tbody>${tableRows.map(r => `<tr style="border-bottom:1px solid var(--border)">
             <td style="padding:6px 8px"><input type="checkbox" class="cca-sel" data-key="${r.type}_${r.id}" checked onchange="ccaUpdateSelCount()"></td>
-            <td style="padding:6px 8px">${docLbl[r.type]}</td><td style="padding:6px 8px">${cmdEsc(r.ref)}</td><td style="padding:6px 8px">${cmdEsc(r.date)}</td><td style="padding:6px 8px">${cmdEsc(r.estab || '—')}</td><td style="padding:6px 8px">${cmdEsc(r.agence)}</td><td style="padding:6px 8px">${cmdEsc(r.type_prestation || '—')}</td><td style="padding:6px 8px">${[...r.roles].join(', ')}</td><td style="padding:6px 8px">${cmdEsc(r.statut)}</td><td style="padding:6px 8px;text-align:right">${fmt(r.montant)}</td>
+            <td style="padding:6px 8px">${docLbl[r.type]}</td><td style="padding:6px 8px">${cmdEsc(r.ref)}</td><td style="padding:6px 8px">${cmdEsc(r.date)}</td><td style="padding:6px 8px">${cmdEsc(r.estab || '—')}</td><td style="padding:6px 8px">${cmdEsc(agenceLabel(r.agence))}</td><td style="padding:6px 8px">${cmdEsc(r.type_prestation || '—')}</td><td style="padding:6px 8px">${[...r.roles].join(', ')}</td><td style="padding:6px 8px">${cmdEsc(r.statut)}</td><td style="padding:6px 8px;text-align:right">${fmt(r.montant)}</td>
           </tr>`).join('') || '<tr><td colspan="10" style="padding:14px;text-align:center;color:var(--t3)">Aucun document pour ces filtres.</td></tr>'}</tbody>
         </table>
       </div>
@@ -14073,7 +14073,7 @@ function _ccaBuildCharts(rows, t) {
   // 5) Par agence
   const byAg = _ccaSumBy(rows, r => r.agence || '—');
   const agE = Object.entries(byAg).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  _ccaBar('ccaChartAgence', agE.map(e => e[0]), agE.map(e => e[1]), '#06b6d4');
+  _ccaBar('ccaChartAgence', agE.map(e => agenceLabel(e[0])), agE.map(e => e[1]), '#06b6d4');
   // 6) Par établissement / site
   const byEt = _ccaSumBy(rows, r => r.estab || '—');
   const etE = Object.entries(byEt).sort((a, b) => b[1] - a[1]).slice(0, 12);
@@ -14116,7 +14116,7 @@ function ccaExportPDF() {
     const docLbl = { devis: 'Devis', commandes: 'Commande', factures: 'Facture' };
     doc.autoTable({
       head: [['Type', 'Réf', 'Date', 'Établissement', 'Agence', 'Mission', 'Rôle', 'Statut', 'Montant HT']],
-      body: rows.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(r => [docLbl[r.type], r.ref, r.date, r.estab || '—', r.agence, r.type_prestation || '—', [...r.roles].join('/'), r.statut, fmt(r.montant)]),
+      body: rows.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(r => [docLbl[r.type], r.ref, r.date, r.estab || '—', agenceLabel(r.agence), r.type_prestation || '—', [...r.roles].join('/'), r.statut, fmt(r.montant)]),
       startY: 16, styles: { fontSize: 7, cellPadding: 1.5 }, headStyles: { fillColor: [79, 143, 247] }
     });
     doc.save('analyse_compte_' + (c.code || c.name || 'client').replace(/[^a-z0-9]/gi, '_') + '.pdf');
@@ -15751,7 +15751,7 @@ function renderAffaireDetail() {
       detailRow('Date fin', a.date_fin ? fmtDateFR(a.date_fin) : null),
       detailRow('Montant HT', fmt(a.montant)),
       detailRow('Montant TTC', fmt(a.montant_ttc)),
-      detailRow('Agence', a.agence),
+      detailRow('Agence', agenceLabel(a.agence)),
       detailRow('Devise', a.devise),
     ])}
   </div>
@@ -20582,7 +20582,7 @@ async function showCommandeDetail(id) {
         detailRow('Gros-œuvre', c.gros_oeuvre),
         detailRow('Commercial gros-œuvre', commLine(c.gros_oeuvre || c.gros_oeuvre_code, roleCommLabel(c.gros_oeuvre_code, c.gros_oeuvre))),
         detailRow('Projet', c.projet),
-        detailRow('Agence', c.agence),
+        detailRow('Agence', agenceLabel(c.agence)),
         detailRow('Responsable', resolveManagerName(c.responsable_id)),
         detailRow('Commercial', resolveManagerName(c.commercial_id)),
         detailRow('Nombre de lignes', c.nb_lignes),
@@ -21105,7 +21105,7 @@ async function showFactureDetail(id) {
         detailRow('Gros-œuvre', f.gros_oeuvre),
         detailRow('Commercial gros-œuvre', commLine(f.gros_oeuvre || f.gros_oeuvre_code, roleCommLabel(f.gros_oeuvre_code, f.gros_oeuvre))),
         detailRow('Projet', f.projet),
-        detailRow('Agence', f.agence),
+        detailRow('Agence', agenceLabel(f.agence)),
         detailRow('Mode de paiement', f.mode_paiement === 'BANK_TRANSFER' ? 'Virement bancaire' : f.mode_paiement === 'CHECK' ? 'Chèque' : f.mode_paiement === 'CASH' ? 'Espèces' : f.mode_paiement),
         detailRow('Responsable', resolveManagerName(f.responsable_id)),
         detailRow('Nombre de lignes', f.nb_lignes),
