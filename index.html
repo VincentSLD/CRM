@@ -12766,7 +12766,8 @@ async function switchEtablissement(newSiret) {
 // ═══ Avatar société : carré bicolore (Catégorie ABC × Statut) + cadre rose vif si grand compte « ++ » ═══
 // Moitié haut-gauche = catégorie ABC, moitié bas-droite = statut. Aucun texte dans le carré.
 const _ABC_COLORS = { A: '#772471', B: '#2f6fed', C: '#8a94a6' };                       // A stratégique / B tactique / C listé
-const _STATUT_COLORS = { actif: '#16a34a', nouveau: '#06b6d4', dormant: '#f59e0b', prospect: '#94a3b8' };
+// Couleurs alignées sur le texte du statut (statusMap → classes .badge) : actif=vert, dormant=rouge, prospect=ambre, nouveau=foncé
+const _STATUT_COLORS = { actif: 'var(--green)', dormant: 'var(--red)', prospect: 'var(--amber)', nouveau: '#1a1a1a' };
 const _AV_NEUTRAL = '#d1d5db';                                                           // non renseigné
 function _clientABC(c) {
   const v = c && c.categorie_compte; if (!v) return null;
