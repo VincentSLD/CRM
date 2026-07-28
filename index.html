@@ -7871,9 +7871,8 @@ async function oppModalOpen(akId, prefill) {
     const C = document.getElementById('contentArea'); if (C) C.innerHTML = '<div class="page active"><div style="text-align:center;padding:40px;color:var(--t3)">Chargement…</div></div>';
     await Promise.all([loadOppRefs(), loadAkuiteoRefs().catch(() => {})]);
     const o = akId ? _opps.find(x => x.akuiteo_id === akId) : null;
-    // En édition : relire l'opportunité avec ses données perso (la recherche en masse ne les renvoie pas)
-    let raw = (o && o.raw) || {};
-    if (akId) { const fresh = await _readOpp(akId); if (fresh && fresh.id) raw = fresh; }
+    // Opportunités 100 % CRM : on utilise le raw stocké en base (plus de relecture Akuiteo)
+    const raw = (o && o.raw) || {};
     const cdTravaux = (raw.customData && raw.customData[OPP_CD_TRAVAUX] && raw.customData[OPP_CD_TRAVAUX].value);
     const defOrigin = (_oppRefs.originTypes.find(t => t.default) || _oppRefs.originTypes.find(t => /autre/i.test(t.name)) || _oppRefs.originTypes[0] || {}).id;
     const d10 = v => (v ? String(v).slice(0, 10) : '');
@@ -8627,8 +8626,9 @@ async function saveOpportunite() {
   if (!f.stageId) return toast('Le stade est obligatoire', 'error');
   if (!f.originTypeId) return toast('Le type d\'origine est obligatoire', 'error');
   const isUpdate = !!f.akId;
+  const existing = isUpdate ? ((_opps || []).find(x => String(x.akuiteo_id) === String(f.akId)) || {}) : {};
   // Agences déjà présentes AVANT la sauvegarde (pour notifier uniquement les agences AJOUTÉES en modification)
-  const _prevAgences = new Set((isUpdate ? ((_opps.find(x => x.akuiteo_id === f.akId) || {}).honoraires_agences || []) : []).map(h => h.agence).filter(Boolean));
+  const _prevAgences = new Set((existing.honoraires_agences || []).map(h => h.agence).filter(Boolean));
   // Décomposition honoraires (CRM-only) : montant + stade + statut par agence ; si présente, le Montant Prestations = somme des lignes
   const honoArr = (f.honorairesAgences || []).filter(h => h.agence).map(h => ({
     agence: h.agence,
@@ -8637,169 +8637,111 @@ async function saveOpportunite() {
     statut: (h.statut === 'WON' || h.statut === 'LOST') ? h.statut : null,
   }));
   if (honoArr.length) f.montant = honoArr.reduce((a, h) => a + h.montant, 0);
-  // En modification : repartir de l'objet Akuiteo complet (conserve id, code et autres champs requis)
-  let payload = {};
-  if (isUpdate) {
-    const o = _opps.find(x => x.akuiteo_id === f.akId);
-    payload = (o && o.raw) ? JSON.parse(JSON.stringify(o.raw)) : {};
-    payload.id = String(f.akId);
-  }
-  payload.name = f.name.trim();
-  // Akuiteo exige un client → « Client non connu » pointe vers le tiers générique « AUCUN / TIERS INCONNU OU INDÉFINI »
-  payload.customerId = f.clientUnknown ? OPP_UNKNOWN_CUSTOMER_ID : String(f.customerAkId);
-  payload.pipeId = String(f.pipeId);
-  payload.stageId = String(f.stageId);
-  payload.originTypeId = String(f.originTypeId);
-  // NB : le champ "title" Akuiteo n'est pas utilisé (le nom fait office de titre) — on n'y touche pas (préservé via raw en modification).
-  // Helpers pour positionner un champ (null pour effacer en modification)
-  const setStr = (k, v) => { if (v != null && v !== '') payload[k] = String(v); else if (isUpdate) payload[k] = null; };
-  const setNum = (k, v) => { if (v !== '' && v != null && !isNaN(Number(v))) payload[k] = Number(v); else if (isUpdate) payload[k] = null; };
-  const setDate = (k, v) => { if (v) payload[k] = v; else if (isUpdate) payload[k] = null; };
-  // Général
-  setStr('endCustomerId', f.endCustomerAkId);
-  setStr('mainContactId', f.contactAkId);
-  setStr('customerLocationId', f.customerLocationId);
-  setStr('origin', f.origin);
-  payload.strategic = !!f.strategic;
-  setStr('description', f.description);
-  // Classement
-  setStr('departmentId', f.departmentId);
-  setStr('yearId', f.yearId);
-  // Équipe
-  setStr('salesManagerId', f.salesManagerId);
-  setStr('productionManagerId', f.productionManagerId);
-  setStr('financialManagerId', f.financialManagerId);
-  setStr('projectManagerId', f.projectManagerId);
-  // Montant
-  if (f.montant !== '' && f.montant != null && !isNaN(Number(f.montant))) {
-    payload.amount = Number(f.montant);
-    payload.amountCurrency = Number(f.montant);
-    payload.currencyCode = f.devise || 'EUR';
-  } else if (isUpdate) { payload.amount = null; payload.amountCurrency = null; }
-  setNum('quantity', f.quantity);
-  setNum('exchangeRate', f.exchangeRate);
-  // Donnée perso "Montant des travaux"
-  if (f.montantTravaux !== '' && f.montantTravaux != null && !isNaN(Number(f.montantTravaux))) {
-    payload.customData = Object.assign({}, payload.customData, { [OPP_CD_TRAVAUX]: { type: 'NUMBER', value: Number(f.montantTravaux) } });
-  } else if (isUpdate && payload.customData && payload.customData[OPP_CD_TRAVAUX]) {
-    payload.customData = Object.assign({}, payload.customData, { [OPP_CD_TRAVAUX]: { type: 'NUMBER', value: null } });
-  }
-  // Probabilité = niveau ; le Taux (weightingCoefficient) est recalculé par Akuiteo → on ne l'envoie pas
-  if (f.probabilityLevel !== '' && f.probabilityLevel != null) {
-    payload.probabilityLevel = String(f.probabilityLevel);
-    delete payload.weightingCoefficient;
-  } else if (isUpdate) { delete payload.weightingCoefficient; }
-  // Dates
-  setDate('expectedSignatureDate', f.dateSignature);
-  setDate('openingDate', f.openingDate);
-  setDate('productionStartDate', f.productionStartDate);
-  setDate('productionEndDate', f.productionEndDate);
-  showSyncLoading(true); setSyncText(isUpdate ? 'Mise à jour dans Akuiteo…' : 'Création dans Akuiteo…');
+  // ─── Opportunités = 100 % CRM (Supabase), plus aucune synchro Akuiteo ───
+  try { if (!_oppRefs) await loadOppRefs(); } catch (e) {}
+  const R = _oppRefs || { stageMap: {}, pipeMap: {}, originMap: {} };
+  const num = v => (v !== '' && v != null && !isNaN(Number(v))) ? Number(v) : null;
+  const stageName = (R.stageMap && R.stageMap[String(f.stageId)] && R.stageMap[String(f.stageId)].name) || existing.stage || '';
+  const pipeName = (R.pipeMap && R.pipeMap[String(f.pipeId)]) || existing.pipe || '';
+  const originName = (R.originMap && R.originMap[String(f.originTypeId)]) || existing.type_origine || '';
+  const respName = (typeof _empDisplayName === 'function' ? (_empDisplayName(f.salesManagerId) || '') : '') || existing.responsable || '';
+  let contactName = existing.contact_name || null;
+  try { const cs = document.getElementById('of-contact'); if (cs && cs.value && cs.selectedIndex >= 0) { const t = (cs.options[cs.selectedIndex].text || '').trim(); if (t && t !== '—') contactName = t; } } catch (e) {}
+  // Statut : conservé en modification (IN_PROGRESS à la création) ; déduction gagnée/perdue depuis les statuts par agence (locale)
+  let statut = existing.statut || 'IN_PROGRESS';
+  const derived = _oppDerivedStatut(honoArr);
+  if (derived === 'WON' || derived === 'LOST') statut = derived;
+  // Identifiant : conservé en modification ; local « crm-… » pour une nouvelle opportunité
+  const akId = isUpdate ? String(f.akId) : ('crm-' + Date.now().toString(36) + Math.round(Math.random() * 1e6).toString(36));
+  // Objet raw conservé/complété (lu par la fiche et la ré-édition)
+  const raw = Object.assign({}, existing.raw || {}, {
+    id: akId, name: f.name.trim(),
+    customerId: f.clientUnknown ? null : (f.customerAkId || null),
+    endCustomerId: f.endCustomerAkId || null, mainContactId: f.contactAkId || null,
+    customerLocationId: f.customerLocationId || null, pipeId: f.pipeId || null, stageId: f.stageId || null,
+    originTypeId: f.originTypeId || null, origin: f.origin || null, strategic: !!f.strategic,
+    departmentId: f.departmentId || null, yearId: f.yearId || null,
+    salesManagerId: f.salesManagerId || null, productionManagerId: f.productionManagerId || null,
+    financialManagerId: f.financialManagerId || null, projectManagerId: f.projectManagerId || null,
+    amount: num(f.montant), currencyCode: f.devise || 'EUR', quantity: num(f.quantity), exchangeRate: num(f.exchangeRate),
+    probabilityLevel: (f.probabilityLevel !== '' && f.probabilityLevel != null) ? String(f.probabilityLevel) : null,
+    expectedSignatureDate: f.dateSignature || null, openingDate: f.openingDate || null,
+    productionStartDate: f.productionStartDate || null, productionEndDate: f.productionEndDate || null,
+    description: f.description || null,
+  });
+  const row = {
+    akuiteo_id: akId, code: existing.code || null, nom: f.name.trim(),
+    client_id: f.clientId || existing.client_id || null,
+    client_name: f.clientName || existing.client_name || null,
+    customer_akuiteo_id: f.clientUnknown ? null : (f.customerAkId || null),
+    contact_akuiteo_id: f.contactAkId || null, contact_name: contactName,
+    montant: num(f.montant), devise: f.devise || 'EUR',
+    probabilite: (f.probabilityLevel !== '' && !isNaN(Number(f.probabilityLevel))) ? Number(f.probabilityLevel) : (existing.probabilite != null ? existing.probabilite : null),
+    statut, stage: stageName || null, stage_id: f.stageId ? String(f.stageId) : null,
+    pipe: pipeName || null, pipe_id: f.pipeId ? String(f.pipeId) : null,
+    type_origine: originName || null, origine: f.origin || null,
+    description: f.description || null,
+    responsable: respName || null, responsable_id: f.salesManagerId ? String(f.salesManagerId) : null,
+    date_signature: f.dateSignature || null,
+    date_creation: existing.date_creation || new Date().toISOString(),
+    montant_travaux: num(f.montantTravaux),
+    honoraires_agences: honoArr.length ? honoArr : null,
+    typologie: f.typologie || null, sous_typologie: f.sousTypologie || null,
+    chantier_lat: (f.chantierLat != null ? f.chantierLat : null), chantier_lng: (f.chantierLng != null ? f.chantierLng : null),
+    chantier_adresse: f.chantierAdresse || null, chantier_dept: f.chantierDept || null,
+    notes_internes: f.notesInternes || null,
+    raw, updated_at: new Date().toISOString(),
+  };
+  showSyncLoading(true); setSyncText(isUpdate ? 'Enregistrement…' : 'Création…');
   try {
-    let akId = f.akId;
-    if (isUpdate) {
-      await akuiteoFetch('POST', `/crm/opportunities/${akId}`, payload, { accept: 'text/plain' });
-    } else {
-      const res = await akuiteoFetch('PUT', '/crm/opportunities', payload, { accept: 'text/plain' });
-      const rawId = (res && typeof res === 'object') ? (res.id || res.value || '') : res;
-      akId = String(rawId == null ? '' : rawId).replace(/[^0-9]/g, '');
-      if (!akId) throw new Error('Akuiteo n\'a pas renvoyé d\'identifiant');
-    }
-    setSyncText('Rafraîchissement…');
-    await _refreshOneOpp(akId);
-    // Champ CRM-only : décomposition par agence (non synchronisé Akuiteo) — écrit après l'upsert de synchro
-    try {
-      const crmFields = {
-        honoraires_agences: honoArr.length ? honoArr : null,
-        typologie: f.typologie || null,
-        sous_typologie: f.sousTypologie || null,
-        chantier_lat: (f.chantierLat != null ? f.chantierLat : null),
-        chantier_lng: (f.chantierLng != null ? f.chantierLng : null),
-        chantier_adresse: f.chantierAdresse || null,
-        chantier_dept: f.chantierDept || null,
-        notes_internes: f.notesInternes || null,
-      };
-      await sb.from('opportunites').update(crmFields).eq('akuiteo_id', String(akId));
-      const mo = (_opps || []).find(x => String(x.akuiteo_id) === String(akId)); if (mo) Object.assign(mo, crmFields);
-      _vrOppsLoaded = false; // forcer le recalcul de la couche/liste « Opportunités » de la Carte
-    } catch (e) { console.warn('honoraires_agences', e.message); }
-    // Statut global déduit des lignes par agence → propagation à Akuiteo (win/lose) avec confirmation
-    try {
-      const derived = _oppDerivedStatut(honoArr);
-      if (derived === 'WON' || derived === 'LOST') {
-        const mo = (_opps || []).find(x => String(x.akuiteo_id) === String(akId));
-        if (!mo || mo.statut !== derived) {
-          const lbl = derived === 'WON' ? 'GAGNÉE (au moins une agence est gagnée)' : 'PERDUE (toutes les agences sont perdues)';
-          showSyncLoading(false);
-          if (confirm('D\'après les statuts par agence, marquer cette opportunité comme ' + lbl + ' dans Akuiteo ?')) {
-            showSyncLoading(true); setSyncText(derived === 'WON' ? 'Marquage gagnée…' : 'Marquage perdue…');
-            if (!_oppRefs) await loadOppRefs();
-            const st = _oppRefs.stages.find(s => s.status === derived);
-            if (st) {
-              const body = derived === 'WON'
-                ? { stageId: String(st.id), signatureDate: new Date().toISOString() }
-                : { stageId: String(st.id), lossDate: new Date().toISOString() };
-              await akuiteoFetch('POST', `/crm/opportunities/${akId}/${derived === 'WON' ? 'win' : 'lose'}`, body, { accept: 'text/plain' });
-              await _refreshOneOpp(akId);
-              // Réappliquer les champs CRM (le refresh repart de l'objet Akuiteo)
-              try { await sb.from('opportunites').update({ honoraires_agences: honoArr.length ? honoArr : null }).eq('akuiteo_id', String(akId)); const m2 = (_opps || []).find(x => String(x.akuiteo_id) === String(akId)); if (m2) m2.honoraires_agences = honoArr.length ? honoArr : null; } catch (e) {}
-            } else toast('Aucun stade « ' + _oppStatutLabel(derived) + ' » configuré dans Akuiteo', 'warn');
-          }
-        }
-      }
-    } catch (e) { console.warn('statut global déduit', e.message); toast('Statut global non appliqué : ' + e.message, 'warning'); }
+    const { error } = await sb.from('opportunites').upsert(row, { onConflict: 'akuiteo_id' });
+    if (error) throw new Error(error.message);
+    await loadOpportunites();
+    _vrOppsLoaded = false; // forcer le recalcul de la couche/liste « Opportunités » de la Carte
     showSyncLoading(false);
-    toast(f.akId ? 'Opportunité mise à jour' : 'Opportunité créée', 'success');
+    toast(isUpdate ? 'Opportunité mise à jour' : 'Opportunité créée', 'success');
     // Notifier les listes de diffusion (non bloquant) : toutes les agences à la création, seulement les agences AJOUTÉES en modification
-    { const notifyAg = (isUpdate ? honoArr.map(h => h.agence).filter(a => !_prevAgences.has(a)) : honoArr.map(h => h.agence)); if (notifyAg.length) { const mo2 = (_opps || []).find(x => String(x.akuiteo_id) === String(akId)); _oppNotifyDiffusion(mo2 || { nom: f.name.trim(), client_name: f.clientName || '', montant: f.montant, responsable: null, chantier_dept: f.chantierDept }, notifyAg, honoArr, !isUpdate); } }
+    { const notifyAg = (isUpdate ? honoArr.map(h => h.agence).filter(a => !_prevAgences.has(a)) : honoArr.map(h => h.agence)); if (notifyAg.length) { const mo2 = (_opps || []).find(x => String(x.akuiteo_id) === String(akId)); _oppNotifyDiffusion(mo2 || row, notifyAg, honoArr, !isUpdate); } }
     oppDetail(akId); // ouvrir la fiche en pleine page
     if (!isUpdate && f._novaOrigin) novaActionDone('opportunite', { akuiteo_id: String(akId), nom: f.name.trim(), client_id: f.clientId || null, client_name: f.clientName || '' });
   } catch (e) {
     showSyncLoading(false);
     console.error('saveOpportunite', e);
-    toast('Erreur Akuiteo : ' + e.message, 'error');
+    toast('Erreur enregistrement : ' + e.message, 'error');
   }
 }
 
-// Changer de stade (stade IN_PROGRESS) — endpoint dédié
+// Changer de stade — mise à jour locale (CRM-only)
 async function oppChangeStage(akId, stageId) {
   if (!stageId) return;
   showSyncLoading(true); setSyncText('Changement de stade…');
   try {
-    await akuiteoFetch('POST', `/crm/opportunities/${akId}/change-stage/${stageId}`, null, { accept: 'text/plain' });
-    await _refreshOneOpp(akId);
+    if (!_oppRefs) await loadOppRefs();
+    const nm = (_oppRefs && _oppRefs.stageMap && _oppRefs.stageMap[String(stageId)] && _oppRefs.stageMap[String(stageId)].name) || null;
+    const upd = { stage_id: String(stageId), stage: nm, updated_at: new Date().toISOString() };
+    const { error } = await sb.from('opportunites').update(upd).eq('akuiteo_id', String(akId));
+    if (error) throw new Error(error.message);
+    const mo = (_opps || []).find(x => String(x.akuiteo_id) === String(akId)); if (mo) Object.assign(mo, upd);
     showSyncLoading(false); toast('Stade mis à jour', 'success');
     closeModal('opp'); if (currentPage === 'opportunites' || currentPage === 'opportunite-detail') renderPage(currentPage);
   } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
 }
 
-// Marquer gagnée / perdue (endpoints dédiés)
-async function oppWin(akId) {
-  if (!_oppRefs) await loadOppRefs();
-  const won = (_oppRefs.stages.find(s => s.status === 'WON'));
-  if (!won) return toast('Aucun stade « Gagnée » configuré dans Akuiteo', 'error');
-  if (!confirm('Marquer cette opportunité comme GAGNÉE ?')) return;
-  showSyncLoading(true); setSyncText('Marquage gagnée…');
+// Marquer gagnée / perdue — statut local (CRM-only, plus de synchro Akuiteo)
+async function _oppSetStatut(akId, statut) {
+  showSyncLoading(true); setSyncText(statut === 'WON' ? 'Marquage gagnée…' : 'Marquage perdue…');
   try {
-    await akuiteoFetch('POST', `/crm/opportunities/${akId}/win`, { stageId: String(won.id), signatureDate: new Date().toISOString() }, { accept: 'text/plain' });
-    await _refreshOneOpp(akId);
-    showSyncLoading(false); toast('Opportunité gagnée 🏆', 'success');
+    const upd = { statut, updated_at: new Date().toISOString() };
+    if (statut === 'WON') upd.date_signature = new Date().toISOString().slice(0, 10);
+    const { error } = await sb.from('opportunites').update(upd).eq('akuiteo_id', String(akId));
+    if (error) throw new Error(error.message);
+    const mo = (_opps || []).find(x => String(x.akuiteo_id) === String(akId)); if (mo) Object.assign(mo, upd);
+    showSyncLoading(false); toast(statut === 'WON' ? 'Opportunité gagnée 🏆' : 'Opportunité marquée perdue', 'success');
     closeModal('opp'); if (currentPage === 'opportunites' || currentPage === 'opportunite-detail') renderPage(currentPage);
   } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
 }
-async function oppLose(akId) {
-  if (!_oppRefs) await loadOppRefs();
-  const lost = (_oppRefs.stages.find(s => s.status === 'LOST'));
-  if (!lost) return toast('Aucun stade « Perdue » configuré dans Akuiteo', 'error');
-  if (!confirm('Marquer cette opportunité comme PERDUE ? (elle sera archivée dans Akuiteo)')) return;
-  showSyncLoading(true); setSyncText('Marquage perdue…');
-  try {
-    await akuiteoFetch('POST', `/crm/opportunities/${akId}/lose`, { stageId: String(lost.id), lossDate: new Date().toISOString() }, { accept: 'text/plain' });
-    await _refreshOneOpp(akId);
-    showSyncLoading(false); toast('Opportunité marquée perdue', 'success');
-    closeModal('opp'); if (currentPage === 'opportunites' || currentPage === 'opportunite-detail') renderPage(currentPage);
-  } catch (e) { showSyncLoading(false); toast('Erreur : ' + e.message, 'error'); }
-}
+async function oppWin(akId) { if (!confirm('Marquer cette opportunité comme GAGNÉE ?')) return; await _oppSetStatut(akId, 'WON'); }
+async function oppLose(akId) { if (!confirm('Marquer cette opportunité comme PERDUE ?')) return; await _oppSetStatut(akId, 'LOST'); }
 
 // ═══ Suggestion de clients à solliciter pour une opportunité (selon leur « Profil marchés ») ═══
 async function oppSuggestClients(akId) {
@@ -8966,7 +8908,6 @@ function renderOpportunites() {
       <button class="btn btn-primary" onclick="oppModalOpen()">+ Nouvelle opportunité</button>
       <button class="btn" onclick="_vrReturn='opportunites';go('veille-regar')" style="background:linear-gradient(135deg,#772471,#FF1E63);color:#fff;border:none">🗺️ Carte des Opportunités</button>
       <button class="btn" onclick="go('opportunite-analyse')">📊 Analyser</button>
-      <button class="btn" onclick="syncOpportunites()">⬇ Synchroniser Akuiteo</button>
       <span style="font-size:13px;color:var(--t2)">${rows.length} opportunité(s)</span>
       ${_oppFlag ? `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;background:#f59e0b22;color:#b45309;border:1px solid #f59e0b55;border-radius:12px;padding:3px 10px">🔔 ${OPP_FLAGS[_oppFlag] || _oppFlag}<span style="cursor:pointer;font-size:14px" onclick="_oppFlag='';renderPage('opportunites')" title="Retirer ce filtre">&times;</span></span>` : ''}
     </div>
@@ -9814,7 +9755,6 @@ function renderOppAnalyse() {
         ${fsel('_oppAnaSousTypo', _oppAnaSousTypo, sousTypoList, '— Sous-typologie —')}
         ${(_oppAnaYear || _oppAnaResp || _oppAnaPipe || _oppAnaTypo || _oppAnaSousTypo) ? `<button class="btn" onclick="_oppAnaYear='';_oppAnaResp='';_oppAnaPipe='';_oppAnaTypo='';_oppAnaSousTypo='';renderPage('opportunite-analyse')" style="font-size:12px" title="Réinitialiser">✕</button>` : ''}
         <button class="btn" onclick="oppAnaExportPdf()">📄 Export PDF</button>
-        <button class="btn" onclick="syncOpportunites()">⬇ Synchroniser</button>
       </div>
     </div>
     <div style="font-size:12px;color:var(--t2);margin-bottom:10px">${opps.length} opportunité(s) analysée(s)${(_oppAnaYear || _oppAnaResp || _oppAnaPipe) ? ' — filtre : ' + window._oppAnaSummary.filtre : ''}</div>
