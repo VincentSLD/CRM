@@ -368,7 +368,7 @@ details.filtres-acc[open] > summary span:first-child { transform: rotate(90deg);
   display: flex; align-items: center; justify-content: center;
   font-weight: 700;
   font-size: 12px;
-  color: var(--magenta);
+  color: #E4C7EC;
   cursor: pointer;
 }
 
@@ -2411,11 +2411,21 @@ tbody tr:last-child td { border-bottom: none; }
       <button class="modal-close" onclick="closeModal('concurrent-form')">×</button>
     </div>
     <div class="modal-body">
+      <div style="background:var(--bg-3);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:14px">
+        <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:8px">Rechercher l'entreprise concurrente</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <div class="fg" style="flex:1;min-width:200px;margin:0"><label class="fl" style="font-size:10px">Nom / SIRET / SIREN</label>
+            <input class="fi" id="cf-sirene-search" placeholder="Nom ou 14 chiffres SIRET" style="font-size:12px" onkeydown="if(event.key==='Enter'){event.preventDefault();cfSearchSirene()}"></div>
+          <button class="btn btn-primary" type="button" onclick="cfSearchSirene()" style="font-size:12px;white-space:nowrap">🔍 Rechercher (SIRENE)</button>
+          <button class="btn" type="button" onclick="webSearchPappers(document.getElementById('cf-sirene-search')?.value || document.getElementById('cf-nom')?.value, document.getElementById('cf-cp')?.value, document.getElementById('cf-ville')?.value)" style="font-size:12px;white-space:nowrap" title="Rechercher sur le web via Google + Pappers">🌐 Recherche web</button>
+        </div>
+        <div id="cf-sirene-results" style="display:none;margin-top:10px;max-height:40vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-1)"></div>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="fg"><label class="fl">Nom *</label><input class="fi" id="cf-nom"></div>
         <div class="fg"><label class="fl">Raison sociale</label><input class="fi" id="cf-raison"></div>
-        <div class="fg"><label class="fl">SIREN</label><input class="fi" id="cf-siren"></div>
-        <div class="fg"><label class="fl">SIRET</label><input class="fi" id="cf-siret"></div>
+        <div class="fg"><label class="fl">SIREN</label><input class="fi" id="cf-siren" onchange="if(/^\d{9}$/.test(this.value.replace(/\s/g,'')))cfFillFromSiret(true)"></div>
+        <div class="fg"><label class="fl">SIRET <a href="#" onclick="event.preventDefault();cfFillFromSiret(false)" style="font-size:10px;color:var(--accent);font-weight:600">🏛️ Remplir</a></label><input class="fi" id="cf-siret" onchange="if(/^\d{14}$/.test(this.value.replace(/\s/g,'')))cfFillFromSiret(true)"></div>
         <div class="fg"><label class="fl">Code APE</label><input class="fi" id="cf-ape"></div>
         <div class="fg"><label class="fl">Site web</label><input class="fi" id="cf-web" placeholder="https://..."></div>
         <div class="fg"><label class="fl">Ville</label><input class="fi" id="cf-ville"></div>
@@ -11656,6 +11666,10 @@ async function fillConcurrentForm(c) {
     ).join('');
   }
   document.getElementById('cf-title').textContent = c.id ? 'Modifier le concurrent' : 'Nouveau concurrent';
+  // Réinitialiser la zone de recherche SIRENE
+  const cfs = document.getElementById('cf-sirene-search'); if (cfs) cfs.value = '';
+  const cfr = document.getElementById('cf-sirene-results'); if (cfr) { cfr.style.display = 'none'; cfr.innerHTML = ''; }
+  _cfSireneResults = [];
 }
 
 async function saveConcurrent() {
@@ -11735,6 +11749,80 @@ async function addConcurrentFromSirene() {
     showSyncLoading(false);
     toast('Erreur: ' + err.message, 'error');
   }
+}
+
+// ═══ Recherche SIRENE dans le formulaire concurrent (comme la création client) ═══
+let _cfSireneResults = [];
+async function cfSearchSirene() {
+  const q = (document.getElementById('cf-sirene-search')?.value || '').trim();
+  if (!q) { toast('Saisissez un nom, un SIRET ou un SIREN.', 'warn'); return; }
+  const box = document.getElementById('cf-sirene-results');
+  if (box) { box.style.display = 'block'; box.innerHTML = '<div style="padding:14px;text-align:center;color:var(--t3)"><span class="hg-spin">⏳</span> Recherche SIRENE…</div>'; }
+  try {
+    await _sireneThrottle();
+    const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + encodeURIComponent(q) + '&per_page=10&mtm_campaign=crm-novam');
+    const d = r.ok ? await r.json() : {};
+    _cfSireneResults = d.results || [];
+    if (!box) return;
+    if (!_cfSireneResults.length) { box.innerHTML = '<div style="padding:14px;text-align:center;color:var(--t3)">Aucun résultat.</div>'; return; }
+    box.innerHTML = _cfSireneResults.map((e, i) => {
+      const s = e.siege || {};
+      const loc = [s.code_postal, s.libelle_commune].filter(Boolean).join(' ');
+      return `<div onclick="cfPickSirene(${i})" style="padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer" onmouseover="this.style.background='rgba(119,36,113,0.06)'" onmouseout="this.style.background=''">
+        <div style="font-weight:600;font-size:13px">${cmdEsc(e.nom_complet || e.nom_raison_sociale || '')}</div>
+        <div style="font-size:11px;color:var(--t3)">${cmdEsc(loc)}${s.activite_principale ? ' · APE ' + cmdEsc(s.activite_principale) : ''}${e.siren ? ' · SIREN ' + e.siren : ''}</div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    if (box) box.innerHTML = '<div style="padding:14px;color:var(--red)">Erreur : ' + cmdEsc(e.message) + '</div>';
+  }
+}
+function cfPickSirene(i) {
+  const e = _cfSireneResults[i]; if (!e) return;
+  const s = e.siege || {};
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+  set('cf-nom', e.nom_complet || e.nom_raison_sociale || '');
+  set('cf-raison', e.nom_raison_sociale || '');
+  set('cf-siren', e.siren || '');
+  set('cf-siret', s.siret || '');
+  set('cf-ape', s.activite_principale || '');
+  set('cf-ville', s.libelle_commune || '');
+  set('cf-cp', s.code_postal || '');
+  set('cf-dept', deptName(s.departement) || s.departement || '');
+  set('cf-region', regionFromDept(s.departement) || '');
+  const box = document.getElementById('cf-sirene-results'); if (box) box.style.display = 'none';
+  toast('Concurrent pré-rempli depuis SIRENE ✅', 'success');
+}
+async function cfFillFromSiret(auto) {
+  const g = id => document.getElementById(id);
+  let siret = ((g('cf-siret') || {}).value || '').replace(/\s/g, '');
+  const sirenIn = ((g('cf-siren') || {}).value || '').replace(/\s/g, '');
+  if (!/^\d{14}$/.test(siret) && !/^\d{9}$/.test(sirenIn)) { if (!auto) toast('Saisissez un SIRET (14 chiffres) ou un SIREN (9 chiffres).', 'warn'); return; }
+  showSyncLoading(true); setSyncText('Recherche SIRENE…');
+  try {
+    let legal = null;
+    if (/^\d{14}$/.test(siret)) legal = await _fetchLegalForSiret(siret);
+    else {
+      await _sireneThrottle();
+      const r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q=' + sirenIn + '&per_page=1');
+      const d = r.ok ? await r.json() : {};
+      const ent = (d.results || [])[0];
+      if (ent && ent.siege && ent.siege.siret) { siret = ent.siege.siret; legal = await _fetchLegalForSiret(siret); }
+    }
+    showSyncLoading(false);
+    if (!legal) { if (!auto) toast('Aucune entreprise trouvée dans SIRENE pour ce numéro.', 'error'); return; }
+    const setVal = (id, val, force) => { const el = g(id); if (el && val != null && val !== '' && (force || !el.value)) el.value = val; };
+    setVal('cf-siret', siret, true);
+    setVal('cf-nom', legal.raison_sociale);
+    setVal('cf-raison', legal.raison_sociale, true);
+    setVal('cf-siren', legal.siren, true);
+    setVal('cf-ape', legal.ape, true);
+    setVal('cf-cp', legal.code_postal, true);
+    setVal('cf-ville', legal.city, true);
+    setVal('cf-dept', legal.departement, true);
+    setVal('cf-region', legal.region, true);
+    toast('Informations remplies depuis SIRENE ✅' + (legal.etat_insee === 'C' ? ' — ⚠️ entreprise radiée/cessée' : ''), 'success');
+  } catch (e) { showSyncLoading(false); if (!auto) toast('Erreur : ' + e.message, 'error'); }
 }
 
 // ═══ Liens client ↔ concurrents ═══
