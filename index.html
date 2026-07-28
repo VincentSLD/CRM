@@ -3420,6 +3420,26 @@ async function reloadClientsForView() {
 let selectedSocietes = new Set(); // vide = toutes
 let _societeRefreshFn = null;
 
+// ═══ Correspondance codes agence/société → noms d'entités du groupe NOVAM (AFFICHAGE uniquement ; les codes restent la valeur en base et servent aux filtres) ═══
+const AGENCE_LABELS = {
+  'NM85': 'NOVAM Ingénierie',
+  'AS44': 'SERBA 44',
+  'SA85': 'SERBA 85',
+  'SA64': 'SERBA Nouvelle-Aquitaine',
+  'EE85': 'EXECOME',
+  'ES44': 'ECTS',
+  'GPH64': 'GPH 64-79',
+  'GPH85': 'GPH 85-44',
+  'GPH-R': 'REGAR',
+  'GRAVI': 'GRAVITY',
+  'NK44': 'NERGIK',
+  'OE85': 'OCE Environnement',
+  'SO35': 'SERTCO',
+  'WATSO': 'WATSONN',
+};
+// Libellé d'affichage d'un code agence (nom d'entité). Retourne la valeur brute si le code est inconnu / vide.
+function agenceLabel(code) { if (code == null || code === '') return code; return AGENCE_LABELS[code] || code; }
+
 function getAllSocietes() {
   const s = new Set();
   [...(DB.devis||[]), ...(DB.commandes||[]), ...(DB.factures||[]), ...(DB.marches||[]), ...(DB.affaires||[])].forEach(d => { if (d.societe) s.add(d.societe); });
@@ -3479,7 +3499,7 @@ function renderSocieteFilter(refreshFn) {
         <input type="checkbox" ${selectedSocietes.size === getAllSocietes().length ? 'checked' : ''} onchange="societeSelect('__ALL__')"> Tout Sélectionner
       </label>
       ${societes.map(s => `<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer">
-        <input type="checkbox" ${selectedSocietes.has(s) ? 'checked' : ''} onchange="societeSelect('${s}')"> ${s}
+        <input type="checkbox" ${selectedSocietes.has(s) ? 'checked' : ''} onchange="societeSelect('${s}')"> ${agenceLabel(s)}
       </label>`).join('')}
     </div>
   </div>`;
@@ -4414,7 +4434,7 @@ function generateAlerts() {
     alerts.push({
       type:'danger', title:'Clients devenus dormants',
       desc: `${newDormant.length} client(s) sans activité (facture/commande) depuis plus de 6 mois`,
-      items: newDormant.slice(0, 30).map(c => `<span onclick="showClient('${c.id}')" style="cursor:pointer;text-decoration:underline">${c.name}</span> — dernière activité il y a ${c.days} jours${c.societe ? ' — ' + c.societe : ''}`)
+      items: newDormant.slice(0, 30).map(c => `<span onclick="showClient('${c.id}')" style="cursor:pointer;text-decoration:underline">${c.name}</span> — dernière activité il y a ${c.days} jours${c.societe ? ' — ' + agenceLabel(c.societe) : ''}`)
     });
   }
   if (nearDormant.length) {
@@ -4422,7 +4442,7 @@ function generateAlerts() {
     alerts.push({
       type:'warn', title:'Clients en risque de dormance',
       desc: `${nearDormant.length} client(s) sans activité depuis 4 à 6 mois — à relancer rapidement`,
-      items: nearDormant.slice(0, 30).map(c => `<span onclick="showClient('${c.id}')" style="cursor:pointer;text-decoration:underline">${c.name}</span> — dernière activité il y a ${c.days} jours${c.societe ? ' — ' + c.societe : ''}`)
+      items: nearDormant.slice(0, 30).map(c => `<span onclick="showClient('${c.id}')" style="cursor:pointer;text-decoration:underline">${c.name}</span> — dernière activité il y a ${c.days} jours${c.societe ? ' — ' + agenceLabel(c.societe) : ''}`)
     });
   }
 
@@ -4444,7 +4464,7 @@ function generateAlerts() {
       alerts.push({
         type:'warn', title:'Clients actifs sans compte-rendu',
         desc: `${noCR.length} client(s) avec devis/commandes récents mais aucun CR — visite à planifier`,
-        items: noCR.slice(0, 30).map(c => `<span onclick="showClient('${c.id}')" style="cursor:pointer;text-decoration:underline">${c.name}</span>${c.societe ? ' — ' + c.societe : ''}`)
+        items: noCR.slice(0, 30).map(c => `<span onclick="showClient('${c.id}')" style="cursor:pointer;text-decoration:underline">${c.name}</span>${c.societe ? ' — ' + agenceLabel(c.societe) : ''}`)
       });
     }
   }
@@ -5210,7 +5230,7 @@ function _vrOppStatutOptions() {
 function _vrOppAgenceOptionsList() {
   const set = new Set();
   (_opps || []).forEach(o => { if (o.statut !== 'LOST' && Array.isArray(o.honoraires_agences)) o.honoraires_agences.forEach(h => { if (h && h.agence) set.add(h.agence); }); });
-  return [...set].sort((a, b) => a.localeCompare(b, 'fr')).map(a => ({ v: a, label: a }));
+  return [...set].sort((a, b) => a.localeCompare(b, 'fr')).map(a => ({ v: a, label: agenceLabel(a) }));
 }
 // Recalcule l'affichage des opportunités (carte + liste) après changement de filtre
 function vrOppsRefresh() {
@@ -8550,7 +8570,7 @@ function _oppHonoRender() {
     const h = map[ag]; const on = !!h;
     return `<tr style="${on ? '' : 'opacity:.5'}">
       <td style="padding:3px 4px"><input type="checkbox" ${on ? 'checked' : ''} onchange="_oppHonoToggleAg('${ag}',this.checked)" style="width:15px;height:15px;accent-color:var(--accent)"></td>
-      <td style="padding:3px 6px;font-weight:600">${ag}</td>
+      <td style="padding:3px 6px;font-weight:600">${agenceLabel(ag)}</td>
       <td style="padding:3px 4px"><input type="number" step="any" placeholder="€" style="${fi};width:110px" value="${on && h.montant != null ? h.montant : ''}" ${on ? '' : 'disabled'} oninput="_oppHonoSetMt('${ag}',this.value)"></td>
       <td style="padding:3px 4px"><select style="${fi};min-width:150px" ${on ? '' : 'disabled'} onchange="_oppHonoSetStade('${ag}',this.value)">${_oppStageOptionsHtml(stageList, on ? h.stade : '')}</select></td>
       <td style="padding:3px 4px"><select style="${fi};min-width:90px" ${on ? '' : 'disabled'} onchange="_oppHonoSetStatut('${ag}',this.value)">${statutOpts(on ? h.statut : '')}</select></td>
@@ -8591,7 +8611,7 @@ function _parseEmails(txt) { return [...new Set(String(txt || '').split(/[\n,;]+
 async function openDiffLists() {
   await loadDiffLists(true);
   const rows = NL_AGENCES.map(ag => `<div style="margin-bottom:10px">
-      <div style="font-size:13px;font-weight:700;margin-bottom:3px">${ag} <span style="color:var(--t3);font-weight:400">(${(_diffLists[ag] || []).length} email(s))</span></div>
+      <div style="font-size:13px;font-weight:700;margin-bottom:3px">${agenceLabel(ag)} <span style="color:var(--t3);font-weight:400">(${(_diffLists[ag] || []).length} email(s))</span></div>
       <textarea data-ag="${ag}" class="diff-emails" rows="2" placeholder="un email par ligne (ou séparés par virgule)" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);resize:vertical">${cmdEsc((_diffLists[ag] || []).join('\n'))}</textarea>
     </div>`).join('');
   const body = `
@@ -8631,7 +8651,7 @@ async function _oppNotifyDiffusion(o, agences, honoArr, isNew) {
     const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;line-height:1.5">
       <p>${intro}</p>
       <p style="font-size:15px"><b>${cmdEsc(o.nom || '')}</b></p>
-      <p>${o.client_name ? '<b>Client :</b> ' + cmdEsc(o.client_name) + '<br>' : ''}${o.montant != null && o.montant !== '' ? '<b>Montant Prestations (HT) :</b> ' + fmt(o.montant) + '<br>' : ''}<b>${agLabel} :</b> ${agences.map(cmdEsc).join(', ')}<br>${o.responsable ? '<b>Responsable :</b> ' + cmdEsc(fmtCommercialName(o.responsable)) + '<br>' : ''}${o.chantier_dept ? '<b>Département chantier :</b> ' + cmdEsc(o.chantier_dept) + '<br>' : ''}</p>
+      <p>${o.client_name ? '<b>Client :</b> ' + cmdEsc(o.client_name) + '<br>' : ''}${o.montant != null && o.montant !== '' ? '<b>Montant Prestations (HT) :</b> ' + fmt(o.montant) + '<br>' : ''}<b>${agLabel} :</b> ${agences.map(a => cmdEsc(agenceLabel(a))).join(', ')}<br>${o.responsable ? '<b>Responsable :</b> ' + cmdEsc(fmtCommercialName(o.responsable)) + '<br>' : ''}${o.chantier_dept ? '<b>Département chantier :</b> ' + cmdEsc(o.chantier_dept) + '<br>' : ''}</p>
       ${honoHtml ? '<p><b>Répartition des honoraires :</b></p>' + honoHtml : ''}
       <p style="color:#666;font-size:12px">— Notification automatique du CRM</p></div>`;
     const subject = (isNew ? '🎯 Nouvelle opportunité : ' : '➕ Agence ajoutée — opportunité : ') + (o.nom || '') + (o.client_name ? ' — ' + o.client_name : '');
@@ -9224,7 +9244,7 @@ async function monEspaceOpen() {
         <button class="btn" onclick="_meAgencesAll(false)" style="font-size:11px;padding:3px 8px">Tout décocher</button>
       </div>
       <div id="me-agences" style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
-        ${(() => { const all = getAllSocietes(); if (!all.length) return '<div style="font-size:11px;color:var(--t3)">Aucune agence disponible pour l\'instant (données en cours de chargement).</div>'; const def = _loadDefaultAgences(); return all.map(a => { const checked = def ? def.includes(a) : true; return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" class="me-agence" value="' + cmdEsc(a) + '" ' + (checked ? 'checked' : '') + ' onchange="_meAgencesSave()" style="accent-color:#4f8ff7"> ' + cmdEsc(a) + '</label>'; }).join(''); })()}
+        ${(() => { const all = getAllSocietes(); if (!all.length) return '<div style="font-size:11px;color:var(--t3)">Aucune agence disponible pour l\'instant (données en cours de chargement).</div>'; const def = _loadDefaultAgences(); return all.map(a => { const checked = def ? def.includes(a) : true; return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" class="me-agence" value="' + cmdEsc(a) + '" ' + (checked ? 'checked' : '') + ' onchange="_meAgencesSave()" style="accent-color:#4f8ff7"> ' + cmdEsc(agenceLabel(a)) + '</label>'; }).join(''); })()}
       </div>
     </div>
     <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between">
@@ -9727,7 +9747,7 @@ function renderOppDetailPage() {
     ${row('Statut', _oppStatutBadge(o.statut))}
     ${row('Stratégique', raw.strategic ? OPP_STAR + ' <b style="color:#FF1E63">Oui</b>' : 'Non')}
     ${row('Montant Prestations (HT)', o.montant != null ? fmt(o.montant) : '')}
-    ${(Array.isArray(o.honoraires_agences) && o.honoraires_agences.length) ? row('Décomposition par agence', o.honoraires_agences.map(h => { const st = stageName(h.stade); const stat = h.statut === 'WON' ? '<span style="color:#10b981;font-weight:700">Gagné</span>' : h.statut === 'LOST' ? '<span style="color:#ef4444;font-weight:700">Perdu</span>' : ''; return `<div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><span style="color:var(--t3)">${cmdEsc(h.agence || '')}</span><span style="display:flex;gap:10px;align-items:center">${st ? '<span style="color:var(--t3);font-size:11px">' + cmdEsc(st) + '</span>' : ''}${stat}<strong>${fmt(Number(h.montant) || 0)}</strong></span></div>`; }).join('')) : ''}
+    ${(Array.isArray(o.honoraires_agences) && o.honoraires_agences.length) ? row('Décomposition par agence', o.honoraires_agences.map(h => { const st = stageName(h.stade); const stat = h.statut === 'WON' ? '<span style="color:#10b981;font-weight:700">Gagné</span>' : h.statut === 'LOST' ? '<span style="color:#ef4444;font-weight:700">Perdu</span>' : ''; return `<div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><span style="color:var(--t3)">${cmdEsc(agenceLabel(h.agence || ''))}</span><span style="display:flex;gap:10px;align-items:center">${st ? '<span style="color:var(--t3);font-size:11px">' + cmdEsc(st) + '</span>' : ''}${stat}<strong>${fmt(Number(h.montant) || 0)}</strong></span></div>`; }).join('')) : ''}
     ${(() => { const v = (raw.customData && raw.customData[OPP_CD_TRAVAUX] && raw.customData[OPP_CD_TRAVAUX].value) != null ? raw.customData[OPP_CD_TRAVAUX].value : o.montant_travaux; return row('Montant des travaux', v != null && v !== '' ? fmt(v) : ''); })()}
     ${row('Quantité', raw.quantity != null ? raw.quantity : '')}
     ${row('Probabilité', o.probabilite != null ? o.probabilite + '%' : '')}
@@ -10926,7 +10946,7 @@ async function renderDashMesTaches() {
       <span title="Devis à relancer" style="flex:none;width:16px;text-align:center">📄</span>
       <div style="flex:1;min-width:0;cursor:pointer" onclick="showDevisDetail('${d.id}')">
         <div style="font-size:13px;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cmdEsc(d.ref || d.id)} — ${cmdEsc(d.client || '')}</div>
-        <div style="font-size:11px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cmdEsc(d.societe || '—')} · ${fmt(d.montant)} · émis le ${d.date} · ${j} j (seuil ${seuil} j)</div>
+        <div style="font-size:11px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cmdEsc(agenceLabel(d.societe || '—'))} · ${fmt(d.montant)} · émis le ${d.date} · ${j} j (seuil ${seuil} j)</div>
       </div>
       <button class="btn" onclick="event.stopPropagation();openRelanceDevis('${d.id}')" style="font-size:10px;padding:2px 8px;background:var(--red);color:#fff;border:none;white-space:nowrap;flex:none">Relancer</button>
     </div>`;
@@ -11015,7 +11035,7 @@ async function renderDashObjectifsAgences() {
       const totalPct = totalObj > 0 ? Math.round(totalCa / totalObj * 100) : 0;
       return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--bg-2)">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
-          <div style="font-size:14px;font-weight:700">${ag}</div>
+          <div style="font-size:14px;font-weight:700">${agenceLabel(ag)}</div>
           <div style="font-size:11px;color:var(--t3)">${items[0].annee}</div>
         </div>
         ${items.map(o => {
@@ -11035,7 +11055,7 @@ async function renderDashObjectifsAgences() {
           </div>`;
         }).join('')}
         ${items.length > 1 ? `<div style="border-top:1px dashed var(--border);padding-top:6px;margin-top:6px;display:flex;justify-content:space-between;align-items:center;font-size:12px">
-          <span style="font-weight:700">Total ${ag}</span>
+          <span style="font-weight:700">Total ${agenceLabel(ag)}</span>
           <span style="color:var(--t3)">${fmt(totalCa)} / ${fmt(totalObj)} — <strong style="color:${objPctColor(totalPct)}">${totalPct}%</strong></span>
         </div>` : ''}
       </div>`;
@@ -15413,7 +15433,7 @@ function renderMarcheDetail() {
       detailRow('Société', m.client_name ? '<a href="#" onclick="showClient(&#39;'+m.client_id+'&#39;);return false" style="color:var(--accent)">'+m.client_name+'</a>' : null),
       detailRow('Description', m.description),
       detailRow('Statut', marcheStatutBadge(m.statut)),
-      detailRow('Agence', m.agence),
+      detailRow('Agence', agenceLabel(m.agence)),
       detailRow('Typologie', m.typologie),
       detailRow('Sous-typologie', m.sous_typologie),
     ])}
@@ -15639,7 +15659,7 @@ function renderAffaires() {
         <td style="text-align:center">${nbCmd}</td>
         <td style="text-align:center">${nbFact}</td>
         <td>${marcheStatutBadge(a.statut)}</td>
-        <td class="mono" style="font-size:11px">${a.societe || a.agence || '—'}</td>
+        <td class="mono" style="font-size:11px">${agenceLabel(a.societe || a.agence || '—')}</td>
       </tr>`;
     }).join('')}</tbody>
     </table>
@@ -15883,7 +15903,7 @@ function renderPipeline() {
           <span class="mono" style="font-size:10px;color:var(--t3)">${d.ref||''}</span>
         </div>
         <div class="pipe-card-client">${d.client}</div>
-        ${d.agence ? '<div style="font-size:10px;color:var(--t3);margin-bottom:4px">'+d.agence+'</div>' : ''}
+        ${d.agence ? '<div style="font-size:10px;color:var(--t3);margin-bottom:4px">'+agenceLabel(d.agence)+'</div>' : ''}
         <div class="pipe-card-foot">
           <div class="pipe-card-amount">${fmt(d.montant)}${d.montant_ttc ? ' <span style="font-size:9px;opacity:.6">TTC '+fmt(d.montant_ttc)+'</span>' : ''}</div>
           <div class="pipe-card-date">${d.date}</div>
@@ -19720,7 +19740,7 @@ function renderDevis(filter='all') {
       <td>${d.sujet||''}</td>
       <td class="mono">${fmt(d.montant)}</td>
       <td>${d.date}</td>
-      <td>${d.societe||''}</td>
+      <td>${agenceLabel(d.societe||'')}</td>
       <td style="font-size:11px">${d.apporteur_affaire||''}</td>
       <td style="font-size:11px">${d.comm_novam||''}</td>
       <td style="font-size:11px">${d.comm_gph||''}</td>
@@ -19803,7 +19823,7 @@ function renderCommandes(filter='all') {
       <td class="mono">${fmt(c.montant)}</td>
       <td>${c.date}</td>
       <td>${c.livraison}</td>
-      <td>${c.societe||''}</td>
+      <td>${agenceLabel(c.societe||'')}</td>
       <td style="font-size:11px">${c.apporteur_affaire||''}</td>
       <td style="font-size:11px">${c.comm_novam||''}</td>
       <td style="font-size:11px">${c.comm_gph||''}</td>
@@ -19886,7 +19906,7 @@ function renderFactures(filter='all') {
       <td class="mono" style="${(f.reste_a_payer||0)>0?'color:var(--red)':''}">${f.reste_a_payer != null ? fmt(f.reste_a_payer) : ''}</td>
       <td>${f.date}</td>
       <td>${f.date_paiement ? fmtDateFR(f.date_paiement) : ''}</td>
-      <td>${f.societe||''}</td>
+      <td>${agenceLabel(f.societe||'')}</td>
       <td style="font-size:11px">${f.apporteur_affaire||''}</td>
       <td style="font-size:11px">${f.comm_novam||''}</td>
       <td style="font-size:11px">${f.comm_gph||''}</td>
@@ -20359,7 +20379,7 @@ async function showDevisDetail(id) {
         detailRow('Gros-œuvre', d.gros_oeuvre),
         detailRow('Commercial gros-œuvre', commLine(d.gros_oeuvre || d.gros_oeuvre_code, roleCommLabel(d.gros_oeuvre_code, d.gros_oeuvre))),
         detailRow('Projet', d.projet),
-        detailRow('Agence', d.agence),
+        detailRow('Agence', agenceLabel(d.agence)),
         detailRow('Responsable', resolveManagerName(d.responsable_id)),
         detailRow('Commercial', resolveManagerName(d.commercial_id)),
         detailRow('Nombre de lignes', d.nb_lignes),
@@ -21254,7 +21274,7 @@ async function searchCRAffaire(q) {
   list = list.slice(0, 100);
   const clear = _crSelectedAffaire ? `<div style="padding:8px 12px;cursor:pointer;font-size:12px;color:var(--red);border-top:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="removeCRAffaire()">✕ Retirer l'affaire liée</div>` : '';
   if (!list.length) { dd.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--t3)">Aucune affaire pour cette société</div>' + clear; }
-  else dd.innerHTML = list.map(a => { const lbl = _crAffaireLabel(a); return `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="selectCRAffaire('${a.id}','${lbl.replace(/'/g, "&#39;")}')">${cmdEsc(lbl)}${a.agence ? ' <span style="color:var(--t3);font-size:11px">(' + cmdEsc(a.agence) + ')</span>' : ''}</div>`; }).join('') + clear;
+  else dd.innerHTML = list.map(a => { const lbl = _crAffaireLabel(a); return `<div style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''" onclick="selectCRAffaire('${a.id}','${lbl.replace(/'/g, "&#39;")}')">${cmdEsc(lbl)}${a.agence ? ' <span style="color:var(--t3);font-size:11px">(' + cmdEsc(agenceLabel(a.agence)) + ')</span>' : ''}</div>`; }).join('') + clear;
   dd.style.display = 'block';
 }
 function selectCRAffaire(id, label) { _crSelectedAffaire = { id, label }; const dd = document.getElementById('crAffaireDropdown'); if (dd) dd.style.display = 'none'; const inp = document.getElementById('crAffaireSearch'); if (inp) inp.value = ''; renderCRAffaireChip(); }
@@ -25411,7 +25431,7 @@ async function renderObjectifsAgences() {
       '<th style="padding:8px 10px;text-align:right">Actions</th>' +
       '</tr></thead><tbody>' +
       rows.map(o => `<tr id="obj-row-${o.id}" style="border-bottom:1px solid var(--border)">
-        <td style="padding:6px 10px;font-weight:500">${o.agence}</td>
+        <td style="padding:6px 10px;font-weight:500">${agenceLabel(o.agence)}</td>
         <td style="padding:6px 10px"><span style="padding:2px 8px;border-radius:4px;background:${o.metier==='SOL'?'rgba(245,158,11,.2)':'rgba(99,102,241,.2)'};color:${o.metier==='SOL'?'#f59e0b':'#524FA1'};font-size:11px;font-weight:600">${o.metier}</span></td>
         <td style="padding:6px 10px;font-size:12px">01/01/${o.annee} → 31/12/${o.annee}</td>
         <td style="padding:6px 10px;text-align:right;font-family:monospace;font-weight:600">${fmt(o.objectif_ht)}</td>
@@ -25568,7 +25588,7 @@ async function renderClientObjectifs(clientId) {
       const label = onTrack ? 'Atteint' : ahead ? 'En avance' : pctVal >= 60 ? 'En cours' : 'En retard';
       return `<tr id="cobj-row-${o.id}" style="border-bottom:1px solid var(--border)">
         <td style="padding:6px 10px">${o.annee}</td>
-        <td style="padding:6px 10px;font-weight:500">${o.agence}</td>
+        <td style="padding:6px 10px;font-weight:500">${agenceLabel(o.agence)}</td>
         <td style="padding:6px 10px"><span style="padding:2px 8px;border-radius:4px;background:${o.metier==='SOL'?'rgba(245,158,11,.2)':o.metier==='EXE'?'rgba(99,102,241,.2)':'rgba(107,114,128,.2)'};color:${o.metier==='SOL'?'#f59e0b':o.metier==='EXE'?'#524FA1':'#6b7280'};font-size:11px;font-weight:600">${o.metier}</span></td>
         <td style="padding:6px 10px;text-align:right;font-family:monospace">${fmt(o.objectif_ht)}</td>
         <td style="padding:6px 10px;text-align:right;font-family:monospace;font-weight:600">${fmt(o.ca)}</td>
