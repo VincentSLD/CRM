@@ -5227,11 +5227,11 @@ function renderVeilleRegar() {
   <div style="max-width:1600px;margin:0 auto">
     <div class="card" style="margin-bottom:14px">
       <div class="card-body">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <button class="btn btn-sm" onclick="go(_vrReturn)">← Retour</button>
-          <span style="font-size:14px;font-weight:700;white-space:nowrap;margin-right:2px">Recherche d'opportunités</span>
-          <input id="vr-dept" value="${cmdEsc(_vrDept)}" placeholder="Dép. (85)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:90px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrLoadPA()">
-          <select id="vr-permis-type" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <button class="btn" title="Retour" onclick="go(_vrReturn)" style="font-size:13px;line-height:1;padding:4px 8px">←</button>
+          <span style="font-size:13px;font-weight:700;white-space:nowrap">Recherche d'opportunités</span>
+          <input id="vr-dept" value="${cmdEsc(_vrDept)}" placeholder="Dép." style="padding:5px 7px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:64px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrLoadPA()">
+          <select id="vr-permis-type" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;max-width:185px;background:var(--card,#fff);color:var(--t1)">
             <option value="pc"${_vrPermisType === 'pc' ? ' selected' : ''}>Permis de construire (logements)</option>
             <option value="pc_existant"${_vrPermisType === 'pc_existant' ? ' selected' : ''}>Permis sur bâti existant (réhab/extension)</option>
             <option value="dpe_ter"${_vrPermisType === 'dpe_ter' ? ' selected' : ''}>DPE tertiaire F/G (à rénover)</option>
@@ -5241,24 +5241,24 @@ function renderVeilleRegar() {
             <option value="veilleco"${_vrPermisType === 'veilleco' ? ' selected' : ''}>🔎 Veilleco (veille marchés)</option>
           </select>
           <input type="file" id="vr-veilco-file" accept=".csv,text/csv" style="display:none" onchange="veilcoLoadFile(this)">
-          <select id="vr-nblgt" title="Filtre logements (s'applique aux permis de construire)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+          <select id="vr-nblgt" title="Filtre logements (s'applique aux permis de construire)" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
             <option value=""${_vrNbLgt === '' ? ' selected' : ''}>Tous</option>
             <option value="1"${_vrNbLgt === '1' ? ' selected' : ''}>1 Logt</option>
             <option value="collectif"${_vrNbLgt === 'collectif' ? ' selected' : ''}>&gt;1 Logt</option>
           </select>
-          <select id="vr-boamp-type" title="Type de marché (BOAMP)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+          <select id="vr-boamp-type" title="Type de marché (BOAMP)" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
             <option value="TRAVAUX"${_vrBoampType === 'TRAVAUX' ? ' selected' : ''}>Travaux</option>
             <option value="SERVICES"${_vrBoampType === 'SERVICES' ? ' selected' : ''}>Services</option>
             <option value="FOURNITURES"${_vrBoampType === 'FOURNITURES' ? ' selected' : ''}>Fournitures</option>
             <option value=""${_vrBoampType === '' ? ' selected' : ''}>Tous types</option>
           </select>
-          <input id="vr-boamp-kw" value="${cmdEsc(_vrBoampKw)}" placeholder="Mot-clé objet (BOAMP)" title="Filtrer l'objet du marché par mot-clé (BOAMP)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:160px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrLoadPA()">
-          <span style="font-size:11px;color:var(--t3)">autorisés du</span>
-          <input type="date" id="vr-pa-from" value="${cmdEsc(_vrPaFrom)}" title="À partir du" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+          <input id="vr-boamp-kw" value="${cmdEsc(_vrBoampKw)}" placeholder="Mot-clé (BOAMP)" title="Filtrer l'objet du marché par mot-clé (BOAMP)" style="padding:5px 7px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:130px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrLoadPA()">
+          <span style="font-size:11px;color:var(--t3)" title="Autorisés du">du</span>
+          <input type="date" id="vr-pa-from" value="${cmdEsc(_vrPaFrom)}" title="À partir du" style="padding:4px 5px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
           <span style="font-size:11px;color:var(--t3)">au</span>
-          <input type="date" id="vr-pa-to" value="${cmdEsc(_vrPaTo)}" title="Jusqu'au" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
-          <button class="btn btn-primary" onclick="vrLoadPA()">🗺️ Afficher sur la carte</button>
-          <button class="btn" onclick="vrResetMap()" title="Réinitialiser — vider la carte (aucune donnée, aucun département)" style="font-size:14px;line-height:1;padding:6px 9px">↺</button>
+          <input type="date" id="vr-pa-to" value="${cmdEsc(_vrPaTo)}" title="Jusqu'au" style="padding:4px 5px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+          <button class="btn btn-primary" onclick="vrLoadPA()" title="Afficher sur la carte" style="font-size:12px;padding:5px 10px;white-space:nowrap">🗺️ Afficher</button>
+          <button class="btn" onclick="vrResetMap()" title="Réinitialiser — vider la carte (aucune donnée, aucun département)" style="font-size:14px;line-height:1;padding:4px 8px">↺</button>
         </div>
       </div>
     </div>
