@@ -2449,7 +2449,7 @@ tbody tr:last-child td { border-bottom: none; }
         <select class="fi" id="lc-concurrent-id">
           <option value="">— Sélectionner un concurrent —</option>
         </select>
-        <div style="font-size:11px;color:var(--t3);margin-top:4px">Pas dans la liste ? <a href="#" onclick="closeModal('link-concurrent');go('concurrence');return false" style="color:#6366f1">Créer un concurrent</a></div>
+        <div style="font-size:11px;color:var(--t3);margin-top:4px">Pas dans la liste ? <a href="#" onclick="closeModal('link-concurrent');go('concurrence');return false" style="color:#524FA1">Créer un concurrent</a></div>
       </div>
       <div class="fg" style="margin-top:10px">
         <label class="fl">Métiers concernés</label>
@@ -4135,11 +4135,11 @@ function renderContacts() {
   </div>
   <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
     <span style="font-size:11px;color:var(--t3);font-weight:600">Filtrer par commercial :</span>
-    <select onchange="contactsFilterNovam=this.value;loadContactsPage(0,contactsLetter,contactsSearch)" style="padding:5px 8px;border:1px solid ${contactsFilterNovam?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${contactsFilterNovam?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:170px;max-width:220px">
+    <select onchange="contactsFilterNovam=this.value;loadContactsPage(0,contactsLetter,contactsSearch)" style="padding:5px 8px;border:1px solid ${contactsFilterNovam?'#FF1E63':'var(--border)'};border-radius:6px;font-size:12px;background:${contactsFilterNovam?'rgba(255,30,99,0.13)':'var(--card)'};color:var(--t1);min-width:170px;max-width:220px">
       <option value="">— Commercial Novam —</option>
       ${(clientsFilterOpts.novam||[]).map(o => `<option value="${String(o.key).replace(/"/g,'&quot;')}"${contactsFilterNovam===o.key?' selected':''}>${o.label}</option>`).join('')}
     </select>
-    <select onchange="contactsFilterGph=this.value;loadContactsPage(0,contactsLetter,contactsSearch)" style="padding:5px 8px;border:1px solid ${contactsFilterGph?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${contactsFilterGph?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1);min-width:170px;max-width:220px">
+    <select onchange="contactsFilterGph=this.value;loadContactsPage(0,contactsLetter,contactsSearch)" style="padding:5px 8px;border:1px solid ${contactsFilterGph?'#FF1E63':'var(--border)'};border-radius:6px;font-size:12px;background:${contactsFilterGph?'rgba(255,30,99,0.13)':'var(--card)'};color:var(--t1);min-width:170px;max-width:220px">
       <option value="">— Commercial GPH —</option>
       ${(clientsFilterOpts.gph||[]).map(o => `<option value="${String(o.key).replace(/"/g,'&quot;')}"${contactsFilterGph===o.key?' selected':''}>${o.label}</option>`).join('')}
     </select>
@@ -4203,7 +4203,7 @@ function renderContactDetail() {
   </div>
   <div class="card" style="margin-bottom:16px">
     <div class="card-body" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-      <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:20px">
+      <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#772471,#7c3aed);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:20px">
         ${(c.prenom||'?')[0]}${(c.nom||'?')[0]}
       </div>
       <div style="flex:1">
@@ -5022,7 +5022,7 @@ let _vrBoampKw = '';                // filtre mot-clé sur l'objet du marché BO
 let _vrReturn = 'endev';            // page de retour du bouton « ← Retour » (En Dev' ou Opportunités)
 let _vrArgileOn = false, _vrArgileOpacity = 0.55, _vrArgileLayer = null;  // calque aléa argile (BRGM) — décoché par défaut
 let _vrCadastreOn = false, _vrCadastreLayer = null;                       // calque cadastre (parcelles IGN)
-const VR_ZONE_COLORS = ['#ef4444', '#2563eb', '#10b981', '#f59e0b', '#8b5cf6']; // 5 couleurs de zones
+const VR_ZONE_COLORS = ['#ef4444', '#2563eb', '#10b981', '#f59e0b', '#772471']; // 5 couleurs de zones
 let _vrZones = [], _vrZonesOn = true, _vrZonesLayer = null, _vrZonesLoaded = false;
 let _vrZonePendingGeo = null, _vrZoneEditId = null, _vrZoneDraftColor = VR_ZONE_COLORS[0], _drawLoading = null;
 let _vrBaseType = 'routes', _vrBaseLayer = null, _vrFsBound = false;       // fond de carte (routes / aérien) + plein écran
@@ -5098,7 +5098,7 @@ function renderVeilleRegar() {
       <div style="padding:8px 12px;font-size:11px;color:var(--t3)">${_vrIsBoamp
         ? 'Marqueurs : <span style="color:#2563eb">●</span> marché public de travaux en cours (BOAMP), position approximative (commune du lieu d\'exécution). Date limite de réponse indiquée.'
         : _vrIsCopro
-        ? 'Marqueurs : <span style="color:#8b5cf6">●</span> copropriété (source BDNB / registre national, position approximative). Cible syndics/bailleurs pour rénovation globale.'
+        ? 'Marqueurs : <span style="color:#772471">●</span> copropriété (source BDNB / registre national, position approximative). Cible syndics/bailleurs pour rénovation globale.'
         : _vrIsDpe
         ? 'Marqueurs : <span style="color:#f59e0b">●</span> classe F · <span style="color:#ef4444">●</span> classe G (passoires thermiques à rénover). Source : observatoire DPE ADEME.'
         : 'Sélectionnez un département puis « Afficher la carte ». Marqueurs : <span style="color:#10b981">●</span> autorisé · <span style="color:#f59e0b">●</span> chantier ouvert · <span style="color:#6b7280">●</span> travaux achevés (Sitadel).'} Calque argile (BRGM) : du jaune (faible) au rouge/violet (fort).</div>
@@ -5663,7 +5663,7 @@ async function _vrInitMap() {
     const isDpe = (d.kind === 'dpe_ter' || d.kind === 'dpe_log');
     let color, rows, buttons;
     if (d.kind === 'copro') {
-      color = '#8b5cf6';
+      color = '#772471';
       rows = [
         `<div style="color:#0891b2;font-size:11px;font-weight:600">Copropriété (BDNB)</div>`,
         d.adresse ? `<div style="color:#555">${cmdEsc(d.adresse)}</div>` : '',
@@ -5826,7 +5826,7 @@ function _vrAddOppsLayer() {
   _vrOppsLayer = _vrClusterGroup({ maxClusterRadius: 30 });
   _vrOppsData.filter(d => d.lat != null && d.lon != null).forEach(d => {
     const approx = d.geo === 'dept';
-    const m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#4338ca', fillColor: '#6366f1', fillOpacity: approx ? 0.35 : 0.85, weight: 2, dashArray: approx ? '3,3' : null });
+    const m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#4338ca', fillColor: '#524FA1', fillOpacity: approx ? 0.35 : 0.85, weight: 2, dashArray: approx ? '3,3' : null });
     const stLbl = (OPP_STATUTS[d.statut] && OPP_STATUTS[d.statut][0]) || d.statut || '';
     m.bindPopup(`<div style="font-size:12px;min-width:200px"><div style="font-weight:700">🎯 ${cmdEsc(d.nom || 'Opportunité')}</div>${d.client_name ? `<div style="color:#555">${cmdEsc(d.client_name)}</div>` : ''}<div style="color:#555;font-size:11px;margin-top:2px">${cmdEsc(stLbl)}${d.stage ? ' · ' + cmdEsc(d.stage) : ''}${d.montant != null ? ' · ' + fmt(d.montant) : ''}</div>${approx ? '<div style="color:#b45309;font-size:11px;margin-top:2px">📍 Localisation approximative (chef-lieu ' + cmdEsc(d.dept) + ')</div>' : ''}<div style="margin-top:6px;display:flex;gap:8px"><button onclick="oppDetail('${d.akId}')" style="font-size:11px;cursor:pointer">Voir la fiche</button><button onclick="oppModalOpen('${d.akId}')" style="font-size:11px;cursor:pointer">✎ Modifier</button></div></div>`);
     m.addTo(_vrOppsLayer);
@@ -6772,11 +6772,11 @@ function renderTaches() {
       <span style="font-size:13px;color:var(--t2)">${rows.length} tâche(s)</span>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-      <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:4px 8px;border:1px solid ${_tachesMine ? '#f59e0b' : 'var(--border)'};border-radius:6px;background:${_tachesMine ? 'rgba(245,158,11,0.15)' : 'var(--card)'}"><input type="checkbox" ${_tachesMine ? 'checked' : ''} onchange="_tachesMine=this.checked;renderPage('taches')"> Mes tâches</label>
-      <select onchange="_tachesFStatut=this.value;renderPage('taches')" style="padding:5px 8px;border:1px solid ${_tachesFStatut ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:4px 8px;border:1px solid ${_tachesMine ? '#FF1E63' : 'var(--border)'};border-radius:6px;background:${_tachesMine ? 'rgba(255,30,99,0.13)' : 'var(--card)'}"><input type="checkbox" ${_tachesMine ? 'checked' : ''} onchange="_tachesMine=this.checked;renderPage('taches')"> Mes tâches</label>
+      <select onchange="_tachesFStatut=this.value;renderPage('taches')" style="padding:5px 8px;border:1px solid ${_tachesFStatut ? '#FF1E63' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
         <option value="">— Statut —</option>${Object.entries(TACHE_STATUTS).map(([k, v]) => `<option value="${k}"${_tachesFStatut === k ? ' selected' : ''}>${v[0]}</option>`).join('')}
       </select>
-      <select onchange="_tachesFAssigne=this.value;renderPage('taches')" style="padding:5px 8px;border:1px solid ${_tachesFAssigne ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);max-width:200px">
+      <select onchange="_tachesFAssigne=this.value;renderPage('taches')" style="padding:5px 8px;border:1px solid ${_tachesFAssigne ? '#FF1E63' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);max-width:200px">
         <option value="">— Assigné —</option>${comm.map(c => `<option value="${c.id}"${_tachesFAssigne === c.id ? ' selected' : ''}>${cmdEsc(fmtCommercialName(c.nom || c.email || ''))}</option>`).join('')}
       </select>
       <button class="btn" onclick="_tachesView=(_tachesView==='pipeline'?'liste':'pipeline');renderPage('taches')" style="font-size:12px">${_tachesView === 'pipeline' ? '☰ Liste' : '▦ Pipeline'}</button>
@@ -6968,7 +6968,7 @@ function tachePickAffaire(id) {
 }
 function tacheRenderClientChip() {
   const el = document.getElementById('t-client-chip'); if (!el) return;
-  el.innerHTML = _tacheSel.client_id ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#6366f122;color:#6366f1;border:1px solid #6366f144">${cmdEsc(_tacheSel.client_name || '')} <span style="cursor:pointer;opacity:0.6;font-size:14px" onclick="tacheClearClient()">&times;</span></span>` : '';
+  el.innerHTML = _tacheSel.client_id ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#524FA122;color:#524FA1;border:1px solid #524FA144">${cmdEsc(_tacheSel.client_name || '')} <span style="cursor:pointer;opacity:0.6;font-size:14px" onclick="tacheClearClient()">&times;</span></span>` : '';
 }
 function tacheClearClient() { _tacheSel.client_id = null; _tacheSel.client_name = null; _tacheSel.affaire_id = null; _tacheSel.affaire_nom = null; _tacheSel.opportunite_id = null; tacheRenderClientChip(); tacheRenderAffaireOptions(); tacheRenderOppOptions(); }
 function tacheRenderAffaireOptions() {
@@ -7097,7 +7097,7 @@ const SOLLIC_STATUTS = {
   sollicite:    ['Sollicité', '#4f8ff7'],
   interesse:    ['Intéressé', '#10b981'],
   sans_suite:   ['Sans suite / Refusé', '#ef4444'],
-  converti:     ['Converti', '#8b5cf6'],
+  converti:     ['Converti', '#772471'],
 };
 function _sollicBadge(s) { const [l, c] = SOLLIC_STATUTS[s] || [s || '—', '#6b7280']; return `<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;background:${c}22;color:${c}">${l}</span>`; }
 async function loadSollicitations() {
@@ -7136,8 +7136,8 @@ function renderSollicitations() {
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <input type="text" placeholder="Rechercher (client, opportunité)…" value="${cmdEsc(_sollicSearch)}" oninput="_sollicSearch=this.value;clearTimeout(window._sollicT);window._sollicT=setTimeout(()=>renderPage('sollicitations'),250)" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
-      <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:4px 8px;border:1px solid ${_sollicMine ? '#f59e0b' : 'var(--border)'};border-radius:6px"><input type="checkbox" ${_sollicMine ? 'checked' : ''} onchange="_sollicMine=this.checked;renderPage('sollicitations')"> Les miennes</label>
-      <select onchange="_sollicFStatut=this.value;renderPage('sollicitations')" style="padding:5px 8px;border:1px solid ${_sollicFStatut ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:4px 8px;border:1px solid ${_sollicMine ? '#FF1E63' : 'var(--border)'};border-radius:6px"><input type="checkbox" ${_sollicMine ? 'checked' : ''} onchange="_sollicMine=this.checked;renderPage('sollicitations')"> Les miennes</label>
+      <select onchange="_sollicFStatut=this.value;renderPage('sollicitations')" style="padding:5px 8px;border:1px solid ${_sollicFStatut ? '#FF1E63' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
         <option value="">— Statut —</option>${Object.entries(SOLLIC_STATUTS).map(([k, v]) => `<option value="${k}"${_sollicFStatut === k ? ' selected' : ''}>${v[0]}</option>`).join('')}
       </select>
     </div>
@@ -7300,7 +7300,7 @@ async function sollicSearchClient(q) {
   dd.style.display = 'block';
 }
 function sollicSelectClient(id, name) { _sollicSel.client_id = id; _sollicSel.client_name = name; _sollicSel.contact_id = null; _sollicSel.contact_nom = null; _sollicSel.contact_email = null; const dd = document.getElementById('sol-client-dd'); if (dd) dd.style.display = 'none'; const inp = document.getElementById('sol-client-search'); if (inp) inp.value = ''; sollicRenderClientChip(); sollicLoadContacts(); }
-function sollicRenderClientChip() { const el = document.getElementById('sol-client-chip'); if (!el) return; el.innerHTML = _sollicSel.client_id ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#6366f122;color:#6366f1;border:1px solid #6366f144">${cmdEsc(_sollicSel.client_name || '')}</span>` : ''; }
+function sollicRenderClientChip() { const el = document.getElementById('sol-client-chip'); if (!el) return; el.innerHTML = _sollicSel.client_id ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#524FA122;color:#524FA1;border:1px solid #524FA144">${cmdEsc(_sollicSel.client_name || '')}</span>` : ''; }
 // Statut clôturant une sollicitation (→ tâche To Do marquée terminée)
 function _sollicTerminal(st) { return st === 'converti' || st === 'sans_suite'; }
 function _sollicTodoComplete(email, todoTaskId) { if (!email || !todoTaskId) return; try { fetch('/api/task-todo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'complete', assigneeEmail: email, todoTaskId }) }).then(() => {}, () => {}); } catch (e) {} }
@@ -8380,7 +8380,7 @@ async function oppNewClientSubmit(isEnd) {
     let code = null; try { const c = await akuiteoFetch('GET', `/crm/customers/${akId}`); code = c && c.code; } catch (e) {}
     // Enregistrer dans le CRM (Supabase)
     const ini = name.split(/\s+/).map(w => (w || '')[0]).join('').substring(0, 2).toUpperCase();
-    const colors = ['#4f8ff7', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899'];
+    const colors = ['#4f8ff7', '#10b981', '#772471', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899'];
     const color = colors[Math.abs(akId.split('').reduce((a, ch) => a + ch.charCodeAt(0), 0)) % colors.length];
     const { error } = await sb.from('clients').upsert({
       id: akId, akuiteo_id: akId, name, code: code || null,
@@ -8658,7 +8658,7 @@ async function oppSuggestClients(akId) {
     return `<div style="border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:7px;background:var(--bg-2)">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
         <div><strong>${cmdEsc(c.name || '')}</strong>${c.city ? ' <span style="color:var(--t3);font-size:11px">— ' + cmdEsc(c.city) + '</span>' : ''}
-          <div style="margin-top:3px">${p.mandataire ? badge(true, 'Mandataire', '#8b5cf6') : ''}${badge(x.posTypo, 'Typologie ✓', '#0ea5e9')}${badge(x.posSous, 'Sous-typo ✓', '#14b8a6')}${badge(x.posDept, 'Département ✓', '#10b981')}${badge(x.posTce, 'TCE ✓', '#f59e0b')}</div></div>
+          <div style="margin-top:3px">${p.mandataire ? badge(true, 'Mandataire', '#772471') : ''}${badge(x.posTypo, 'Typologie ✓', '#0ea5e9')}${badge(x.posSous, 'Sous-typo ✓', '#14b8a6')}${badge(x.posDept, 'Département ✓', '#10b981')}${badge(x.posTce, 'TCE ✓', '#f59e0b')}</div></div>
         <div style="display:flex;gap:6px">
           <button class="btn" style="font-size:11px" onclick="this.closest('.nl-overlay').remove();showClient('${c.id}')">Fiche</button>
           <button class="btn btn-primary" style="font-size:11px" onclick="this.closest('.nl-overlay').remove();sollicModalOpen(null,{client_id:'${c.id}',client_name:'${(c.name || '').replace(/'/g, "\\'")}',opportunite_id:'${akId}',opportunite_nom:'${oppNomEsc}'})">🤝 Solliciter</button>
@@ -8771,19 +8771,19 @@ function renderOpportunites() {
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <button class="btn" onclick="openDiffLists()" title="Configurer les emails de diffusion par agence (envoi auto à la création d'opportunité)">📧 Liste Diffusion</button>
       <input type="text" placeholder="Rechercher..." value="${(_oppSearch || '').replace(/"/g, '&quot;')}" oninput="_oppSearch=this.value;clearTimeout(window._oppT);window._oppT=setTimeout(()=>renderPage('opportunites'),250)" style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);min-width:160px">
-      <select onchange="_oppFPipe=this.value;renderPage('opportunites')" style="padding:5px 8px;border:1px solid ${_oppFPipe ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);max-width:200px">
+      <select onchange="_oppFPipe=this.value;renderPage('opportunites')" style="padding:5px 8px;border:1px solid ${_oppFPipe ? '#FF1E63' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);max-width:200px">
         <option value="">— Portefeuille —</option>${pipes.map(p => `<option value="${cmdEsc(p)}"${_oppFPipe === p ? ' selected' : ''}>${cmdEsc(p)}</option>`).join('')}
       </select>
-      <select onchange="_oppFStatut=this.value;renderPage('opportunites')" style="padding:5px 8px;border:1px solid ${_oppFStatut ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
+      <select onchange="_oppFStatut=this.value;renderPage('opportunites')" style="padding:5px 8px;border:1px solid ${_oppFStatut ? '#FF1E63' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1)">
         <option value="">— Statut —</option>${Object.entries(OPP_STATUTS).map(([k, v]) => `<option value="${k}"${_oppFStatut === k ? ' selected' : ''}>${v[0]}</option>`).join('')}
       </select>
-      <select onchange="_oppFResp=this.value;renderPage('opportunites')" style="padding:5px 8px;border:1px solid ${_oppFResp ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);max-width:200px">
+      <select onchange="_oppFResp=this.value;renderPage('opportunites')" style="padding:5px 8px;border:1px solid ${_oppFResp ? '#FF1E63' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);max-width:200px">
         <option value="">— Responsable —</option>${resps.map(r => `<option value="${cmdEsc(r)}"${_oppFResp === r ? ' selected' : ''}>${cmdEsc(fmtCommercialName(r))}</option>`).join('')}
       </select>
       <span style="display:inline-flex;gap:4px;align-items:center;font-size:11px;color:var(--t3)" title="Date de signature prévisionnelle">📅 Signature
-        <input type="date" value="${_oppFSigFrom}" onchange="_oppFSigFrom=this.value;renderPage('opportunites')" style="padding:4px 6px;border:1px solid ${_oppFSigFrom ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:11px;background:var(--card,#fff);color:var(--t1)">
+        <input type="date" value="${_oppFSigFrom}" onchange="_oppFSigFrom=this.value;renderPage('opportunites')" style="padding:4px 6px;border:1px solid ${_oppFSigFrom ? '#FF1E63' : 'var(--border)'};border-radius:6px;font-size:11px;background:var(--card,#fff);color:var(--t1)">
         <span>→</span>
-        <input type="date" value="${_oppFSigTo}" onchange="_oppFSigTo=this.value;renderPage('opportunites')" style="padding:4px 6px;border:1px solid ${_oppFSigTo ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:11px;background:var(--card,#fff);color:var(--t1)">
+        <input type="date" value="${_oppFSigTo}" onchange="_oppFSigTo=this.value;renderPage('opportunites')" style="padding:4px 6px;border:1px solid ${_oppFSigTo ? '#FF1E63' : 'var(--border)'};border-radius:6px;font-size:11px;background:var(--card,#fff);color:var(--t1)">
         ${(_oppFSigFrom || _oppFSigTo) ? `<button class="btn" onclick="_oppFSigFrom='';_oppFSigTo='';renderPage('opportunites')" style="font-size:10px;padding:3px 6px" title="Effacer">✕</button>` : ''}
       </span>
       <button class="btn" onclick="_oppView=(_oppView==='pipeline'?'liste':'pipeline');renderPage('opportunites')" style="font-size:12px">${_oppView === 'pipeline' ? '☰ Liste' : '▦ Pipeline'}</button>
@@ -8791,7 +8791,7 @@ function renderOpportunites() {
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">
     <div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:18px;font-weight:700;color:#4f8ff7">${fmt(totalHT)}</div><div style="font-size:11px;color:var(--t3)">Pipeline en cours (HT)</div></div></div>
-    <div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:18px;font-weight:700;color:#8b5cf6">${fmt(pondere)}</div><div style="font-size:11px;color:var(--t3)">Pondéré par probabilité</div></div></div>
+    <div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:18px;font-weight:700;color:#772471">${fmt(pondere)}</div><div style="font-size:11px;color:var(--t3)">Pondéré par probabilité</div></div></div>
     <div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:18px;font-weight:700;color:#10b981">${fmt(caGagne)}</div><div style="font-size:11px;color:var(--t3)">Gagnées (${gagnees.length})</div></div></div>
     <div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:18px;font-weight:700;color:var(--t1)">${enCours.length}</div><div style="font-size:11px;color:var(--t3)">En cours</div></div></div>
   </div>`;
@@ -9368,7 +9368,7 @@ function _oppTimeline(o) {
   (DB.reports || []).filter(r => r.opportunite_id === akId).forEach(r => {
     const actor = crGetRedacteurNom(r);
     const meta = [actor ? 'par ' + who(actor) : '', r.client_name ? '— ' + cmdEsc(r.client_name) : ''].filter(Boolean).join(' ');
-    push(r.date_raw || r.created_at, '📝', '#8b5cf6', 'CR « ' + cmdEsc(r.titre || 'Sans titre') + ' »' + (r.type_cr ? ' <span style="color:var(--t3)">(' + cmdEsc(_CR_TYPE_LBL[r.type_cr] || r.type_cr) + ')</span>' : ''), meta, "openCRDetail('" + r.id + "')");
+    push(r.date_raw || r.created_at, '📝', '#772471', 'CR « ' + cmdEsc(r.titre || 'Sans titre') + ' »' + (r.type_cr ? ' <span style="color:var(--t3)">(' + cmdEsc(_CR_TYPE_LBL[r.type_cr] || r.type_cr) + ')</span>' : ''), meta, "openCRDetail('" + r.id + "')");
   });
   const _todayISO = new Date().toISOString().slice(0, 10);
   const _echRouge = (dateStr, retard) => `<span style="${retard ? 'color:var(--red);font-weight:600' : ''}">${dateStr}${retard ? ' ⚠' : ''}</span>`;
@@ -9385,7 +9385,7 @@ function _oppTimeline(o) {
     const relRetard = s.date_relance && String(s.date_relance).slice(0, 10) < _todayISO && !_sollicTerminal(s.statut);
     const rel = s.date_relance ? _echRouge('à faire avant ' + fmtDateFR(String(s.date_relance).slice(0, 10)), relRetard) : '';
     const meta = [s.createur_nom ? 'par ' + who(s.createur_nom) : '', s.assigne_nom ? '→ ' + who(s.assigne_nom) : '', rel, _sollicBadge(s.statut)].filter(Boolean).join(' · ');
-    push(s.date_sollicitation || s.created_at, '🤝', '#6366f1', 'Sollicitation ' + cmdEsc(s.client_name || ''), meta, 'sollicModalOpen(' + s.id + ')');
+    push(s.date_sollicitation || s.created_at, '🤝', '#524FA1', 'Sollicitation ' + cmdEsc(s.client_name || ''), meta, 'sollicModalOpen(' + s.id + ')');
     if (s.email_envoye && s.email_date) push(s.email_date, '✉️', '#0ea5e9', 'Mail de sollicitation envoyé' + (s.email_destinataire ? ' à ' + cmdEsc(s.email_destinataire) : ''), s.client_name ? cmdEsc(s.client_name) : '', 'sollicMailOpen(' + s.id + ')');
   });
   // Issue
@@ -9461,7 +9461,7 @@ function renderOppDetailPage() {
     `<button class="btn" onclick="oppModalOpen('${o.akuiteo_id}')">✏️ Modifier</button>`,
     `<button class="btn" onclick="oppCreerTache('${o.akuiteo_id}')">✅ Créer une tâche</button>`,
     `<button class="btn" onclick="oppCreerCR('${o.akuiteo_id}')">📝 Créer un CR</button>`,
-    `<button class="btn" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;border:none" onclick="oppSuggestClients('${o.akuiteo_id}')" title="Proposer des clients à solliciter selon leur profil marchés (typologie, département, TCE…)">🎯 Clients à solliciter</button>`,
+    `<button class="btn" style="background:linear-gradient(135deg,#772471,#FF1E63);color:#fff;border:none" onclick="oppSuggestClients('${o.akuiteo_id}')" title="Proposer des clients à solliciter selon leur profil marchés (typologie, département, TCE…)">🎯 Clients à solliciter</button>`,
     enCours ? `<button class="btn" style="color:#10b981" onclick="oppWin('${o.akuiteo_id}')">🏆 Gagnée</button>` : '',
     enCours ? `<button class="btn" style="color:#ef4444" onclick="oppLose('${o.akuiteo_id}')">Perdue</button>` : '',
     o.client_id ? `<button class="btn" onclick="showClient('${o.client_id}')">Voir le client</button>` : '',
@@ -9524,10 +9524,10 @@ function renderOppAnalyse() {
     { cond: depassees.length, color: '#ef4444', icon: '⏰', titre: `${depassees.length} opportunité(s) à requalifier`, sous: `Signature prévisionnelle dépassée — total ${mtFmt(depassees)} HT. À relancer, gagner ou clôturer.`, flag: 'depassees' },
     { cond: sous30.length, color: '#f59e0b', icon: '🎯', titre: `${sous30.length} signature(s) attendue(s) sous 30 jours`, sous: `Total ${mtFmt(sous30)} HT à closer. À prioriser cette période.`, flag: 'sous30' },
     { cond: sansDate.length, color: '#f59e0b', icon: '📅', titre: `${sansDate.length} opportunité(s) sans date de signature`, sous: `Impossible de prévoir l'atterrissage. Renseignez une date prévisionnelle.`, flag: 'sansDate' },
-    { cond: sansResp.length, color: '#6366f1', icon: '👤', titre: `${sansResp.length} opportunité(s) sans responsable`, sous: `Affectez un responsable commercial pour le suivi.`, flag: 'sansResp' },
-    { cond: sansContact.length, color: '#6366f1', icon: '📇', titre: `${sansContact.length} opportunité(s) sans contact`, sous: `Ajoutez un contact pour faciliter la relance.`, flag: 'sansContact' },
+    { cond: sansResp.length, color: '#524FA1', icon: '👤', titre: `${sansResp.length} opportunité(s) sans responsable`, sous: `Affectez un responsable commercial pour le suivi.`, flag: 'sansResp' },
+    { cond: sansContact.length, color: '#524FA1', icon: '📇', titre: `${sansContact.length} opportunité(s) sans contact`, sous: `Ajoutez un contact pour faciliter la relance.`, flag: 'sansContact' },
     { cond: grosEnjeu.length, color: '#10b981', icon: '💎', titre: `${grosEnjeu.length} opportunité(s) à fort enjeu (≥ 100 k€)`, sous: `Total ${mtFmt(grosEnjeu)} HT. Top : ${grosEnjeu.slice(0, 3).map(o => cmdEsc(o.nom)).join(', ')}.`, flag: 'grosEnjeu' },
-    { cond: strat.length, color: '#8b5cf6', icon: '⭐', titre: `${strat.length} opportunité(s) stratégique(s) en cours`, sous: `À suivre de près — total ${mtFmt(strat)} HT.`, flag: 'strategiques' },
+    { cond: strat.length, color: '#772471', icon: '⭐', titre: `${strat.length} opportunité(s) stratégique(s) en cours`, sous: `À suivre de près — total ${mtFmt(strat)} HT.`, flag: 'strategiques' },
   ].filter(a => a.cond);
   const alerts = alertDefs.map(a => `
     <div onclick="oppAnaShow('${a.flag}')" class="card" style="cursor:pointer;border-left:4px solid ${a.color}" title="Voir ces opportunités">
@@ -9539,7 +9539,7 @@ function renderOppAnalyse() {
 
   // ─ Données graphiques ─
   const grp = (arr, keyFn, valFn) => { const m = {}; arr.forEach(o => { const k = keyFn(o) || '—'; m[k] = (m[k] || 0) + (valFn ? valFn(o) : 1); }); return m; };
-  const PAL = ['#4f8ff7', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#f97316'];
+  const PAL = ['#772471', '#FF1E63', '#524FA1', '#0057B8', '#C11F39', '#B07AAE', '#F58BB0', '#2E8B8B', '#7E9A3E', '#E08A2E'];
   // Par stade (montant en cours)
   const byStage = grp(enCours, o => o.stage, o => num(o.montant));
   // Par portefeuille
@@ -9572,7 +9572,7 @@ function renderOppAnalyse() {
     { id: 'oppAnaStatut', cfg: { type: 'doughnut', data: { labels: Object.keys(statutCounts), datasets: [{ data: Object.values(statutCounts), backgroundColor: ['#4f8ff7', '#10b981', '#ef4444', '#6b7280'] }] }, options: { plugins: { legend: { position: 'bottom' } }, responsive: true, maintainAspectRatio: false } } },
     { id: 'oppAnaPipe', cfg: { type: 'doughnut', data: { labels: Object.keys(byPipe), datasets: [{ data: Object.values(byPipe), backgroundColor: PAL }] }, options: { plugins: { legend: { position: 'bottom' } }, responsive: true, maintainAspectRatio: false } } },
     { id: 'oppAnaStage', cfg: { type: 'bar', data: { labels: Object.keys(byStage), datasets: [{ label: 'Montant en cours (HT)', data: Object.values(byStage), backgroundColor: '#4f8ff7' }] }, options: { plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { autoSkip: false, maxRotation: 40, minRotation: 0 } } } } } },
-    { id: 'oppAnaResp', cfg: { type: 'bar', data: { labels: respSorted.map(r => r[0]), datasets: [{ label: 'Pipeline (HT)', data: respSorted.map(r => r[1]), backgroundColor: '#8b5cf6' }] }, options: { indexAxis: 'y', plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false } } },
+    { id: 'oppAnaResp', cfg: { type: 'bar', data: { labels: respSorted.map(r => r[0]), datasets: [{ label: 'Pipeline (HT)', data: respSorted.map(r => r[1]), backgroundColor: '#772471' }] }, options: { indexAxis: 'y', plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false } } },
     { id: 'oppAnaMonth', cfg: { type: 'bar', data: { labels: mLab, datasets: [{ label: 'Signatures prévues (HT)', data: months.map(m => byMonth[m] || 0), backgroundColor: '#10b981' }] }, options: { plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false } } },
     { id: 'oppAnaOrig', cfg: { type: 'doughnut', data: { labels: Object.keys(byOrig), datasets: [{ data: Object.values(byOrig), backgroundColor: PAL }] }, options: { plugins: { legend: { position: 'bottom' } }, responsive: true, maintainAspectRatio: false } } },
     { id: 'oppAnaTypo', cfg: { type: 'doughnut', data: { labels: Object.keys(byTypo), datasets: [{ data: Object.values(byTypo), backgroundColor: PAL }] }, options: { plugins: { legend: { position: 'bottom' } }, responsive: true, maintainAspectRatio: false } } },
@@ -9588,7 +9588,7 @@ function renderOppAnalyse() {
 
   const kpi = (val, lbl, color) => `<div class="card"><div class="card-body" style="text-align:center;padding:12px"><div style="font-size:18px;font-weight:700;color:${color}">${val}</div><div style="font-size:11px;color:var(--t3)">${lbl}</div></div></div>`;
   const chartBox = (id, titre, h) => `<div class="card"><div class="card-header"><div class="card-title">${titre}</div></div><div class="card-body"><div style="height:${h || 240}px;position:relative"><canvas id="${id}"></canvas></div></div></div>`;
-  const fsel = (val, cur, opts, ph) => `<select onchange="${val}=this.value;renderPage('opportunite-analyse')" style="padding:5px 8px;border:1px solid ${cur ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);max-width:200px"><option value="">${ph}</option>${opts.map(o => `<option value="${cmdEsc(typeof o === 'string' ? o : o.v)}"${cur === (typeof o === 'string' ? o : o.v) ? ' selected' : ''}>${cmdEsc(typeof o === 'string' ? o : o.l)}</option>`).join('')}</select>`;
+  const fsel = (val, cur, opts, ph) => `<select onchange="${val}=this.value;renderPage('opportunite-analyse')" style="padding:5px 8px;border:1px solid ${cur ? '#FF1E63' : 'var(--border)'};border-radius:6px;font-size:12px;background:var(--card,#fff);color:var(--t1);max-width:200px"><option value="">${ph}</option>${opts.map(o => `<option value="${cmdEsc(typeof o === 'string' ? o : o.v)}"${cur === (typeof o === 'string' ? o : o.v) ? ' selected' : ''}>${cmdEsc(typeof o === 'string' ? o : o.l)}</option>`).join('')}</select>`;
 
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
@@ -9607,7 +9607,7 @@ function renderOppAnalyse() {
     <div style="font-size:12px;color:var(--t2);margin-bottom:10px">${opps.length} opportunité(s) analysée(s)${(_oppAnaYear || _oppAnaResp || _oppAnaPipe) ? ' — filtre : ' + window._oppAnaSummary.filtre : ''}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px">
       ${kpi(fmt(totalHT), 'Pipeline en cours (HT)', '#4f8ff7')}
-      ${kpi(fmt(pondere), 'Pondéré par taux', '#8b5cf6')}
+      ${kpi(fmt(pondere), 'Pondéré par taux', '#772471')}
       ${kpi(enCours.length, 'En cours', 'var(--t1)')}
       ${kpi(fmt(caGagne), 'Gagnées (' + gagnees.length + ')', '#10b981')}
       ${kpi(winRate != null ? winRate + ' %' : '—', 'Taux de réussite (nb)', '#10b981')}
@@ -10020,7 +10020,7 @@ function renderDecpAnalyse() {
     ${_anRankCard('Par département (acheteur)', rk(r => r.acheteur_dept), caTotal, '#10b981')}
     ${_anRankCard('Par nature de travaux (CPV)', rk(r => _cpvLabel(r.cpv) || 'Autre'), caTotal, '#0ea5e9')}
     ${_anRankCard('Top donneurs d\'ordre publics', rk(r => r.acheteur_nom), caTotal, '#f59e0b')}
-    ${_anRankCard('Par année de notification', rk(_decpYear), caTotal, '#8b5cf6')}
+    ${_anRankCard('Par année de notification', rk(_decpYear), caTotal, '#772471')}
   </div>`;
   return filters + kpis + ranks;
 }
@@ -10069,7 +10069,7 @@ function msButton(key, label) {
   const n = r.selected.size, active = n > 0;
   const items = (r.options.length ? r.options.map(o => `<label style="display:flex;align-items:center;gap:6px;padding:4px 10px;cursor:pointer;font-size:12px;white-space:nowrap" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''"><input type="checkbox" value="${_msEsc(o.v)}" ${r.selected.has(o.v) ? 'checked' : ''} onchange="msSet('${key}',this.value,this.checked)"> ${o.label}</label>`).join('') : '<div style="padding:8px 10px;font-size:11px;color:var(--t3)">Aucune valeur</div>');
   return `<div class="ms-wrap" style="position:relative;display:inline-block">
-    <button type="button" onclick="msToggle('${key}',event)" style="padding:5px 8px;border:1px solid ${active ? '#f59e0b' : 'var(--border)'};border-radius:6px;font-size:12px;background:${active ? 'rgba(245,158,11,0.15)' : 'var(--card,#fff)'};color:var(--t1);cursor:pointer;min-width:120px;text-align:left">${label}${n ? ' · ' + n : ''} ▾</button>
+    <button type="button" onclick="msToggle('${key}',event)" style="padding:5px 8px;border:1px solid ${active ? '#FF1E63' : 'var(--border)'};border-radius:6px;font-size:12px;background:${active ? 'rgba(255,30,99,0.13)' : 'var(--card,#fff)'};color:var(--t1);cursor:pointer;min-width:120px;text-align:left">${label}${n ? ' · ' + n : ''} ▾</button>
     <div class="ms-pop" id="mspop-${key}" style="display:none;position:absolute;top:100%;left:0;z-index:1000;background:var(--card,#fff);border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.18);max-height:300px;overflow:auto;margin-top:3px;min-width:170px">
       <div style="display:flex;gap:10px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:11px;position:sticky;top:0;background:var(--card,#fff)"><a href="#" onclick="msAll('${key}',true);return false" style="color:var(--accent)">Tout</a><a href="#" onclick="msAll('${key}',false);return false" style="color:var(--accent)">Aucun</a></div>
       ${items}
@@ -10143,7 +10143,7 @@ function renderAnalyse() {
     ${_anRankCard('CA par apporteur d\'affaire', byApp, caTotal, '#f59e0b')}
     ${_anRankCard('CA par architecte', byArch, caTotal, '#10b981')}
     ${_anRankCard('CA par client facturé', byClient, caTotal, '#4f8ff7')}
-    ${_anRankCard('CA par commercial Novam', byNovam, caTotal, '#8b5cf6')}
+    ${_anRankCard('CA par commercial Novam', byNovam, caTotal, '#772471')}
     ${_anRankCard('CA par commercial GPH', byGph, caTotal, '#06b6d4')}
     ${_anRankCard('CA par métier', byMetier, caTotal, '#ef4444')}
     ${_anRankCard('CA par typologie', byTypo, caTotal, '#0ea5e9')}
@@ -10154,7 +10154,7 @@ function renderAnalyse() {
   const network = `<div class="card" id="anNetCard"><div class="card-header" style="flex-wrap:wrap;gap:10px">
       <div class="card-title">Cartographie — qui travaille avec qui</div>
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-        ${tcb('agence', '<span style="color:#8b5cf6">●</span> Agences')}
+        ${tcb('agence', '<span style="color:#772471">●</span> Agences')}
         ${tcb('client', '<span style="color:#4f8ff7">●</span> Clients')}
         ${tcb('architecte', '<span style="color:#10b981">●</span> Architectes')}
         ${tcb('apporteur', '<span style="color:#f59e0b">●</span> Apporteurs')}
@@ -10320,7 +10320,7 @@ function buildAnalyseNetwork() {
     nodeIds = nodeIds.sort((a, b) => nodeCA[b] - nodeCA[a]).slice(0, 60);
   }
   const keep = new Set(nodeIds);
-  const colors = { agence: '#8b5cf6', client: '#4f8ff7', architecte: '#10b981', apporteur: '#f59e0b', gros_oeuvre: '#ec4899' };
+  const colors = { agence: '#772471', client: '#0057B8', architecte: '#524FA1', apporteur: '#FF1E63', gros_oeuvre: '#C11F39' };
   const typeLbl = { agence: 'agence', client: 'client', architecte: 'architecte', apporteur: 'apporteur', gros_oeuvre: 'gros-œuvre' };
   const nodes = nodeIds.map(id => {
     const p = id.split('|'); const type = p[0]; const name = p.slice(1).join('|');
@@ -10696,7 +10696,7 @@ async function renderDashObjectifsAgences() {
           const color = onTrack ? '#22c55e' : ahead ? '#3b82f6' : pctVal >= 60 ? '#f59e0b' : '#ef4444';
           const label = o.metier === 'GLOBAL' ? 'Global' : o.metier;
           const badgeBg = o.metier==='SOL'?'rgba(245,158,11,.2)':o.metier==='EXE'?'rgba(99,102,241,.2)':'rgba(107,114,128,.2)';
-          const badgeColor = o.metier==='SOL'?'#f59e0b':o.metier==='EXE'?'#6366f1':'#6b7280';
+          const badgeColor = o.metier==='SOL'?'#f59e0b':o.metier==='EXE'?'#524FA1':'#6b7280';
           return `<div style="margin-bottom:8px">
             <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:3px">
               <span style="display:inline-flex;align-items:center;gap:6px"><span style="padding:1px 6px;border-radius:3px;background:${badgeBg};color:${badgeColor};font-size:10px;font-weight:700">${label}</span><span style="color:var(--t3)">${fmt(o.ca)} / ${fmt(o.objectif_ht)}</span></span>
@@ -10877,7 +10877,7 @@ function renderDashChartAgence(factures) {
   if (entries.length === 0) return '<div style="text-align:center;color:var(--t3);padding:40px">Aucune donnée</div>';
   const max = entries[0][1];
   const total = entries.reduce((a, [, v]) => a + v, 0);
-  const palette = ['#4f8ff7','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1','#14b8a6','#d946ef','#a855f7','#22d3ee'];
+  const palette = ['#772471','#FF1E63','#524FA1','#0057B8','#C11F39','#B07AAE','#F58BB0','#2E8B8B','#7E9A3E','#E08A2E','#9A5BA5','#F27CA2','#3AA0A0','#5B7FC4'];
   return '<div style="display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto">' +
     entries.map(([ag, v], i) => {
       const pct = Math.round(v / total * 100);
@@ -11143,7 +11143,7 @@ function renderConcurrence() {
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <span style="font-size:13px;color:var(--t2)"><strong>${total}</strong> concurrent(s) — <strong>${totalLies}</strong> liaison(s) avec des clients</span>
       <button class="btn btn-primary" onclick="addConcurrent()">+ Nouveau concurrent</button>
-      <button class="btn" onclick="openConcurrentTarget()" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;border:none">🎯 Cibler concurrents</button>
+      <button class="btn" onclick="openConcurrentTarget()" style="background:linear-gradient(135deg,#772471,#FF1E63);color:#fff;border:none">🎯 Cibler concurrents</button>
     </div>
     <input type="text" id="cn-local-q" placeholder="Rechercher (nom, SIREN, ville...)" value="${_cnLocalFilter || ''}" oninput="_cnLocalFilter=this.value;renderCnLocalList()" style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;width:240px;background:var(--card);color:var(--t1)">
   </div>
@@ -11405,9 +11405,9 @@ function renderCnLocalList() {
       ? '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--t3)">Aucun concurrent enregistré.</td></tr>'
       : list.map(c => {
           const nbClients = concurrentsClientCount[c.id] || 0;
-          const agencesHTML = Array.isArray(c.agences) && c.agences.length ? c.agences.map(a => '<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:rgba(99,102,241,.15);color:#6366f1;font-size:10px;font-weight:600;margin-right:3px">'+a+'</span>').join('') : '—';
+          const agencesHTML = Array.isArray(c.agences) && c.agences.length ? c.agences.map(a => '<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:rgba(99,102,241,.15);color:#524FA1;font-size:10px;font-weight:600;margin-right:3px">'+a+'</span>').join('') : '—';
           return '<tr>' +
-            '<td><a href="#" onclick="showConcurrentFiche(\''+c.id+'\');return false" style="color:#6366f1;font-weight:700;text-decoration:none" title="Ouvrir la fiche d\'analyse">'+(c.nom||'')+'</a></td>' +
+            '<td><a href="#" onclick="showConcurrentFiche(\''+c.id+'\');return false" style="color:#524FA1;font-weight:700;text-decoration:none" title="Ouvrir la fiche d\'analyse">'+(c.nom||'')+'</a></td>' +
             '<td style="font-size:12px;color:var(--t2)">'+(c.raison_sociale || '—')+'</td>' +
             '<td class="mono" style="font-size:12px">'+(c.siren || '—')+'</td>' +
             '<td class="mono" style="font-size:12px">'+(c.ape || '—')+'</td>' +
@@ -11516,7 +11516,7 @@ function _cnfRender(c, rows) {
             <th style="padding:6px 8px">Client</th><th style="padding:6px 8px">Ville</th><th style="padding:6px 8px">Dpt</th><th style="padding:6px 8px">Statut</th><th style="padding:6px 8px">Commercial GPH</th><th style="padding:6px 8px">Métiers concurrence</th><th style="padding:6px 8px;text-align:right">CA</th><th style="padding:6px 8px">Notes</th>
           </tr></thead>
           <tbody>${rows.slice().sort((a, b) => (Number(b.ca) || 0) - (Number(a.ca) || 0)).map(r => `<tr style="border-bottom:1px solid var(--border)">
-            <td style="padding:6px 8px"><a href="#" onclick="cnfClose();showClient('${r.id}');return false" style="color:#6366f1;text-decoration:none;font-weight:600">${cmdEsc(r.name || r.id)}</a></td>
+            <td style="padding:6px 8px"><a href="#" onclick="cnfClose();showClient('${r.id}');return false" style="color:#524FA1;text-decoration:none;font-weight:600">${cmdEsc(r.name || r.id)}</a></td>
             <td style="padding:6px 8px">${cmdEsc(r.city || '—')}</td>
             <td style="padding:6px 8px">${cmdEsc(r.departement || '—')}</td>
             <td style="padding:6px 8px">${stLbl[r.status] || r.status || '—'}</td>
@@ -11530,7 +11530,7 @@ function _cnfRender(c, rows) {
     </div>`;
 
   const bar = (id, obj, color, horiz) => { const e = Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, 12); _cnfMkChart(id, { type: 'bar', data: { labels: e.map(x => x[0]), datasets: [{ data: e.map(x => x[1]), backgroundColor: color }] }, options: { indexAxis: horiz ? 'y' : 'x', plugins: { legend: { display: false } }, maintainAspectRatio: false, scales: { x: { ticks: { font: { size: 10 } } }, y: { ticks: { font: { size: 10 } } } } } }); };
-  bar('cnfDept', byDept, '#6366f1');
+  bar('cnfDept', byDept, '#524FA1');
   bar('cnfComm', byComm, '#10b981', true);
   const mE = Object.entries(byMetier).sort((a, b) => b[1] - a[1]);
   _cnfMkChart('cnfMetier', { type: 'doughnut', data: { labels: mE.map(e => e[0]), datasets: [{ data: mE.map(e => e[1]), backgroundColor: CCA_PALETTE }] }, options: { plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } }, maintainAspectRatio: false } });
@@ -11755,7 +11755,7 @@ async function renderClientConcurrents(clientId) {
   const rows = liens.map(l => {
     const c = concurrentsCache.find(x => x.id === l.concurrent_id);
     if (!c) return '';
-    const metiersHTML = Array.isArray(l.metiers) ? l.metiers.map(m => `<span style="display:inline-block;padding:1px 7px;border-radius:3px;background:rgba(99,102,241,.15);color:#6366f1;font-size:11px;font-weight:600;margin-right:3px">${m}</span>`).join('') : '<span style="color:var(--t3);font-size:12px">—</span>';
+    const metiersHTML = Array.isArray(l.metiers) ? l.metiers.map(m => `<span style="display:inline-block;padding:1px 7px;border-radius:3px;background:rgba(99,102,241,.15);color:#524FA1;font-size:11px;font-weight:600;margin-right:3px">${m}</span>`).join('') : '<span style="color:var(--t3);font-size:12px">—</span>';
     const pappersLink = (c.siren||c.siret) ? `<a href="https://www.pappers.fr/entreprise/${c.siren||c.siret}" target="_blank" rel="noopener" style="text-decoration:none;color:#3b82f6;margin-right:6px" title="Pappers">📋</a>` : '';
     return `<tr>
       <td><strong>${c.nom}</strong>${c.ville ? ' <span style="color:var(--t3);font-size:11px">— '+c.ville+'</span>' : ''}</td>
@@ -11867,7 +11867,7 @@ function renderClients(filter='all') {
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <span style="font-size:13px;color:var(--t2)">${clientsTotalCount} clients/prospects</span>
       <button class="btn btn-primary" onclick="_ncReturnCtx=null;openModal('new-client')">+ Nouveau client/prospect</button>
-      <button class="btn" onclick="openModal('prospect-target')" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;border:none">🎯 Cibler prospects</button>
+      <button class="btn" onclick="openModal('prospect-target')" style="background:linear-gradient(135deg,#772471,#FF1E63);color:#fff;border:none">🎯 Cibler prospects</button>
       <button class="btn" onclick="exportCSV('clients')">⤓ Export CSV</button>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
@@ -11890,10 +11890,10 @@ function renderClients(filter='all') {
     </summary>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;border-top:1px solid var(--border)">
       <span style="font-size:11px;color:var(--t3);font-weight:600">Filtres :</span>
-      <label title="Masquer les entreprises radiées (état INSEE)" style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:4px 8px;border:1px solid ${clientsHideRadiees?'#f59e0b':'var(--border)'};border-radius:6px;background:${clientsHideRadiees?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
+      <label title="Masquer les entreprises radiées (état INSEE)" style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:4px 8px;border:1px solid ${clientsHideRadiees?'#FF1E63':'var(--border)'};border-radius:6px;background:${clientsHideRadiees?'rgba(255,30,99,0.13)':'var(--card)'};color:var(--t1)">
         <input type="checkbox" ${clientsHideRadiees ? 'checked' : ''} onchange="clientsHideRadiees=this.checked;loadClientsPage(0,clientsLetter,clientsSearch)"> Masquer radiées
       </label>
-      <select onchange="clientsFilterPlus=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" title="Comptes clés (++)" style="padding:5px 8px;border:1px solid ${clientsFilterPlus?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterPlus?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
+      <select onchange="clientsFilterPlus=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" title="Comptes clés (++)" style="padding:5px 8px;border:1px solid ${clientsFilterPlus?'#FF1E63':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterPlus?'rgba(255,30,99,0.13)':'var(--card)'};color:var(--t1)">
         <option value="" ${!clientsFilterPlus?'selected':''}>— ++ (clés) —</option>
         <option value="yes" ${clientsFilterPlus==='yes'?'selected':''}>✓ Comptes clés (++)</option>
         <option value="no" ${clientsFilterPlus==='no'?'selected':''}>✗ Sans ++</option>
@@ -11902,12 +11902,12 @@ function renderClients(filter='all') {
       ${_mkMs('cfNovam', 'Commercial Novam', (clientsFilterOpts.novam || []).map(o => ({ v: o.key, label: o.label })), clientsFilterNovam, v => clientsFilterNovam = v)}
       ${_mkMs('cfGph', 'Commercial GPH', (clientsFilterOpts.gph || []).map(o => ({ v: o.key, label: o.label })), clientsFilterGph, v => clientsFilterGph = v)}
       ${_mkMs('cfStatut', 'Statut', [{ v: 'prospect', label: 'Prospect' }, { v: 'actif', label: 'Actif' }, { v: 'dormant', label: 'Dormant' }, { v: 'nouveau', label: 'Nouveau' }], clientsFilterStatut, v => clientsFilterStatut = v)}
-      <select onchange="clientsFilterSync=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterSync?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterSync?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
+      <select onchange="clientsFilterSync=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterSync?'#FF1E63':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterSync?'rgba(255,30,99,0.13)':'var(--card)'};color:var(--t1)">
         <option value="" ${!clientsFilterSync?'selected':''}>— Akuiteo —</option>
         <option value="yes" ${clientsFilterSync==='yes'?'selected':''}>🟢 Synchronisés</option>
         <option value="no" ${clientsFilterSync==='no'?'selected':''}>🟠 Non synchro</option>
       </select>
-      <select onchange="clientsFilterCatRole=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" title="Rôle ciblé par le filtre catégorie" style="padding:5px 8px;border:1px solid ${clientsFilterCatRole!=='client'?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterCatRole!=='client'?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
+      <select onchange="clientsFilterCatRole=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" title="Rôle ciblé par le filtre catégorie" style="padding:5px 8px;border:1px solid ${clientsFilterCatRole!=='client'?'#FF1E63':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterCatRole!=='client'?'rgba(255,30,99,0.13)':'var(--card)'};color:var(--t1)">
         <option value="client" ${clientsFilterCatRole==='client'?'selected':''}>Rôle : Client facturé</option>
         <option value="apporteur" ${clientsFilterCatRole==='apporteur'?'selected':''}>Rôle : Apporteur</option>
         <option value="architecte" ${clientsFilterCatRole==='architecte'?'selected':''}>Rôle : Architecte</option>
@@ -11925,17 +11925,17 @@ function renderClients(filter='all') {
       ${_mkMs('cfType', 'Type', _msStr(clientsFilterOpts.type), clientsFilterType, v => clientsFilterType = v)}
       ${_mkMs('cfGroupe', 'Groupe', _msStr(clientsFilterOpts.groupe), clientsFilterGroupe, v => clientsFilterGroupe = v)}
       ${_mkMs('cfOrigine', 'Origine', _msStr(clientsFilterOpts.origine), clientsFilterOrigine, v => clientsFilterOrigine = v)}
-      <select onchange="clientsFilterSiret=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterSiret?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterSiret?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
+      <select onchange="clientsFilterSiret=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterSiret?'#FF1E63':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterSiret?'rgba(255,30,99,0.13)':'var(--card)'};color:var(--t1)">
         <option value="" ${!clientsFilterSiret?'selected':''}>— SIRET —</option>
         <option value="yes" ${clientsFilterSiret==='yes'?'selected':''}>✓ Avec SIRET</option>
         <option value="no" ${clientsFilterSiret==='no'?'selected':''}>✗ Sans SIRET</option>
       </select>
-      <select onchange="clientsFilterSiege=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterSiege?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterSiege?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
+      <select onchange="clientsFilterSiege=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterSiege?'#FF1E63':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterSiege?'rgba(255,30,99,0.13)':'var(--card)'};color:var(--t1)">
         <option value="" ${!clientsFilterSiege?'selected':''}>— Établissement —</option>
         <option value="siege" ${clientsFilterSiege==='siege'?'selected':''}>Siège social</option>
         <option value="etablissement" ${clientsFilterSiege==='etablissement'?'selected':''}>Établissement secondaire</option>
       </select>
-      <select onchange="clientsFilterReseauxPro=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterReseauxPro?'#f59e0b':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterReseauxPro?'rgba(245,158,11,0.15)':'var(--card)'};color:var(--t1)">
+      <select onchange="clientsFilterReseauxPro=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterReseauxPro?'#FF1E63':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterReseauxPro?'rgba(255,30,99,0.13)':'var(--card)'};color:var(--t1)">
         <option value="" ${!clientsFilterReseauxPro?'selected':''}>— Réseau pro —</option>
         ${clientsFilterOpts.reseauxPro.map(v => '<option value="' + v.replace(/"/g,'&quot;') + '"' + (clientsFilterReseauxPro===v?' selected':'') + '>' + v + '</option>').join('')}
       </select>
@@ -13009,7 +13009,7 @@ async function ajouterEtablissementsSirene() {
   btn.disabled = true;
   btn.textContent = 'Création en cours…';
 
-  const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
+  const colors = ['#4f8ff7,#3b73d9','#772471,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
   const name = c.raison_sociale || c.name || 'Sans nom';
   const ini = name.split(' ').map(w => (w || '')[0]).join('').substring(0, 2).toUpperCase();
   let created = 0, errors = 0;
@@ -13609,7 +13609,7 @@ function _ccaMkChart(id, config) {
   ccaCharts[id] = new Chart(ctx, config);
 }
 
-const CCA_PALETTE = ['#4f8ff7', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#ef4444', '#84cc16', '#6366f1', '#f97316'];
+const CCA_PALETTE = ['#772471', '#FF1E63', '#524FA1', '#0057B8', '#C11F39', '#B07AAE', '#F58BB0', '#2E8B8B', '#7E9A3E', '#E08A2E'];
 function _ccaBar(id, labels, data, color, horizontal) {
   _ccaMkChart(id, {
     type: 'bar',
@@ -13636,7 +13636,7 @@ function _ccaBuildCharts(rows, t) {
   // 3) Par type de mission (top 10)
   const byPresta = _ccaSumBy(rows, r => r.type_prestation || '—');
   const prestaSorted = Object.entries(byPresta).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  _ccaBar('ccaChartPresta', prestaSorted.map(e => e[0]), prestaSorted.map(e => e[1]), '#8b5cf6', true);
+  _ccaBar('ccaChartPresta', prestaSorted.map(e => e[0]), prestaSorted.map(e => e[1]), '#772471', true);
   // 4) Par métier (doughnut)
   const byMetier = _ccaSumBy(rows, r => r.metier || '—');
   const mE = Object.entries(byMetier).sort((a, b) => b[1] - a[1]);
@@ -14254,7 +14254,7 @@ function renderClientDetail() {
       detailRow('Réseaux pro', (() => {
         const rp = c.reseaux_pro;
         if (!rp || !Array.isArray(rp) || rp.length === 0) return '—';
-        return rp.map(r => '<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:#6366f122;color:#6366f1;margin:1px 4px 1px 0">' + r + '</span>').join('');
+        return rp.map(r => '<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:#524FA122;color:#524FA1;margin:1px 4px 1px 0">' + r + '</span>').join('');
       })()),
       '<details class="acc" style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px"><summary style="cursor:pointer;user-select:none;font-weight:700;color:var(--accent);font-size:12px">Tarification GPH</summary><div style="margin-top:4px">'
         + detailRow('Mode de tarification GPH', c.mode_tarification_name || resolvePricingMethod(c.mode_tarification) || '—')
@@ -15291,7 +15291,7 @@ function renderAffaireDetail() {
       <div style="font-size:11px;color:var(--t3)">Factures (${fmt(totalFactHT)})</div>
     </div></div>
     <div class="card"><div class="card-body" style="text-align:center;padding:12px">
-      <div style="font-size:20px;font-weight:700;color:#6366f1">${crsLies.length}</div>
+      <div style="font-size:20px;font-weight:700;color:#524FA1">${crsLies.length}</div>
       <div style="font-size:11px;color:var(--t3)">Comptes-rendus</div>
     </div></div>
   </div>
@@ -16692,7 +16692,7 @@ async function imxImportSocietes() {
   const mapped = _imxOutSoc.map(s => imxApplyMapping('soc', s));
   if (!confirm('Importer ' + mapped.length + ' sociétés dans le CRM ?\nLes existants (legacy_id / code / code_codial) seront mis à jour.')) return;
   showSyncLoading(true); setSyncText('Préparation...');
-  const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
+  const colors = ['#4f8ff7,#3b73d9','#772471,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
   // Construire la map des identifiants existants : legacy_id, code, code_codial → id
   const existing = {}; // clé de matching → id Supabase
   const allKeys = [...new Set(mapped.flatMap(s => [s.legacy_id, s.code, s.code_codial].filter(Boolean)))];
@@ -17531,7 +17531,7 @@ function renderEnrichSiren() {
   <div style="background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(139,92,246,.05));border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
     <div style="font-weight:700;font-size:14px;color:var(--t1);margin-bottom:4px">🔎 SIRETAGE — Enrichissement SIREN / SIRET</div>
     <div style="font-size:12px;color:var(--t3);max-width:920px;line-height:1.5">
-      Cherche dans <a href="https://recherche-entreprises.api.gouv.fr" target="_blank" style="color:#6366f1">recherche-entreprises.api.gouv.fr</a>
+      Cherche dans <a href="https://recherche-entreprises.api.gouv.fr" target="_blank" style="color:#524FA1">recherche-entreprises.api.gouv.fr</a>
       les fiches clients/prospects qui n'ont pas de SIRET. Pour chaque match, calcule un score de confiance basé sur le nom, le code
       postal et la ville. Tu valides ou rejettes chaque proposition (et tu peux pousser à Akuiteo dans la foulée).
     </div>
@@ -18965,8 +18965,8 @@ function renderProceduresColl() {
     <div style="font-weight:700;font-size:14px;color:var(--t1);margin-bottom:4px">⚠ Veille procédures collectives + état INSEE</div>
     <div style="font-size:12px;color:var(--t3);max-width:920px;line-height:1.5">
       Pour chaque client/prospect avec SIREN, l'outil interroge en parallèle :
-      <br>• <strong>BODACC</strong> (<a href="https://bodacc-datadila.opendatasoft.com" target="_blank" style="color:#6366f1">annonces officielles</a>) — détecte sauvegarde, RJ, liquidation, plans, jugements de clôture
-      <br>• <strong>INSEE</strong> (<a href="https://recherche-entreprises.api.gouv.fr" target="_blank" style="color:#6366f1">recherche-entreprises</a>) — détecte les fiches <strong>radiées</strong> (état "C") avec date de fermeture
+      <br>• <strong>BODACC</strong> (<a href="https://bodacc-datadila.opendatasoft.com" target="_blank" style="color:#524FA1">annonces officielles</a>) — détecte sauvegarde, RJ, liquidation, plans, jugements de clôture
+      <br>• <strong>INSEE</strong> (<a href="https://recherche-entreprises.api.gouv.fr" target="_blank" style="color:#524FA1">recherche-entreprises</a>) — détecte les fiches <strong>radiées</strong> (état "C") avec date de fermeture
       <br><br><strong>3 modes</strong> :
       <br>🔍 <strong>Veille (page courante)</strong> : analyse 25 fiches puis demande validation manuelle pour chaque (bouton "📝 Enregistrer")
       <br>🔄 <strong>Sync auto (>7j)</strong> : analyse + enregistre automatiquement toutes les fiches non vérifiées depuis 7 jours (mode incrémental, idéal pour usage régulier)
@@ -20694,7 +20694,7 @@ function renderObjectifs() {
 
 // ═══ COMPTES RENDUS ═══
 function crTypeBadge(type) {
-  const map = {rdv_ext:'#4f8ff7',rdv_int:'#6366f1',salon_foire:'#f59e0b',tel:'#10b981',visio:'#8b5cf6',autre:'#94a3b8'};
+  const map = {rdv_ext:'#4f8ff7',rdv_int:'#524FA1',salon_foire:'#f59e0b',tel:'#10b981',visio:'#772471',autre:'#94a3b8'};
   const labels = {rdv_ext:'RDV EXT.',rdv_int:'RDV INT.',salon_foire:'SALON-FOIRE',tel:'TEL.',visio:'VISIO.',autre:'AUTRE'};
   return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;color:#fff;background:${map[type]||map.autre}">${labels[type]||type||'Autre'}</span>`;
 }
@@ -20834,7 +20834,7 @@ function selectCROpp(id, label) { _crSelectedOpp = { id, label }; const dd = doc
 function removeCROpp() { _crSelectedOpp = null; const dd = document.getElementById('crOppDropdown'); if (dd) dd.style.display = 'none'; renderCROppChip(); }
 function renderCROppChip() {
   const el = document.getElementById('crOppChip'); if (!el) return;
-  el.innerHTML = _crSelectedOpp ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#8b5cf622;color:#7c3aed;border:1px solid #8b5cf644">🎯 ${cmdEsc(_crSelectedOpp.label)} <span style="cursor:pointer;opacity:0.6;font-size:14px" onclick="removeCROpp()">&times;</span></span>` : '';
+  el.innerHTML = _crSelectedOpp ? `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#77247122;color:#7c3aed;border:1px solid #77247144">🎯 ${cmdEsc(_crSelectedOpp.label)} <span style="cursor:pointer;opacity:0.6;font-size:14px" onclick="removeCROpp()">&times;</span></span>` : '';
 }
 function _crOppFromId(akId) {
   if (!akId) return null;
@@ -21643,7 +21643,7 @@ function renderCRClientChips() {
   const el = document.getElementById('crClientChips');
   if (!el) return;
   el.innerHTML = _crSelectedClients.map((c, i) =>
-    `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#6366f122;color:#6366f1;border:1px solid #6366f144">`
+    `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#524FA122;color:#524FA1;border:1px solid #524FA144">`
     + c.name + ` <span style="cursor:pointer;opacity:0.6;font-size:14px" onclick="removeCRClient(${i})">&times;</span></span>`
   ).join('');
 }
@@ -24928,7 +24928,7 @@ async function renderObjectifsAgences() {
       '</tr></thead><tbody>' +
       rows.map(o => `<tr id="obj-row-${o.id}" style="border-bottom:1px solid var(--border)">
         <td style="padding:6px 10px;font-weight:500">${o.agence}</td>
-        <td style="padding:6px 10px"><span style="padding:2px 8px;border-radius:4px;background:${o.metier==='SOL'?'rgba(245,158,11,.2)':'rgba(99,102,241,.2)'};color:${o.metier==='SOL'?'#f59e0b':'#6366f1'};font-size:11px;font-weight:600">${o.metier}</span></td>
+        <td style="padding:6px 10px"><span style="padding:2px 8px;border-radius:4px;background:${o.metier==='SOL'?'rgba(245,158,11,.2)':'rgba(99,102,241,.2)'};color:${o.metier==='SOL'?'#f59e0b':'#524FA1'};font-size:11px;font-weight:600">${o.metier}</span></td>
         <td style="padding:6px 10px;font-size:12px">01/01/${o.annee} → 31/12/${o.annee}</td>
         <td style="padding:6px 10px;text-align:right;font-family:monospace;font-weight:600">${fmt(o.objectif_ht)}</td>
         <td style="padding:6px 10px;text-align:right;white-space:nowrap">
@@ -25085,7 +25085,7 @@ async function renderClientObjectifs(clientId) {
       return `<tr id="cobj-row-${o.id}" style="border-bottom:1px solid var(--border)">
         <td style="padding:6px 10px">${o.annee}</td>
         <td style="padding:6px 10px;font-weight:500">${o.agence}</td>
-        <td style="padding:6px 10px"><span style="padding:2px 8px;border-radius:4px;background:${o.metier==='SOL'?'rgba(245,158,11,.2)':o.metier==='EXE'?'rgba(99,102,241,.2)':'rgba(107,114,128,.2)'};color:${o.metier==='SOL'?'#f59e0b':o.metier==='EXE'?'#6366f1':'#6b7280'};font-size:11px;font-weight:600">${o.metier}</span></td>
+        <td style="padding:6px 10px"><span style="padding:2px 8px;border-radius:4px;background:${o.metier==='SOL'?'rgba(245,158,11,.2)':o.metier==='EXE'?'rgba(99,102,241,.2)':'rgba(107,114,128,.2)'};color:${o.metier==='SOL'?'#f59e0b':o.metier==='EXE'?'#524FA1':'#6b7280'};font-size:11px;font-weight:600">${o.metier}</span></td>
         <td style="padding:6px 10px;text-align:right;font-family:monospace">${fmt(o.objectif_ht)}</td>
         <td style="padding:6px 10px;text-align:right;font-family:monospace;font-weight:600">${fmt(o.ca)}</td>
         <td style="padding:6px 10px">
@@ -25924,7 +25924,7 @@ function _renderCallPanel(contactName, clientName) {
     const dur = String(Math.floor(_callSeconds / 60)).padStart(2, '0') + ':' + String(_callSeconds % 60).padStart(2, '0');
     panel.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-        <div style="width:32px;height:32px;border-radius:50%;background:#8b5cf6;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px">✦</div>
+        <div style="width:32px;height:32px;border-radius:50%;background:#772471;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px">✦</div>
         <div style="flex:1">
           <div style="font-weight:600;font-size:13px;color:var(--t1)">Résumé d'appel — ${contactName}</div>
           <div style="font-size:11px;color:var(--t3)">${clientName} · Durée : ${dur}</div>
@@ -25940,7 +25940,7 @@ function _renderCallPanel(contactName, clientName) {
           <button id="callDictStopBtn" onclick="stopCallDictation()" class="btn" style="font-size:12px;padding:6px 12px;display:none;color:var(--red)">⏹️ Arrêter</button>
           <span id="callDictInterim" style="font-size:11px;color:var(--t3);font-style:italic;align-self:center"></span>
         </div>
-        <button onclick="callGenerateCR()" class="btn btn-primary" style="font-size:12px;padding:8px 16px;background:#8b5cf6;font-weight:600">✦ Générer CR</button>
+        <button onclick="callGenerateCR()" class="btn btn-primary" style="font-size:12px;padding:8px 16px;background:#772471;font-weight:600">✦ Générer CR</button>
       </div>`;
   }
   document.body.appendChild(panel);
@@ -28237,7 +28237,7 @@ async function submitNewClient() {
     setStep('Création du client « ' + name + ' »…', 20);
     const id = name.toLowerCase().replace(/[^a-z0-9]/g,'_').substring(0,20) + '_' + String(Date.now()).slice(-4);
     const ini = name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
-    const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
+    const colors = ['#4f8ff7,#3b73d9','#772471,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
     await dbInsert('clients', {
       id, name,
       code: document.getElementById('nc-code').value.trim() || `CLI-${String(Date.now()).slice(-4)}`,
@@ -28943,7 +28943,7 @@ function renderReseauxProChips(containerId) {
   const el = document.getElementById(containerId);
   if (!el) return;
   el.innerHTML = _rpSelected.map((r, i) =>
-    '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#6366f122;color:#6366f1;border:1px solid #6366f144">'
+    '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:600;background:#524FA122;color:#524FA1;border:1px solid #524FA144">'
     + r + ' <span style="cursor:pointer;opacity:0.6;font-size:14px" onclick="removeReseauPro(' + i + ',\'' + containerId + '\')">&times;</span></span>'
   ).join('');
 }
@@ -29402,7 +29402,7 @@ async function syncAkuiteoQuick() {
     const { data: existingClients } = await _sbRetry(() => sb.from('clients').select('id,akuiteo_id'), 'read existingClients');
     const existingMap = {};
     for (const ec of (existingClients || [])) { if (ec.akuiteo_id) existingMap[ec.akuiteo_id] = ec.id; }
-    const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626'];
+    const colors = ['#4f8ff7,#3b73d9','#772471,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626'];
 
     // Charger les exclusions (clients supprimés du CRM à ne pas re-créer)
     const { data: excRows } = await _sbRetry(() => sb.from('sync_exclusions').select('akuiteo_id'), 'read exclusions');
@@ -29750,7 +29750,7 @@ async function syncAkuiteo() {
     }
 
     let created = 0, updated = 0;
-    const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626'];
+    const colors = ['#4f8ff7,#3b73d9','#772471,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626'];
 
     // Charger tous les clients existants (avec retry — table volumineuse)
     const { data: existingClients } = await _sbRetry(() => sb.from('clients').select('id,akuiteo_id'), 'read existingClients');
@@ -31197,7 +31197,7 @@ function buildLiensHTML(entreprise, dirigeantMap, allResults) {
   // 1. Dirigeants personne morale (holdings, sociétés mères)
   const holdings = dirs.filter(d => d.type_dirigeant === 'personne morale' && d.siren);
   if (holdings.length > 0) {
-    blocs.push(holdings.map(h => `<a href="https://www.pappers.fr/entreprise/${h.siren}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="display:inline-block;padding:2px 8px;border-radius:4px;background:rgba(99,102,241,.15);color:#6366f1;font-size:10px;font-weight:600;text-decoration:none;margin-right:4px;margin-top:2px" title="${h.qualite || ''}">🏢 ${h.denomination || h.siren} ${h.qualite ? '· '+h.qualite : ''}</a>`).join(''));
+    blocs.push(holdings.map(h => `<a href="https://www.pappers.fr/entreprise/${h.siren}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="display:inline-block;padding:2px 8px;border-radius:4px;background:rgba(99,102,241,.15);color:#524FA1;font-size:10px;font-weight:600;text-decoration:none;margin-right:4px;margin-top:2px" title="${h.qualite || ''}">🏢 ${h.denomination || h.siren} ${h.qualite ? '· '+h.qualite : ''}</a>`).join(''));
   }
   // 2. Personnes physiques avec d'autres entreprises dans les résultats
   const linkedCompanies = new Set();
@@ -31240,7 +31240,7 @@ async function addSelectedProspects() {
   const enrich = getAkuiteoFieldsFromModal('pt');
   const enrichClean = {};
   for (const [k, v] of Object.entries(enrich)) { if (v != null && v !== '') enrichClean[k] = v; }
-  const colors = ['#4f8ff7,#3b73d9','#8b5cf6,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
+  const colors = ['#4f8ff7,#3b73d9','#772471,#7c3aed','#f59e0b,#d97706','#10b981,#059669','#ef4444,#dc2626','#06b6d4,#0891b2'];
   let added = 0;
   try {
     for (const cb of checks) {
