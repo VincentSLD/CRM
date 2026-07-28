@@ -10996,12 +10996,12 @@ async function renderDashObjectifsAgences() {
     el.innerHTML = '<div style="text-align:center;padding:14px">Aucun objectif pour les agences sélectionnées.</div>';
     return;
   }
-  // Charger toutes les commandes pour calcul du CA réalisé
-  let allCmds = [], off = 0;
+  // Charger toutes les factures pour calcul du CA FACTURÉ réalisé (avancement basé sur le CA facturé, pas le commandé)
+  let allFacts = [], off = 0;
   while (true) {
-    const { data } = await sb.from('commandes').select('societe,date,montant,custom_data').range(off, off+999);
+    const { data } = await sb.from('factures').select('societe,date,montant,custom_data').range(off, off+999);
     if (!data || data.length === 0) break;
-    allCmds = allCmds.concat(data);
+    allFacts = allFacts.concat(data);
     if (data.length < 1000) break;
     off += 1000;
   }
@@ -11009,15 +11009,15 @@ async function renderDashObjectifsAgences() {
     const yearStart = o.annee + '-01-01';
     const yearEnd = (o.annee + 1) + '-01-01';
     let ca = 0;
-    for (const cmd of allCmds) {
-      if ((cmd.societe || '') !== o.agence) continue;
-      const date = (cmd.date || '').substring(0, 10);
+    for (const f of allFacts) {
+      if ((f.societe || '') !== o.agence) continue;
+      const date = (f.date || '').substring(0, 10);
       if (date < yearStart || date >= yearEnd) continue;
       if (o.metier === 'GLOBAL') {
-        ca += Number(cmd.montant || 0);
+        ca += Number(f.montant || 0);
       } else {
-        const tm = cmd.custom_data?.['1-alpha06']?.value;
-        if (tm && _missionMapping[tm] === o.metier) ca += Number(cmd.montant || 0);
+        const tm = f.custom_data?.['1-alpha06']?.value;
+        if (tm && _missionMapping[tm] === o.metier) ca += Number(f.montant || 0);
       }
     }
     return { ...o, ca };
