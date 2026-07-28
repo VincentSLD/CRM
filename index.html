@@ -11231,7 +11231,7 @@ function renderDashChartAgence(factures) {
       const wPct = Math.round(v / max * 100);
       const color = palette[i % palette.length];
       return `<div style="display:flex;align-items:center;gap:8px;font-size:12px">
-        <span style="width:70px;flex-shrink:0;font-weight:600">${ag}</span>
+        <span style="width:118px;flex-shrink:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${agenceLabel(ag)}">${agenceLabel(ag)}</span>
         <div style="flex:1;height:18px;background:var(--bg-3);border-radius:4px;position:relative;overflow:hidden">
           <div style="width:${wPct}%;height:100%;background:${color};border-radius:4px"></div>
           <div style="position:absolute;top:0;left:6px;line-height:18px;font-size:10px;color:var(--t1);font-weight:600">${fmt(v)}</div>
