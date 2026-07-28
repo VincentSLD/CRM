@@ -12765,7 +12765,7 @@ async function switchEtablissement(newSiret) {
 
 // ═══ Avatar société : carré bicolore (Catégorie ABC × Statut) + cadre rose vif si grand compte « ++ » ═══
 // Moitié haut-gauche = catégorie ABC, moitié bas-droite = statut. Aucun texte dans le carré.
-const _ABC_COLORS = { A: '#772471', B: '#2f6fed', C: '#8a94a6' };                       // A stratégique / B tactique / C listé
+const _ABC_COLORS = { A: '#772471', B: '#A64D9E', C: '#D9A9D3' };                        // A stratégique (violet foncé) / B tactique (violet moyen) / C listé (mauve clair)
 // Couleurs du statut (carré) — mêmes familles que le texte du statut mais plus vives/claires pour ressortir à l'écran
 const _STATUT_COLORS = { actif: '#22c55e', dormant: '#ef4444', prospect: '#f59e0b', nouveau: '#3b82f6' };
 const _AV_NEUTRAL = '#d1d5db';                                                           // non renseigné
@@ -14328,11 +14328,12 @@ function renderClientDetail() {
         if (!ags.length) return '—';
         return ags.map(ag => {
           const val = cc[ag] || '';
-          const bg = val.startsWith('A') ? '#3b82f6' : val.startsWith('B') ? '#f59e0b' : '#6b7280';
+          const bg = val.startsWith('A') ? '#772471' : val.startsWith('B') ? '#A64D9E' : '#D9A9D3';
+          const fg = (val && val.startsWith('C')) ? '#4a1e46' : '#fff';
           const rank = rg[ag];
           const plusBadge = pl[ag] ? ' <span style="background:#fff;color:#dc2626;border-radius:3px;padding:0 3px;font-weight:800;margin-left:3px" title="Grand compte">++</span>' : '';
           const label = val ? (val + (rank ? ' (' + rank + ')' : '')) : 'Grand compte';
-          return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + (val ? bg : '#dc2626') + ';color:#fff;margin:1px 4px 1px 0">' + ag + ' : ' + label + plusBadge + '</span>';
+          return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + (val ? bg : '#dc2626') + ';color:' + (val ? fg : '#fff') + ';margin:1px 4px 1px 0">' + ag + ' : ' + label + plusBadge + '</span>';
         }).join('');
       })()),
       ...(() => {
