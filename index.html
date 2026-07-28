@@ -551,7 +551,7 @@ details.acc[open] > summary::before { transform: rotate(90deg); }
 .btn {
   padding: 7px 14px;
   border-radius: var(--r-sm);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(36,17,48,0.45);
   background: var(--bg-3);
   color: var(--t2);
   font-size: 12px;
@@ -565,7 +565,7 @@ details.acc[open] > summary::before { transform: rotate(90deg); }
   white-space: nowrap;
 }
 
-.btn:hover { color: var(--t1); border-color: rgba(26,26,26,0.3); background: rgba(26,26,26,0.05); }
+.btn:hover { color: var(--t1); border-color: rgba(36,17,48,0.7); background: rgba(36,17,48,0.06); }
 .btn.active { background: var(--yellow-pale); color: #1a1a1a; border-color: rgba(119,36,113,0.4); }
 
 .btn-primary { background: linear-gradient(135deg, var(--ink) 0%, var(--ink-2) 100%); color: #fff; border: 2px solid var(--magenta); font-weight: 700; letter-spacing: 0.02em; }
@@ -2207,7 +2207,7 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="card-header"><div class="card-title">Importance du compte <span style="font-weight:400;font-size:11px">(par agence)</span></div></div>
         <div class="card-body">
           <div id="nc-categorie-compte" style="display:flex;gap:12px;flex-wrap:wrap"></div>
-          <div style="font-size:11px;color:var(--t3);margin-top:6px">A/B/C calculé automatiquement par la catégorisation ABC. Cochez <strong>++</strong> pour un compte clé (très important, spécificités).</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:6px">A/B/C calculé automatiquement par la catégorisation ABC. Cochez <strong>++</strong> pour un grand compte (très important, spécificités).</div>
         </div>
       </div>
       <!-- Objectifs annuels -->
@@ -2774,7 +2774,7 @@ tbody tr:last-child td { border-bottom: none; }
         <div class="card-header"><div class="card-title">Importance du compte <span style="font-weight:400;font-size:11px">(par agence)</span></div></div>
         <div class="card-body">
           <div id="ec-categorie-compte" style="display:flex;gap:12px;flex-wrap:wrap"></div>
-          <div style="font-size:11px;color:var(--t3);margin-top:6px">A/B/C calculé automatiquement par la catégorisation ABC. Cochez <strong>++</strong> pour un compte clé (très important, spécificités).</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:6px">A/B/C calculé automatiquement par la catégorisation ABC. Cochez <strong>++</strong> pour un grand compte (très important, spécificités).</div>
         </div>
       </div>
       <!-- Habitudes Administratives -->
@@ -3194,7 +3194,7 @@ let clientsFilterCatCompte = [];
 let clientsFilterCatRole = 'client'; // 'client' | 'apporteur' | 'architecte' | 'gros_oeuvre' (colonne ciblée par le filtre Cat. compte)
 let clientsFilterReseauxPro = '';
 let clientsHideRadiees = true; // masquer les entreprises radiées INSEE (etat_insee = 'C') — coché par défaut
-let clientsFilterPlus = ''; // '' | 'yes' | 'no' — comptes clés (++)
+let clientsFilterPlus = ''; // '' | 'yes' | 'no' — grands comptes (++)
 let _clientsServerLoaded = false; // 1er chargement serveur de la liste clients (pour appliquer les filtres dès l'entrée)
 const CLIENTS_PER_PAGE = 50;
 let clientsFilterOpts = { depts: [], novam: [], gph: [], categorie: [], sousCategorie: [], categoriePro: [], secteur: [], type: [], groupe: [], origine: [], reseauxPro: [] };
@@ -4543,9 +4543,9 @@ function go(page) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === navPage));
   const titles = {dashboard:'Tableau de bord',analyse:'Analyse / KPI',clients:'Clients/Prospects',contacts:'Contacts',concurrence:'Concurrence','import-xml':'Import XML (CODIAL legacy)','enrich-siren':'SIRETAGE — enrichissement SIREN/SIRET',duplicates:'Détection des doublons clients',campagnes:'Campagnes marketing','marches-publics':'Veille marchés publics','procedures-coll':'Veille procédures collectives (BODACC)',pipeline:'Pipeline commercial',carte:'Carte sociétés',
     marches:'Marchés',affaires:'Affaires',devis:'Devis',commandes:'Commandes',factures:'Factures','carte-affaires':'Carte des Affaires',objectifs:'Objectifs',batiscope:"BatiScop' — Observatoire Construction & Démographie",
-    cr:'Comptes-rendus',taches:'✅ Tâches commerciales',sollicitations:'🤝 Sollicitations',opportunites:'🎯 Opportunités',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
+    cr:'Comptes-rendus',taches:ICON_TACHE+' Tâches commerciales',sollicitations:ICON_SOLLIC+' Sollicitations',opportunites:'🎯 Opportunités',envois:'Envois & Diffusions',alertes:'Alertes & Relances','client-detail':'Fiche client/prospect','contact-detail':'Fiche contact',
     'marche-detail':'Fiche marché','affaire-detail':'Fiche affaire',collaborateurs:'Collaborateurs AKUITEO','collaborateurs-lucca':'Collaborateurs LUCCA',annuaire:'Annuaire Collaborateurs',ged:'Assistant documentaire',endev:"En Dev'",'mode-emploi':"Mode d'emploi",'cahier-charges':'Cahier des charges','veille-regar':'Carte des opportunités',newsletter:'Infolettre hebdomadaire','decp-analyse':'Marchés publics (DECP)'};
-  document.getElementById('pageTitle').textContent = titles[page]||page;
+  document.getElementById('pageTitle').innerHTML = titles[page]||page;
   renderPage(page);
   if(window.innerWidth<=768) toggleSidebar(false);
 }
@@ -4616,7 +4616,7 @@ const MODE_EMPLOI = [
   ]},
   { key:'clients', pages:['clients','client-detail'], icon:'👥', title:'Clients / Prospects', items:[
     "Recherche pertinente : correspondance contiguë (« VM » ne ramène que les vraies sociétés « VM… »), classée par pertinence (exact/préfixe d'abord) et sièges avant établissements secondaires ; repli tolérant aux fautes/ponctuation si aucun résultat.",
-    "Filtre par lettre + accordéon « Filtres & Infos Entreprise » : département, commercial Novam/GPH, statut, synchro Akuiteo, catégorie A/B/C (par rôle), comptes clés ++, catégorie/sous-catégorie/secteur/type/groupe/origine, SIRET présent/absent, siège/établissement, réseau pro, masquer radiées. Les listes d'options sont mises en cache (affichage quasi instantané).",
+    "Filtre par lettre + accordéon « Filtres & Infos Entreprise » : département, commercial Novam/GPH, statut, synchro Akuiteo, catégorie A/B/C (par rôle), grands comptes, catégorie/sous-catégorie/secteur/type/groupe/origine, SIRET présent/absent, siège/établissement, réseau pro, masquer radiées. Les listes d'options sont mises en cache (affichage quasi instantané).",
     "Fiche société — blocs : Informations légales · Commerce (commerciaux Novam/GPH, Importance du compte A/B/C par agence, réseaux pro, accordéon Tarification GPH) · Infos Entreprise · Adresses (site / facturation) & Coordonnées · Habitudes · Établissements liés · Objectifs annuels · Opportunités · Tâches & Sollicitations · Profil marchés · Concurrents · Contacts · Comptes-rendus.",
     "« Mettre à jour (SIRET) » : complète les informations légales depuis SIRENE (raison sociale, APE, forme juridique, TVA, adresse, siège/établissement, état INSEE / radiation).",
     "« 📊 Analyser le compte » : CA par devis/commandes/factures, par rôle (client / apporteur / architecte / gros-œuvre), par établissement, graphiques et export PDF.",
@@ -6738,6 +6738,9 @@ let _taches = [], _tachesLoaded = false;
 let _tachesFStatut = '', _tachesFAssigne = '', _tachesMine = false, _tachesView = 'liste';
 let _tacheSel = { client_id: null, client_name: null, affaire_id: null, affaire_nom: null };
 
+// Icônes thématiques NOVAM (remplacent les emojis ✅/🤝) — tâches = violet, sollicitations = rose
+const ICON_TACHE = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#772471" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M9 11l3 3L20 5"/><path d="M20 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>';
+const ICON_SOLLIC = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FF1E63" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
 const TACHE_STATUTS = { a_faire: ['À faire', '#f59e0b'], en_cours: ['En cours', '#4f8ff7'], terminee: ['Terminée', '#10b981'], annulee: ['Annulée', '#6b7280'] };
 const TACHE_PRIOS = { basse: ['Basse', '#6b7280'], normale: ['Normale', '#4f8ff7'], haute: ['Haute', '#ef4444'] };
 function _tStatutBadge(s) { const [l, c] = TACHE_STATUTS[s] || [s, '#6b7280']; return `<span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;background:${c}22;color:${c}">${l}</span>`; }
@@ -7089,7 +7092,7 @@ function renderTachesCard(opts) {
   const list = (_taches || []).filter(t => opts.client_id ? t.client_id === opts.client_id : (opts.affaire_id ? t.affaire_id === opts.affaire_id : false));
   const pre = opts.client_id ? `{client_id:'${opts.client_id}',client_name:'${(opts.client_name || '').replace(/'/g, "\\'")}'${opts.affaire_id ? ",affaire_id:'" + opts.affaire_id + "',affaire_nom:'" + (opts.affaire_nom || '').replace(/'/g, "\\'") + "'" : ''}}` : `{affaire_id:'${opts.affaire_id}',affaire_nom:'${(opts.affaire_nom || '').replace(/'/g, "\\'")}',client_id:'${opts.client_id_aff || ''}',client_name:'${(opts.client_name || '').replace(/'/g, "\\'")}'}`;
   return `<div class="card" style="margin-bottom:16px">
-    <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">✅ Tâches (${list.length})</div>
+    <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">${ICON_TACHE} Tâches (${list.length})</div>
       <button class="btn btn-sm" onclick="tacheModalOpen(null, ${pre})">+ Tâche</button></div>
     <div class="card-body" style="padding:0">${list.length ? '<div class="table-wrap"><table><thead><tr><th>Tâche</th><th>Échéance</th><th>Statut</th><th>Assigné</th><th></th></tr></thead><tbody>' +
       list.map(t => `<tr style="${_tEnRetard(t) ? 'background:rgba(239,68,68,.06)' : ''}"><td style="padding:6px 8px;font-size:12px"><strong>${cmdEsc(t.titre)}</strong></td><td style="padding:6px 8px;font-size:12px;white-space:nowrap">${_tEcheanceTxt(t.echeance)}</td><td style="padding:6px 8px">${_tStatutBadge(t.statut)}</td><td style="padding:6px 8px;font-size:12px">${cmdEsc(fmtCommercialName(t.assigne_nom || '') || '—')}</td><td style="padding:6px 8px;white-space:nowrap">${t.statut !== 'terminee' ? '<button class="btn" style="font-size:11px;padding:2px 6px;color:var(--green)" title="Terminer" onclick="setTacheStatut(' + t.id + ',\'terminee\')">✓</button>' : ''}<button class="btn" style="font-size:11px;padding:2px 6px" onclick="tacheModalOpen(' + t.id + ')">✎</button></td></tr>`).join('') +
@@ -7199,7 +7202,7 @@ function renderSollicCard(opts) {
       <td style="padding:6px 8px;white-space:nowrap"><button class="btn" style="font-size:11px;padding:2px 6px" title="Mail" onclick="sollicMailOpen(${s.id})">✉️</button><button class="btn" style="font-size:11px;padding:2px 6px" title="Modifier" onclick="sollicModalOpen(${s.id})">✎</button></td>
     </tr>`; }).join('') + '</tbody></table></div>'
     : '<div style="padding:14px;text-align:center;color:var(--t3);font-size:13px">Aucune sollicitation</div>';
-  return `<div class="card" style="margin-top:16px"><div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">🤝 Sollicitations (${list.length})</div>${addBtn}</div>
+  return `<div class="card" style="margin-top:16px"><div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">${ICON_SOLLIC} Sollicitations (${list.length})</div>${addBtn}</div>
     <div class="card-body" style="padding:0">${rows}</div></div>`;
 }
 function _sollicOppOptions() {
@@ -9336,7 +9339,7 @@ function _oppTachesCard(akId, clientId, clientName, oppNom) {
       <td style="padding:6px 8px;white-space:nowrap"><button class="btn" style="font-size:11px;padding:2px 6px" title="Modifier" onclick="tacheModalOpen(${t.id})">✎</button></td>
     </tr>`).join('') + '</tbody></table></div>' : '<div style="padding:14px;text-align:center;color:var(--t3);font-size:13px">Aucune tâche liée</div>';
   return `<div class="card">
-    <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">✅ Tâches liées (${list.length})</div>
+    <div class="card-header" style="flex-wrap:wrap;gap:8px"><div class="card-title">${ICON_TACHE} Tâches liées (${list.length})</div>
       <button class="btn btn-sm" onclick="oppCreerTache('${akId}')">+ Tâche</button></div>
     <div class="card-body" style="padding:0">${rows}</div>
   </div>`;
@@ -10471,7 +10474,7 @@ function renderDashboard() {
   <details class="card acc" id="dashTodo" style="margin-bottom:16px">
     <summary class="card-header" style="cursor:pointer;user-select:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px">
       <span class="card-title" style="display:inline-flex;align-items:center;gap:8px;white-space:nowrap">
-        <span style="white-space:nowrap">✅ Mes tâches à faire</span>
+        <span style="white-space:nowrap">${ICON_TACHE} Mes tâches à faire</span>
         <span id="dashTodoCount" style="display:none;flex:none;white-space:nowrap;background:var(--accent);color:#fff;border-radius:10px;padding:1px 8px;font-size:12px;font-weight:700;line-height:1.6"></span>
       </span>
       <span style="display:inline-flex;gap:6px;flex:none;flex-wrap:wrap;margin-left:auto">
@@ -10616,7 +10619,7 @@ async function renderDashMesTaches() {
     const ctx = ctxParts.join(' · ');
     const dueTxt = s.date_relance ? fmtDateFR(String(s.date_relance).slice(0, 10)) : '';
     return `<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border)${enRetard ? ';background:rgba(239,68,68,.06)' : ''}">
-      <span title="Sollicitation" style="flex:none;font-size:15px;width:16px;text-align:center">🤝</span>
+      <span title="Sollicitation" style="flex:none;width:16px;text-align:center">${ICON_SOLLIC}</span>
       <div style="flex:1;min-width:0;cursor:pointer" onclick="sollicModalOpen(${s.id})">
         <div style="font-size:13px;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ctx || 'Sollicitation'}</div>
         <div style="margin-top:2px">${_sollicBadge(s.statut)}</div>
@@ -10629,11 +10632,11 @@ async function renderDashMesTaches() {
   const subHdr = t => '<div style="padding:9px 14px 4px;font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.4px;border-top:1px solid var(--border)">' + t + '</div>';
   let html = '';
   if (showT.length) {
-    html += subHdr('✅ Tâches (' + mine.length + ')') + showT.map(ligneT).join('');
+    html += subHdr(ICON_TACHE + ' Tâches (' + mine.length + ')') + showT.map(ligneT).join('');
     if (mine.length > showT.length) html += '<div style="padding:8px 14px;text-align:center"><a href="#" onclick="go(\'taches\');return false" style="color:var(--accent);font-size:12px;text-decoration:none">Voir mes ' + mine.length + ' tâches →</a></div>';
   }
   if (showS.length) {
-    html += subHdr('🤝 Sollicitations à traiter (' + mySollic.length + ')') + showS.map(ligneS).join('');
+    html += subHdr(ICON_SOLLIC + ' Sollicitations à traiter (' + mySollic.length + ')') + showS.map(ligneS).join('');
     if (mySollic.length > showS.length) html += '<div style="padding:8px 14px;text-align:center"><a href="#" onclick="go(\'sollicitations\');return false" style="color:var(--accent);font-size:12px;text-decoration:none">Voir mes ' + mySollic.length + ' sollicitations →</a></div>';
   }
   el.innerHTML = html;
@@ -11981,10 +11984,10 @@ function renderClients(filter='all') {
       <label title="Masquer les entreprises radiées (état INSEE)" style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:4px 8px;border:1px solid ${clientsHideRadiees?'#FF1E63':'var(--border)'};border-radius:6px;background:${clientsHideRadiees?'rgba(255,30,99,0.13)':'var(--card)'};color:var(--t1)">
         <input type="checkbox" ${clientsHideRadiees ? 'checked' : ''} onchange="clientsHideRadiees=this.checked;loadClientsPage(0,clientsLetter,clientsSearch)"> Masquer radiées
       </label>
-      <select onchange="clientsFilterPlus=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" title="Comptes clés (++)" style="padding:5px 8px;border:1px solid ${clientsFilterPlus?'#FF1E63':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterPlus?'rgba(255,30,99,0.13)':'var(--card)'};color:var(--t1)">
-        <option value="" ${!clientsFilterPlus?'selected':''}>— ++ (clés) —</option>
-        <option value="yes" ${clientsFilterPlus==='yes'?'selected':''}>✓ Comptes clés (++)</option>
-        <option value="no" ${clientsFilterPlus==='no'?'selected':''}>✗ Sans ++</option>
+      <select onchange="clientsFilterPlus=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" title="Grands comptes" style="padding:5px 8px;border:1px solid ${clientsFilterPlus?'#FF1E63':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterPlus?'rgba(255,30,99,0.13)':'var(--card)'};color:var(--t1)">
+        <option value="" ${!clientsFilterPlus?'selected':''}>— Grands comptes —</option>
+        <option value="yes" ${clientsFilterPlus==='yes'?'selected':''}>✓ Grands comptes</option>
+        <option value="no" ${clientsFilterPlus==='no'?'selected':''}>✗ Hors grand compte</option>
       </select>
       ${_mkMs('cfDept', 'Département', _msStr(clientsFilterOpts.depts), clientsFilterDept, v => clientsFilterDept = v)}
       ${_mkMs('cfNovam', 'Commercial Novam', (clientsFilterOpts.novam || []).map(o => ({ v: o.key, label: o.label })), clientsFilterNovam, v => clientsFilterNovam = v)}
@@ -12760,7 +12763,7 @@ async function switchEtablissement(newSiret) {
   }
 }
 
-// ═══ Avatar société : carré bicolore (Catégorie ABC × Statut) + cadre rose vif si compte clé « ++ » ═══
+// ═══ Avatar société : carré bicolore (Catégorie ABC × Statut) + cadre rose vif si grand compte « ++ » ═══
 // Moitié haut-gauche = catégorie ABC, moitié bas-droite = statut. Aucun texte dans le carré.
 const _ABC_COLORS = { A: '#772471', B: '#2f6fed', C: '#8a94a6' };                       // A stratégique / B tactique / C listé
 const _STATUT_COLORS = { actif: '#16a34a', nouveau: '#06b6d4', dormant: '#f59e0b', prospect: '#94a3b8' };
@@ -12786,7 +12789,7 @@ function _avStyle(c) {
 function _avTitle(c) {
   const abc = _clientABC(c);
   const stLbl = { actif: 'Actif', nouveau: 'Nouveau', dormant: 'Dormant', prospect: 'Prospect' }[(c && c.status) || ''] || 'Statut non défini';
-  return 'Catégorie ' + (abc || '?') + ' · ' + stLbl + (_clientPlus(c) ? ' · Compte clé ++' : '');
+  return 'Catégorie ' + (abc || '?') + ' · ' + stLbl + (_clientPlus(c) ? ' · Grand compte' : '');
 }
 
 function downloadClientListPDF(type) {
@@ -14326,8 +14329,8 @@ function renderClientDetail() {
           const val = cc[ag] || '';
           const bg = val.startsWith('A') ? '#3b82f6' : val.startsWith('B') ? '#f59e0b' : '#6b7280';
           const rank = rg[ag];
-          const plusBadge = pl[ag] ? ' <span style="background:#fff;color:#dc2626;border-radius:3px;padding:0 3px;font-weight:800;margin-left:3px" title="Client clé">++</span>' : '';
-          const label = val ? (val + (rank ? ' (' + rank + ')' : '')) : 'Client clé';
+          const plusBadge = pl[ag] ? ' <span style="background:#fff;color:#dc2626;border-radius:3px;padding:0 3px;font-weight:800;margin-left:3px" title="Grand compte">++</span>' : '';
+          const label = val ? (val + (rank ? ' (' + rank + ')' : '')) : 'Grand compte';
           return '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + (val ? bg : '#dc2626') + ';color:#fff;margin:1px 4px 1px 0">' + ag + ' : ' + label + plusBadge + '</span>';
         }).join('');
       })()),
@@ -27358,8 +27361,8 @@ function fillCategorieCompteDropdowns(prefix, catCompte, catPlus) {
         <option value="B- Tactique"${val==='B- Tactique'?' selected':''}>B- Tactique</option>
         <option value="C- Listé"${val==='C- Listé'?' selected':''}>C- Listé</option>
       </select>
-      <label style="display:flex;align-items:center;gap:4px;font-size:11px;margin-top:3px;cursor:pointer;color:var(--t2)" title="Client clé : très important pour nous, avec spécificités">
-        <input type="checkbox" data-societe-plus="${soc}"${isPlus ? ' checked' : ''}> <strong>++</strong> client clé
+      <label style="display:flex;align-items:center;gap:4px;font-size:11px;margin-top:3px;cursor:pointer;color:var(--t2)" title="Grand compte : très important pour nous, avec spécificités">
+        <input type="checkbox" data-societe-plus="${soc}"${isPlus ? ' checked' : ''}> <strong>++</strong> Grand compte
       </label>
     </div>`;
   }).join('');
