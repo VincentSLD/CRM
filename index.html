@@ -2973,6 +2973,9 @@ tbody tr:last-child td { border-bottom: none; }
 body.nova-only > *:not(#aiChatPanel){ display:none !important; }
 body.nova-only #aiChatPanel{ display:flex !important; inset:0 !important; top:0 !important; left:0 !important; right:0 !important; bottom:0 !important; width:100vw !important; height:100vh !important; max-width:none !important; max-height:none !important; min-width:0 !important; min-height:0 !important; border:none !important; border-radius:0 !important; box-shadow:none !important; resize:none !important; }
 body.nova-only #aiChatHeader{ cursor:default !important; }
+/* Mode « carte des opportunités détachée » (2e fenêtre) : plein écran sans la barre latérale */
+body.carte-detached .sidebar{ display:none !important; }
+body.carte-detached .main{ margin-left:0 !important; }
 </style>
 <!-- Chatbot IA flottant -->
 <div id="aiChatBtn" onclick="toggleAIChat()" title="NOVA" style="position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#772471,#FF1E63);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 6px 20px rgba(119,36,113,.45);z-index:900;transition:transform .2s;font-weight:800;font-size:11px;letter-spacing:1px" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform=''">
@@ -5346,12 +5349,13 @@ function renderVeilleRegar() {
   const _vrIsDpe = (_vrPermisType === 'dpe_ter' || _vrPermisType === 'dpe_log');
   const _vrIsCopro = (_vrPermisType === 'copro');
   const _vrIsBoamp = (_vrPermisType === 'boamp');
+  const _vrDetached = document.body.classList.contains('carte-detached');
   return `
   <div style="max-width:1600px;margin:0 auto">
     <div class="card" style="margin-bottom:14px">
       <div class="card-body">
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-          <button class="btn" title="Retour" onclick="go(_vrReturn)" style="font-size:12px;line-height:1;padding:5px 10px;margin-right:8px">← Retour</button>
+          ${_vrDetached ? '' : `<button class="btn" title="Retour" onclick="go(_vrReturn)" style="font-size:12px;line-height:1;padding:5px 10px;margin-right:8px">← Retour</button><button class="btn" title="Détacher la carte dans une nouvelle fenêtre" onclick="carteDetach()" style="font-size:12px;line-height:1;padding:5px 10px;margin-right:8px">⧉ Détacher</button>`}
           <span style="font-size:13px;font-weight:700;white-space:nowrap">Recherche d'opportunités</span>
           <input id="vr-dept" value="${cmdEsc(_vrDept)}" placeholder="Dép." style="padding:5px 7px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:64px;background:var(--card,#fff);color:var(--t1)" onkeydown="if(event.key==='Enter')vrLoadPA()">
           <select id="vr-permis-type" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;max-width:231px;background:var(--card,#fff);color:var(--t1)">
@@ -26861,6 +26865,13 @@ function novaDetach() {
   const panel = document.getElementById('aiChatPanel');
   if (panel && panel.style.display === 'flex') toggleAIChat();
 }
+// Ouvre la carte des opportunités dans une fenêtre séparée (déplaçable sur un 2e écran)
+function carteDetach() {
+  const url = location.pathname + '?page=veille-regar';
+  const w = window.open(url, 'CARTE_OPP_' + Date.now(), 'popup=yes,width=1400,height=900');
+  if (!w) { toast('Autorisez les fenêtres pop-up pour détacher la carte.', 'info'); return; }
+  toast('Carte ouverte dans une nouvelle fenêtre', 'success');
+}
 // Mode « NOVA seule » : la page ne montre que l'assistant (fenêtre détachée)
 function _enterNovaOnly() {
   const panel = document.getElementById('aiChatPanel'); if (!panel) return;
@@ -33378,7 +33389,9 @@ async function onAuthSuccess(user) {
   initRealtime();
   checkAdminPending(user);
   // Fenêtre détachée : n'afficher que NOVA (2e écran)
-  if (new URLSearchParams(location.search).get('nova') === '1') { try { _enterNovaOnly(); } catch (e) { console.warn('nova-only', e.message); } }
+  const _qp = new URLSearchParams(location.search);
+  if (_qp.get('nova') === '1') { try { _enterNovaOnly(); } catch (e) { console.warn('nova-only', e.message); } }
+  else if (_qp.get('page') === 'veille-regar') { try { document.body.classList.add('carte-detached'); document.title = 'Carte des opportunités — CRM NOVAM'; _vrReturn = 'dashboard'; go('veille-regar'); } catch (e) { console.warn('carte-detached', e.message); } }
   else toast(`Bienvenue ${currentCommercial ? currentCommercial.nom : user.email}`, 'success');
 }
 
