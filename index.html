@@ -4788,13 +4788,55 @@ function veilcoToOpp(idx) {
 // ═══ MODE D'EMPLOI — modèle structuré par partie du CRM (clé + pages liées pour l'aide contextuelle) ═══
 const MODE_EMPLOI = [
   { key:'dashboard', pages:['dashboard'], icon:'🏠', title:'Tableau de bord', items:[
-    "Vue d'ensemble de votre activité : KPIs (Devis en cours / émis, Taux de conversion, Panier moyen, Devis perdus, CA commandé, CA facturé, Factures en retard), avec tendances vs mois précédent.",
-    "En haut : filtre de période (Du / Au) et filtre par société. Dans la barre du haut : bascule « Mes données / Toutes les données ».",
-    "Accordéon « ✅ Mes tâches à faire » (replié par défaut, avec compteur) : regroupe vos tâches à faire/en cours ET vos sollicitations non finalisées ; boutons « Toutes les tâches » et « Toutes les sollicitations ».",
-    "« Avancement des objectifs par agence », graphiques (CA facturé sur 12 mois, CA par agence), répartition Devis / Factures par statut.",
+    "Vue d'ensemble de votre activité : KPIs (Devis en cours / émis, Taux de conversion, Panier moyen, Devis perdus, CA commandé, CA facturé, Factures en retard), avec tendances vs mois précédent (▲/▼ en %).",
+    "Barre du haut : filtre de période (Du / Au) et filtre « Agences » (le bouton affiche le nom de l'entité sélectionnée). Dans l'en-tête de l'application : bascule « Mes données / Toutes les données ».",
+    "Accordéon « ✅ Mes tâches/relances à faire » (replié par défaut, avec compteur) : regroupe en 3 sections vos tâches à faire/en cours, vos sollicitations non finalisées ET vos devis à relancer (bouton « Relancer ») ; boutons « Toutes les tâches » et « Toutes les sollicitations ».",
+    "« Avancement des objectifs par agence » : calculé sur le CA facturé de l'année, ventilé par métier (SOL/EXE), barre en dégradé continu rouge → vert selon l'atteinte.",
+    "Graphiques : CA facturé sur 12 mois, CA facturé par agence (noms d'entités), répartition Devis / Factures par statut.",
     "Listes (accordéons) : Top 100 clients par CA facturé, Nouveaux clients, Clients dormants.",
+  ], schema:`<svg viewBox="0 0 680 360" width="100%" style="max-width:680px;border:1px solid #e0ddd5;border-radius:8px;background:#fff" xmlns="http://www.w3.org/2000/svg" font-family="Arial,Helvetica,sans-serif">
+    <rect x="12" y="12" width="656" height="34" rx="8" fill="#f7f6f2" stroke="#e0ddd5"/>
+    <text x="24" y="34" font-size="12" fill="#241130" font-weight="bold">Période :</text>
+    <rect x="86" y="20" width="66" height="18" rx="4" fill="#fff" stroke="#c9c4bb"/><text x="93" y="33" font-size="10" fill="#777">Du…</text>
+    <rect x="160" y="20" width="66" height="18" rx="4" fill="#fff" stroke="#c9c4bb"/><text x="167" y="33" font-size="10" fill="#777">au…</text>
+    <rect x="548" y="18" width="108" height="22" rx="11" fill="#772471"/><text x="562" y="33" font-size="11" fill="#fff" font-weight="bold">GPH 85-44 ▾</text>
+    <rect x="12" y="54" width="656" height="28" rx="6" fill="#fff" stroke="#e0ddd5"/>
+    <text x="26" y="72" font-size="12" fill="#241130" font-weight="bold">▸ ✅ Mes tâches/relances à faire</text>
+    <circle cx="268" cy="68" r="9" fill="#FF1E63"/><text x="268" y="71" font-size="10" fill="#fff" text-anchor="middle" font-weight="bold">3</text>
+    <g font-size="10">
+      <rect x="12" y="92" width="146" height="56" rx="7" fill="#fff" stroke="#e0ddd5"/><text x="24" y="112" fill="#777">Devis en cours</text><text x="24" y="133" font-size="17" fill="#241130" font-weight="bold">128 k€</text>
+      <rect x="182" y="92" width="146" height="56" rx="7" fill="#fff" stroke="#e0ddd5"/><text x="194" y="112" fill="#777">CA facturé</text><text x="194" y="133" font-size="17" fill="#241130" font-weight="bold">1,24 M€</text>
+      <rect x="352" y="92" width="146" height="56" rx="7" fill="#fff" stroke="#e0ddd5"/><text x="364" y="112" fill="#777">Taux conversion</text><text x="364" y="133" font-size="17" fill="#241130" font-weight="bold">34 %</text>
+      <rect x="522" y="92" width="146" height="56" rx="7" fill="#fff" stroke="#e0ddd5"/><text x="534" y="112" fill="#777">Factures en retard</text><text x="534" y="133" font-size="17" fill="#C11F39" font-weight="bold">42 k€</text>
+    </g>
+    <rect x="12" y="158" width="656" height="80" rx="7" fill="#fff" stroke="#e0ddd5"/>
+    <text x="24" y="178" font-size="12" fill="#241130" font-weight="bold">Avancement des objectifs par agence</text>
+    <text x="24" y="200" font-size="10" fill="#555">GPH 85-44 · SOL</text><rect x="150" y="192" width="420" height="10" rx="5" fill="#eee"/><rect x="150" y="192" width="294" height="10" rx="5" fill="#b7a52f"/><text x="580" y="201" font-size="10" fill="#b7a52f" font-weight="bold">70 %</text>
+    <text x="24" y="223" font-size="10" fill="#555">SERBA 44 · Global</text><rect x="150" y="215" width="420" height="10" rx="5" fill="#eee"/><rect x="150" y="215" width="420" height="10" rx="5" fill="#33a13a"/><text x="580" y="224" font-size="10" fill="#33a13a" font-weight="bold">102 %</text>
+    <rect x="12" y="248" width="320" height="100" rx="7" fill="#fff" stroke="#e0ddd5"/>
+    <text x="24" y="268" font-size="11" fill="#241130" font-weight="bold">CA facturé — 12 mois</text>
+    <polyline points="26,330 74,320 122,300 170,308 218,285 266,292 314,262" fill="none" stroke="#772471" stroke-width="2"/>
+    <rect x="348" y="248" width="320" height="100" rx="7" fill="#fff" stroke="#e0ddd5"/>
+    <text x="360" y="268" font-size="11" fill="#241130" font-weight="bold">CA facturé par agence</text>
+    <g font-size="9" fill="#555"><text x="360" y="289">NOVAM Ingénierie</text><rect x="470" y="281" width="180" height="9" rx="4" fill="#772471"/>
+    <text x="360" y="307">GPH 85-44</text><rect x="470" y="299" width="120" height="9" rx="4" fill="#FF1E63"/>
+    <text x="360" y="325">SERBA 44</text><rect x="470" y="317" width="70" height="9" rx="4" fill="#524FA1"/></g>
+  </svg>`, schemaLegende:"Schéma de principe du tableau de bord (les valeurs sont illustratives).", procedures:[
+    { t:'Analyser une période / une agence', steps:[
+      "Réglez « Du » et « Au » dans la barre du haut : tous les KPIs, graphiques et listes se recalculent sur la période.",
+      "Cliquez le bouton « Agences » et cochez une ou plusieurs entités (NOVAM, GPH 85-44, SERBA 44…) : le tableau de bord se limite à ces agences ; le bouton affiche le nom sélectionné.",
+      "Utilisez la bascule « Mes données / Toutes les données » (en-tête) pour passer de votre portefeuille à la vue globale.",
+    ]},
+    { t:'Traiter mes relances devis', steps:[
+      "Dépliez l'accordéon « Mes tâches/relances à faire » → section « Devis à relancer ».",
+      "Le seuil (nombre de jours) est réglé par agence dans Paramétrage ; un devis « envoyé » sans réponse au-delà du seuil apparaît ici.",
+      "Cliquez « Relancer » pour journaliser la relance (canal, résultat, note), ou ouvrez le devis pour le détail.",
+    ]},
   ], astuces:[
     "Les compteurs du menu latéral (Clients, Devis, Tâches, Sollicitations…) reflètent le volume en temps réel.",
+    "L'avancement des objectifs est basé sur le CA facturé : une agence peut dépasser 100 % (barre entièrement verte).",
+  ], visuels:[
+    { src:'assets/help/dashboard.png', legende:"Tableau de bord — capture réelle (à ajouter dans assets/help/dashboard.png)." },
   ]},
   { key:'clients', pages:['clients','client-detail'], icon:'👥', title:'Clients / Prospects', items:[
     "Recherche pertinente : correspondance contiguë (« VM » ne ramène que les vraies sociétés « VM… »), classée par pertinence (exact/préfixe d'abord) et sièges avant établissements secondaires ; repli tolérant aux fautes/ponctuation si aucun résultat.",
@@ -4815,6 +4857,9 @@ const MODE_EMPLOI = [
     ]},
   ], astuces:[
     "À la création, TVA intracom. et état INSEE sont désormais remplis et enregistrés depuis SIRENE.",
+    "Les codes agence (NM85, GPH85…) sont affichés partout sous leur nom d'entité (NOVAM Ingénierie, GPH 85-44…) ; le code reste la valeur technique en base.",
+  ], visuels:[
+    { src:'assets/help/fiche-client.png', legende:"Fiche société — capture réelle (à ajouter dans assets/help/fiche-client.png)." },
   ]},
   { key:'contacts', pages:['contacts','contact-detail'], icon:'📇', title:'Contacts', items:[
     "Liste avec colonnes Commercial Novam / GPH, filtres et recherche tolérante ; affichage « NOM Prénom » partout.",
@@ -4826,19 +4871,45 @@ const MODE_EMPLOI = [
     ]},
   ]},
   { key:'opportunites', pages:['opportunites','opportunite-detail','opportunite-analyse'], icon:'🎯', title:'Opportunités', items:[
-    "Synchro depuis Akuiteo ; création/modification renvoyées vers Akuiteo.",
-    "Vues Pipeline (Kanban par stade) et Liste ; filtres Portefeuille, Statut, Responsable, dates de signature ; Typologie / Sous-typologie.",
+    "100 % CRM : les opportunités sont gérées dans le CRM (base Supabase), sans synchronisation Akuiteo. La création et les modifications restent locales.",
+    "Vues Pipeline (Kanban par stade, glisser-déposer d'une colonne à l'autre) et Liste ; filtres Portefeuille, Statut, Responsable, Agence, dates de signature ; Typologie / Sous-typologie.",
+    "Opportunité stratégique : la case « Opportunité stratégique » la fait ressortir partout par une ★ rose (carte kanban, liste, carte des opportunités et fiche).",
     "Fiche : client, contact, établissement, portefeuille, stade, type d'origine, responsables, montant, montant des travaux, probabilité, dates ; tâches et CR liés.",
-    "Agences et honoraires : décomposition par agence ; pour chaque ligne un Stade et un Statut (Gagné/Perdu). Statut global déduit : ≥1 Gagné → Gagnée ; toutes Perdu → Perdue (propagé à Akuiteo avec confirmation).",
+    "Agences et honoraires : décomposition par agence (noms d'entités) ; pour chaque ligne un Stade et un Statut (Gagné/Perdu). Statut global déduit : ≥1 Gagné → Gagnée ; toutes Perdu → Perdue.",
     "Actions : Modifier, Gagnée / Perdue, Créer une tâche, Créer un CR (pré-remplis), et « 🎯 Clients à solliciter » (propose des clients selon leur profil marchés : typologie, département, TCE, mandataire).",
     "« 📊 Analyser » : KPIs (pipeline, pondéré, taux de réussite), alertes actionnables (signatures dépassées, à signer < 30 j, sans date/responsable/contact, fort enjeu, stratégiques), graphiques ; filtres Année/Responsable/Portefeuille et export PDF.",
-  ], procedures:[
+  ], schema:`<svg viewBox="0 0 680 300" width="100%" style="max-width:680px;border:1px solid #e0ddd5;border-radius:8px;background:#fff" xmlns="http://www.w3.org/2000/svg" font-family="Arial,Helvetica,sans-serif">
+    <text x="14" y="24" font-size="12" fill="#241130" font-weight="bold">Pipeline (Kanban) — glisser-déposer une carte pour changer de stade</text>
+    <g font-size="10">
+      <rect x="12" y="36" width="156" height="250" rx="7" fill="#f7f6f2" stroke="#e0ddd5"/><text x="22" y="54" fill="#241130" font-weight="bold">À qualifier</text><text x="150" y="54" fill="#777" text-anchor="end">4</text>
+      <rect x="180" y="36" width="156" height="250" rx="7" fill="#f7f6f2" stroke="#e0ddd5"/><text x="190" y="54" fill="#241130" font-weight="bold">En cours</text><text x="318" y="54" fill="#777" text-anchor="end">3</text>
+      <rect x="348" y="36" width="156" height="250" rx="7" fill="#f7f6f2" stroke="#e0ddd5"/><text x="358" y="54" fill="#241130" font-weight="bold">Proposition</text><text x="486" y="54" fill="#777" text-anchor="end">2</text>
+      <rect x="516" y="36" width="152" height="250" rx="7" fill="#f7f6f2" stroke="#e0ddd5"/><text x="526" y="54" fill="#241130" font-weight="bold">Signature</text><text x="656" y="54" fill="#777" text-anchor="end">1</text>
+    </g>
+    <g font-size="9">
+      <rect x="20" y="64" width="140" height="40" rx="5" fill="#fff" stroke="#e0ddd5"/><text x="28" y="80" fill="#241130" font-weight="bold">Lotissement Les Chênes</text><text x="28" y="96" fill="#777">85 k€ · SOL</text>
+      <rect x="20" y="112" width="140" height="40" rx="5" fill="#fff" stroke="#FF1E63" stroke-width="2"/><polygon points="150,120 152,126 158,126 153,130 155,136 150,132 145,136 147,130 142,126 148,126" fill="#FF1E63"/><text x="28" y="128" fill="#241130" font-weight="bold">ZAC Bellevue</text><text x="28" y="144" fill="#777">240 k€ · stratégique</text>
+      <rect x="188" y="64" width="140" height="40" rx="5" fill="#fff" stroke="#e0ddd5"/><text x="196" y="80" fill="#241130" font-weight="bold">Groupe scolaire</text><text x="196" y="96" fill="#777">120 k€ · EXE</text>
+      <rect x="356" y="64" width="140" height="40" rx="5" fill="#fff" stroke="#e0ddd5"/><text x="364" y="80" fill="#241130" font-weight="bold">Réhab. logements</text><text x="364" y="96" fill="#777">96 k€ · SOL</text>
+      <rect x="524" y="64" width="136" height="40" rx="5" fill="#fff" stroke="#33a13a" stroke-width="1.5"/><text x="532" y="80" fill="#241130" font-weight="bold">Pont Vendée</text><text x="532" y="96" fill="#33a13a">Gagnée ✓</text>
+    </g>
+  </svg>`, schemaLegende:"Vue Pipeline : chaque carte = une opportunité ; la ★ rose signale une opportunité stratégique (valeurs illustratives).", procedures:[
     { t:'Créer une opportunité', steps:[
       "Menu « Opportunités » → « + Nouvelle opportunité » (ou depuis une fiche client).",
       "Choisissez le client (créez-le directement s'il n'existe pas), le Portefeuille, le Stade (filtré selon le portefeuille) et le Type d'origine.",
-      "Complétez contact, établissement, responsables, montant / montant des travaux / probabilité, dates, typologie et description.",
-      "« Enregistrer et envoyer à Akuiteo » : l'opportunité est créée dans Akuiteo et sa fiche s'ouvre.",
+      "Complétez contact, établissement, responsables, montant / montant des travaux / probabilité, dates, typologie et description ; cochez « Opportunité stratégique » si besoin.",
+      "Renseignez la décomposition « Agences & honoraires » si plusieurs entités interviennent, puis « Enregistrer » (l'opportunité reste dans le CRM).",
     ]},
+    { t:'Faire avancer, gagner ou perdre', steps:[
+      "En vue Pipeline, glissez la carte vers la colonne du stade voulu (le stade est enregistré aussitôt).",
+      "Depuis la fiche : « Gagnée » ou « Perdue » ; avec plusieurs agences, réglez le Statut ligne par ligne (le statut global se déduit).",
+      "Enchaînez au besoin « Créer un CR » puis « Créer une tâche » de suivi (pré-remplis).",
+    ]},
+  ], astuces:[
+    "Le montant des travaux (≠ montant prestations) sert au pré-remplissage : renseignez-le pour des estimations d'honoraires cohérentes.",
+    "Une opportunité stratégique (★ rose) reste visuellement prioritaire dans toutes les vues, y compris sur la carte des opportunités.",
+  ], visuels:[
+    { src:'assets/help/opportunites-kanban.png', legende:"Pipeline des opportunités — capture réelle (à ajouter dans assets/help/opportunites-kanban.png)." },
   ]},
   { key:'sollicitations', pages:['sollicitations'], icon:'🤝', title:'Sollicitations', items:[
     "Relient des comptes clients/prospects à une opportunité, avec suivi de statut : À solliciter → Sollicité → Intéressé → Converti (ou Sans suite).",
@@ -4889,6 +4960,19 @@ const MODE_EMPLOI = [
     "Sur carte, par département et période : permis de construire (logements / sur bâti existant), DPE F/G (tertiaire / logements), copropriétés (BDNB), marchés publics travaux (BOAMP).",
     "Calques : aléa argile (RGA) avec opacité, cadastre, études de sol GPH, fond routes/aérien, plein écran.",
     "Tracer une « zone d'opportunité » (lotissement), afficher les opportunités du CRM ; créer un prospect ou une opportunité depuis un résultat.",
+  ], procedures:[
+    { t:'Chercher des opportunités sur une zone', steps:[
+      "Choisissez le type de recherche (permis, DPE F/G, copropriétés, BOAMP…) — ou « Veilleco » pour la veille marchés du prestataire.",
+      "Sélectionnez le département et la période, puis « Afficher sur la carte » : les résultats s'affichent en marqueurs et dans le tableau du bas.",
+      "Activez les calques utiles via « Calques » (aléa argile RGA, cadastre, études de sol GPH, fond routes/aérien).",
+      "Filtrez les opportunités du CRM par Agence, Statut, Responsable ; les opportunités stratégiques ressortent avec une ★ rose.",
+    ]},
+    { t:"Tracer une zone et créer une opportunité", steps:[
+      "Cliquez « Tracer une zone d'opportunité » et dessinez le périmètre du lotissement sur la carte.",
+      "Depuis un résultat (ou la zone), créez directement un prospect ou une opportunité pré-remplie (adresse, département).",
+    ]},
+  ], visuels:[
+    { src:'assets/help/carte-opportunites.png', legende:"Carte des opportunités (veille terrain) — capture réelle (à ajouter dans assets/help/carte-opportunites.png)." },
   ]},
   { key:'campagnes', pages:['campagnes'], icon:'📣', title:'Campagnes', items:[
     "Ciblage d'emails : nommez la campagne, sélectionnez les cibles (clients/contacts) via les filtres, suivez les envois.",
@@ -4926,11 +5010,17 @@ const MODE_EMPLOI = [
     "Veille marchés publics (BOAMP/DECP) et procédures collectives (BODACC).",
   ]},
 ];
+// Construit l'URL d'une image d'aide : absolue si http(s), sinon relative à la racine du site (fonctionne aussi dans la fenêtre d'impression).
+function _meImgSrc(src) { if (!src) return ''; if (/^https?:/i.test(src)) return src; return location.origin + '/' + String(src).replace(/^\//, ''); }
 function _meRenderSection(s, withAnchor) {
   let h = `<h2${withAnchor ? ' id="me-' + s.key + '"' : ''} style="font-size:16px;margin:18px 0 6px;color:#4f46e5;border-bottom:2px solid #e0ddd5;padding-bottom:4px">${s.icon} ${s.title}</h2>`;
   if (s.items && s.items.length) h += `<ul style="margin:0 0 6px 18px;padding:0;font-size:13px;line-height:1.6">${s.items.map(x => '<li style="margin:2px 0">' + x + '</li>').join('')}</ul>`;
+  // Schéma vectoriel (SVG inline) : maquette annotée de l'écran, rendue immédiatement (nette à l'impression).
+  if (s.schema) h += `<figure style="margin:10px 0;text-align:center">${s.schema}${s.schemaLegende ? '<figcaption style="font-size:11px;color:#888;margin-top:4px">' + s.schemaLegende + '</figcaption>' : ''}</figure>`;
   if (s.procedures && s.procedures.length) h += s.procedures.map(p => `<div style="margin:6px 0 6px 2px"><div style="font-weight:700;font-size:13px;color:#0e9f6e">▸ ${p.t}</div><ol style="margin:2px 0 4px 22px;padding:0;font-size:13px;line-height:1.55">${p.steps.map(x => '<li style="margin:2px 0">' + x + '</li>').join('')}</ol></div>`).join('');
   if (s.astuces && s.astuces.length) h += `<div style="background:#fff7ed;border-left:3px solid #f59e0b;border-radius:4px;padding:6px 10px;margin:6px 0;font-size:12px;line-height:1.5"><b>💡 Astuce :</b><ul style="margin:2px 0 0 16px;padding:0">${s.astuces.map(x => '<li>' + x + '</li>').join('')}</ul></div>`;
+  // Captures d'écran (fichiers dans assets/help/) : s'affichent si présentes, sinon masquées proprement (pas d'image cassée).
+  if (s.visuels && s.visuels.length) h += s.visuels.map(v => `<figure style="margin:10px 0;border:1px solid #e0ddd5;border-radius:6px;overflow:hidden;background:#fafafa"><img src="${_meImgSrc(v.src)}" alt="${(v.legende || '').replace(/"/g, '&quot;')}" style="max-width:100%;display:block;margin:0 auto" onerror="var f=this.closest('figure');if(f)f.style.display='none'">${v.legende ? '<figcaption style="font-size:11px;color:#666;padding:5px 8px;background:#f4f2ee">📷 ' + v.legende + '</figcaption>' : ''}</figure>`).join('');
   return h;
 }
 // Aide contextuelle : ouvre la ou les sections du mode d'emploi correspondant à la page courante.
