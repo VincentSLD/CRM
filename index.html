@@ -3438,7 +3438,15 @@ const AGENCE_LABELS = {
   'WATSO': 'WATSONN',
 };
 // Libellé d'affichage d'un code agence (nom d'entité). Retourne la valeur brute si le code est inconnu / vide.
-function agenceLabel(code) { if (code == null || code === '') return code; return AGENCE_LABELS[code] || code; }
+// Tolère les espaces et un suffixe marqueur '*' (ex. « GPH85* ») : on mappe le code de base et on conserve le marqueur.
+function agenceLabel(code) {
+  if (code == null || code === '') return code;
+  const raw = String(code).trim();
+  if (AGENCE_LABELS[raw]) return AGENCE_LABELS[raw];
+  const m = raw.match(/^([A-Za-z0-9-]+?)\s*(\*+)$/);
+  if (m && AGENCE_LABELS[m[1]]) return AGENCE_LABELS[m[1]] + ' ' + m[2];
+  return code;
+}
 
 function getAllSocietes() {
   const s = new Set();
