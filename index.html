@@ -14690,16 +14690,22 @@ function _concViewRecherche(concId, idx) {
   _nlOverlay(`<div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px"><div style="font-size:15px;font-weight:700">🔎 Recherche du ${h.date ? fmtDateFR(String(h.date).slice(0, 10)) : ''} — ${cmdEsc(c.nom || '')}</div><button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button></div><div style="padding:14px 20px;max-height:70vh;overflow:auto;font-size:13px">${h.web_html || '<div style="color:var(--t3)">Pas de synthèse web enregistrée pour cette recherche (DECP seul).</div>'}</div>`, 820);
 }
 async function _concDelRecherche(concId, idx) {
-  const c = (concurrentsCache || []).find(x => x.id === concId) || (_concRR.c && _concRR.c.id === concId ? _concRR.c : null); if (!c) return;
-  const hist = Array.isArray(c.recherches) ? c.recherches.slice() : [];
-  if (idx < 0 || idx >= hist.length) return;
+  if (!confirm('Supprimer cette ligne de l\'historique des recherches ?')) return;
+  // Source la plus fiable de la liste : cache, sinon concurrent en cours, sinon lecture DB (évite le "rien ne se passe")
+  let c = (concurrentsCache || []).find(x => x.id === concId) || (_concRR && _concRR.c && _concRR.c.id === concId ? _concRR.c : null);
+  let hist;
+  if (c && Array.isArray(c.recherches)) hist = c.recherches.slice();
+  else { try { const { data } = await sb.from('concurrents').select('recherches').eq('id', concId).maybeSingle(); hist = Array.isArray(data && data.recherches) ? data.recherches.slice() : []; } catch (e) { hist = []; } }
+  if (idx < 0 || idx >= hist.length) { toast('Ligne introuvable (rechargez la fiche).', 'warn'); return; }
   hist.splice(idx, 1);
-  const { error } = await sb.from('concurrents').update({ recherches: hist }).eq('id', c.id);
+  const { error } = await sb.from('concurrents').update({ recherches: hist }).eq('id', concId);
   if (error) { toast('Erreur : ' + error.message, 'error'); return; }
-  c.recherches = hist;
-  try { const it = (concurrentsCache || []).find(x => x.id === c.id); if (it) it.recherches = hist; } catch (e) {}
-  const hb = document.getElementById('conc-hist'); if (hb) hb.innerHTML = _concHistTable(c);
-  const fb = document.getElementById('cnf-hist'); if (fb) fb.innerHTML = _concHistTable(c);
+  if (c) c.recherches = hist;
+  try { const it = (concurrentsCache || []).find(x => x.id === concId); if (it) it.recherches = hist; } catch (e) {}
+  if (_concRR && _concRR.c && _concRR.c.id === concId) _concRR.c.recherches = hist;
+  const ref = c || { id: concId, nom: '', recherches: hist };
+  const hb = document.getElementById('conc-hist'); if (hb) hb.innerHTML = _concHistTable(ref);
+  const fb = document.getElementById('cnf-hist'); if (fb) fb.innerHTML = _concHistTable(ref);
   try { if (currentPage === 'concurrence' && typeof renderCnLocalList === 'function') renderCnLocalList(); } catch (e) {}
   toast('Ligne supprimée', 'success');
 }
