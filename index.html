@@ -14982,6 +14982,7 @@ function renderClientDetail() {
       })()}
       <button class="btn" onclick="ccaOpen()" title="Analyse multi-filtres du compte (CA, rôles, missions, graphiques, PDF)">📊 Analyser le compte</button>
       <button class="btn" onclick="openRechercheRealisations()" title="Rechercher les réalisations du client : marchés publics (DECP) et/ou web (IA)">🔎 Recherche Réalisations</button>
+      <button class="btn" onclick="voirCRClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Voir les comptes-rendus liés à ce client">📝 Voir les CR liés</button>
       <button class="btn btn-primary" onclick="goToCR('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">✈ Rédiger CR</button>
       <button class="btn btn-danger" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')" title="Supprimer ce client/prospect">Supprimer</button>
     </div>
@@ -22313,6 +22314,11 @@ function closeCRModal() {
 
 // Pré-remplissage CR depuis fiche client ou contact
 let _crPrefill = null;
+// Ouvre la page des comptes-rendus filtrée sur les CR liés à ce client (par nom de société)
+function voirCRClient(clientId, clientName) {
+  try { crFilterSociete = clientName || ''; if (typeof crFilterAuteur !== 'undefined') crFilterAuteur = '__all__'; } catch (e) {}
+  go('cr');
+}
 function goToCR(clientId, clientName, contactId, contactName) {
   currentReport = null;
   _crNovaOrigin = false;
