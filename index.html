@@ -14681,7 +14681,7 @@ function _concHistTable(c) {
       <td style="padding:5px 8px;white-space:nowrap">${h.date ? fmtDateFR(String(h.date).slice(0, 10)) : (h.t ? fmtDateFR(new Date(h.t).toISOString().slice(0, 10)) : '—')}</td>
       <td style="padding:5px 8px;white-space:nowrap">${srcLbl(h.sources)}</td>
       <td style="padding:5px 8px;color:var(--t2)">${profilSum(h.profil)}</td>
-      <td style="padding:5px 8px;text-align:right;white-space:nowrap">${h.web_html ? '<button class="btn" style="font-size:11px;padding:2px 8px" onclick="_concViewRecherche(\'' + c.id + '\',' + i + ')">Voir</button> ' : ''}<button class="btn" style="font-size:11px;padding:2px 8px;color:var(--red)" title="Supprimer cette ligne" onclick="_concDelRecherche(\'' + c.id + '\',' + i + ')">×</button></td>
+      <td style="padding:5px 8px;text-align:right;white-space:nowrap">${h.web_html ? `<button class="btn" style="font-size:11px;padding:2px 8px" onclick="_concViewRecherche('${c.id}',${i})">Voir</button> ` : ''}<button class="btn" style="font-size:11px;padding:2px 8px;color:var(--red)" title="Supprimer cette ligne" onclick="_concDelRecherche('${c.id}',${i})">×</button></td>
     </tr>`).join('')}</tbody></table></div>`;
 }
 function _concViewRecherche(concId, idx) {
