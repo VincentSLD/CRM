@@ -9883,7 +9883,7 @@ function renderOppDetailPage() {
     `<button class="btn" onclick="oppCreerTache('${o.akuiteo_id}')">✅ Créer une tâche</button>`,
     `<button class="btn" onclick="oppCreerCR('${o.akuiteo_id}')">📝 Créer un CR</button>`,
     `<button class="btn" style="background:linear-gradient(135deg,#772471,#FF1E63);color:#fff;border:none" onclick="oppSuggestClients('${o.akuiteo_id}')" title="Proposer des clients à solliciter selon leur profil marchés (typologie, département, TCE…)">🎯 Clients à solliciter</button>`,
-    `<button class="btn" onclick="oppConcurrents('${o.akuiteo_id}')" title="Identifier les concurrents susceptibles de se positionner sur ce marché (correspondance CRM + recherche IA)">🕵️ Concurrents à surveiller</button>`,
+    `<button class="btn" onclick="oppConcurrents('${o.akuiteo_id}')" title="Identifier les concurrents susceptibles de se positionner sur ce marché (correspondance CRM + recherche IA)">🕵️ Concurrents potentiels</button>`,
     enCours ? `<button class="btn" style="color:#10b981" onclick="oppWin('${o.akuiteo_id}')">🏆 Gagnée</button>` : '',
     enCours ? `<button class="btn" style="color:#ef4444" onclick="oppLose('${o.akuiteo_id}')">Perdue</button>` : '',
     o.client_id ? `<button class="btn" onclick="showClient('${o.client_id}')">Voir le client</button>` : '',
@@ -14645,7 +14645,7 @@ async function oppConcurrents(akId) {
     </div>`).join('') : '<div style="padding:14px;color:var(--t3);font-size:13px">Aucun concurrent du CRM avec un profil correspondant. Analysez d\'abord vos concurrents (fiche concurrent → « 🔎 Recherche réalisations ») pour construire leur profil marchés, ou lancez la recherche IA ci-dessous.</div>';
   _nlOverlay(`
     <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px">
-      <div style="font-size:16px;font-weight:700">🕵️ Concurrents à surveiller</div>
+      <div style="font-size:16px;font-weight:700">🕵️ Concurrents potentiels</div>
       <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
     </div>
     <div style="padding:14px 20px 18px;max-height:70vh;overflow:auto">
