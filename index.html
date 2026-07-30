@@ -11860,8 +11860,9 @@ function renderCnLocalList() {
       : list.map(c => {
           const nbClients = concurrentsClientCount[c.id] || 0;
           const agencesHTML = Array.isArray(c.agences) && c.agences.length ? c.agences.map(a => '<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:rgba(99,102,241,.15);color:#524FA1;font-size:10px;font-weight:600;margin-right:3px">'+a+'</span>').join('') : '—';
+          const hasRealiz = !!(c.web_research || c.marche_profil);
           return '<tr>' +
-            '<td><a href="#" onclick="showConcurrentFiche(\''+c.id+'\');return false" style="color:#524FA1;font-weight:700;text-decoration:none" title="Ouvrir la fiche d\'analyse">'+(c.nom||'')+'</a></td>' +
+            '<td><a href="#" onclick="showConcurrentFiche(\''+c.id+'\');return false" style="color:#524FA1;font-weight:700;text-decoration:none" title="Ouvrir la fiche d\'analyse">'+(c.nom||'')+'</a>'+(hasRealiz?' <span title="Réalisations analysées — profil marchés disponible" style="cursor:default">🔎</span>':'')+'</td>' +
             '<td style="font-size:12px;color:var(--t2)">'+(c.raison_sociale || '—')+'</td>' +
             '<td class="mono" style="font-size:12px">'+(c.siren || '—')+'</td>' +
             '<td class="mono" style="font-size:12px">'+(c.ape || '—')+'</td>' +
@@ -11934,6 +11935,38 @@ async function showConcurrentFiche(id) {
   }
 }
 
+// Carte « historique de recherche de réalisations » affichée dans la fiche concurrent (profil marchés mémorisé + synthèse web)
+function _cnfRealizCard(c) {
+  const wr = c.web_research || null;
+  const p = c.marche_profil || (wr && wr.structured) || null;
+  const arr = a => Array.isArray(a) ? a : [];
+  const hasHist = !!(wr && wr.html) || !!(p && (p.role || arr(p.typologies).length || arr(p.departements).length || arr(p.competences).length || p.tce_min != null || p.tce_max != null));
+  const dateTxt = wr && wr.generated_at ? fmtDateFR(new Date(wr.generated_at).toISOString().slice(0, 10)) : '';
+  const list = a => arr(a).length ? arr(a).map(x => cmdEsc(String(x))).join(', ') : '—';
+  let inner;
+  if (hasHist) {
+    const s = p || {};
+    const line = (l, v) => v ? '<div><b>' + l + ' :</b> ' + v + '</div>' : '';
+    inner = `<div style="font-size:12px;line-height:1.6">
+        ${line('Rôle', s.role ? cmdEsc(String(s.role)) : '')}
+        ${line('Mandataire possible', s.peut_mandataire != null ? (s.peut_mandataire ? 'oui' : 'non') : '')}
+        ${line('Typologies', list(s.typologies))}
+        ${line('Départements', list(s.departements))}
+        ${line('Compétences', list(s.competences))}
+        ${(s.tce_min != null || s.tce_max != null) ? line('Ordre de grandeur TCE', (s.tce_min != null ? fmt(s.tce_min) : '?') + ' – ' + (s.tce_max != null ? fmt(s.tce_max) : '?')) : ''}
+      </div>
+      ${wr && wr.html ? '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;color:#524FA1;font-weight:600">Voir la synthèse web (IA) — à vérifier</summary><div style="margin-top:8px;font-size:13px;border-top:1px solid var(--border);padding-top:8px">' + wr.html + '</div></details>' : ''}`;
+  } else {
+    inner = '<div style="font-size:12px;color:var(--t3)">Aucune recherche de réalisations enregistrée pour ce concurrent.</div>';
+  }
+  return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600">🔎 Réalisations & profil marchés${dateTxt ? ' <span style="font-weight:400;color:var(--t3);font-size:11px">— màj ' + dateTxt + '</span>' : ''}</div>
+        <button class="btn btn-sm" onclick="openConcurrentRealisations('${c.id}')">${hasHist ? '🔄 Ouvrir / relancer' : '🔎 Rechercher les réalisations'}</button>
+      </div>
+      ${inner}
+    </div>`;
+}
 function _cnfRender(c, rows) {
   const body = document.getElementById('cnfBody'); if (!body) return;
   const stLbl = { actif: 'Actif', nouveau: 'Nouveau', dormant: 'Dormant', prospect: 'Prospect' };
@@ -11963,7 +11996,8 @@ function _cnfRender(c, rows) {
       ${chartCard('Clients liés par commercial GPH', 'cnfComm', 260)}
       ${chartCard('Par métier de concurrence', 'cnfMetier')}
     </div>
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px">
+    ${_cnfRealizCard(c)}
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:14px">
       <div style="font-size:13px;font-weight:600;margin-bottom:8px">Clients où « ${cmdEsc(c.nom || '')} » est présent (${rows.length})</div>
       <div style="overflow:auto;max-height:380px">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
