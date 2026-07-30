@@ -643,3 +643,8 @@ CREATE TABLE IF NOT EXISTS listes_diffusion (
 ALTER TABLE listes_diffusion ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "listes_diffusion_all" ON listes_diffusion;
 CREATE POLICY "listes_diffusion_all" ON listes_diffusion FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- ═══ Concurrents : recherche réalisations & profil marchés déduit ═══
+-- web_research : synthèse IA (html + structured + date) ; marche_profil : profil déduit réutilisé pour la correspondance sur les opportunités.
+ALTER TABLE concurrents ADD COLUMN IF NOT EXISTS web_research JSONB;
+ALTER TABLE concurrents ADD COLUMN IF NOT EXISTS marche_profil JSONB;

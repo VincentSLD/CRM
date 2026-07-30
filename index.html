@@ -9883,6 +9883,7 @@ function renderOppDetailPage() {
     `<button class="btn" onclick="oppCreerTache('${o.akuiteo_id}')">✅ Créer une tâche</button>`,
     `<button class="btn" onclick="oppCreerCR('${o.akuiteo_id}')">📝 Créer un CR</button>`,
     `<button class="btn" style="background:linear-gradient(135deg,#772471,#FF1E63);color:#fff;border:none" onclick="oppSuggestClients('${o.akuiteo_id}')" title="Proposer des clients à solliciter selon leur profil marchés (typologie, département, TCE…)">🎯 Clients à solliciter</button>`,
+    `<button class="btn" onclick="oppConcurrents('${o.akuiteo_id}')" title="Identifier les concurrents susceptibles de se positionner sur ce marché (correspondance CRM + recherche IA)">🕵️ Concurrents à surveiller</button>`,
     enCours ? `<button class="btn" style="color:#10b981" onclick="oppWin('${o.akuiteo_id}')">🏆 Gagnée</button>` : '',
     enCours ? `<button class="btn" style="color:#ef4444" onclick="oppLose('${o.akuiteo_id}')">Perdue</button>` : '',
     o.client_id ? `<button class="btn" onclick="showClient('${o.client_id}')">Voir le client</button>` : '',
@@ -11913,6 +11914,7 @@ async function showConcurrentFiche(id) {
     <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--card)">
       <div style="flex:1"><div style="font-weight:700;font-size:15px">🏴 ${cmdEsc(c.nom || '')}</div>
         <div style="font-size:11px;color:var(--t3)">${cmdEsc(c.raison_sociale || '')}${c.ville ? ' · ' + cmdEsc(c.ville) : ''}${c.departement ? ' (' + cmdEsc(c.departement) + ')' : ''} · Métiers : ${cmdEsc(metiers)}</div></div>
+      <button class="btn btn-sm" onclick="openConcurrentRealisations('${id}')" title="Analyser les réalisations (DECP + web IA) et déduire le profil marchés du concurrent">🔎 Recherche réalisations</button>
       ${(c.siren || c.siret) ? '<a href="https://www.pappers.fr/entreprise/' + (c.siren || c.siret) + '" target="_blank" rel="noopener" class="btn btn-sm" style="text-decoration:none">📋 Pappers</a>' : ''}
       <button class="btn btn-sm" onclick="cnfToggleFullscreen()" title="Plein écran">⛶ Plein écran</button>
       <button class="btn btn-sm" onclick="cnfClose()">✕ Fermer</button>
@@ -14486,6 +14488,185 @@ async function applyWebToProfil() {
   const ov = document.querySelector('.nl-overlay'); if (ov) ov.remove();
   const el = document.getElementById('mp-block'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   toast('Appliqué au profil marchés — vérifiez puis « Enregistrer le profil ».', 'success');
+}
+// ═══════════════════════════════════════════════════════════
+//  CONCURRENTS — Recherche réalisations (DECP + web IA) & profil marchés
+//  + OPPORTUNITÉS — concurrents susceptibles de se positionner
+// ═══════════════════════════════════════════════════════════
+let _concRR = { c: null };       // concurrent en cours d'analyse
+let _concRealizWebLast = null;   // { html, structured } en attente d'enregistrement
+// Adapte un concurrent au format entité attendu par _rrDecp/_rrWeb (name/city/sector/siren…)
+function _concEnt(c) {
+  return {
+    name: (c.nom || c.raison_sociale || '').trim(),
+    raison_sociale: c.raison_sociale || '',
+    siren: c.siren || (c.siret ? String(c.siret).slice(0, 9) : ''),
+    siret: c.siret || '',
+    departement: c.departement || '',
+    code_postal: c.code_postal || '',
+    city: c.ville || '',
+    sector: c.ape || '',
+    web_research: c.web_research || null,
+  };
+}
+async function openConcurrentRealisations(id) {
+  let c = (concurrentsCache || []).find(x => x.id === id);
+  if (!c) { const r = await sb.from('concurrents').select('*').eq('id', id).maybeSingle(); c = r.data; }
+  if (!c) { toast('Concurrent introuvable', 'error'); return; }
+  _concRR = { c };
+  const ent = _concEnt(c);
+  const siretOk = _siretValide(ent.siret) || (String(ent.siren).replace(/\D/g, '').length >= 9);
+  const prevWeb = c.web_research && c.web_research.html;
+  _nlOverlay(`
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div style="font-size:16px;font-weight:700">🔎 Recherche réalisations — ${cmdEsc(ent.name)}</div>
+      <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
+    </div>
+    <div style="padding:16px 20px 6px">
+      <div style="font-size:12px;color:var(--t2);margin-bottom:10px">Analyser ce concurrent (marchés publics gagnés + réalisations web) pour en déduire son <b>profil marchés</b> : typologies, départements, métiers, ordre de grandeur TCE. Le profil enregistré sert ensuite à identifier les concurrents sur une opportunité.</div>
+      <label style="display:flex;gap:9px;align-items:flex-start;margin-bottom:10px;cursor:pointer"><input type="checkbox" id="rr-decp" checked style="margin-top:3px"><span><b>🏛️ Marchés publics (DECP)</b><br><span style="font-size:12px;color:var(--t3)">Marchés publics gagnés — données ouvertes, gratuit et instantané.</span></span></label>
+      <label style="display:flex;gap:9px;align-items:flex-start;margin-bottom:8px;cursor:${siretOk ? 'pointer' : 'not-allowed'}"><input type="checkbox" id="rr-web" ${siretOk ? 'checked' : 'disabled'} style="margin-top:3px"><span><b>🌐 Réalisations web (IA)</b> <span style="font-size:11px;background:#fef3c7;color:#92400e;border-radius:8px;padding:1px 6px;font-weight:700">payant · IA</span><br><span style="font-size:12px;color:var(--t3)">${siretOk ? 'Recherche web NOVA — couvre aussi le privé.' : '🔒 Nécessite un SIREN/SIRET sur la fiche concurrent.'}</span></span></label>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" id="rr-go" onclick="concRealizRun(false)">Lancer la recherche</button>
+        <label style="font-size:12px;color:var(--t3);display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="rr-force"> Ignorer le cache</label>
+        ${prevWeb ? '<span style="font-size:11px;color:var(--t3)">Profil web enregistré le ' + (c.web_research.generated_at ? fmtDateFR(new Date(c.web_research.generated_at).toISOString().slice(0, 10)) : '?') + '</span>' : ''}
+      </div>
+    </div>
+    <div id="rr-body" style="padding:6px 20px 20px;max-height:62vh;overflow:auto"></div>`, 900);
+}
+async function concRealizRun(force) {
+  const c = _concRR.c; if (!c) return;
+  const ent = _concEnt(c);
+  const decpCb = document.getElementById('rr-decp'), webCb = document.getElementById('rr-web'), forceCb = document.getElementById('rr-force');
+  const wantDecp = decpCb && decpCb.checked;
+  const wantWeb = webCb && webCb.checked && !webCb.disabled;
+  if (!wantDecp && !wantWeb) { toast('Sélectionnez au moins une source.', 'warn'); return; }
+  const f = force || (forceCb && forceCb.checked);
+  const body = document.getElementById('rr-body'), goBtn = document.getElementById('rr-go');
+  if (goBtn) { goBtn.disabled = true; goBtn.innerHTML = '<span class="hg-spin">⏳</span> Recherche…'; }
+  body.innerHTML = (wantDecp ? '<div id="rr-decp-sec" style="margin-bottom:16px"><div style="text-align:center;color:var(--t3);padding:22px"><span class="hg-spin" style="font-size:22px">⏳</span><div style="margin-top:8px">🏛️ Marchés publics (DECP)…</div></div></div>' : '')
+    + (wantWeb ? '<div id="rr-web-sec"><div style="text-align:center;color:var(--t3);padding:22px"><span class="hg-spin" style="font-size:22px">⏳</span><div style="margin-top:8px">🌐 NOVA recherche sur le web… (10‑25 s)</div></div></div>' : '')
+    + '<div id="rr-usage"></div>';
+  const tasks = [];
+  if (wantDecp) tasks.push(_rrDecp(ent, f));
+  if (wantWeb) tasks.push(_rrWebConc(ent, c, f));
+  tasks.push(new Promise(r => setTimeout(r, 500)));
+  await Promise.all(tasks);
+  if (goBtn) { goBtn.disabled = false; goBtn.innerHTML = '🔄 Relancer'; }
+}
+async function _rrWebConc(ent, c, force) {
+  const sec = () => document.getElementById('rr-web-sec');
+  const name = ent.name;
+  const siren = String(ent.siren || '').replace(/\D/g, '');
+  const cacheKey = 'realizwebconc_' + (siren || name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24));
+  const show = (o, src, usage) => {
+    _concRealizWebLast = { html: o.html, structured: o.structured || null };
+    const s = sec(); if (s) s.innerHTML = _realizWebRenderConc(o.html, o.structured, o.t, src);
+    const u = document.getElementById('rr-usage'); if (u) u.innerHTML = usage ? _rrUsageBox(usage) : '';
+  };
+  if (!force && c.web_research && c.web_research.html) { show({ html: c.web_research.html, structured: c.web_research.structured, t: c.web_research.generated_at ? new Date(c.web_research.generated_at).getTime() : null }, 'base'); return; }
+  if (!force) { try { const raw = localStorage.getItem(cacheKey); if (raw) { const o = JSON.parse(raw); if (o && o.t && (Date.now() - o.t) < 30 * 864e5 && o.html) { show({ html: o.html, structured: o.structured, t: o.t }, 'cache'); return; } } } catch (e) {} }
+  if (!siren || siren.length < 9) { const s = sec(); if (s) s.innerHTML = '<div style="padding:16px;color:#b45309;font-size:13px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px">🔒 SIREN manquant : complétez la fiche concurrent (Pappers / SIRENE).</div>'; return; }
+  try {
+    const r = await fetch('/api/realisations-web', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, city: ent.city || '', siren, sector: ent.sector || '', dept: ent.departement || (ent.code_postal ? String(ent.code_postal).slice(0, 2) : ''), typologies: _typoList(), competences: _competencesActive() }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    const now = Date.now();
+    try { localStorage.setItem(cacheKey, JSON.stringify({ t: now, html: j.html, structured: j.structured || null })); } catch (e) {}
+    show({ html: j.html, structured: j.structured, t: now }, null, j.usage || null);
+  } catch (e) { const s = sec(); if (s) s.innerHTML = '<div style="color:var(--red);padding:16px">Erreur recherche web : ' + cmdEsc(e.message) + '</div>'; }
+}
+function _realizWebRenderConc(html, structured, ts, src) {
+  const srcTxt = src === 'base' ? ' · depuis la fiche' : src === 'cache' ? ' · cache navigateur' : '';
+  let out = '<div style="font-size:11px;color:var(--t3);margin-bottom:8px">Synthèse IA (recherches web) — <b>à vérifier</b>' + (ts ? ' · généré le ' + fmtDateFR(new Date(ts).toISOString().slice(0, 10)) : '') + srcTxt + '.</div>';
+  out += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"><button class="btn btn-primary" style="font-size:12px" onclick="saveConcRealizWeb()">💾 Enregistrer sur la fiche concurrent</button></div>';
+  const s = structured || {}; const arr = a => Array.isArray(a) ? a : [];
+  const hasSugg = s && (s.role || arr(s.typologies).length || arr(s.departements).length || arr(s.competences).length || s.tce_min != null || s.tce_max != null || s.peut_mandataire != null);
+  if (hasSugg) {
+    const line = (l, v) => v ? '<div><b>' + l + ' :</b> ' + v + '</div>' : '';
+    const list = a => arr(a).length ? arr(a).map(x => cmdEsc(String(x))).join(', ') : '—';
+    out += '<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;background:var(--bg-2)"><div style="font-weight:700;font-size:13px;margin-bottom:6px">🧩 Profil marchés déduit <span style="font-weight:400;color:var(--t3);font-size:11px">(à valider)</span></div><div style="font-size:12px;line-height:1.6">'
+      + line('Rôle', s.role ? cmdEsc(String(s.role)) : '')
+      + line('Mandataire possible', s.peut_mandataire != null ? (s.peut_mandataire ? 'oui' : 'non') : '')
+      + line('Typologies', list(s.typologies))
+      + line('Départements', list(s.departements))
+      + line('Compétences', list(s.competences))
+      + ((s.tce_min != null || s.tce_max != null) ? line('Ordre de grandeur TCE', (s.tce_min != null ? fmt(s.tce_min) : '?') + ' – ' + (s.tce_max != null ? fmt(s.tce_max) : '?')) : '')
+      + '</div></div>';
+  }
+  return out + html;
+}
+async function saveConcRealizWeb() {
+  const c = _concRR.c; if (!c || !_concRealizWebLast) return;
+  const rec = { html: _concRealizWebLast.html, structured: _concRealizWebLast.structured || null, generated_at: new Date().toISOString(), by: (currentCommercial && currentCommercial.nom) || null };
+  const s = _concRealizWebLast.structured || {};
+  const prof = {
+    role: s.role || null,
+    typologies: Array.isArray(s.typologies) ? s.typologies : [],
+    departements: Array.isArray(s.departements) ? s.departements : [],
+    competences: Array.isArray(s.competences) ? s.competences : [],
+    tce_min: s.tce_min != null ? s.tce_min : null,
+    tce_max: s.tce_max != null ? s.tce_max : null,
+    peut_mandataire: s.peut_mandataire != null ? !!s.peut_mandataire : null,
+  };
+  const { error } = await sb.from('concurrents').update({ web_research: rec, marche_profil: prof }).eq('id', c.id);
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  c.web_research = rec; c.marche_profil = prof;
+  try { const it = (concurrentsCache || []).find(x => x.id === c.id); if (it) { it.web_research = rec; it.marche_profil = prof; } } catch (e) {}
+  toast('Profil marchés du concurrent enregistré ✅', 'success');
+}
+// ── Opportunité : concurrents susceptibles de se positionner (correspondance CRM + recherche IA) ──
+async function oppConcurrents(akId) {
+  const o = _opps.find(x => x.akuiteo_id === akId); if (!o) { toast('Opportunité introuvable', 'error'); return; }
+  let list = (concurrentsCache && concurrentsCache.length) ? concurrentsCache : null;
+  if (!list) { try { const { data } = await sb.from('concurrents').select('*').order('nom'); list = data || []; concurrentsCache = list; } catch (e) { list = []; } }
+  const typo = o.typologie || '', sous = o.sous_typologie || '', dept = o.chantier_dept || '';
+  const tce = Number(o.montant_travaux || o.montant || 0) || 0;
+  const norm = x => String(x || '').trim().toLowerCase();
+  const scored = (list || []).map(c => {
+    const p = c.marche_profil || {};
+    const tps = (Array.isArray(p.typologies) ? p.typologies : []).map(norm);
+    const deps = (Array.isArray(p.departements) ? p.departements : []).map(x => String(x).toUpperCase());
+    const mets = (Array.isArray(c.metiers) ? c.metiers : []).map(norm);
+    let score = 0; const why = [];
+    if (typo && tps.includes(norm(typo))) { score += 3; why.push('typologie'); }
+    if (sous && tps.includes(norm(sous))) { score += 1; }
+    if (dept && deps.includes(String(dept).toUpperCase())) { score += 2; why.push('dépt ' + dept + ' (profil)'); }
+    if (dept && String(c.departement || '').toUpperCase() === String(dept).toUpperCase()) { score += 1; why.push('implanté dépt ' + dept); }
+    if (tce && p.tce_min != null && p.tce_max != null && tce >= Number(p.tce_min) * 0.5 && tce <= Number(p.tce_max) * 1.5) { score += 1; why.push('TCE compatible'); }
+    if (mets.length && norm(typo) && mets.some(m => norm(typo).includes(m) || m.includes(norm(typo)))) { score += 1; why.push('métier'); }
+    return { c, score, why };
+  }).filter(x => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 20);
+  const ctx = [typo && ('Typologie : ' + cmdEsc(typo)), sous && ('Sous-typo : ' + cmdEsc(sous)), dept && ('Département : ' + cmdEsc(dept)), tce && ('TCE ~ ' + fmt(tce))].filter(Boolean).join(' · ') || 'critères non renseignés sur l\'opportunité';
+  const rows = scored.length ? scored.map(({ c, why }) => `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border)">
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px">🏴 ${cmdEsc(c.nom || c.raison_sociale || '')}</div>
+      <div style="font-size:11px;color:var(--t3)">${cmdEsc((c.ville || '') + (c.departement ? ' (' + c.departement + ')' : ''))}${why.length ? ' · ' + cmdEsc(why.join(', ')) : ''}</div></div>
+      <button class="btn" style="font-size:11px" onclick="showConcurrentFiche('${c.id}')">Fiche</button>
+    </div>`).join('') : '<div style="padding:14px;color:var(--t3);font-size:13px">Aucun concurrent du CRM avec un profil correspondant. Analysez d\'abord vos concurrents (fiche concurrent → « 🔎 Recherche réalisations ») pour construire leur profil marchés, ou lancez la recherche IA ci-dessous.</div>';
+  _nlOverlay(`
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div style="font-size:16px;font-weight:700">🕵️ Concurrents à surveiller</div>
+      <button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button>
+    </div>
+    <div style="padding:14px 20px 18px;max-height:70vh;overflow:auto">
+      <div style="font-size:12px;color:var(--t2);margin-bottom:10px">Marché : <b>${cmdEsc(o.nom || '')}</b><br><span style="color:var(--t3)">${ctx}</span></div>
+      <div style="font-weight:700;font-size:13px;margin:6px 0 4px">Concurrents du CRM correspondants (${scored.length})</div>
+      <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">${rows}</div>
+      <div style="border-top:1px solid var(--border);padding-top:12px">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px">🌐 Découvrir d'autres concurrents (IA web)</div>
+        <div style="font-size:12px;color:var(--t3);margin-bottom:8px">NOVA recherche sur le web les acteurs susceptibles de se positionner sur ce type de marché (résultats à vérifier).</div>
+        <button class="btn btn-primary" onclick="oppConcurrentsIA('${akId}')">🔎 Rechercher via NOVA (IA)</button>
+      </div>
+    </div>`, 720);
+}
+function oppConcurrentsIA(akId) {
+  const o = _opps.find(x => x.akuiteo_id === akId); if (!o) return;
+  const typo = [o.typologie, o.sous_typologie].filter(Boolean).join(' / ') || 'ce type de projet';
+  const dept = o.chantier_dept ? (' dans le département ' + o.chantier_dept) : '';
+  const prompt = `Recherche web : quels bureaux d'études techniques et entreprises concurrents sont susceptibles de se positionner sur un marché de type « ${typo} »${dept} ? Donne une liste de 5 à 10 acteurs (nom, ville/zone, spécialité : géotechnique, structure, VRD, fluides, thermique…) en t'appuyant sur des sources web récentes ; précise lesquels pourraient être mandataires.`;
+  const ov = document.querySelector('.nl-overlay'); if (ov) ov.remove();
+  const panel = document.getElementById('aiChatPanel'); if (panel && panel.style.display === 'none') toggleAIChat();
+  if (typeof askAIChat === 'function') askAIChat(prompt); else toast('Assistant NOVA indisponible', 'error');
 }
 function _realizRender(j, c, ts) {
   const decp = j.decp || {};
