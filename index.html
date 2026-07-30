@@ -11965,6 +11965,10 @@ function _cnfRealizCard(c) {
         <button class="btn btn-sm" onclick="openConcurrentRealisations('${c.id}')">${hasHist ? '🔄 Ouvrir / relancer' : '🔎 Rechercher les réalisations'}</button>
       </div>
       ${inner}
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+        <div style="font-weight:600;font-size:12px;margin-bottom:4px">📋 Tableau des recherches</div>
+        <div id="cnf-hist">${_concHistTable(c)}</div>
+      </div>
     </div>`;
 }
 function _cnfRender(c, rows) {
@@ -14547,7 +14551,8 @@ async function openConcurrentRealisations(id) {
   let c = (concurrentsCache || []).find(x => x.id === id);
   if (!c) { const r = await sb.from('concurrents').select('*').eq('id', id).maybeSingle(); c = r.data; }
   if (!c) { toast('Concurrent introuvable', 'error'); return; }
-  _concRR = { c };
+  _concRR = { c, decpRan: false, webRan: false };
+  _concRealizWebLast = null;
   const ent = _concEnt(c);
   const siretOk = _siretValide(ent.siret) || (String(ent.siren).replace(/\D/g, '').length >= 9);
   const prevWeb = c.web_research && c.web_research.html;
@@ -14562,8 +14567,12 @@ async function openConcurrentRealisations(id) {
       <label style="display:flex;gap:9px;align-items:flex-start;margin-bottom:8px;cursor:${siretOk ? 'pointer' : 'not-allowed'}"><input type="checkbox" id="rr-web" ${siretOk ? 'checked' : 'disabled'} style="margin-top:3px"><span><b>🌐 Réalisations web (IA)</b> <span style="font-size:11px;background:#fef3c7;color:#92400e;border-radius:8px;padding:1px 6px;font-weight:700">payant · IA</span><br><span style="font-size:12px;color:var(--t3)">${siretOk ? 'Recherche web NOVA — couvre aussi le privé.' : '🔒 Nécessite un SIREN/SIRET sur la fiche concurrent.'}</span></span></label>
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-primary" id="rr-go" onclick="concRealizRun(false)">Lancer la recherche</button>
+        <button class="btn" id="rr-save" onclick="saveConcRecherche()" title="Ajouter cette recherche à l'historique daté du concurrent">💾 Enregistrer les recherches</button>
         <label style="font-size:12px;color:var(--t3);display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="rr-force"> Ignorer le cache</label>
-        ${prevWeb ? '<span style="font-size:11px;color:var(--t3)">Profil web enregistré le ' + (c.web_research.generated_at ? fmtDateFR(new Date(c.web_research.generated_at).toISOString().slice(0, 10)) : '?') + '</span>' : ''}
+      </div>
+      <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px">📋 Tableau des recherches</div>
+        <div id="conc-hist">${_concHistTable(c)}</div>
       </div>
     </div>
     <div id="rr-body" style="padding:6px 20px 20px;max-height:62vh;overflow:auto"></div>`, 900);
@@ -14575,6 +14584,7 @@ async function concRealizRun(force) {
   const wantDecp = decpCb && decpCb.checked;
   const wantWeb = webCb && webCb.checked && !webCb.disabled;
   if (!wantDecp && !wantWeb) { toast('Sélectionnez au moins une source.', 'warn'); return; }
+  _concRR.decpRan = wantDecp; _concRR.webRan = wantWeb;
   const f = force || (forceCb && forceCb.checked);
   const body = document.getElementById('rr-body'), goBtn = document.getElementById('rr-go');
   if (goBtn) { goBtn.disabled = true; goBtn.innerHTML = '<span class="hg-spin">⏳</span> Recherche…'; }
@@ -14612,8 +14622,7 @@ async function _rrWebConc(ent, c, force) {
 }
 function _realizWebRenderConc(html, structured, ts, src) {
   const srcTxt = src === 'base' ? ' · depuis la fiche' : src === 'cache' ? ' · cache navigateur' : '';
-  let out = '<div style="font-size:11px;color:var(--t3);margin-bottom:8px">Synthèse IA (recherches web) — <b>à vérifier</b>' + (ts ? ' · généré le ' + fmtDateFR(new Date(ts).toISOString().slice(0, 10)) : '') + srcTxt + '.</div>';
-  out += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"><button class="btn btn-primary" style="font-size:12px" onclick="saveConcRealizWeb()">💾 Enregistrer sur la fiche concurrent</button></div>';
+  let out = '<div style="font-size:11px;color:var(--t3);margin-bottom:8px">Synthèse IA (recherches web) — <b>à vérifier</b>' + (ts ? ' · généré le ' + fmtDateFR(new Date(ts).toISOString().slice(0, 10)) : '') + srcTxt + '. Cliquez « 💾 Enregistrer les recherches » en haut pour l\'ajouter à l\'historique.</div>';
   const s = structured || {}; const arr = a => Array.isArray(a) ? a : [];
   const hasSugg = s && (s.role || arr(s.typologies).length || arr(s.departements).length || arr(s.competences).length || s.tce_min != null || s.tce_max != null || s.peut_mandataire != null);
   if (hasSugg) {
@@ -14648,6 +14657,75 @@ async function saveConcRealizWeb() {
   c.web_research = rec; c.marche_profil = prof;
   try { const it = (concurrentsCache || []).find(x => x.id === c.id); if (it) { it.web_research = rec; it.marche_profil = prof; } } catch (e) {}
   toast('Profil marchés du concurrent enregistré ✅', 'success');
+}
+function _profilFromStructured(s) {
+  s = s || {};
+  return { role: s.role || null, typologies: Array.isArray(s.typologies) ? s.typologies : [], departements: Array.isArray(s.departements) ? s.departements : [], competences: Array.isArray(s.competences) ? s.competences : [], tce_min: s.tce_min != null ? s.tce_min : null, tce_max: s.tce_max != null ? s.tce_max : null, peut_mandataire: s.peut_mandataire != null ? !!s.peut_mandataire : null };
+}
+function _concDecpCount(ent) {
+  const siren = String(ent.siren || '').replace(/\D/g, ''); if (siren.length < 9) return null;
+  const dept = String(ent.departement || (ent.code_postal ? String(ent.code_postal).replace(/\s/g, '').slice(0, 2) : '') || '').trim();
+  try { const o = JSON.parse(localStorage.getItem('realiz_' + siren + '_' + dept) || 'null'); if (o && o.d && o.d.decp && Array.isArray(o.d.decp.items)) return o.d.decp.items.length; } catch (e) {}
+  return null;
+}
+// Tableau (historique daté) des recherches de réalisations d'un concurrent
+function _concHistTable(c) {
+  const hist = Array.isArray(c.recherches) ? c.recherches : [];
+  if (!hist.length) return '<div style="font-size:12px;color:var(--t3);padding:4px 0">Aucune recherche enregistrée. Lancez une recherche puis « 💾 Enregistrer les recherches ».</div>';
+  const arr = a => Array.isArray(a) ? a : [];
+  const srcLbl = s => { const a = []; if (s && s.decp != null && s.decp !== false) a.push('🏛️ DECP' + (typeof s.decp === 'number' ? ' (' + s.decp + ')' : '')); if (s && s.web) a.push('🌐 Web IA'); return a.join(' · ') || '—'; };
+  const profilSum = p => { if (!p) return '—'; const t = arr(p.typologies).slice(0, 3).join(', '); const d = arr(p.departements).slice(0, 5).join(', '); return [t && ('Typo : ' + cmdEsc(t)), d && ('Dépt : ' + cmdEsc(d))].filter(Boolean).join(' · ') || (p.role ? cmdEsc(String(p.role)) : '—'); };
+  return `<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="text-align:left;color:var(--t3);border-bottom:1px solid var(--border)"><th style="padding:5px 8px;white-space:nowrap">Date</th><th style="padding:5px 8px">Sources</th><th style="padding:5px 8px">Profil déduit</th><th style="padding:5px 8px"></th></tr></thead>
+    <tbody>${hist.map((h, i) => `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:5px 8px;white-space:nowrap">${h.date ? fmtDateFR(String(h.date).slice(0, 10)) : (h.t ? fmtDateFR(new Date(h.t).toISOString().slice(0, 10)) : '—')}</td>
+      <td style="padding:5px 8px;white-space:nowrap">${srcLbl(h.sources)}</td>
+      <td style="padding:5px 8px;color:var(--t2)">${profilSum(h.profil)}</td>
+      <td style="padding:5px 8px;text-align:right;white-space:nowrap">${h.web_html ? '<button class="btn" style="font-size:11px;padding:2px 8px" onclick="_concViewRecherche(\'' + c.id + '\',' + i + ')">Voir</button> ' : ''}<button class="btn" style="font-size:11px;padding:2px 8px;color:var(--red)" title="Supprimer cette ligne" onclick="_concDelRecherche(\'' + c.id + '\',' + i + ')">×</button></td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+function _concViewRecherche(concId, idx) {
+  const c = (concurrentsCache || []).find(x => x.id === concId); if (!c) return;
+  const h = (Array.isArray(c.recherches) ? c.recherches : [])[idx]; if (!h) return;
+  _nlOverlay(`<div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px"><div style="font-size:15px;font-weight:700">🔎 Recherche du ${h.date ? fmtDateFR(String(h.date).slice(0, 10)) : ''} — ${cmdEsc(c.nom || '')}</div><button class="btn" onclick="this.closest('.nl-overlay').remove()">✕</button></div><div style="padding:14px 20px;max-height:70vh;overflow:auto;font-size:13px">${h.web_html || '<div style="color:var(--t3)">Pas de synthèse web enregistrée pour cette recherche (DECP seul).</div>'}</div>`, 820);
+}
+async function _concDelRecherche(concId, idx) {
+  const c = (concurrentsCache || []).find(x => x.id === concId) || (_concRR.c && _concRR.c.id === concId ? _concRR.c : null); if (!c) return;
+  const hist = Array.isArray(c.recherches) ? c.recherches.slice() : [];
+  if (idx < 0 || idx >= hist.length) return;
+  hist.splice(idx, 1);
+  const { error } = await sb.from('concurrents').update({ recherches: hist }).eq('id', c.id);
+  if (error) { toast('Erreur : ' + error.message, 'error'); return; }
+  c.recherches = hist;
+  try { const it = (concurrentsCache || []).find(x => x.id === c.id); if (it) it.recherches = hist; } catch (e) {}
+  const hb = document.getElementById('conc-hist'); if (hb) hb.innerHTML = _concHistTable(c);
+  const fb = document.getElementById('cnf-hist'); if (fb) fb.innerHTML = _concHistTable(c);
+  try { if (currentPage === 'concurrence' && typeof renderCnLocalList === 'function') renderCnLocalList(); } catch (e) {}
+  toast('Ligne supprimée', 'success');
+}
+// Ajoute la recherche courante (DECP + web) comme une ligne datée dans l'historique du concurrent
+async function saveConcRecherche() {
+  const c = _concRR.c; if (!c) return;
+  const web = _concRealizWebLast; // { html, structured } ou null
+  const decpRan = !!_concRR.decpRan, webRan = !!_concRR.webRan;
+  const sources = {};
+  if (decpRan) { const n = _concDecpCount(_concEnt(c)); sources.decp = (n != null ? n : true); }
+  if (webRan && web && web.html) sources.web = true;
+  if (!sources.decp && !sources.web) { toast('Lancez d\'abord une recherche (DECP ou web) avant d\'enregistrer.', 'warn'); return; }
+  const profil = (web && web.structured) ? web.structured : (c.marche_profil || null);
+  const entry = { t: Date.now(), date: new Date().toISOString(), sources, profil: profil || null, web_html: (web && web.html) ? web.html : null };
+  const hist = Array.isArray(c.recherches) ? c.recherches.slice() : [];
+  hist.unshift(entry);
+  if (hist.length > 30) hist.length = 30;
+  const upd = { recherches: hist };
+  if (web && web.html) { upd.web_research = { html: web.html, structured: web.structured || null, generated_at: entry.date, by: (currentCommercial && currentCommercial.nom) || null }; upd.marche_profil = _profilFromStructured(web.structured); }
+  const { error } = await sb.from('concurrents').update(upd).eq('id', c.id);
+  if (error) { toast('Erreur d\'enregistrement : ' + error.message + ' (colonnes recherches/web_research créées dans Supabase ?)', 'error'); return; }
+  c.recherches = hist; if (upd.web_research) c.web_research = upd.web_research; if (upd.marche_profil) c.marche_profil = upd.marche_profil;
+  try { const it = (concurrentsCache || []).find(x => x.id === c.id); if (it) { it.recherches = hist; if (upd.web_research) it.web_research = upd.web_research; if (upd.marche_profil) it.marche_profil = upd.marche_profil; } } catch (e) {}
+  toast('Recherche ajoutée à l\'historique ✅', 'success');
+  const hb = document.getElementById('conc-hist'); if (hb) hb.innerHTML = _concHistTable(c);
+  try { if (currentPage === 'concurrence' && typeof renderCnLocalList === 'function') renderCnLocalList(); } catch (e) {}
 }
 // ── Opportunité : concurrents susceptibles de se positionner (correspondance CRM + recherche IA) ──
 async function oppConcurrents(akId) {

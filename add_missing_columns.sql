@@ -648,3 +648,5 @@ CREATE POLICY "listes_diffusion_all" ON listes_diffusion FOR ALL TO authenticate
 -- web_research : synthèse IA (html + structured + date) ; marche_profil : profil déduit réutilisé pour la correspondance sur les opportunités.
 ALTER TABLE concurrents ADD COLUMN IF NOT EXISTS web_research JSONB;
 ALTER TABLE concurrents ADD COLUMN IF NOT EXISTS marche_profil JSONB;
+-- Historique daté des recherches de réalisations d'un concurrent (tableau des recherches)
+ALTER TABLE concurrents ADD COLUMN IF NOT EXISTS recherches JSONB DEFAULT '[]'::jsonb;
