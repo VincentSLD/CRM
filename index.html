@@ -3192,6 +3192,8 @@ let clientsFilterType = [];
 let clientsFilterGroupe = [];
 let clientsFilterOrigine = [];
 let clientsFilterSiret = ''; // '' | 'yes' | 'no'
+let clientsFilterPlateforme = ''; // '' | 'yes' | 'no' (id_plateforme)
+let clientsFilterCodial = ''; // '' | 'yes' | 'no' (code_codial)
 let clientsFilterSiege = ''; // '' | 'siege' | 'etablissement'
 let clientsFilterCatCompte = [];
 let clientsFilterCatRole = 'client'; // 'client' | 'apporteur' | 'architecte' | 'gros_oeuvre' (colonne ciblée par le filtre Cat. compte)
@@ -3952,6 +3954,10 @@ async function loadClientsPage(page, letter, search) {
     if (clientsFilterOrigine.length) query = query.in('mk_origine', _expandMulti('origine', clientsFilterOrigine));
     if (clientsFilterSiret === 'yes') query = query.not('siret', 'is', null).neq('siret', '');
     if (clientsFilterSiret === 'no') query = query.or('siret.is.null,siret.eq.');
+    if (clientsFilterPlateforme === 'yes') query = query.not('id_plateforme', 'is', null).neq('id_plateforme', '');
+    if (clientsFilterPlateforme === 'no') query = query.or('id_plateforme.is.null,id_plateforme.eq.');
+    if (clientsFilterCodial === 'yes') query = query.not('code_codial', 'is', null).neq('code_codial', '');
+    if (clientsFilterCodial === 'no') query = query.or('code_codial.is.null,code_codial.eq.');
     if (clientsFilterSiege === 'siege') query = query.eq('est_siege', true);
     if (clientsFilterSiege === 'etablissement') query = query.eq('est_siege', false);
     if (clientsFilterReseauxPro) query = query.contains('reseaux_pro', [clientsFilterReseauxPro]);
@@ -4006,6 +4012,8 @@ function resetClientsFilters() {
   clientsFilterGroupe = [];
   clientsFilterOrigine = [];
   clientsFilterSiret = '';
+  clientsFilterPlateforme = '';
+  clientsFilterCodial = '';
   clientsFilterSiege = '';
   clientsFilterCatCompte = [];
   clientsFilterCatRole = 'client';
@@ -12420,7 +12428,7 @@ async function deleteClientConcurrent(linkId, clientId) {
 }
 
 function _clientsHasFilters() {
-  return !!(clientsFilterDept.length || clientsFilterNovam.length || clientsFilterGph.length || clientsFilterStatut.length || clientsFilterSync || clientsFilterCategorie.length || clientsFilterSousCategorie.length || clientsFilterCategoriePro.length || clientsFilterSecteur.length || clientsFilterType.length || clientsFilterGroupe.length || clientsFilterOrigine.length || clientsFilterSiret || clientsFilterSiege || clientsFilterCatCompte.length || !clientsHideRadiees || clientsFilterPlus || clientsFilterReseauxPro);
+  return !!(clientsFilterDept.length || clientsFilterNovam.length || clientsFilterGph.length || clientsFilterStatut.length || clientsFilterSync || clientsFilterCategorie.length || clientsFilterSousCategorie.length || clientsFilterCategoriePro.length || clientsFilterSecteur.length || clientsFilterType.length || clientsFilterGroupe.length || clientsFilterOrigine.length || clientsFilterSiret || clientsFilterPlateforme || clientsFilterCodial || clientsFilterSiege || clientsFilterCatCompte.length || !clientsHideRadiees || clientsFilterPlus || clientsFilterReseauxPro);
 }
 
 function renderClients(filter='all') {
@@ -12499,6 +12507,16 @@ function renderClients(filter='all') {
         <option value="" ${!clientsFilterSiret?'selected':''}>— SIRET —</option>
         <option value="yes" ${clientsFilterSiret==='yes'?'selected':''}>✓ Avec SIRET</option>
         <option value="no" ${clientsFilterSiret==='no'?'selected':''}>✗ Sans SIRET</option>
+      </select>
+      <select onchange="clientsFilterPlateforme=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" title="ID Plateforme (local)" style="padding:5px 8px;border:1px solid ${clientsFilterPlateforme?'#FF1E63':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterPlateforme?'rgba(255,30,99,0.13)':'var(--card)'};color:var(--t1)">
+        <option value="" ${!clientsFilterPlateforme?'selected':''}>— ID Plateforme —</option>
+        <option value="yes" ${clientsFilterPlateforme==='yes'?'selected':''}>✓ Avec ID</option>
+        <option value="no" ${clientsFilterPlateforme==='no'?'selected':''}>✗ Sans ID</option>
+      </select>
+      <select onchange="clientsFilterCodial=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" title="Code CODIAL (local)" style="padding:5px 8px;border:1px solid ${clientsFilterCodial?'#FF1E63':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterCodial?'rgba(255,30,99,0.13)':'var(--card)'};color:var(--t1)">
+        <option value="" ${!clientsFilterCodial?'selected':''}>— Code CODIAL —</option>
+        <option value="yes" ${clientsFilterCodial==='yes'?'selected':''}>✓ Avec ID</option>
+        <option value="no" ${clientsFilterCodial==='no'?'selected':''}>✗ Sans ID</option>
       </select>
       <select onchange="clientsFilterSiege=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterSiege?'#FF1E63':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterSiege?'rgba(255,30,99,0.13)':'var(--card)'};color:var(--t1)">
         <option value="" ${!clientsFilterSiege?'selected':''}>— Établissement —</option>
