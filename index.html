@@ -22128,12 +22128,12 @@ function getCREditorHTML(r) {
     <div class="cr-fields-row" style="padding:12px 16px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:${window.innerWidth<=768?'1fr':'2fr 1fr 1fr 1fr'};gap:10px">
       <div>
         <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Titre <span style="color:var(--red)">*</span></label>
-        <input type="text" id="crTitre" placeholder="Titre du compte-rendu..." value="${r ? (r.titre||'').replace(/"/g,'&quot;') : ''}"
+        <input type="text" id="crTitre" placeholder="Titre du compte-rendu..." value="${r ? (r.titre||'').replace(/"/g,'&quot;') : ''}" oninput="crScheduleAutosave()"
           style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)">
       </div>
       <div>
         <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Type <span style="color:var(--red)">*</span></label>
-        <select id="crType" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)">
+        <select id="crType" onchange="crScheduleAutosave()" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--t1)">
           <option value="rdv_ext" ${r?.type_cr==='rdv_ext'?'selected':''}>RDV EXT.</option>
           <option value="rdv_int" ${r?.type_cr==='rdv_int'?'selected':''}>RDV INT.</option>
           <option value="salon_foire" ${r?.type_cr==='salon_foire'?'selected':''}>SALON-FOIRE</option>
@@ -22144,12 +22144,12 @@ function getCREditorHTML(r) {
       </div>
       <div>
         <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Date RDV <span style="color:var(--red)">*</span></label>
-        <input type="date" id="crDate" value="${r ? (r.date_raw||'').substring(0,10) : today}"
+        <input type="date" id="crDate" value="${r ? (r.date_raw||'').substring(0,10) : today}" onchange="crScheduleAutosave()"
           style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
       </div>
       <div>
         <label style="font-size:11px;color:var(--t3);margin-bottom:4px;display:block">Rédacteur <span style="color:var(--red)">*</span></label>
-        <select id="crRedacteur" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
+        <select id="crRedacteur" onchange="crScheduleAutosave()" style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg-1);color:var(--t1)">
           ${getCRRedacteurOptions().map(c => `<option value="${c.id}" ${(r ? r.redacteur_id == c.id : c.id == myId) ? 'selected' : ''}>${c.label}</option>`).join('')}
         </select>
       </div>
@@ -22249,7 +22249,7 @@ function getCREditorHTML(r) {
           <button class="tb tb-ai" onclick="aiAssist('summarize')">✦ Synthèse</button>
           <button class="tb tb-ai" onclick="aiAssist('complete')">✦ Compléter</button>
         </div>
-        <div class="editor-body" contenteditable="true" id="editorBody">${r ? r.contenu||'' : ''}</div>
+        <div class="editor-body" contenteditable="true" id="editorBody" oninput="crScheduleAutosave()">${r ? r.contenu||'' : ''}</div>
         <div id="dictZone" style="display:none"></div>
         <div id="aiArea"></div>
         <div id="crAttachZone" style="padding:10px 16px;border-top:1px solid var(--border)">
@@ -22268,7 +22268,8 @@ function getCREditorHTML(r) {
         </div>
         <div class="editor-foot">
           <div style="font-size:11px;color:var(--t3)" id="editorStatus">Prêt</div>
-          <div style="display:flex;gap:6px">
+          <div style="display:flex;gap:6px;align-items:center">
+            <span id="crAutosaveStatus" style="font-size:11px;margin-right:4px" title="Le compte-rendu est enregistré automatiquement (brouillon) dès qu'une société est saisie, puis à la frappe."></span>
             <button class="btn" onclick="backToCRList()">Annuler</button>
             ${r ? '<button class="btn" style="color:var(--red)" onclick="deleteReport()">Supprimer</button>' : ''}
             <button class="btn" onclick="saveReport()" style="background:var(--ink);color:#fff;border-color:var(--magenta);font-weight:600">${r ? 'Mettre à jour' : 'Enregistrer'}</button>
@@ -22308,6 +22309,7 @@ async function openCRDetail(reportId) {
 
 // Modal uniquement pour Nouveau CR
 function openCRModal() {
+  if (typeof _crAutosaveReset === 'function') _crAutosaveReset();
   currentReport = null;
   _crNovaOrigin = false;
   crAttachments = [];
@@ -22332,6 +22334,7 @@ function clearEditor() {
 }
 
 function closeCRModal() {
+  if (typeof _crAutosaveReset === 'function') _crAutosaveReset();
   const el = document.getElementById('modal-cr');
   if (el) el.classList.remove('active');
 }
@@ -22344,6 +22347,7 @@ function voirCRClient(clientId, clientName) {
   go('cr');
 }
 function goToCR(clientId, clientName, contactId, contactName) {
+  if (typeof _crAutosaveReset === 'function') _crAutosaveReset();
   currentReport = null;
   _crNovaOrigin = false;
   crAttachments = [];
@@ -22517,6 +22521,8 @@ function selectCRClient(id, name) {
   if (af) { af.disabled = false; af.style.opacity = '1'; }
   // Charger les contacts de ce client
   loadCRContacts(id);
+  // Dès qu'une société est saisie → créer/mettre à jour le brouillon automatiquement
+  if (typeof crScheduleAutosave === 'function') crScheduleAutosave(true);
 }
 
 function removeCRClient(idx) {
@@ -22872,10 +22878,14 @@ async function saveReport(silent) {
   if (!dateCr) missing.push('Date RDV');
   if (!redacteurId) missing.push('Rédacteur');
   if (!_crSelectedClients.length) missing.push('Société');
-  if (missing.length) { toast('Champs obligatoires manquants : ' + missing.join(', '), 'error'); return false; }
+  if (missing.length) {
+    // Enregistrement AUTOMATIQUE (brouillon) : seule la Société est requise ; les autres champs se complètent ensuite.
+    if (!silent) { toast('Champs obligatoires manquants : ' + missing.join(', '), 'error'); return false; }
+    if (!_crSelectedClients.length) return false;
+  }
 
-  // Sablier pendant l'enregistrement
-  const saveBtn = document.querySelector('[onclick="saveReport()"]');
+  // Sablier pendant l'enregistrement (jamais en mode auto/silencieux)
+  const saveBtn = silent ? null : document.querySelector('[onclick="saveReport()"]');
   const saveBtnText = saveBtn ? saveBtn.innerHTML : '';
   if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><span style="display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></span>Enregistrement...</span>'; }
 
@@ -22899,7 +22909,7 @@ async function saveReport(silent) {
     titre: titre,
     contenu: body.innerHTML,
     type_cr: typeCr,
-    date: dateCr + 'T12:00:00',
+    date: (dateCr || new Date().toISOString().slice(0, 10)) + 'T12:00:00',
     updated_at: new Date().toISOString(),
     redacteur_id: redacteurId ? Number(redacteurId) : null,
     redacteur_nom: crGetRedacteurLabel(redacteurId) || redacteur?.nom || null,
@@ -22937,6 +22947,52 @@ async function saveReport(silent) {
   }
   if (isNewReport && _crNovaOrigin) { _crNovaOrigin = false; novaActionDone('cr', { id: currentReport && currentReport.id, titre: titre, client_name: allClientNames }); }
   return true;
+}
+
+// ═══ Enregistrement AUTOMATIQUE du CR (brouillon) : dès qu'une société est saisie, puis au fil de la frappe ═══
+let _crAutosaveTimer = null, _crAutosaveSig = '', _crAutosaveBusy = false;
+function _crAutosaveReset() { clearTimeout(_crAutosaveTimer); _crAutosaveTimer = null; _crAutosaveSig = ''; _crAutosaveBusy = false; }
+function _crAutosaveSignature() {
+  const body = document.getElementById('editorBody');
+  return JSON.stringify({
+    t: document.getElementById('crTitre')?.value || '',
+    ty: document.getElementById('crType')?.value || '',
+    d: document.getElementById('crDate')?.value || '',
+    rd: document.getElementById('crRedacteur')?.value || '',
+    c: body ? body.innerHTML : '',
+    cl: _crSelectedClients.map(c => c.id),
+    co: _crSelectedContacts.map(c => c.id),
+    af: _crSelectedAffaire ? _crSelectedAffaire.id : null,
+    op: _crSelectedOpp ? _crSelectedOpp.id : null,
+    pj: (crAttachments || []).length,
+  });
+}
+function _crSetAutosaveStatus(state) {
+  const el = document.getElementById('crAutosaveStatus'); if (!el) return;
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+  if (state === 'saving') el.innerHTML = '<span style="opacity:.65">💾 Enregistrement…</span>';
+  else if (state === 'saved') el.innerHTML = '<span style="color:#10b981">✓ Brouillon enregistré ' + hh + '</span>';
+  else if (state === 'error') el.innerHTML = '<span style="color:var(--red)">⚠ Échec de l\'enregistrement auto</span>';
+  else el.innerHTML = '';
+}
+// Programme un autosave anti-rebond. fast=true → délai court (à la sélection de la société).
+function crScheduleAutosave(fast) {
+  if (!_crSelectedClients.length) return; // condition : une société doit être saisie
+  clearTimeout(_crAutosaveTimer);
+  _crAutosaveTimer = setTimeout(crAutosaveNow, fast ? 500 : 2200);
+}
+async function crAutosaveNow() {
+  if (!_crSelectedClients.length) return;
+  if (_crAutosaveBusy) { crScheduleAutosave(); return; }
+  const sig = _crAutosaveSignature();
+  if (sig === _crAutosaveSig) return; // rien de nouveau depuis le dernier enregistrement
+  _crAutosaveBusy = true;
+  _crSetAutosaveStatus('saving');
+  let ok = false;
+  try { ok = await saveReport(true); } catch (e) { ok = false; }
+  _crAutosaveBusy = false;
+  if (ok) { _crAutosaveSig = sig; _crSetAutosaveStatus('saved'); } else { _crSetAutosaveStatus('error'); }
 }
 
 // ═══ ENVOIS ═══
