@@ -32818,20 +32818,26 @@ function _akIdFromName(list, name) {
 }
 // Applique les champs référentiels (catégorie, sous-catégorie, secteur, type, tarif, commerciaux).
 // Si l'id manque côté CRM, on le résout depuis le nom via le référentiel Akuiteo (akRef).
+// Convertit en entier Akuiteo valide (id) ; retourne null si non numérique (évite NumberFormatException côté Akuiteo).
+function _akInt(v) { if (v == null || v === '') return null; const n = Number(String(v).trim().replace(/\s/g, '')); return Number.isFinite(n) ? Math.trunc(n) : null; }
+// Convertit un montant/effectif en nombre (tolère espaces, €, virgule décimale) ; null si non numérique.
+function _akNum(v) { if (v == null || v === '') return null; const n = Number(String(v).replace(/[^\d.,-]/g, '').replace(/\s/g, '').replace(',', '.')); return Number.isFinite(n) ? n : null; }
 function _applyAkRefs(akData, full) {
   const r = (typeof akRef === 'object' && akRef) ? akRef : {};
-  const cat = full.mk_categorie_id || _akIdFromName(r.categories, full.mk_categorie); if (cat) akData.categoryId = cat;
-  const sub = full.mk_sous_categorie_id || _akIdFromName(r.subCategories, full.mk_sous_categorie); if (sub) akData.subCategoryId = sub;
-  const pro = full.mk_categorie_pro_id || _akIdFromName(r.proCats, full.mk_categorie_pro); if (pro) akData.professionalCategoryId = pro;
-  const sec = full.mk_secteur_id || _akIdFromName(r.sectors, full.mk_secteur); if (sec) akData.sectorId = sec;
-  const typ = full.mk_type_id || _akIdFromName(r.linkTypes, full.mk_type); if (typ) akData.thirdPartyLinkTypeId = typ;
-  const pm = full.mode_tarification || _akIdFromName(r.pricingMethods, full.mode_tarification_name); if (pm) akData.firstPricingMethodId = pm;
-  const am = full.account_manager_id || _akIdFromName(r.employees, full.account_manager_name); if (am) akData.accountManagerId = am;
-  const sm = full.salesman_id || _akIdFromName(r.employees, full.salesman_name); if (sm) akData.salesmanId = sm;
-  if (full.mk_groupe) akData.level1grouping = full.mk_groupe;
-  if (full.mk_origine) akData.level2grouping = full.mk_origine;
+  // Tous ces champs sont des IDs NUMÉRIQUES côté Akuiteo → on coerce et on abandonne toute valeur non numérique.
+  const setId = (key, val) => { const n = _akInt(val); if (n != null) akData[key] = n; else delete akData[key]; };
+  setId('categoryId', full.mk_categorie_id || _akIdFromName(r.categories, full.mk_categorie));
+  setId('subCategoryId', full.mk_sous_categorie_id || _akIdFromName(r.subCategories, full.mk_sous_categorie));
+  setId('professionalCategoryId', full.mk_categorie_pro_id || _akIdFromName(r.proCats, full.mk_categorie_pro));
+  setId('sectorId', full.mk_secteur_id || _akIdFromName(r.sectors, full.mk_secteur));
+  setId('thirdPartyLinkTypeId', full.mk_type_id || _akIdFromName(r.linkTypes, full.mk_type));
+  setId('firstPricingMethodId', full.mode_tarification || _akIdFromName(r.pricingMethods, full.mode_tarification_name));
+  setId('accountManagerId', full.account_manager_id || _akIdFromName(r.employees, full.account_manager_name));
+  setId('salesmanId', full.salesman_id || _akIdFromName(r.employees, full.salesman_name));
+  if (full.mk_groupe) akData.level1grouping = full.mk_groupe; else delete akData.level1grouping;
+  if (full.mk_origine) akData.level2grouping = full.mk_origine; else delete akData.level2grouping;
   // Statut Akuiteo basé sur l'état INSEE : "Radiée" (C) → DORMANT, "Active" (A) ou vide → ACTIF
-  const sid = _akStatusId(full.etat_insee); if (sid) akData.statusId = sid;
+  setId('statusId', _akStatusId(full.etat_insee));
 }
 // Référentiel des statuts client Akuiteo (/settings/customer-status/search) : code/nom (majuscules) → id
 let _akStatuses = null;
@@ -33043,9 +33049,9 @@ async function pushClientToAkuiteo(clientId) {
       if (full.forme_juridique) akData.legalForm = full.forme_juridique;
       if (full.reference_externe) akData.externalReference = full.reference_externe;
       if (full.langue) akData.languageCode = full.langue;
-      if (full.chiffre_affaires) akData.revenue = full.chiffre_affaires;
-      if (full.capital) akData.equity = full.capital;
-      if (full.effectif) akData.headcount = full.effectif;
+      { const v = _akNum(full.chiffre_affaires); if (v != null) akData.revenue = v; else delete akData.revenue; }
+      { const v = _akNum(full.capital); if (v != null) akData.equity = v; else delete akData.equity; }
+      { const v = _akInt(full.effectif); if (v != null) akData.headcount = v; else delete akData.headcount; }
       if (full.notes !== undefined) akData.notes = full.notes;
       // Champs Akuiteo (IDs) — Infos Entreprise / Commercial / Tarification (id, sinon résolu depuis le nom)
       _applyAkRefs(akData, full);
@@ -33089,6 +33095,7 @@ async function pushClientToAkuiteo(clientId) {
     // Akuiteo limite le code à 10 caractères : on tronque pour éviter T9RuntimeException
     if (akData.code && akData.code.length > 10) akData.code = akData.code.substring(0, 10);
 
+    try { console.log('[Akuiteo] payload /crm/customers', JSON.stringify(akData)); } catch (e) {}
     if (full.akuiteo_id) {
       // Update : id dans le body + Accept text/plain obligatoires
       akData.id = full.akuiteo_id;
