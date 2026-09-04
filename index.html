@@ -2781,19 +2781,8 @@ tbody tr:last-child td { border-bottom: none; }
       <div class="card" style="margin-bottom:16px">
         <div class="card-header"><div class="card-title">Habitudes Administratives et Commerciales</div></div>
         <div class="card-body">
-          <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
-            <div style="display:flex;gap:2px;padding:4px 6px;border-bottom:1px solid var(--border);background:var(--bg-2)">
-              <button class="tb" title="Gras" onclick="fmtRTE('ec-notes','bold')"><b>B</b></button>
-              <button class="tb" title="Italique" onclick="fmtRTE('ec-notes','italic')"><i>I</i></button>
-              <button class="tb" title="Souligné" onclick="fmtRTE('ec-notes','underline')"><u>U</u></button>
-              <div class="tb-div"></div>
-              <button class="tb" title="Liste" onclick="fmtRTE('ec-notes','insertUnorderedList')">☰</button>
-              <div class="tb-div"></div>
-              <button class="tb" title="Couleur du texte" onmousedown="event.preventDefault()" onclick="rteOpenPalette('ec-notes','fg',this)"><span style="color:#C11F39;font-weight:700">A</span></button>
-              <button class="tb" title="Surligner" onmousedown="event.preventDefault()" onclick="rteOpenPalette('ec-notes','bg',this)">🖍</button>
-            </div>
-            <div class="editor-body" contenteditable="true" id="ec-notes" style="min-height:80px;max-height:250px;overflow-y:auto"></div>
-          </div>
+          <textarea class="fi" id="ec-notes" rows="3" style="resize:vertical" placeholder="Texte simple (synchronisé vers Akuiteo)"></textarea>
+          <div style="font-size:11px;color:var(--t3);margin-top:4px">Texte simple — synchronisé vers Akuiteo (pas de mise en forme).</div>
         </div>
       </div>
       <!-- Habitudes Techniques | Habitudes Géotechniques -->
@@ -28249,7 +28238,7 @@ function openModal(id) {
     document.getElementById('ec-siret').value = c.siret||'';
     document.getElementById('ec-ape').value = c.ape||'';
     const ecRefext = document.getElementById('ec-refext'); if (ecRefext) ecRefext.value = c.reference_externe||'';
-    { const _n = document.getElementById('ec-notes'); if (_n) { const v = c.notes || ''; _n.innerHTML = /<[a-z!][\s\S]*>/i.test(v) ? v : v.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); } }
+    { const _n = document.getElementById('ec-notes'); if (_n) { let v = c.notes || ''; if (/<[a-z!][\s\S]*>/i.test(v)) v = v.replace(/<\/(div|p|li)>/gi,'\n').replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]+>/g,'').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/\n{3,}/g,'\n\n').trim(); _n.value = v; } }
     document.getElementById('ec-hab-tech').innerHTML = c.habitudes_techniques||'';
     document.getElementById('ec-hab-geo').innerHTML = c.habitudes_geotechniques||'';
     document.getElementById('ec-tva').value = c.tva_intracommunautaire || computeTVA(c.siren) || '';
@@ -29551,7 +29540,7 @@ async function submitEditClient() {
       tva_intracommunautaire: document.getElementById('ec-tva').value.trim() || null,
       categorie_compte: readCategorieCompte('ec'),
       categorie_compte_plus: readCategorieComptePlus('ec'),
-      notes: document.getElementById('ec-notes').innerHTML.trim() || null,
+      notes: document.getElementById('ec-notes').value.trim() || null,
       habitudes_techniques: document.getElementById('ec-hab-tech').innerHTML.trim() || null,
       habitudes_geotechniques: document.getElementById('ec-hab-geo').innerHTML.trim() || null,
       code_codial: document.getElementById('ec-code-codial')?.value.trim() || null,
