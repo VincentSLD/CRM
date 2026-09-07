@@ -650,3 +650,16 @@ ALTER TABLE concurrents ADD COLUMN IF NOT EXISTS web_research JSONB;
 ALTER TABLE concurrents ADD COLUMN IF NOT EXISTS marche_profil JSONB;
 -- Historique daté des recherches de réalisations d'un concurrent (tableau des recherches)
 ALTER TABLE concurrents ADD COLUMN IF NOT EXISTS recherches JSONB DEFAULT '[]'::jsonb;
+
+-- ═══ Journal des synchronisations nocturnes (crons) ═══
+CREATE TABLE IF NOT EXISTS sync_log (
+  id BIGSERIAL PRIMARY KEY,
+  job TEXT,
+  ok BOOLEAN,
+  duration_ms INTEGER,
+  detail JSONB,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE sync_log ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "sync_log_all" ON sync_log;
+CREATE POLICY "sync_log_all" ON sync_log FOR ALL TO authenticated USING (true) WITH CHECK (true);
