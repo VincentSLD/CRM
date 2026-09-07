@@ -66,8 +66,14 @@ async function fetchDecp(siren, max = 500) {
 function pctl(arr, p) { if (!arr.length) return null; const a = arr.slice().sort((x, y) => x - y); const i = Math.min(a.length - 1, Math.max(0, Math.round((p / 100) * (a.length - 1)))); return a[i]; }
 
 export default async function handler(req, res) {
+  // Autorisation : Vercel Cron (Bearer CRON_SECRET) OU admin CRM connecté (jeton Supabase) pour un lancement manuel
   if (process.env.CRON_SECRET) {
-    if ((req.headers['authorization'] || '') !== 'Bearer ' + process.env.CRON_SECRET) return res.status(401).json({ error: 'unauthorized' });
+    const auth = req.headers['authorization'] || '';
+    let okAuth = (auth === 'Bearer ' + process.env.CRON_SECRET);
+    if (!okAuth && auth.startsWith('Bearer ')) {
+      try { const u = await fetch(SUPABASE_URL + '/auth/v1/user', { headers: { apikey: KEY, Authorization: auth } }); if (u.ok) { const j = await u.json(); const em = ((j && j.email) || '').toLowerCase(); const admins = (process.env.ADMIN_EMAILS || 'vsalaud@be-gph.fr').toLowerCase().split(',').map(s => s.trim()); okAuth = !!em && admins.includes(em); } } catch (e) {}
+    }
+    if (!okAuth) return res.status(401).json({ error: 'unauthorized' });
   }
   if (!KEY) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY non configuré' });
   try {

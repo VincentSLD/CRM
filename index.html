@@ -20044,7 +20044,8 @@ async function syncRunNow(key) {
   const jobs = await _loadSyncJobs(); const j = jobs.find(x => x.key === key); if (!j) return;
   toast('Lancement : ' + j.label + '… (peut prendre quelques minutes)', 'info');
   try {
-    const r = await fetch(j.endpoint + '?force=1', { method: 'POST' });
+    const _tk = (typeof getAuthToken === 'function') ? await getAuthToken() : null;
+    const r = await fetch(j.endpoint + '?force=1', { method: 'POST', headers: _tk ? { Authorization: 'Bearer ' + _tk } : {} });
     const txt = await r.text(); let js = {}; try { js = JSON.parse(txt); } catch (e) {}
     if (!r.ok) toast('Échec (' + r.status + ') : ' + (js.error || txt.slice(0, 140)), 'error');
     else toast('Terminé : ' + j.label + (js.duration_ms ? ' (' + Math.round(js.duration_ms / 1000) + ' s)' : ''), 'success');
@@ -20055,9 +20056,11 @@ async function syncRunAll() {
   const jobs = (await _loadSyncJobs()).filter(j => j.actif).sort((a, b) => a.ordre - b.ordre);
   if (!jobs.length) { toast('Aucune synchro active.', 'warn'); return; }
   if (!confirm('Lancer ' + jobs.length + ' synchro(s) séquentiellement dans l\'ordre ?\nCela peut prendre plusieurs minutes — garde cet onglet ouvert.')) return;
+  const _tk = (typeof getAuthToken === 'function') ? await getAuthToken() : null;
+  const _hdr = _tk ? { Authorization: 'Bearer ' + _tk } : {};
   for (const j of jobs) {
     toast('▶️ ' + j.label + '…', 'info');
-    try { const r = await fetch(j.endpoint + '?force=1', { method: 'POST' }); const js = await r.json().catch(() => ({})); if (!r.ok) toast('⚠️ ' + j.label + ' : ' + (js.error || r.status), 'warning'); }
+    try { const r = await fetch(j.endpoint + '?force=1', { method: 'POST', headers: _hdr }); const js = await r.json().catch(() => ({})); if (!r.ok) toast('⚠️ ' + j.label + ' : ' + (js.error || r.status), 'warning'); }
     catch (e) { toast('⚠️ ' + j.label + ' : ' + e.message, 'warning'); }
     try { renderSyncAdmin(); } catch (e) {}
   }
