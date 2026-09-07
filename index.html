@@ -33261,6 +33261,10 @@ async function pushClientToAkuiteo(clientId) {
       // Création : code + type obligatoires + Accept text/plain
       akData.code = (full.code || '').substring(0, 10) || null;
       akData.type = 'CUSTOMER';
+      // Société Akuiteo (dossier) : rattacher au profil société. Priorité à celle déjà connue sur la fiche
+      // (code_societe), sinon la société partagée du groupe (AKUITEO_SOCIETE_DEFAUT si renseignée).
+      const _akSoc = full.code_societe || (typeof AKUITEO_SOCIETE_DEFAUT !== 'undefined' ? AKUITEO_SOCIETE_DEFAUT : '');
+      if (_akSoc) akData.companyCode = _akSoc;
       let result;
       try {
         result = await akuiteoFetch('PUT', '/crm/customers', akData, { accept: 'text/plain' });
