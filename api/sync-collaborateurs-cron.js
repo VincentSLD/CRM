@@ -57,6 +57,9 @@ export default async function handler(req, res) {
     if (auth !== 'Bearer ' + process.env.CRON_SECRET) return res.status(401).json({ error: 'unauthorized' });
   }
   if (!SB_KEY) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY manquante' });
+  // Interrupteur Actif/Inactif (page Admin « Synchronisations ») — ignoré si ?force=1 (lancement manuel)
+  const _force = req.query && (req.query.force === '1');
+  if (!_force) { try { const rows = await sbReq("app_config?select=value&key=eq.sync_jobs&limit=1"); const arr = rows && rows[0] && rows[0].value; if (Array.isArray(arr)) { const j = arr.find(x => x.key === 'collaborateurs'); if (j && j.actif === false) return res.status(200).json({ ok: true, skipped: true }); } } catch (e) {} }
 
   const t0 = Date.now();
   const result = { collaborateurs_akuiteo: 0, collaborateurs_lucca: 0, liaisons: 0, absences: 0, errors: [] };

@@ -10254,7 +10254,7 @@ function renderPage(page) {
     _clientsServerLoaded = true;
     loadClientsPage(clientsPage || 0, clientsLetter, clientsSearch);
   }
-  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); renderMetiersConfig(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); renderNlAdminConfig(); renderRelanceSeuilsConfig(); }, 50);
+  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); renderMetiersConfig(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); renderNlAdminConfig(); renderRelanceSeuilsConfig(); renderSyncAdmin(); }, 50);
   if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); }, 50);
   if (page === 'analyse') setTimeout(initAnalyse, 30);
   if (page === 'decp-analyse') setTimeout(initDecpAnalyse, 30);
@@ -19970,6 +19970,100 @@ async function saveRelanceSeuils() {
   if (currentPage === 'dashboard') renderDashMesTaches();
 }
 
+// ═══ Admin : Synchronisations (crons) — journal global + activer/désactiver + lancer ═══
+const SYNC_JOBS_DEFAULT = [
+  { key: 'collaborateurs', label: 'Collaborateurs (Akuiteo + Lucca) + liaison + absences', endpoint: '/api/sync-collaborateurs-cron', ordre: 1 },
+  { key: 'akuiteo_societes', label: 'Akuiteo — Sociétés (dernier mois)', endpoint: '/api/sync-akuiteo-societes-cron', ordre: 2 },
+  { key: 'akuiteo_docs', label: 'Akuiteo — Devis/Commandes/Factures + Marchés/Affaires', endpoint: '/api/sync-akuiteo-docs-cron', ordre: 3 },
+  { key: 'decp', label: 'DECP — Marchés publics des clients', endpoint: '/api/decp-sync-cron', ordre: 4 },
+];
+let _syncJobsCfg = null;
+async function _loadSyncJobs(force) {
+  if (_syncJobsCfg && !force) return _syncJobsCfg;
+  let saved = null;
+  try { const { data } = await sb.from('app_config').select('value').eq('key', 'sync_jobs').maybeSingle(); if (data && Array.isArray(data.value)) saved = data.value; } catch (e) {}
+  const byKey = {}; (saved || []).forEach(j => { byKey[j.key] = j; });
+  _syncJobsCfg = SYNC_JOBS_DEFAULT.map(d => ({ ...d, actif: byKey[d.key] ? byKey[d.key].actif !== false : true, ordre: (byKey[d.key] && byKey[d.key].ordre != null) ? byKey[d.key].ordre : d.ordre }));
+  _syncJobsCfg.sort((a, b) => a.ordre - b.ordre);
+  return _syncJobsCfg;
+}
+async function _saveSyncJobs() {
+  const val = _syncJobsCfg.map(j => ({ key: j.key, actif: j.actif, ordre: j.ordre }));
+  const { error } = await sb.from('app_config').upsert({ key: 'sync_jobs', value: val, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  if (error) throw error;
+}
+function _syncJobLabel(key) { const j = SYNC_JOBS_DEFAULT.find(x => x.key === key); return j ? j.label : (key || '—'); }
+function _syncStatusBadge(l) {
+  if (!l) return '<span style="color:var(--t3)">—</span>';
+  if (l.ok) return '<span style="color:#10b981;font-weight:600">✅ OK</span>';
+  const d = l.detail || {};
+  if (d.partial) return '<span style="color:#f59e0b;font-weight:600">⚠️ Partiel</span>';
+  return '<span style="color:var(--red);font-weight:600">❌ Erreur</span>';
+}
+function _syncFmtDur(ms) { return ms == null ? '—' : (ms < 1000 ? ms + ' ms' : (ms / 1000).toFixed(1) + ' s'); }
+function _syncFmtDT(s) { return s ? new Date(s).toLocaleString('fr-FR') : '—'; }
+async function renderSyncAdmin() {
+  const box = document.getElementById('syncAdminBox'); if (!box) return;
+  const jobs = await _loadSyncJobs(true);
+  let logs = [];
+  try { const { data } = await sb.from('sync_log').select('*').order('created_at', { ascending: false }).limit(60); logs = data || []; } catch (e) {}
+  const lastByJob = {}; for (const l of logs) { if (!lastByJob[l.job]) lastByJob[l.job] = l; }
+  let html = '<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+    + '<thead><tr style="text-align:left;color:var(--t3);border-bottom:1px solid var(--border)"><th style="padding:6px 8px">#</th><th style="padding:6px 8px">Synchronisation</th><th style="padding:6px 8px;text-align:center">Active</th><th style="padding:6px 8px">Dernier passage</th><th style="padding:6px 8px">Statut</th><th style="padding:6px 8px"></th></tr></thead><tbody>';
+  jobs.forEach(j => {
+    const l = lastByJob[j.key];
+    html += `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 8px">${j.ordre}</td>
+      <td style="padding:6px 8px"><b>${cmdEsc(j.label)}</b><div style="font-size:10px;color:var(--t3)">${j.endpoint}</div></td>
+      <td style="padding:6px 8px;text-align:center"><input type="checkbox" ${j.actif ? 'checked' : ''} onchange="syncToggleJob('${j.key}',this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:#10b981"></td>
+      <td style="padding:6px 8px;white-space:nowrap">${_syncFmtDT(l && l.created_at)}${l ? ' · ' + _syncFmtDur(l.duration_ms) : ''}</td>
+      <td style="padding:6px 8px">${_syncStatusBadge(l)}</td>
+      <td style="padding:6px 8px;text-align:right"><button class="btn" style="font-size:11px;padding:3px 8px" onclick="syncRunNow('${j.key}')">▶️ Lancer</button></td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  html += '<div style="font-weight:700;font-size:13px;margin:14px 0 6px">📋 Journal global des synchronisations</div>';
+  if (!logs.length) html += '<div style="color:var(--t3);font-size:12px">Aucune exécution enregistrée pour l\'instant.</div>';
+  else {
+    html += '<div style="overflow:auto;max-height:360px"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="text-align:left;color:var(--t3);border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card)"><th style="padding:5px 8px">Date</th><th style="padding:5px 8px">Synchro</th><th style="padding:5px 8px">Durée</th><th style="padding:5px 8px">Statut</th><th style="padding:5px 8px">Détail</th></tr></thead><tbody>';
+    for (const l of logs) {
+      const d = l.detail || {};
+      const errs = Array.isArray(d.errors) ? d.errors : [];
+      const counts = Object.entries(d).filter(([k, v]) => typeof v === 'number').map(([k, v]) => k + ' : ' + v).join(' · ');
+      html += `<tr style="border-bottom:1px solid var(--border)"><td style="padding:5px 8px;white-space:nowrap">${_syncFmtDT(l.created_at)}</td><td style="padding:5px 8px">${cmdEsc(_syncJobLabel(l.job))}</td><td style="padding:5px 8px;white-space:nowrap">${_syncFmtDur(l.duration_ms)}</td><td style="padding:5px 8px">${_syncStatusBadge(l)}</td><td style="padding:5px 8px;font-size:11px;color:var(--t2)">${cmdEsc(counts)}${errs.length ? '<div style="color:var(--red);margin-top:2px">' + cmdEsc(errs.join(' | ').slice(0, 400)) + '</div>' : ''}</td></tr>`;
+    }
+    html += '</tbody></table></div>';
+  }
+  box.innerHTML = html;
+}
+async function syncToggleJob(key, actif) {
+  try { const jobs = await _loadSyncJobs(); const j = jobs.find(x => x.key === key); if (j) j.actif = actif; await _saveSyncJobs(); toast(actif ? 'Synchro activée' : 'Synchro désactivée (elle sera ignorée la nuit)', 'success'); }
+  catch (e) { toast('Erreur : ' + e.message, 'error'); }
+}
+async function syncRunNow(key) {
+  const jobs = await _loadSyncJobs(); const j = jobs.find(x => x.key === key); if (!j) return;
+  toast('Lancement : ' + j.label + '… (peut prendre quelques minutes)', 'info');
+  try {
+    const r = await fetch(j.endpoint + '?force=1', { method: 'POST' });
+    const txt = await r.text(); let js = {}; try { js = JSON.parse(txt); } catch (e) {}
+    if (!r.ok) toast('Échec (' + r.status + ') : ' + (js.error || txt.slice(0, 140)), 'error');
+    else toast('Terminé : ' + j.label + (js.duration_ms ? ' (' + Math.round(js.duration_ms / 1000) + ' s)' : ''), 'success');
+  } catch (e) { toast('Erreur : ' + e.message, 'error'); }
+  renderSyncAdmin();
+}
+async function syncRunAll() {
+  const jobs = (await _loadSyncJobs()).filter(j => j.actif).sort((a, b) => a.ordre - b.ordre);
+  if (!jobs.length) { toast('Aucune synchro active.', 'warn'); return; }
+  if (!confirm('Lancer ' + jobs.length + ' synchro(s) séquentiellement dans l\'ordre ?\nCela peut prendre plusieurs minutes — garde cet onglet ouvert.')) return;
+  for (const j of jobs) {
+    toast('▶️ ' + j.label + '…', 'info');
+    try { const r = await fetch(j.endpoint + '?force=1', { method: 'POST' }); const js = await r.json().catch(() => ({})); if (!r.ok) toast('⚠️ ' + j.label + ' : ' + (js.error || r.status), 'warning'); }
+    catch (e) { toast('⚠️ ' + j.label + ' : ' + e.message, 'warning'); }
+    try { renderSyncAdmin(); } catch (e) {}
+  }
+  toast('Séquence terminée — consultez le journal', 'success');
+}
+
 // Cellule "Relance" d'une ligne de devis : badge si déjà relancé, bouton si à relancer, sinon —
 function renderDevisRelanceCell(d) {
   const rel = getDevisRelance(d.id);
@@ -24530,6 +24624,20 @@ function renderAdmin() {
       <p style="font-size:12px;color:var(--t2);margin-bottom:10px">Nombre de jours après émission d'un devis « envoyé » sans réponse au-delà duquel il apparaît comme <strong>à relancer</strong> (dans le tableau de bord et la liste des devis). Réglez une valeur par agence — ex. <strong>GPH85 = 7 jours</strong>. Laissez vide pour utiliser la valeur par défaut.</p>
       <div id="relance-seuils-box" style="font-size:13px;color:var(--t3)">Chargement...</div>
       <div style="margin-top:12px"><button class="btn btn-primary" onclick="saveRelanceSeuils()">💾 Enregistrer les seuils</button></div>
+    </div>
+  </details>
+
+  <details class="card acc" style="margin-top:16px">
+    <summary class="card-header" style="cursor:pointer;user-select:none;flex-wrap:wrap;gap:8px">
+      <div class="card-title">🔄 Synchronisations (crons nocturnes)</div>
+      <span style="display:inline-flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+        <button class="btn" onclick="event.preventDefault();event.stopPropagation();syncRunAll()" style="font-size:12px">▶️ Tout lancer dans l'ordre</button>
+        <button class="btn" onclick="event.preventDefault();event.stopPropagation();renderSyncAdmin()" style="font-size:12px">↻ Rafraîchir</button>
+      </span>
+    </summary>
+    <div class="card-body">
+      <p style="font-size:12px;color:var(--t2);margin-bottom:10px">Synchros automatiques nocturnes. <strong>Active/désactive</strong> chaque synchro (effet immédiat, sans redéploiement), <strong>lance à la demande</strong>, et consulte le <strong>journal global</strong>. Les <em>horaires</em> planifiés sont fixés dans <code>vercel.json</code> (changement = redéploiement).</p>
+      <div id="syncAdminBox" style="font-size:13px;color:var(--t3)">Chargement...</div>
     </div>
   </details>
 

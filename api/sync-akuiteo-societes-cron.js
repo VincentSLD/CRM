@@ -107,6 +107,8 @@ export default async function handler(req, res) {
   }
   if (!SB_KEY) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY manquante' });
   if (!AK_ROOT || !AK_USER || !AK_PASS) return res.status(500).json({ error: 'Variables Akuiteo manquantes' });
+  const _force = req.query && (req.query.force === '1');
+  if (!_force) { try { const rows = await sbReq("app_config?select=value&key=eq.sync_jobs&limit=1"); const arr = rows && rows[0] && rows[0].value; if (Array.isArray(arr)) { const j = arr.find(x => x.key === 'akuiteo_societes'); if (j && j.actif === false) return res.status(200).json({ ok: true, skipped: true }); } } catch (e) {} }
 
   const t0 = Date.now();
   const out = { societes: 0, billing: 0, contacts: 0, salesmen: 0, paiements: 0, partial: false, errors: [] };
