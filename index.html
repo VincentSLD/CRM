@@ -20012,8 +20012,9 @@ async function renderSyncAdmin() {
     + '<thead><tr style="text-align:left;color:var(--t3);border-bottom:1px solid var(--border)"><th style="padding:6px 8px">#</th><th style="padding:6px 8px">Synchronisation</th><th style="padding:6px 8px;text-align:center">Active</th><th style="padding:6px 8px">Dernier passage</th><th style="padding:6px 8px">Statut</th><th style="padding:6px 8px"></th></tr></thead><tbody>';
   jobs.forEach(j => {
     const l = lastByJob[j.key];
+    const _first = j.ordre === jobs[0].ordre, _last = j.ordre === jobs[jobs.length - 1].ordre;
     html += `<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:6px 8px">${j.ordre}</td>
+      <td style="padding:6px 8px;white-space:nowrap"><span style="font-weight:700">${j.ordre}</span> <button class="btn" title="Monter" onclick="syncMoveJob('${j.key}',-1)" ${_first ? 'disabled' : ''} style="font-size:10px;padding:1px 5px">▲</button><button class="btn" title="Descendre" onclick="syncMoveJob('${j.key}',1)" ${_last ? 'disabled' : ''} style="font-size:10px;padding:1px 5px">▼</button></td>
       <td style="padding:6px 8px"><b>${cmdEsc(j.label)}</b><div style="font-size:10px;color:var(--t3)">${j.endpoint}</div></td>
       <td style="padding:6px 8px;text-align:center"><input type="checkbox" ${j.actif ? 'checked' : ''} onchange="syncToggleJob('${j.key}',this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:#10b981"></td>
       <td style="padding:6px 8px;white-space:nowrap">${_syncFmtDT(l && l.created_at)}${l ? ' · ' + _syncFmtDur(l.duration_ms) : ''}</td>
@@ -20035,6 +20036,16 @@ async function renderSyncAdmin() {
     html += '</tbody></table></div>';
   }
   box.innerHTML = html;
+}
+async function syncMoveJob(key, dir) {
+  const jobs = await _loadSyncJobs();
+  const i = jobs.findIndex(j => j.key === key);
+  const ni = i + dir;
+  if (i < 0 || ni < 0 || ni >= jobs.length) return;
+  const tmp = jobs[i]; jobs[i] = jobs[ni]; jobs[ni] = tmp;
+  jobs.forEach((j, idx) => { j.ordre = idx + 1; });
+  try { await _saveSyncJobs(); toast('Ordre mis à jour', 'success'); } catch (e) { toast('Erreur : ' + e.message, 'error'); return; }
+  renderSyncAdmin();
 }
 async function syncToggleJob(key, actif) {
   try { const jobs = await _loadSyncJobs(); const j = jobs.find(x => x.key === key); if (j) j.actif = actif; await _saveSyncJobs(); toast(actif ? 'Synchro activée' : 'Synchro désactivée (elle sera ignorée la nuit)', 'success'); }
