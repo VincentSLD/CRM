@@ -8,6 +8,7 @@
     { "path": "/api/sollicitations-rappels", "schedule": "0 6 * * *" },
     { "path": "/api/newsletter-cron", "schedule": "0 7 * * 1" },
     { "path": "/api/sync-collaborateurs-cron", "schedule": "0 2 * * *" },
+    { "path": "/api/sync-akuiteo-societes-cron", "schedule": "30 2 * * *" },
     { "path": "/api/decp-sync-cron", "schedule": "30 3 * * *" }
   ]
 }
