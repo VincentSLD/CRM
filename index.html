@@ -20559,6 +20559,8 @@ function linkAffaire(affaireId) {
   return `<a href="#" onclick="showAffaireDetail('${affaireId}');return false" style="color:var(--accent);font-size:12px" title="${a ? (a.nom||'') : ''}">${label}</a>`;
 }
 // ═══ CACHE RÉFÉRENCES AKUITEO ═══
+// Société Akuiteo (dossier/companyCode) partagée du groupe : TOUS les clients y sont rattachés à la synchro.
+const AKUITEO_SOCIETE_DEFAUT = '*****';
 const akRef = { categories: null, subCategories: null, proCats: null, sectors: null, linkTypes: null, pricingMethods: null, employees: null, _loading: null };
 async function loadAkuiteoRefs() {
   if (akRef._loading) return akRef._loading;
@@ -33255,16 +33257,15 @@ async function pushClientToAkuiteo(clientId) {
     if (full.akuiteo_id) {
       // Update : id dans le body + Accept text/plain obligatoires
       akData.id = full.akuiteo_id;
+      akData.companyCode = AKUITEO_SOCIETE_DEFAUT; // toujours rattacher à la société partagée
       await akuiteoFetch('POST', '/crm/customers/' + full.akuiteo_id, akData, { accept: 'text/plain' });
       toast('Client mis à jour dans Akuiteo', 'success');
     } else {
       // Création : code + type obligatoires + Accept text/plain
       akData.code = (full.code || '').substring(0, 10) || null;
       akData.type = 'CUSTOMER';
-      // Société Akuiteo (dossier) : rattacher au profil société. Priorité à celle déjà connue sur la fiche
-      // (code_societe), sinon la société partagée du groupe (AKUITEO_SOCIETE_DEFAUT si renseignée).
-      const _akSoc = full.code_societe || (typeof AKUITEO_SOCIETE_DEFAUT !== 'undefined' ? AKUITEO_SOCIETE_DEFAUT : '');
-      if (_akSoc) akData.companyCode = _akSoc;
+      // Société Akuiteo (dossier) : TOUJOURS rattacher à la société partagée du groupe.
+      akData.companyCode = AKUITEO_SOCIETE_DEFAUT;
       let result;
       try {
         result = await akuiteoFetch('PUT', '/crm/customers', akData, { accept: 'text/plain' });
