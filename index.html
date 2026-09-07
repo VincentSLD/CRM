@@ -19972,10 +19972,11 @@ async function saveRelanceSeuils() {
 
 // ═══ Admin : Synchronisations (crons) — journal global + activer/désactiver + lancer ═══
 const SYNC_JOBS_DEFAULT = [
-  { key: 'collaborateurs', label: 'Collaborateurs (Akuiteo + Lucca) + liaison + absences', endpoint: '/api/sync-collaborateurs-cron', ordre: 1 },
-  { key: 'akuiteo_societes', label: 'Akuiteo — Sociétés (dernier mois)', endpoint: '/api/sync-akuiteo-societes-cron', ordre: 2 },
-  { key: 'akuiteo_docs', label: 'Akuiteo — Devis/Commandes/Factures + Marchés/Affaires', endpoint: '/api/sync-akuiteo-docs-cron', ordre: 3 },
-  { key: 'decp', label: 'DECP — Marchés publics des clients', endpoint: '/api/decp-sync-cron', ordre: 4 },
+  { key: 'collaborateurs', label: 'Collaborateurs (Akuiteo + Lucca) + liaison', endpoint: '/api/sync-collaborateurs-cron', ordre: 1 },
+  { key: 'absences', label: 'Absences Lucca (année en cours)', endpoint: '/api/sync-absences-cron', ordre: 2 },
+  { key: 'akuiteo_societes', label: 'Akuiteo — Sociétés (dernier mois)', endpoint: '/api/sync-akuiteo-societes-cron', ordre: 3 },
+  { key: 'akuiteo_docs', label: 'Akuiteo — Devis/Commandes/Factures + Marchés/Affaires', endpoint: '/api/sync-akuiteo-docs-cron', ordre: 4 },
+  { key: 'decp', label: 'DECP — Marchés publics des clients', endpoint: '/api/decp-sync-cron', ordre: 5 },
 ];
 let _syncJobsCfg = null;
 async function _loadSyncJobs(force) {
