@@ -19978,6 +19978,7 @@ const SYNC_JOBS_DEFAULT = [
   { key: 'akuiteo_docs', label: 'Akuiteo — Devis/Commandes/Factures + Marchés/Affaires', endpoint: '/api/sync-akuiteo-docs-cron', ordre: 4 },
   { key: 'decp', label: 'DECP — Marchés publics des clients', endpoint: '/api/decp-sync-cron', ordre: 5 },
   { key: 'sirene', label: 'Veille SIRENE — radiations / état INSEE (par lots)', endpoint: '/api/sync-sirene-cron', ordre: 6 },
+  { key: 'abc', label: 'Catégorisation ABC (par agence + rôles)', endpoint: '/api/sync-abc-cron', ordre: 7 },
 ];
 let _syncJobsCfg = null;
 async function _loadSyncJobs(force) {
