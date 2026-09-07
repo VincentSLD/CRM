@@ -663,3 +663,7 @@ CREATE TABLE IF NOT EXISTS sync_log (
 ALTER TABLE sync_log ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "sync_log_all" ON sync_log;
 CREATE POLICY "sync_log_all" ON sync_log FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Curseur de veille SIRENE (radiations) : date du dernier contrôle légal par client (cron sync-sirene)
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS legal_checked_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_clients_legal_checked_at ON clients(legal_checked_at NULLS FIRST);
