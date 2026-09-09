@@ -10379,6 +10379,7 @@ async function loadAnalyseData() {
     }
   } catch (e) { console.warn('[analyse] exception', e); }
   _anEnrich(all);
+  if (!_anClients) { try { _anClients = await _anLoadClients(); } catch (e) { _anClients = []; } }
   _anData = all; _anLoading = false;
   // Carte société → commercial chargée en arrière-plan si absente : ré-enrichit + rafraîchit sans bloquer l'affichage
   if (!_clientCommById) {
@@ -10394,6 +10395,111 @@ function _anFiltered() {
   if (anTypologies.length) rows = rows.filter(f => anTypologies.includes(f._typologie || ''));
   if (anSousTypologies.length) rows = rows.filter(f => anSousTypologies.includes(f._sousTypologie || ''));
   return rows;
+}
+
+// ── Analyse « portefeuille commercial » : évolution N‑1, ABC, dormants, nouveaux, pipeline ──
+function _anEnrichRow(f) {
+  const e = (_clientCommById && f.client_id && _clientCommById[f.client_id]) || null;
+  const mt = (_anMarcheTypo && f.marche_id) ? _anMarcheTypo[f.marche_id] : null;
+  return { novam: (e && e.novam) || '', gph: (e && e.gph) || '', metier: deriveMetier(f.type_prestation), typo: (mt && mt.t) || '', sous: (mt && mt.s) || '' };
+}
+// Factures d'une fenêtre de dates quelconque (depuis DB.factures) avec les MÊMES filtres non-date que l'analyse
+function _anWindowFilter(from, to) {
+  const commSel = new Set(anCommercial);
+  const needEnrich = commSel.size || anMetiers.length || anTypologies.length || anSousTypologies.length;
+  return (DB.factures || []).filter(f => {
+    const d = f.date_raw || f.date; if (!d || d < from || d > to) return false;
+    if (anAgences.length && !anAgences.includes(f.societe || '')) return false;
+    if (needEnrich) {
+      const en = _anEnrichRow(f);
+      if (commSel.size && !(commSel.has(en.novam) || commSel.has(en.gph))) return false;
+      if (anMetiers.length && !anMetiers.includes(en.metier)) return false;
+      if (anTypologies.length && !anTypologies.includes(en.typo)) return false;
+      if (anSousTypologies.length && !anSousTypologies.includes(en.sous)) return false;
+    }
+    return true;
+  });
+}
+let _anClients = null;
+async function _anLoadClients() {
+  const out = []; let lastId = '';
+  while (true) {
+    let q = sb.from('clients').select('id,name,status,categorie_compte').order('id', { ascending: true }).limit(1000);
+    if (lastId) q = q.gt('id', lastId);
+    const { data, error } = await q;
+    if (error || !data || !data.length) break;
+    out.push(...data); lastId = data[data.length - 1].id;
+    if (data.length < 1000) break;
+  }
+  return out;
+}
+function _anShiftYear(ds, dy) { const d = new Date(ds); d.setFullYear(d.getFullYear() + dy); return d.toISOString().slice(0, 10); }
+function _anScopeFns() {
+  const commSel = new Set(anCommercial);
+  const inScopeCid = (cid) => { if (!commSel.size) return true; const e = _clientCommById && _clientCommById[cid]; return !!(e && ((e.novam && commSel.has(e.novam)) || (e.gph && commSel.has(e.gph)))); };
+  const label = anCommercial.length ? anCommercial.map(c => (typeof fmtCommercialName === 'function' ? fmtCommercialName(c) : c)).join(', ') : 'tous commerciaux';
+  return { inScopeCid, label };
+}
+function _anPortefeuilleHtml() {
+  const { inScopeCid, label } = _anScopeFns();
+  // 1) Évolution N vs N-1
+  const rowsN = _anFiltered();
+  const rowsN1 = _anWindowFilter(_anShiftYear(anFrom, -1), _anShiftYear(anTo, -1));
+  const caN = rowsN.reduce((a, f) => a + Number(f.montant || 0), 0);
+  const caN1 = rowsN1.reduce((a, f) => a + Number(f.montant || 0), 0);
+  const evo = caN1 > 0 ? ((caN - caN1) / caN1 * 100) : null;
+  const caByClient = rows => { const m = {}; for (const f of rows) { const k = f.client_name || f.client_id; if (!k) continue; m[k] = (m[k] || 0) + Number(f.montant || 0); } return m; };
+  const mN = caByClient(rowsN), mN1 = caByClient(rowsN1);
+  const movers = [...new Set([...Object.keys(mN), ...Object.keys(mN1)])].map(k => ({ k, d: (mN[k] || 0) - (mN1[k] || 0) })).filter(x => x.d !== 0);
+  const hausse = movers.filter(x => x.d > 0).sort((a, b) => b.d - a.d).slice(0, 6);
+  const baisse = movers.filter(x => x.d < 0).sort((a, b) => a.d - b.d).slice(0, 6);
+  const moverList = arr => arr.length ? arr.map(x => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin:2px 0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cmdEsc(x.k)}</span><strong style="white-space:nowrap;color:${x.d >= 0 ? '#10b981' : '#ef4444'}">${x.d >= 0 ? '+' : ''}${fmt(x.d)}</strong></div>`).join('') : '<div style="font-size:12px;color:var(--t3)">—</div>';
+  // 2) Portefeuille clients (scope commercial)
+  const clients = (_anClients || []).filter(c => inScopeCid(c.id));
+  const abcOf = c => { const cc = c.categorie_compte; if (!cc || typeof cc !== 'object') return null; const v = cc.GROUPE || Object.values(cc)[0]; return v ? String(v)[0] : null; };
+  let nA = 0, nB = 0, nC = 0; for (const c of clients) { const x = abcOf(c); if (x === 'A') nA++; else if (x === 'B') nB++; else if (x === 'C') nC++; }
+  const dormants = clients.filter(c => c.status === 'dormant');
+  // 3) Nouveaux clients de la période (1re facture dans la fenêtre)
+  const firstByCid = {}; for (const f of (DB.factures || [])) { const cid = f.client_id; if (!cid || !inScopeCid(cid)) continue; const d = f.date_raw || f.date; if (!d) continue; if (!firstByCid[cid] || d < firstByCid[cid].d) firstByCid[cid] = { d, name: f.client_name }; }
+  const nouveaux = Object.values(firstByCid).filter(v => v.d >= anFrom && v.d <= anTo).sort((a, b) => (b.d || '').localeCompare(a.d || ''));
+  // 4) Pipeline & conversion (devis en scope)
+  const devs = (DB.devis || []).filter(d => d.client_id && inScopeCid(d.client_id));
+  const mtEnCours = devs.filter(d => d.statut === 'pending' || d.statut === 'sent').reduce((a, d) => a + Number(d.montant || 0), 0);
+  const devTotal = devs.filter(d => d.statut !== 'pending').length;
+  const devGagnes = devs.filter(d => d.statut === 'accepted' || d.statut === 'signed').length;
+  const taux = devTotal ? Math.round(devGagnes / devTotal * 100) : 0;
+  const aRelancer = devs.filter(d => (typeof isDevisARelancer === 'function') && isDevisARelancer(d)).length;
+
+  const card = (title, body) => `<div class="card"><div class="card-header"><div class="card-title">${title}</div></div><div class="card-body" style="padding:10px 12px">${body}</div></div>`;
+  const mini = (l, v, c) => `<div style="text-align:center;flex:1;min-width:78px"><div style="font-size:18px;font-weight:800;color:${c || 'var(--accent)'}">${v}</div><div style="font-size:10px;color:var(--t3)">${l}</div></div>`;
+  return `<div style="margin:4px 0 16px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px">👤 Portefeuille — ${cmdEsc(label)}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">
+      ${card('Évolution CA vs N‑1', `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">${mini('CA période', fmt(caN))}${mini('CA N‑1', fmt(caN1))}${mini('Évolution', evo == null ? '—' : (evo >= 0 ? '+' : '') + evo.toFixed(0) + ' %', evo == null ? 'var(--t3)' : evo >= 0 ? '#10b981' : '#ef4444')}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div><div style="font-size:11px;font-weight:700;color:#10b981;margin-bottom:3px">▲ Hausses</div>${moverList(hausse)}</div><div><div style="font-size:11px;font-weight:700;color:#ef4444;margin-bottom:3px">▼ Baisses</div>${moverList(baisse)}</div></div>`)}
+      ${card('Répartition ABC', `<div style="display:flex;gap:10px">${mini('A‑Strat.', nA, '#3b82f6')}${mini('B‑Tact.', nB, '#f59e0b')}${mini('C‑Listé', nC, '#6b7280')}${mini('Classés', nA + nB + nC)}</div>`)}
+      ${card('Pipeline & conversion', `<div style="display:flex;gap:10px;flex-wrap:wrap">${mini('Devis en cours', fmt(mtEnCours))}${mini('Conversion', taux + ' %')}${mini('À relancer', aRelancer, aRelancer ? 'var(--amber)' : 'var(--t3)')}</div>`)}
+      ${card('Comptes dormants (' + dormants.length + ')', dormants.length ? '<div style="max-height:150px;overflow:auto;font-size:12px">' + dormants.slice(0, 40).map(c => '<div style="padding:2px 0;cursor:pointer;color:var(--accent)" onclick="showClient(\'' + c.id + '\')">' + cmdEsc(c.name || '') + '</div>').join('') + (dormants.length > 40 ? '<div style="color:var(--t3)">+ ' + (dormants.length - 40) + ' autres…</div>' : '') + '</div>' : '<div style="font-size:12px;color:var(--t3)">Aucun compte dormant.</div>')}
+      ${card('Nouveaux clients (période) — ' + nouveaux.length, nouveaux.length ? '<div style="max-height:150px;overflow:auto;font-size:12px">' + nouveaux.slice(0, 40).map(v => '<div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + cmdEsc(v.name || '') + '</span><span style="color:var(--t3);white-space:nowrap">' + (v.d ? fmtDateFR(v.d) : '') + '</span></div>').join('') + '</div>' : '<div style="font-size:12px;color:var(--t3)">Aucun nouveau client sur la période.</div>')}
+      ${card('Objectif vs réalisé', '<div style="font-size:12px;color:var(--t2)">Objectifs définis <b>par agence</b> (pas par commercial). CA facturé de la sélection : <b>' + fmt(caN) + '</b>.<br><span style="color:var(--t3)">Voir « Avancement des objectifs par agence » dans le tableau de bord.</span></div>')}
+    </div>
+  </div>`;
+}
+function anExportPDF() {
+  if (!_anData) { toast('Données non chargées', 'warn'); return; }
+  const { label } = _anScopeFns();
+  const rows = _anFiltered();
+  const caN = rows.reduce((a, f) => a + Number(f.montant || 0), 0);
+  const caN1 = _anWindowFilter(_anShiftYear(anFrom, -1), _anShiftYear(anTo, -1)).reduce((a, f) => a + Number(f.montant || 0), 0);
+  const evo = caN1 > 0 ? Math.round((caN - caN1) / caN1 * 100) : null;
+  const rk = keyFn => { const m = {}; for (const f of rows) { const k = keyFn(f); if (!k) continue; m[k] = (m[k] || 0) + Number(f.montant || 0); } return Object.entries(m).sort((a, b) => b[1] - a[1]); };
+  const li = arr => arr.map(([k, v]) => '<tr><td>' + cmdEsc(k) + '</td><td style="text-align:right">' + fmt(v) + '</td></tr>').join('');
+  const nClients = new Set(rows.map(f => f.client_id || f.client_name).filter(Boolean)).size;
+  const html = `<p><b>Commercial :</b> ${cmdEsc(label)}<br><b>Période :</b> ${fmtDateFR(anFrom)} → ${fmtDateFR(anTo)}${anAgences.length ? '<br><b>Agences :</b> ' + anAgences.map(a => cmdEsc(agenceLabel(a))).join(', ') : ''}</p>
+    <h2>Synthèse</h2>
+    <ul><li>CA facturé : <b>${fmt(caN)}</b></li><li>CA N‑1 : ${fmt(caN1)}${evo == null ? '' : ' (' + (evo >= 0 ? '+' : '') + evo + ' %)'}</li><li>Factures : ${rows.length} · Ticket moyen : ${fmt(rows.length ? caN / rows.length : 0)} · Clients facturés : ${nClients}</li></ul>
+    <h2>Top clients (CA)</h2><table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left">Client</th><th style="text-align:right">CA</th></tr></thead><tbody>${li(rk(f => f.client_name).slice(0, 20))}</tbody></table>
+    <h2>CA par apporteur</h2><table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left">Apporteur</th><th style="text-align:right">CA</th></tr></thead><tbody>${li(rk(f => _anClean(f.apporteur_affaire)).slice(0, 15))}</tbody></table>`;
+  _printDoc('Analyse portefeuille — ' + label, html);
 }
 
 function initAnalyse() {
@@ -10574,6 +10680,7 @@ function renderAnalyse() {
     ${(() => { msDef('anMetier', [{ v: 'Géotechnique', label: 'Géotechnique' }, { v: 'Structure', label: 'Structure' }], anMetiers, arr => { anMetiers = arr; _anNetwork = null; _anMap = null; renderPage('analyse'); }, false); return msButton('anMetier', 'Métiers'); })()}
     ${(() => { const opts = [...new Set((_anData || []).map(f => f._typologie).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr')); msDef('anTypo', opts.map(t => ({ v: t, label: t })), anTypologies, arr => { anTypologies = arr; anSousTypologies = anSousTypologies.filter(s => !arr.length || (_anData || []).some(f => arr.includes(f._typologie) && f._sousTypologie === s)); _anNetwork = null; _anMap = null; renderPage('analyse'); }, false); return msButton('anTypo', 'Typologies'); })()}
     ${(() => { const base = anTypologies.length ? (_anData || []).filter(f => anTypologies.includes(f._typologie || '')) : (_anData || []); const opts = [...new Set(base.map(f => f._sousTypologie).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr')); msDef('anSousTypo', opts.map(t => ({ v: t, label: t })), anSousTypologies, arr => { anSousTypologies = arr; _anNetwork = null; _anMap = null; renderPage('analyse'); }, false); return msButton('anSousTypo', 'Sous-typologies'); })()}
+    <button class="btn" style="font-size:12px" onclick="anExportPDF()">📄 Export PDF</button>
     <button class="btn" style="font-size:12px" onclick="anReset()">Réinitialiser</button>
   </div>`;
 
@@ -10674,7 +10781,7 @@ function renderAnalyse() {
       <div id="anMap" style="height:560px;border-top:1px solid var(--border)"></div>
     </div></div>`;
 
-  return filters + kpis + rankings + network + mapSection;
+  return filters + kpis + _anPortefeuilleHtml() + rankings + network + mapSection;
 }
 
 // ── Carte CA par département ──
