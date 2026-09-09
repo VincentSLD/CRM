@@ -10288,7 +10288,7 @@ function renderPage(page) {
 //  ANALYSE / KPI — indicateurs + cartographie "qui travaille avec qui"
 // ═══════════════════════════════════════════════════════════
 let anFrom = '', anTo = '';            // plage de dates (date de facture)
-let anAgences = [], anMetiers = [], anTypologies = [], anSousTypologies = [];    // filtres multi-sélection
+let anAgences = [], anMetiers = [], anTypologies = [], anSousTypologies = [], anCommercial = [];    // filtres multi-sélection
 let _anData = null, _anLoading = false;
 let _anNetwork = null, _anNetFocus = '';
 let _anNetTypes = { agence: true, client: true, architecte: true, apporteur: true, gros_oeuvre: false };
@@ -10389,6 +10389,7 @@ async function loadAnalyseData() {
 function _anFiltered() {
   let rows = _anData || [];
   if (anAgences.length) rows = rows.filter(f => anAgences.includes(f.societe || ''));
+  if (anCommercial.length) rows = rows.filter(f => anCommercial.includes(f._novam) || anCommercial.includes(f._gph));
   if (anMetiers.length) rows = rows.filter(f => anMetiers.includes(f._metier));
   if (anTypologies.length) rows = rows.filter(f => anTypologies.includes(f._typologie || ''));
   if (anSousTypologies.length) rows = rows.filter(f => anSousTypologies.includes(f._sousTypologie || ''));
@@ -10404,7 +10405,7 @@ function initAnalyse() {
   }
 }
 function anSetDates(from, to) { anFrom = from; anTo = to; _anData = null; _anNetwork = null; _anMap = null; renderPage('analyse'); }
-function anReset() { const r = _anDefaultRange(); anFrom = r.from; anTo = r.to; anAgences = []; anMetiers = []; anTypologies = []; anSousTypologies = []; _anNetFocus = ''; _anData = null; _anNetwork = null; _anMap = null; renderPage('analyse'); }
+function anReset() { const r = _anDefaultRange(); anFrom = r.from; anTo = r.to; anAgences = []; anMetiers = []; anTypologies = []; anSousTypologies = []; anCommercial = []; _anNetFocus = ''; _anData = null; _anNetwork = null; _anMap = null; renderPage('analyse'); }
 // ═══ ANALYSE DES MARCHÉS PUBLICS (DECP archivés — table decp_marches) ═══
 let _decpData = null, _decpLoading = false, _decpNames = {}, _decpLoadProgress = '';
 let decpFDept = [], decpFCpv = [], decpFYear = [], decpFClient = [];
@@ -10568,7 +10569,8 @@ function renderAnalyse() {
     <input type="date" value="${anFrom}" onchange="anSetDates(this.value, anTo)" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1)">
     <label style="font-size:12px;color:var(--t3)">au</label>
     <input type="date" value="${anTo}" onchange="anSetDates(anFrom, this.value)" style="padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg-1);color:var(--t1)">
-    ${(() => { msDef('anAgence', agences.map(a => ({ v: a, label: a })), anAgences, arr => { anAgences = arr; _anNetwork = null; _anMap = null; renderPage('analyse'); }, false); return msButton('anAgence', 'Agences'); })()}
+    ${(() => { msDef('anAgence', agences.map(a => ({ v: a, label: agenceLabel(a) })), anAgences, arr => { anAgences = arr; _anNetwork = null; _anMap = null; renderPage('analyse'); }, false); return msButton('anAgence', 'Agences'); })()}
+    ${(() => { const opts = [...new Set([].concat((_anData || []).map(f => f._novam), (_anData || []).map(f => f._gph)).filter(Boolean))].sort((a, b) => (a + '').localeCompare(b + '', 'fr')); msDef('anComm', opts.map(c => ({ v: c, label: (typeof fmtCommercialName === 'function' ? fmtCommercialName(c) : c) })), anCommercial, arr => { anCommercial = arr; _anNetwork = null; _anMap = null; renderPage('analyse'); }, false); return msButton('anComm', 'Commercial'); })()}
     ${(() => { msDef('anMetier', [{ v: 'Géotechnique', label: 'Géotechnique' }, { v: 'Structure', label: 'Structure' }], anMetiers, arr => { anMetiers = arr; _anNetwork = null; _anMap = null; renderPage('analyse'); }, false); return msButton('anMetier', 'Métiers'); })()}
     ${(() => { const opts = [...new Set((_anData || []).map(f => f._typologie).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr')); msDef('anTypo', opts.map(t => ({ v: t, label: t })), anTypologies, arr => { anTypologies = arr; anSousTypologies = anSousTypologies.filter(s => !arr.length || (_anData || []).some(f => arr.includes(f._typologie) && f._sousTypologie === s)); _anNetwork = null; _anMap = null; renderPage('analyse'); }, false); return msButton('anTypo', 'Typologies'); })()}
     ${(() => { const base = anTypologies.length ? (_anData || []).filter(f => anTypologies.includes(f._typologie || '')) : (_anData || []); const opts = [...new Set(base.map(f => f._sousTypologie).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr')); msDef('anSousTypo', opts.map(t => ({ v: t, label: t })), anSousTypologies, arr => { anSousTypologies = arr; _anNetwork = null; _anMap = null; renderPage('analyse'); }, false); return msButton('anSousTypo', 'Sous-typologies'); })()}
@@ -10600,11 +10602,14 @@ function renderAnalyse() {
   const kpi = (label, val, sub) => `<div class="card"><div class="card-body" style="text-align:center;padding:14px 10px">
     <div style="font-size:20px;font-weight:800;color:var(--accent)">${val}</div>
     <div style="font-size:11px;color:var(--t3);margin-top:3px">${label}</div>${sub ? '<div style="font-size:10px;color:var(--t3)">' + sub + '</div>' : ''}</div></div>`;
+  const top5CA = byClient.slice(0, 5).reduce((a, [, v]) => a + v.ca, 0);
+  const pctTop5 = caTotal ? Math.round(top5CA / caTotal * 100) : 0;
   const kpis = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">
     ${kpi('CA facturé', fmt(caTotal))}
     ${kpi('Factures', nbFact)}
     ${kpi('Ticket moyen', fmt(ticket))}
     ${kpi('Clients facturés', nClients)}
+    ${kpi('Concentration top 5', pctTop5 + ' %', 'part des 5 plus gros clients')}
     ${kpi('Apporteurs', nApp)}
     ${kpi('Architectes', nArch)}
   </div>`;
