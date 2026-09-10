@@ -18,11 +18,11 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABA
 const TOOLS = [
   {
     name: 'query_table',
-    description: 'Interroger une table Supabase avec filtres. Retourne les lignes. Les tables disponibles sont: clients, contacts, devis, commandes, factures, affaires, marches, reports, commerciaux, taches_commerciales, opportunites.',
+    description: 'Interroger une table Supabase avec filtres. Retourne les lignes. Les tables disponibles sont: clients, contacts, devis, commandes, factures, affaires, marches, reports, commerciaux, taches_commerciales, opportunites, exeplan_qualite (erreurs & modifications sur les commandes), exeplan_interventions (études EXE planifiées), geoplan_interventions (études de SOL planifiées).',
     input_schema: {
       type: 'object',
       properties: {
-        table: { type: 'string', enum: ['clients','contacts','devis','commandes','factures','affaires','marches','reports','commerciaux','taches_commerciales','opportunites'] },
+        table: { type: 'string', enum: ['clients','contacts','devis','commandes','factures','affaires','marches','reports','commerciaux','taches_commerciales','opportunites','exeplan_qualite','exeplan_interventions','geoplan_interventions'] },
         select: { type: 'string', description: 'Colonnes séparées par virgule, ex: "id,name,ca". * pour toutes.', default: '*' },
         filters: { type: 'object', description: 'Filtres. Clés: colonne.op (eq,neq,gt,gte,lt,lte,like,ilike,in,is). Ex: {"statut.eq":"retard","date.gte":"2024-01-01","name.ilike":"%rubato%"}' },
         order: { type: 'string', description: 'Colonne de tri, préfixer par "-" pour DESC. Ex: "-date"' },
@@ -169,7 +169,7 @@ const TOOLS = [
   }
 ];
 
-const TABLE_LABELS = { clients:'clients', contacts:'contacts', devis:'devis', commandes:'commandes', factures:'factures', affaires:'affaires', marches:'marchés', reports:'comptes-rendus', commerciaux:'commerciaux', taches_commerciales:'tâches commerciales', opportunites:'opportunités' };
+const TABLE_LABELS = { clients:'clients', contacts:'contacts', devis:'devis', commandes:'commandes', factures:'factures', affaires:'affaires', marches:'marchés', reports:'comptes-rendus', commerciaux:'commerciaux', taches_commerciales:'tâches commerciales', opportunites:'opportunités', exeplan_qualite:'erreurs/modifications', exeplan_interventions:'études EXE planifiées', geoplan_interventions:'études SOL planifiées' };
 // Libellés des tranches d'effectif INSEE
 const EFF_TRANCHE = { '00': '0 sal.', '01': '1-2', '02': '3-5', '03': '6-9', '11': '10-19', '12': '20-49', '21': '50-99', '22': '100-199', '31': '200-249', '32': '250-499', '41': '500-999', '42': '1000-1999', '51': '2000-4999', '52': '5000-9999', '53': '10000+', 'NN': 'n.c.' };
 
@@ -605,6 +605,10 @@ Tables disponibles (schéma principal) :
 - commerciaux : id, nom, email, akuiteo_manager_id, role
 - taches_commerciales : id, titre, description, priorite (basse/normale/haute), statut (a_faire/en_cours/terminee/annulee), echeance, client_id, client_name, affaire_id, affaire_nom, createur_nom, createur_email, assigne_nom, assigne_email, created_at, done_at
 - opportunites : id, akuiteo_id, code, nom, description, client_id, client_name, contact_name, montant, montant_travaux, devise, probabilite (%), statut (IN_PROGRESS=en cours / WON=gagnée / LOST=perdue / DISCARD=abandonnée), stage (libellé du stade), pipe (portefeuille : Marchés privés/publics), type_origine, origine, responsable, date_signature (signature prévisionnelle), date_creation
+- exeplan_qualite (erreurs commises par nos bureaux d'études & modifications demandées, rattachées à une commande) : id, created_at, created_by, commande_ref, affaire_ref, client_name, societe, nature ('erreur' = de notre part / 'modification' = demande client), type_label, sous_type_label, gravite (mineure/majeure/critique), payante (booléen — pour une modification : true=facturée/avenant, false=geste commercial gratuit), temps_passe (heures passées à corriger/modifier), facture_liee (booléen), facture_ref, montant_facture (€), cause_racine, action_corrective, statut (ouvert/en_cours/cloture), responsable_email, description, date_evenement. → Pour un client : filtrer par client_name (ilike) ou par affaire_ref.
+- exeplan_interventions (études d'EXÉCUTION planifiées — planning EXE du BE structure) : id, title, type, date (date planifiée de réalisation au bureau), duration (minutes), tech_id (ingénieur, id interne non résolu dans le CRM), client, commande_ref, affaire_ref, dlr_date (date limite de rendu), dlc_date (date limite client), agence, status, is_rapport (true = ligne "rapport", à IGNORER pour les dates d'étude). → Dates planifiées d'une étude EXE : filtrer par client (ilike) ou affaire_ref, avec is_rapport.eq=false et date non nulle.
+- geoplan_interventions (études de SOL / géotechnique planifiées — planning GEOPLAN) : mêmes colonnes que exeplan_interventions (title, type, date, tech_id, client, commande_ref, affaire_ref, location, status, is_rapport, geosolia_ref, geosolia_name). → Dates planifiées d'une étude SOL : filtrer par client (ilike) ou affaire_ref, avec is_rapport.eq=false.
+Note transverse : ces 3 tables sont partagées avec les outils de planning EXE (ExéPlan) et SOL (GéoPlan). Quand on t'interroge sur un client/une affaire, pense à vérifier s'il y a eu des erreurs/modifications (exeplan_qualite) et à donner les dates planifiées de ses études EXE (exeplan_interventions) et SOL (geoplan_interventions) si c'est pertinent. Le lien se fait par client_name/client (ilike) ou par affaire_ref (récupérable via les affaires du client).
 
 Opérateurs de filtre : eq (=), neq (≠), gt (>), gte (≥), lt (<), lte (≤), like (case sensitive), ilike (case insensitive, utilise % pour wildcards), in, is (pour null : "col.is" : "null")
 
@@ -618,6 +622,9 @@ Exemples :
 - Chercher une société (exact, si tu connais déjà le nom précis) : query_table(table="clients", filters={"name.ilike":"%rubato%"}, select="id,name,code,city,code_postal,ca,status,account_manager_name,salesman_name,categorie_compte,secteur_activite,phone,telephone2,mobile,email,site_web") [NB : la table clients utilise phone et telephone2, PAS telephone]
 - Contacts d'une société : query_table(table="contacts", filters={"client_id.eq":"<id_client>"}, select="nom,prenom,titre,fonction,service,email,email2,telephone,mobile") [NB : la table contacts utilise telephone et mobile, PAS telephone2]
 - Chercher un contact par nom (TOLÉRANT, à privilégier) : search_contacts(q="dupond") → candidats classés avec coordonnées et client_id ; utilise client_id pour la société.
+- Erreurs & modifications avec un client : query_table(table="exeplan_qualite", filters={"client_name.ilike":"%rubato%"}, select="date_evenement,nature,type_label,sous_type_label,gravite,payante,temps_passe,montant_facture,statut,commande_ref,description", order="-date_evenement")
+- Dates planifiées des études EXE d'un client : query_table(table="exeplan_interventions", filters={"client.ilike":"%rubato%","is_rapport.eq":"false"}, select="date,type,affaire_ref,commande_ref,dlr_date,dlc_date,status", order="date")
+- Dates planifiées des études SOL d'un client : query_table(table="geoplan_interventions", filters={"client.ilike":"%rubato%","is_rapport.eq":"false"}, select="date,type,affaire_ref,commande_ref,status", order="date")
 - Chercher un contact par nom (exact, si nom précis connu) : query_table(table="contacts", filters={"nom.ilike":"%dupont%"}, select="nom,prenom,titre,fonction,email,email2,telephone,mobile,client_id")
 
 - Devis d'un client : query_table(table="devis", filters={"client_id.eq":"<id_client>"}, select="ref,sujet,montant,statut,date,agence,probabilite", order="-date")
