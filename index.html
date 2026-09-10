@@ -20836,19 +20836,23 @@ async function loadApporteurCommMap() {
     try {
       while (true) {
         let q = sb.from('clients')
-          .select('id,name,code,raison_sociale,account_manager_name,salesman_name,est_siege,siren,code_postal')
+          .select('id,name,code,raison_sociale,account_manager_name,salesman_name,account_manager_id,salesman_id,est_siege,siren,code_postal')
           .order('id', { ascending: true }).limit(1000);
         if (lastId) q = q.gt('id', lastId);
         const { data, error } = await q;
         if (error) { console.warn('[loadApporteurCommMap]', error.message); break; }
         if (!data || !data.length) break;
         for (const c of data) {
+          // Nom du commercial : colonne nom si présente, sinon résolution par l'ID Akuiteo (référentiel collaborateurs).
+          // La synchro en masse ne remplit que les *_id : sans ce repli, seuls les rares clients au nom saisi apparaissent.
+          const novamRaw = c.account_manager_name || _empDisplayName(c.account_manager_id) || null;
+          const gphRaw = c.salesman_name || _empDisplayName(c.salesman_id) || null;
           const rec = {
             nom: c.name || null,
             id: c.id || null,
             code: c.code || null,
-            novam: c.account_manager_name ? fmtCommercialName(c.account_manager_name) : null,
-            gph: c.salesman_name ? fmtCommercialName(c.salesman_name) : null,
+            novam: novamRaw ? fmtCommercialName(novamRaw) : null,
+            gph: gphRaw ? fmtCommercialName(gphRaw) : null,
             siren: c.siren || null,
             cp: c.code_postal || null,
           };
@@ -30731,6 +30735,7 @@ async function syncAkuiteoQuick() {
           contact: ak.accountManager || ak.salesman || '', email: ak.address?.email || ak.email || '',
           phone: ak.address?.phone || ak.phone || '', akuiteo_id: akId,
           account_manager_id: ak.accountManagerId || null, salesman_id: ak.salesmanId || null,
+          account_manager_name: ak.accountManager || null, salesman_name: ak.salesman || null,
           fact_adresse_ligne1: ak.address?.line1 || null, fact_adresse_ligne2: ak.address?.line2 || null,
           fact_adresse_ligne3: ak.address?.line3 || null, fact_code_postal: ak.address?.postalCode || null,
           fact_ville: ak.address?.city || null,
@@ -30886,6 +30891,7 @@ async function syncAkuiteoQuick() {
         newClients.push({ id, name: ak.name || ak.legalName || ak.code || 'Sans nom', code: ak.code || akId, akuiteo_id: akId,
           city: ak.address?.city || '', fact_ville: ak.address?.city || null, fact_code_postal: ak.address?.postalCode || null,
           account_manager_id: ak.accountManagerId || null, salesman_id: ak.salesmanId || null,
+          account_manager_name: ak.accountManager || null, salesman_name: ak.salesman || null,
           raison_sociale: ak.legalName || null, siren: ak.SIREN || null, siret: ak.SIRET || null,
           ...(isNew ? { ini, ca: 0, obj: 0, margin: 0, dso: 0, score: 50, status: 'nouveau' } : {}) });
         akCMap[akId] = { id, akuiteo_id: akId, name: ak.name || ak.legalName || ak.code };
@@ -31089,6 +31095,8 @@ async function syncAkuiteo() {
         akuiteo_id: akId,
         account_manager_id: ak.accountManagerId || null,
         salesman_id: ak.salesmanId || null,
+        account_manager_name: ak.accountManager || null,
+        salesman_name: ak.salesman || null,
         last_contact: new Date().toISOString().slice(0, 10),
         fact_adresse_ligne1: ak.address?.line1 || null, fact_adresse_ligne2: ak.address?.line2 || null,
         fact_adresse_ligne3: ak.address?.line3 || null, fact_code_postal: ak.address?.postalCode || null,

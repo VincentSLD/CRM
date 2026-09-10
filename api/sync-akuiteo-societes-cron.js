@@ -156,6 +156,7 @@ export default async function handler(req, res) {
           contact: ak.accountManager || ak.salesman || '', email: a.email || ak.email || '',
           phone: a.phone || ak.phone || '', akuiteo_id: akId,
           account_manager_id: ak.accountManagerId || null, salesman_id: ak.salesmanId || null,
+          account_manager_name: ak.accountManager || null, salesman_name: ak.salesman || null,
           fact_adresse_ligne1: a.line1 || null, fact_adresse_ligne2: a.line2 || null, fact_adresse_ligne3: a.line3 || null,
           fact_code_postal: a.postalCode || null, fact_ville: a.city || null,
           fact_pays: a.countryName || null, fact_departement: a.geographicalDepartmentName || null, fact_region: a.regionName || null,
