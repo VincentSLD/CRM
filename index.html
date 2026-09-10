@@ -11464,16 +11464,22 @@ function renderDashChartCA(factures) {
     return factures.filter(f => { const d = new Date(f.date_raw || f.date); return !isNaN(d) && d.getFullYear() === y && d.getMonth() === m; })
       .reduce((a, f) => a + Number(f.montant || 0), 0);
   });
-  const max = Math.max(...data, 1);
+  // Ligne de base "zéro" : gère les mois à CA net négatif (avoirs > factures) sans hauteur SVG négative
+  const maxV = Math.max(...data, 0);
+  const minV = Math.min(...data, 0);
+  const range = (maxV - minV) || 1;
   const W = 100, H = 60, padT = 4, padB = 12;
+  const plotH = H - padT - padB;
+  const zeroY = padT + (maxV / range) * plotH;
   const barW = W / months.length * 0.7;
   const gap = W / months.length;
   let bars = '';
   data.forEach((v, i) => {
-    const h = (v / max) * (H - padT - padB);
+    const h = Math.abs(v) / range * plotH;
     const x = i * gap + (gap - barW) / 2;
-    const y = H - padB - h;
-    bars += `<rect x="${x}" y="${y}" width="${barW}" height="${h}" fill="var(--accent)" rx="1"><title>${months[i].label}: ${fmt(v)}</title></rect>`;
+    const y = v >= 0 ? zeroY - h : zeroY;
+    const fill = v < 0 ? '#C11F39' : 'var(--accent)';
+    bars += `<rect x="${x}" y="${y}" width="${barW}" height="${h}" fill="${fill}" rx="1"><title>${months[i].label}: ${fmt(v)}</title></rect>`;
     bars += `<text x="${x + barW/2}" y="${H - 2}" text-anchor="middle" font-size="3" fill="var(--t3)">${months[i].label}</text>`;
   });
   const totalCA = data.reduce((a,v) => a+v, 0);
