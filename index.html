@@ -31318,6 +31318,20 @@ async function syncAkuiteo() {
     ]);
     console.log(`[Akuiteo] Bulk fetch: ${allQuotations.length} devis, ${allOrders.length} cmd, ${allInvoices.length} fact en ${((Date.now()-t4Start)/1000).toFixed(1)}s`);
 
+    // --- Détail des commandes (lignes + DONNÉES PERSONNALISÉES + description) ---
+    // Le bulk /sales/orders/search NE renvoie PAS customData ni lines → on va chercher le détail par commande,
+    // sinon les données personnalisées (type de mission 1-alpha06, gros-œuvre, codes AA/GO…) ne sont jamais rafraîchies.
+    if (allOrders.length > 0) {
+      toast(`Détail des ${allOrders.length} commandes (données personnalisées)…`, 'info');
+      let _od = 0;
+      await _syncMapLimit(allOrders, 6, async o => {
+        if ((_od++ % 100) === 0) setSyncText(`Détail commandes ${_od}/${allOrders.length}…`);
+        try { const full = await _akRetry('GET', '/sales/orders/' + o.id); if (full) { o.lines = full.lines || o.lines || []; o.description = full.description || o.description || null; o.customData = full.customData || o.customData || null; } }
+        catch (e) { o.lines = o.lines || []; }
+      });
+      console.log('[Akuiteo] Détail commandes récupéré (customData + lignes)');
+    }
+
     // --- Traiter devis ---
     toast(`Traitement ${allQuotations.length} devis...`, 'info');
     const dBatchAll = allQuotations.map(q => {
