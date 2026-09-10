@@ -4117,6 +4117,7 @@ async function loadContactsPage(page, letter, search) {
     if (contactsFilterGph) { const g = await _clientIdsForComm('salesman_name', contactsFilterGph, clientsGphVariants, 'commerciaux_associes'); ids = ids ? ids.filter(x => g.includes(x)) : g; }
     query = query.in('client_id', (ids && ids.length) ? ids : ['__none__']);
   }
+  if (_ctHidePartiGlobal) query = query.or('statut_presence.is.null,statut_presence.neq.parti');
   query = query.order('nom', { ascending: true }).range(from, to);
 
   const { data, count } = await query;
@@ -4190,9 +4191,9 @@ function renderContacts() {
     ${contactsList.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--t3)">Aucun contact trouvé</div>' :
       contactsList.map(c => {
         const fullName = [c.prenom, (c.nom||'').toUpperCase()].filter(Boolean).join(' ');
-        return `<div onclick="showContact('${c.id}')" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">
+        return `<div onclick="showContact('${c.id}')" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer${_ctParti(c) ? ';opacity:.65' : ''}">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <strong style="font-size:14px">${fullName}</strong>
+            <strong style="font-size:14px${_ctParti(c) ? ';text-decoration:line-through' : ''}">${fullName}${_ctPartiBadge(c)}</strong>
             <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'}" title="${c.akuiteo_id ? 'Synchronisé' : 'Non synchronisé'}"></span>
           </div>
           ${c.fonction ? '<div style="font-size:12px;color:var(--t2);margin-bottom:2px">' + c.fonction + '</div>' : ''}
@@ -4239,6 +4240,7 @@ function renderContacts() {
     </select>
     ${(contactsFilterNovam||contactsFilterGph) ? `<button class="btn" style="font-size:12px;padding:5px 10px;color:var(--red)" onclick="contactsFilterNovam='';contactsFilterGph='';loadContactsPage(0,contactsLetter,contactsSearch)">✕ Effacer</button>` : ''}
     ${!clientsFilterOptsLoaded ? '<span style="font-size:11px;color:var(--t3)">⏳ chargement des options…</span>' : ''}
+    <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--t3);cursor:pointer;margin-left:auto"><input type="checkbox" ${_ctHidePartiGlobal ? 'checked' : ''} onchange="_ctHidePartiGlobal=this.checked;loadContactsPage(0,contactsLetter,contactsSearch)"> Masquer les contacts partis</label>
   </div>
   <div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:12px">
     <button class="btn ${!contactsLetter?'active':''}" style="padding:3px 7px;font-size:11px;min-width:28px" onclick="loadContactsPage(0,'','')">Tous</button>
@@ -4248,8 +4250,8 @@ function renderContacts() {
     <table><thead><tr><th>Nom Prénom</th><th>Fonction</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th>Société</th><th>Commercial Novam</th><th>Commercial GPH</th></tr></thead>
     <tbody>${contactsList.length === 0 ? '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--t3)">Aucun contact trouvé</td></tr>' : contactsList.map(c => {
       const fullName = [c.titre, c.prenom, c.nom].filter(Boolean).join(' ');
-      return `<tr onclick="showContact('${c.id}')" style="cursor:pointer">
-        <td><div style="font-weight:600;font-size:13px">${fullName} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'};margin-left:4px;vertical-align:middle" title="${c.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span></div><div style="font-size:11px;color:var(--t3)">${c.code||''}</div></td>
+      return `<tr onclick="showContact('${c.id}')" style="cursor:pointer${_ctParti(c) ? ';opacity:.6' : ''}">
+        <td><div style="font-weight:600;font-size:13px${_ctParti(c) ? ';text-decoration:line-through' : ''}">${fullName} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'};margin-left:4px;vertical-align:middle" title="${c.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span>${_ctPartiBadge(c)}</div><div style="font-size:11px;color:var(--t3)">${c.code||''}</div></td>
         <td style="font-size:12px">${c.fonction||'—'}</td>
         <td style="font-size:12px">${c.email ? '<a href="mailto:'+c.email+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+c.email+'</a>' : '—'}</td>
         <td style="font-size:12px;font-family:monospace">${c.telephone ? '<a href="tel:'+c.telephone+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+formatPhone(c.telephone)+'</a>' : '—'}</td>
@@ -4301,7 +4303,7 @@ function renderContactDetail() {
         ${(c.prenom||'?')[0]}${(c.nom||'?')[0]}
       </div>
       <div style="flex:1">
-        <h2 style="margin:0;font-size:20px">${fullName}</h2>
+        <h2 style="margin:0;font-size:20px">${fullName}${_ctPartiBadge(c)}</h2>
         <div style="font-size:13px;color:var(--t3);margin-top:2px">${c.fonction||''} ${c.service ? '— '+c.service : ''}</div>
         ${c._clientName ? `<div style="font-size:13px;color:var(--accent);margin-top:4px;cursor:pointer" onclick="showClient('${c.client_id}')">${c._clientName}</div>` : ''}
       </div>
@@ -4310,6 +4312,9 @@ function renderContactDetail() {
         ${_callBtns(c, [c.prenom,c.nom].filter(Boolean).join(' '), 'btn')}
         <button class="btn" onclick="goToCR('${c.client_id||''}','${(c._clientName||'').replace(/'/g,"\\'")}','${c.id||''}','${([c.prenom,c.nom].filter(Boolean).join(' ')).replace(/'/g,"\\'")}')">Rédiger CR</button>
         <button class="btn" onclick="toggleEditContact()">Modifier</button>
+        ${_ctParti(c)
+          ? `<button class="btn" onclick="annulerContactParti('${c.id}','${c.client_id||''}')" title="Ce contact est marqué comme parti — cliquez pour réactiver">↩ Réactiver</button>`
+          : `<button class="btn" onclick="marquerContactParti('${c.id}','${c.client_id||''}')" title="Marquer ce contact comme ayant quitté l'entreprise">⚑ Marquer parti</button>`}
         <button class="btn ${c.akuiteo_id ? 'btn-synced' : 'btn-not-synced'}" onclick="pushContactToAkuiteo('${c.id}')" title="${c.akuiteo_id ? 'Synchronisé (ID: '+c.akuiteo_id+')' : 'Non synchronisé — cliquez pour envoyer vers Akuiteo'}">${c.akuiteo_id ? '✔ Synchronisé' : '⬆ Sync Akuiteo'}</button>
       </div>
     </div>
@@ -4340,6 +4345,9 @@ function renderContactDetail() {
     <div class="card-header"><div class="card-title">Commentaire</div></div>
     <div class="card-body"><div style="white-space:pre-wrap;font-size:13px;color:var(--t2)">${c.commentaire}</div></div>
   </div>` : ''}
+  ${_ctParti(c) ? `<div class="card" style="margin-top:16px;border-color:#9ca3af"><div class="card-body" style="padding:12px 14px;font-size:12px;color:var(--t2)">⚑ Ce contact a quitté <strong>${cmdEsc(c._clientName || "l'entreprise")}</strong>${c.parti_date ? ' le ' + fmtDateFR(c.parti_date) : ''}${c.parti_vers ? ' — désormais chez <strong>' + cmdEsc(c.parti_vers) + '</strong>' : ''}.${c.parti_note ? '<div style="margin-top:4px;color:var(--t3)">' + cmdEsc(c.parti_note) + '</div>' : ''}</div></div>` : ''}
+  <div id="ct-retrouve" style="margin-top:16px;display:none"></div>
+  <div id="ct-parcours" style="margin-top:16px;display:none"></div>
   <div id="editContactForm" style="display:none;margin-top:16px">
     <div class="card">
       <div class="card-header"><div class="card-title">Modifier le contact</div></div>
@@ -4423,6 +4431,231 @@ async function saveEditContact() {
   // Retour à la fiche client si le contact a été ouvert depuis celle-ci, sinon rester sur la fiche contact
   if (_contactReturnClient) { const rc = _contactReturnClient; _contactReturnClient = null; showClient(rc); }
   else renderPage('contact-detail');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SUIVI DE PRÉSENCE & PARCOURS DES CONTACTS (statut « parti » + personne_id)
+// Tout est CRM-only : pushContactToAkuiteo ne pousse aucun de ces champs.
+// ═══════════════════════════════════════════════════════════════════════════
+let _ctDupTimer = null, _ctDupSeq = 0, _ctPendingPersonneId = null, _ctPendingFromContact = null;
+let _ctHideParti = false, _ctHidePartiGlobal = false;
+function _uuid() { return (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : ('p_' + Date.now() + '_' + Math.random().toString(36).slice(2)); }
+function _ctNormName(a, b) { return String((a || '') + (b || '')).toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function _ctParti(c) { return !!(c && c.statut_presence === 'parti'); }
+function _ctPartiBadge(c) {
+  if (!_ctParti(c)) return '';
+  const d = c.parti_date ? ' ' + fmtDateFR(c.parti_date) : '';
+  const vers = c.parti_vers ? ' → ' + c.parti_vers : '';
+  return ` <span class="badge" style="background:#9ca3af;color:#fff;font-size:9px;vertical-align:middle" title="Parti de l'entreprise${d}${vers}">⚑ Parti${d}</span>`;
+}
+
+// --- Marquage « parti » (overlay) ---
+function marquerContactParti(contactId, clientId) {
+  const c = (currentContact && currentContact.id === contactId) ? currentContact : null;
+  const today = new Date().toISOString().slice(0, 10);
+  const nom = c ? [c.prenom, c.nom].filter(Boolean).join(' ') : 'ce contact';
+  const ex = document.getElementById('ct-parti-ov'); if (ex) ex.remove();
+  const ov = document.createElement('div');
+  ov.id = 'ct-parti-ov';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML = `<div style="background:var(--card,#fff);border-radius:12px;max-width:440px;width:100%;padding:20px;box-shadow:0 12px 40px rgba(0,0,0,.3)">
+    <div style="font-size:15px;font-weight:700;color:var(--t1);margin-bottom:4px">Marquer comme parti</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:14px">${cmdEsc(nom)} quitte l'entreprise rattachée. Information CRM interne (non transmise à Akuiteo).</div>
+    <label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Date de départ</label>
+    <input type="date" id="ct-parti-date" value="${today}" class="fi" style="padding:6px 8px;font-size:12px;margin-bottom:10px;width:100%;box-sizing:border-box">
+    <label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Parti vers (société de destination, optionnel)</label>
+    <input type="text" id="ct-parti-vers" placeholder="Ex: nouvelle société" value="${c && c.parti_vers ? cmdEsc(c.parti_vers) : ''}" class="fi" style="padding:6px 8px;font-size:12px;margin-bottom:10px;width:100%;box-sizing:border-box">
+    <label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Note (optionnel)</label>
+    <textarea id="ct-parti-note" rows="2" class="fi" style="padding:6px 8px;font-size:12px;resize:vertical;margin-bottom:14px;width:100%;box-sizing:border-box">${c && c.parti_note ? cmdEsc(c.parti_note) : ''}</textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="document.getElementById('ct-parti-ov').remove()">Annuler</button>
+      <button class="btn btn-primary" onclick="_ctConfirmParti('${contactId}','${clientId || ''}')">Confirmer le départ</button>
+    </div>
+  </div>`;
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
+}
+async function _ctConfirmParti(contactId, clientId) {
+  const upd = {
+    statut_presence: 'parti',
+    parti_date: document.getElementById('ct-parti-date')?.value || null,
+    parti_vers: (document.getElementById('ct-parti-vers')?.value || '').trim() || null,
+    parti_note: (document.getElementById('ct-parti-note')?.value || '').trim() || null,
+  };
+  const { error } = await sb.from('contacts').update(upd).eq('id', contactId);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  const ov = document.getElementById('ct-parti-ov'); if (ov) ov.remove();
+  if (currentContact && currentContact.id === contactId) Object.assign(currentContact, upd);
+  toast('Contact marqué comme parti', 'success');
+  _ctAfterStatusChange(clientId);
+}
+async function annulerContactParti(contactId, clientId) {
+  const upd = { statut_presence: 'actif', parti_date: null, parti_vers: null };
+  const { error } = await sb.from('contacts').update(upd).eq('id', contactId);
+  if (error) { toast('Erreur: ' + error.message, 'error'); return; }
+  if (currentContact && currentContact.id === contactId) Object.assign(currentContact, upd);
+  toast('Contact réactivé', 'success');
+  _ctAfterStatusChange(clientId);
+}
+function _ctAfterStatusChange(clientId) {
+  contactsLoaded = false;
+  if (typeof crContactsCache === 'object' && clientId) delete crContactsCache[clientId];
+  if (document.getElementById('contacts-list') && clientId) loadClientContacts(clientId);
+  if (currentPage === 'contact-detail') renderPage('contact-detail');
+  else if (currentPage === 'contacts') loadContactsPage(contactsPage, contactsLetter, contactsSearch);
+}
+
+// --- Détection de doublon EN DIRECT dans le formulaire « nouveau contact » ---
+function _ctDupSchedule(clientId) { clearTimeout(_ctDupTimer); _ctDupTimer = setTimeout(() => _ctRunDupSearch(clientId), 400); }
+function _ctResetPendingLink() { _ctPendingPersonneId = null; _ctPendingFromContact = null; const b = document.getElementById('nc-dup-suggest'); if (b) { b.innerHTML = ''; b.style.display = 'none'; } }
+async function _ctRunDupSearch(clientId) {
+  const box = document.getElementById('nc-dup-suggest'); if (!box) return;
+  if (_ctPendingPersonneId) return; // une liaison est déjà choisie
+  const nom = (document.getElementById('nc-ct-nom')?.value || '').trim();
+  const prenom = (document.getElementById('nc-ct-prenom')?.value || '').trim();
+  if (nom.length < 3) { box.innerHTML = ''; box.style.display = 'none'; return; }
+  const q = [prenom, nom].filter(Boolean).join(' ').trim();
+  const seq = ++_ctDupSeq;
+  let rows = [];
+  try { const { data } = await sb.rpc('search_contacts', { q, lim: 8 }); rows = data || []; } catch (e) { return; }
+  if (seq !== _ctDupSeq) return;
+  rows = rows.filter(r => r.id && (r.score == null || r.score >= 0.3));
+  if (!rows.length) { box.innerHTML = ''; box.style.display = 'none'; return; }
+  const ids = rows.map(r => r.id);
+  const clientIds = [...new Set(rows.map(r => r.client_id).filter(Boolean))];
+  let exMap = {}, clMap = {};
+  try {
+    const [ex, cls] = await Promise.all([
+      sb.from('contacts').select('id,statut_presence,parti_date,parti_vers,personne_id').in('id', ids),
+      clientIds.length ? sb.from('clients').select('id,name').in('id', clientIds) : Promise.resolve({ data: [] }),
+    ]);
+    (ex.data || []).forEach(x => exMap[x.id] = x);
+    (cls.data || []).forEach(x => clMap[x.id] = x.name);
+  } catch (e) {}
+  if (seq !== _ctDupSeq) return;
+  box.style.display = 'block';
+  box.innerHTML = `<div style="border:1px solid #fcd34d;background:#fffbeb;border-radius:8px;padding:10px 12px">
+    <div style="font-size:12px;font-weight:700;color:#b45309;margin-bottom:6px">👤 Contacts similaires — est-ce la même personne ?</div>
+    ${rows.slice(0, 6).map(r => {
+      const e = exMap[r.id] || {}; const same = r.client_id === clientId;
+      const soc = clMap[r.client_id] || '—';
+      const parti = e.statut_presence === 'parti';
+      const tag = parti ? ` <span class="badge" style="background:#9ca3af;color:#fff;font-size:9px">parti${e.parti_date ? ' ' + fmtDateFR(e.parti_date) : ''}</span>` : '';
+      const nm = [r.prenom, (r.nom || '').toUpperCase()].filter(Boolean).join(' ');
+      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;border-top:1px solid #fde68a">
+        <div style="flex:1"><strong>${cmdEsc(nm)}</strong> — ${cmdEsc(soc)}${tag}${r.fonction ? ' <span style="color:var(--t3)">· ' + cmdEsc(r.fonction) + '</span>' : ''}</div>
+        ${same
+          ? `<span style="font-size:10px;color:var(--t3)">déjà ici</span> <button class="btn" style="font-size:10px;padding:2px 8px" onclick="showContact('${r.id}','${clientId}')">Ouvrir</button>`
+          : `<button class="btn btn-primary" style="font-size:10px;padding:2px 8px" onclick="_ctLinkPersonne('${r.id}','${clientId}')">Même personne</button>`}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+async function _ctLinkPersonne(candidateId, clientId) {
+  let cand = null;
+  try { const { data } = await sb.from('contacts').select('*').eq('id', candidateId).maybeSingle(); cand = data; } catch (e) {}
+  if (!cand) { toast('Contact introuvable', 'error'); return; }
+  let pid = cand.personne_id;
+  if (!pid) { pid = _uuid(); try { await sb.from('contacts').update({ personne_id: pid }).eq('id', candidateId); } catch (e) {} }
+  _ctPendingPersonneId = pid; _ctPendingFromContact = candidateId;
+  const setIf = (id, val) => { const el = document.getElementById(id); if (el && !el.value && val) el.value = val; };
+  setIf('nc-ct-prenom', cand.prenom); setIf('nc-ct-titre', cand.titre);
+  setIf('nc-ct-mobile', cand.mobile); setIf('nc-ct-tel', cand.telephone); setIf('nc-ct-email', cand.email);
+  const box = document.getElementById('nc-dup-suggest');
+  if (box) box.innerHTML = `<div style="border:1px solid #a7f3d0;background:#ecfdf5;border-radius:8px;padding:10px 12px;font-size:12px;color:#065f46">
+    ✓ Parcours relié à <strong>${cmdEsc([cand.prenom, cand.nom].filter(Boolean).join(' '))}</strong>. À l'enregistrement, ce contact rejoindra son parcours.
+    <label style="display:flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer;color:#065f46">
+      <input type="checkbox" id="nc-mark-old-parti" checked> Marquer l'ancien contact comme « parti » vers cette société
+    </label>
+    <button class="btn" style="font-size:10px;padding:2px 8px;margin-top:8px" onclick="_ctResetPendingLink()">Annuler la liaison</button>
+  </div>`;
+}
+
+// --- Parcours professionnel (fiche contact) ---
+async function _ctRenderParcours() {
+  const box = document.getElementById('ct-parcours'); if (!box || !currentContact) return;
+  const c = currentContact;
+  if (!c.personne_id) { box.style.display = 'none'; return; }
+  let data = [];
+  try { const r = await sb.from('contacts').select('id,client_id,nom,prenom,fonction,statut_presence,parti_date,parti_vers').eq('personne_id', c.personne_id); data = r.data || []; } catch (e) { return; }
+  if (data.length <= 1) { box.style.display = 'none'; return; }
+  const clientIds = [...new Set(data.map(x => x.client_id).filter(Boolean))];
+  let nameMap = {};
+  try { const { data: cls } = clientIds.length ? await sb.from('clients').select('id,name').in('id', clientIds) : { data: [] }; (cls || []).forEach(x => nameMap[x.id] = x.name); } catch (e) {}
+  const items = data.slice().sort((a, b) => {
+    const ap = a.statut_presence === 'parti', bp = b.statut_presence === 'parti';
+    if (ap !== bp) return ap ? -1 : 1;
+    return (a.parti_date || '9999') < (b.parti_date || '9999') ? -1 : 1;
+  });
+  box.style.display = 'block';
+  box.innerHTML = `<div class="card"><div class="card-header"><div class="card-title">Parcours professionnel</div></div>
+    <div class="card-body">${items.map((x, i) => {
+      const cur = x.id === c.id, parti = x.statut_presence === 'parti';
+      const soc = nameMap[x.client_id] || '—';
+      const per = parti ? (x.parti_date ? 'jusqu\'à ' + fmtDateFR(x.parti_date) : 'parti') + (x.parti_vers ? ' → ' + cmdEsc(x.parti_vers) : '') : 'poste actuel';
+      return `<div style="display:flex;gap:10px;padding:8px 0;${i ? 'border-top:1px solid var(--border)' : ''};${parti && !cur ? 'opacity:.7' : ''}">
+        <div style="width:10px;height:10px;border-radius:50%;margin-top:4px;flex-shrink:0;background:${cur ? '#772471' : (parti ? '#9ca3af' : '#22c55e')}"></div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:13px">${cmdEsc(soc)} ${cur ? '<span style="font-size:10px;color:#772471">(fiche courante)</span>' : ''}</div>
+          <div style="font-size:12px;color:var(--t2)">${cmdEsc(x.fonction || '—')} · <span style="${parti ? 'color:#9ca3af' : 'color:#059669'}">${per}</span></div>
+        </div>
+        ${!cur ? `<button class="btn" style="font-size:10px;padding:2px 8px;align-self:center" onclick="showContact('${x.id}')">Ouvrir</button>` : ''}
+      </div>`;
+    }).join('')}</div></div>`;
+}
+
+// --- Alerte « contact retrouvé ailleurs » (fiche contact) ---
+async function _ctRenderRetrouve() {
+  const box = document.getElementById('ct-retrouve'); if (!box || !currentContact) return;
+  const c = currentContact;
+  const q = [c.prenom, c.nom].filter(Boolean).join(' ').trim();
+  if ((c.nom || '').length < 3) { box.style.display = 'none'; return; }
+  let rows = [];
+  try { const { data } = await sb.rpc('search_contacts', { q, lim: 12 }); rows = data || []; } catch (e) { box.style.display = 'none'; return; }
+  const myName = _ctNormName(c.prenom, c.nom), myNameR = _ctNormName(c.nom, c.prenom);
+  const myEmail = (c.email || '').toLowerCase().trim();
+  rows = rows.filter(r => {
+    if (r.id === c.id || r.client_id === c.client_id) return false;
+    const rn = _ctNormName(r.prenom, r.nom), rnR = _ctNormName(r.nom, r.prenom);
+    const sameName = rn && (rn === myName || rnR === myName || rn === myNameR);
+    const sameEmail = myEmail && r.email && r.email.toLowerCase().trim() === myEmail;
+    return (r.score != null && r.score >= 0.6) || sameName || sameEmail;
+  });
+  if (!rows.length) { box.style.display = 'none'; return; }
+  const ids = rows.map(r => r.id);
+  let exMap = {};
+  try { const { data: ex } = await sb.from('contacts').select('id,personne_id,statut_presence,client_id').in('id', ids); (ex || []).forEach(x => exMap[x.id] = x); } catch (e) {}
+  rows = rows.filter(r => { const e = exMap[r.id]; return !(c.personne_id && e && e.personne_id === c.personne_id); });
+  if (!rows.length) { box.style.display = 'none'; return; }
+  const clientIds = [...new Set(rows.map(r => r.client_id).filter(Boolean))];
+  let clMap = {};
+  try { const { data: cls } = clientIds.length ? await sb.from('clients').select('id,name').in('id', clientIds) : { data: [] }; (cls || []).forEach(x => clMap[x.id] = x.name); } catch (e) {}
+  box.style.display = 'block';
+  box.innerHTML = `<div class="card" style="border-color:#f59e0b"><div class="card-body" style="padding:12px 14px">
+    <div style="font-size:12px;font-weight:700;color:#b45309;margin-bottom:6px">🔎 Cette personne apparaît peut-être ailleurs</div>
+    ${rows.slice(0, 5).map(r => {
+      const soc = clMap[r.client_id] || '—'; const e = exMap[r.id] || {};
+      const partiTag = e.statut_presence === 'parti' ? ' <span class="badge" style="background:#9ca3af;color:#fff;font-size:9px">parti</span>' : '';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;border-top:1px solid var(--border)">
+        <div style="flex:1"><strong>${cmdEsc([r.prenom, r.nom].filter(Boolean).join(' '))}</strong> — ${cmdEsc(soc)}${partiTag}${r.fonction ? ' <span style="color:var(--t3)">· ' + cmdEsc(r.fonction) + '</span>' : ''}</div>
+        <button class="btn" style="font-size:10px;padding:2px 8px" onclick="showContact('${r.id}')">Ouvrir</button>
+        <button class="btn btn-primary" style="font-size:10px;padding:2px 8px" onclick="_ctLinkExisting('${c.id}','${r.id}')">Relier</button>
+      </div>`;
+    }).join('')}
+  </div></div>`;
+}
+async function _ctLinkExisting(currentId, otherId) {
+  let both = [];
+  try { const { data } = await sb.from('contacts').select('id,personne_id').in('id', [currentId, otherId]); both = data || []; } catch (e) {}
+  const pids = [...new Set(both.map(x => x.personne_id).filter(Boolean))];
+  const target = pids[0] || _uuid();
+  try {
+    if (pids.length > 1) await sb.from('contacts').update({ personne_id: target }).in('personne_id', pids.filter(p => p !== target));
+    await sb.from('contacts').update({ personne_id: target }).in('id', [currentId, otherId]);
+  } catch (e) { toast('Erreur: ' + e.message, 'error'); return; }
+  if (currentContact && currentContact.id === currentId) currentContact.personne_id = target;
+  toast('Parcours relié', 'success');
+  _ctRenderParcours(); _ctRenderRetrouve();
 }
 
 function generateAlerts() {
@@ -10231,6 +10464,7 @@ function renderPage(page) {
   C.innerHTML = '<div class="page active">' + renderers[page]() + '</div>';
   // Post-render hooks
   if (page === 'cr') initEditor();
+  if (page === 'contact-detail') setTimeout(() => { _ctRenderRetrouve(); _ctRenderParcours(); }, 30);
   if (page === 'carte') setTimeout(initCarteMap, 50);
   if (page === 'carte-affaires') setTimeout(initCarteAffairesMap, 50);
   if (page === 'veille-regar') { setTimeout(_vrInitMap, 60); if (!_oppsLoaded) loadOpportunites().then(() => { const el = document.getElementById('vr-opps-count'); if (el) el.textContent = _vrOppsCount(); }); }
@@ -15384,9 +15618,9 @@ function renderClientDetail() {
                   <option value="">—</option><option value="M.">M.</option><option value="Mme">Mme</option>
                 </select></div>
               <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Prénom</label>
-                <input type="text" id="nc-ct-prenom" class="fi" style="padding:6px 8px;font-size:12px"></div>
+                <input type="text" id="nc-ct-prenom" class="fi" style="padding:6px 8px;font-size:12px" oninput="_ctDupSchedule('${c.id}')"></div>
               <div><label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Nom *</label>
-                <input type="text" id="nc-ct-nom" class="fi" style="padding:6px 8px;font-size:12px"></div>
+                <input type="text" id="nc-ct-nom" class="fi" style="padding:6px 8px;font-size:12px" oninput="_ctDupSchedule('${c.id}')"></div>
             </div>
           </div>
         </div>
@@ -15417,6 +15651,7 @@ function renderClientDetail() {
           </div>
         </div>
       </div>
+      <div id="nc-dup-suggest" style="display:none;margin-bottom:12px"></div>
       <div class="card" style="margin-bottom:12px">
         <div class="card-header"><div class="card-title" style="font-size:12px">Notes</div></div>
         <div class="card-body" style="padding:10px 14px">
@@ -15491,16 +15726,23 @@ async function loadClientContacts(clientId) {
     el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3)">Aucun contact enregistré</div>';
     return;
   }
-  el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Fonction</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th></th></tr></thead><tbody>'
-    + data.map(ct => {
+  const _nbParti = data.filter(_ctParti).length;
+  const rows = _ctHideParti ? data.filter(c => !_ctParti(c)) : data;
+  el.innerHTML = (_nbParti ? `<div style="padding:6px 12px;font-size:11px;color:var(--t3);border-bottom:1px solid var(--border)"><label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" ${_ctHideParti ? 'checked' : ''} onchange="_ctHideParti=this.checked;loadClientContacts('${clientId}')"> Masquer les contacts partis (${_nbParti})</label></div>` : '')
+    + '<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Fonction</th><th>Email</th><th>Téléphone</th><th>Mobile</th><th></th></tr></thead><tbody>'
+    + rows.map(ct => {
       const fullName = [ct.titre, (ct.nom || '').toUpperCase(), ct.prenom].filter(Boolean).join(' ');
-      return `<tr style="cursor:pointer" onclick="showContact('${ct.id}','${clientId}')">
-        <td><strong>${fullName}</strong> <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ct.akuiteo_id ? '#22c55e' : '#f59e0b'};vertical-align:middle" title="${ct.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span>${ct.service ? '<div style="font-size:10px;color:var(--t3)">'+ct.service+'</div>' : ''}</td>
+      const parti = _ctParti(ct);
+      return `<tr style="cursor:pointer${parti ? ';opacity:.6' : ''}" onclick="showContact('${ct.id}','${clientId}')">
+        <td><strong style="${parti ? 'text-decoration:line-through' : ''}">${fullName}</strong> <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ct.akuiteo_id ? '#22c55e' : '#f59e0b'};vertical-align:middle" title="${ct.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span>${_ctPartiBadge(ct)}${ct.service ? '<div style="font-size:10px;color:var(--t3)">'+ct.service+'</div>' : ''}</td>
         <td style="font-size:12px">${ct.fonction || '—'}</td>
         <td style="font-size:12px">${ct.email ? '<a href="mailto:'+ct.email+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+ct.email+'</a>' : '—'}</td>
         <td class="mono" style="font-size:12px">${ct.telephone ? '<a href="tel:'+ct.telephone+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+formatPhone(ct.telephone)+'</a>' : '—'}</td>
         <td class="mono" style="font-size:12px">${ct.mobile ? '<a href="tel:'+ct.mobile+'" onclick="event.stopPropagation()" style="color:var(--accent)">'+formatPhone(ct.mobile)+'</a>' : '—'}</td>
-        <td><button class="btn" style="font-size:10px;padding:2px 6px;color:var(--red)" onclick="event.stopPropagation();deleteContact('${ct.id}','${clientId}')">×</button></td>
+        <td style="white-space:nowrap">
+          <button class="btn" style="font-size:11px;padding:2px 6px" title="${parti ? 'Réactiver' : 'Marquer comme parti'}" onclick="event.stopPropagation();${parti ? `annulerContactParti('${ct.id}','${clientId}')` : `marquerContactParti('${ct.id}','${clientId}')`}">${parti ? '↩' : '⚑'}</button>
+          <button class="btn" style="font-size:10px;padding:2px 6px;color:var(--red)" onclick="event.stopPropagation();deleteContact('${ct.id}','${clientId}')">×</button>
+        </td>
       </tr>`;
     }).join('')
     + '</tbody></table></div>';
@@ -15510,6 +15752,7 @@ function toggleNewContactForm() {
   const form = document.getElementById('new-contact-form');
   if (!form) return;
   form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  _ctResetPendingLink();
 }
 
 let _savingContact = false;
@@ -15537,9 +15780,22 @@ async function saveNewContact(clientId) {
       telephone: document.getElementById('nc-ct-tel')?.value.trim() || '',
       mobile: document.getElementById('nc-ct-mobile')?.value.trim() || '',
     };
+    // personne_id uniquement si une liaison de parcours a été choisie (statut_presence a un DEFAULT en base)
+    if (_ctPendingPersonneId) contactData.personne_id = _ctPendingPersonneId;
     const { error } = await sb.from('contacts').insert(contactData);
     if (error) { toast('Erreur: ' + error.message, 'error'); return; }
     toast('Contact ajouté', 'success');
+    // Parcours : si ce contact a été relié à une personne existante, proposer de marquer l'ancien comme « parti »
+    if (_ctPendingFromContact && document.getElementById('nc-mark-old-parti')?.checked) {
+      try {
+        await sb.from('contacts').update({
+          statut_presence: 'parti',
+          parti_date: new Date().toISOString().slice(0, 10),
+          parti_vers: (currentClient && currentClient.name) || null,
+        }).eq('id', _ctPendingFromContact);
+      } catch (e) {}
+    }
+    _ctResetPendingLink();
     // Fermer et vider le formulaire
     const form = document.getElementById('new-contact-form');
     if (form) form.style.display = 'none';

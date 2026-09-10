@@ -98,6 +98,18 @@ ALTER TABLE contacts ADD COLUMN IF NOT EXISTS adresse TEXT;
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS code_postal TEXT;
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS commentaire TEXT;
 
+-- Suivi de présence & parcours du contact (CRM-only, NON poussé vers Akuiteo)
+--   statut_presence : 'actif' (défaut) | 'parti'
+--   personne_id     : identifiant partagé reliant les contacts d'une MÊME personne à travers plusieurs sociétés
+--                     → permet le "parcours professionnel" (une ligne contacts = personne @ société)
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS statut_presence TEXT DEFAULT 'actif';
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS parti_date DATE;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS parti_vers TEXT;   -- société de destination (si connue)
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS parti_note TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS arrivee_date DATE; -- date d'arrivée dans la société (parcours)
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS personne_id UUID;
+CREATE INDEX IF NOT EXISTS idx_contacts_personne_id ON contacts(personne_id);
+
 -- ═══ Objectifs et mapping métier ═══
 
 -- Référentiel des métiers (paramétrable) — liste de métiers affectables aux agences
