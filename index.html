@@ -32781,7 +32781,7 @@ async function pullAffaireFromAkuiteo(affaireId) {
           projet: o.projectId || null, agence: o.entityCode || null, societe: o.companyCode || null,
           responsable_id: o.managerId || null, commercial_id: o.salesManagerId || null,
           surface_facturee: surface, affaire_id: affId, marche_id: marcheId,
-          description: o.description || null };
+          description: o.description || null, ..._docCd(o.customData) };
         if (o.customData) row.custom_data = o.customData;
         return row;
       });
