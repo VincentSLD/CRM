@@ -10494,7 +10494,7 @@ function renderPage(page) {
     loadClientsPage(clientsPage || 0, clientsLetter, clientsSearch);
   }
   if (page === 'clients' && isSupervisor() && _cliCleanupMode) setTimeout(_cliLoadCounts, 20);
-  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); renderMetiersConfig(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); renderNlAdminConfig(); renderRelanceSeuilsConfig(); renderSyncAdmin(); }, 50);
+  if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); renderMetiersConfig(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); renderNlAdminConfig(); renderRelanceSeuilsConfig(); renderSyncAdmin(); renderFullSyncStatus(); }, 50);
   if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); }, 50);
   if (page === 'analyse') setTimeout(initAnalyse, 30);
   if (page === 'decp-analyse') setTimeout(initDecpAnalyse, 30);
@@ -20515,6 +20515,54 @@ async function syncRunAll() {
   toast('Séquence terminée — consultez le journal', 'success');
 }
 
+// ═══ Synchro COMPLÈTE Akuiteo (resumable) — pilotage manuel depuis l'admin ═══
+let _fullSyncRunning = false, _fullSyncStop = false;
+async function renderFullSyncStatus() {
+  const el = document.getElementById('fullSyncStatus'); if (!el) return;
+  let st = null, log = null;
+  try { const r = await sb.from('sync_state').select('value').eq('key', 'akuiteo_full').maybeSingle(); st = r.data ? r.data.value : null; } catch (e) {}
+  try { const r = await sb.from('sync_log').select('*').eq('job', 'akuiteo_full').order('created_at', { ascending: false }).limit(1); log = (r.data && r.data[0]) || null; } catch (e) {}
+  const phase = (st && st.phase) ? st.phase : '—';
+  const fin = (st && st.finishedAt) ? _syncFmtDT(st.finishedAt) : null;
+  el.innerHTML = `<div style="font-size:12px;color:var(--t2)">Curseur : phase <b>${cmdEsc(phase)}</b>${st && st.offset ? (' · offset ' + st.offset) : ''}${st && st.lastId ? (' · id ' + cmdEsc(String(st.lastId))) : ''}${fin ? (' · dernier cycle complet : ' + fin) : ''}</div>`
+    + (log ? `<div style="font-size:11px;color:var(--t3);margin-top:2px">Dernier lot : ${_syncFmtDT(log.created_at)} · ${_syncFmtDur(log.duration_ms)} · ${_syncStatusBadge(log)}</div>` : '');
+}
+function fullSyncStop() { if (_fullSyncRunning) { _fullSyncStop = true; toast('Arrêt demandé après le lot en cours…', 'info'); } }
+async function fullSyncRun(reset) {
+  if (_fullSyncRunning) { toast('Déjà en cours', 'warn'); return; }
+  if (reset && !confirm('Réinitialiser le curseur et relancer la synchro complète depuis le début ?')) return;
+  _fullSyncRunning = true; _fullSyncStop = false;
+  const prog = document.getElementById('fullSyncProgress');
+  const btn = document.getElementById('fullSyncRunBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ En cours…'; }
+  const _tk = (typeof getAuthToken === 'function') ? await getAuthToken() : null;
+  const hdr = _tk ? { Authorization: 'Bearer ' + _tk } : {};
+  let iter = 0, done = false; const t0 = Date.now(); const totals = {};
+  try {
+    while (!_fullSyncStop && iter < 500) {
+      iter++;
+      const url = '/api/sync-akuiteo-full-cron' + (reset && iter === 1 ? '?reset=1' : '');
+      let js = {}, ok = false;
+      try { const r = await fetch(url, { headers: hdr }); ok = r.ok; js = await r.json().catch(() => ({})); }
+      catch (e) { if (prog) prog.innerHTML = '<div style="color:var(--red)">Erreur réseau : ' + cmdEsc(e.message) + ' — reprise possible.</div>'; break; }
+      if (!ok) {
+        if (/maintenance/i.test(js.error || '')) { if (prog) prog.innerHTML = '<div style="color:#f59e0b">Akuiteo en maintenance — nouvelle tentative dans 60 s…</div>'; await new Promise(s => setTimeout(s, 60000)); continue; }
+        if (prog) prog.innerHTML = '<div style="color:var(--red)">Erreur : ' + cmdEsc(js.error || 'HTTP') + '</div>'; break;
+      }
+      for (const k of ['processed', 'devis', 'commandes', 'factures']) if (typeof js[k] === 'number') totals[k] = (totals[k] || 0) + js[k];
+      if (prog) prog.innerHTML = `<div style="font-size:12px;color:var(--t2)">Lot ${iter} · phase <b>${cmdEsc(js.phase || js.next || '?')}</b> · offset ${js.offset || 0} · ${Math.round((Date.now() - t0) / 1000)} s<br>Cumul : ${Object.entries(totals).map(([k, v]) => k + ' ' + v).join(' · ') || '—'}</div>`;
+      if (js.done) { done = true; break; }
+      await new Promise(s => setTimeout(s, 1500));
+    }
+    if (prog) prog.innerHTML += done ? '<div style="color:#10b981;font-weight:700;margin-top:6px">✅ Synchro complète terminée</div>' : (_fullSyncStop ? '<div style="color:#f59e0b;margin-top:6px">⏹ Arrêtée — cliquez « Lancer / reprendre » pour continuer.</div>' : '');
+    toast(done ? 'Synchro complète terminée' : (_fullSyncStop ? 'Synchro interrompue (reprise possible)' : 'Synchro arrêtée sur erreur'), done ? 'success' : 'warn');
+  } finally {
+    _fullSyncRunning = false;
+    if (btn) { btn.disabled = false; btn.textContent = '▶️ Lancer / reprendre'; }
+    renderFullSyncStatus();
+  }
+}
+
 // Cellule "Relance" d'une ligne de devis : badge si déjà relancé, bouton si à relancer, sinon —
 function renderDevisRelanceCell(d) {
   const rel = getDevisRelance(d.id);
@@ -25081,6 +25129,23 @@ function renderAdmin() {
       <p style="font-size:12px;color:var(--t2);margin-bottom:10px">Nombre de jours après émission d'un devis « envoyé » sans réponse au-delà duquel il apparaît comme <strong>à relancer</strong> (dans le tableau de bord et la liste des devis). Réglez une valeur par agence — ex. <strong>GPH85 = 7 jours</strong>. Laissez vide pour utiliser la valeur par défaut.</p>
       <div id="relance-seuils-box" style="font-size:13px;color:var(--t3)">Chargement...</div>
       <div style="margin-top:12px"><button class="btn btn-primary" onclick="saveRelanceSeuils()">💾 Enregistrer les seuils</button></div>
+    </div>
+  </details>
+
+  <details class="card acc" style="margin-top:16px">
+    <summary class="card-header" style="cursor:pointer;user-select:none;flex-wrap:wrap;gap:8px">
+      <div class="card-title">🌙 Synchro complète Akuiteo (données complètes)</div>
+      <span style="display:inline-flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+        <button class="btn btn-primary" id="fullSyncRunBtn" onclick="event.preventDefault();event.stopPropagation();fullSyncRun(false)" style="font-size:12px">▶️ Lancer / reprendre</button>
+        <button class="btn" onclick="event.preventDefault();event.stopPropagation();fullSyncStop()" style="font-size:12px">⏹ Arrêter</button>
+        <button class="btn" onclick="event.preventDefault();event.stopPropagation();fullSyncRun(true)" style="font-size:12px" title="Repartir de zéro">♻️ Réinitialiser</button>
+        <button class="btn" onclick="event.preventDefault();event.stopPropagation();renderFullSyncStatus()" style="font-size:12px">↻</button>
+      </span>
+    </summary>
+    <div class="card-body">
+      <p style="font-size:12px;color:var(--t2);margin-bottom:10px">Rapatrie <strong>toutes</strong> les données Akuiteo (sociétés, contacts, devis, commandes + détail, factures, marchés/affaires) par lots resumables (curseur). Tourne <strong>automatiquement chaque nuit</strong> via GitHub Actions ; ce bouton permet de lancer/reprendre manuellement — <em>garde cet onglet ouvert</em>. En fin de cycle nocturne, la catégorisation <strong>ABC</strong> et les <strong>statuts</strong> sont recalculés sur ces données complètes.</p>
+      <div id="fullSyncStatus" style="font-size:13px;color:var(--t3)">Chargement…</div>
+      <div id="fullSyncProgress" style="margin-top:8px"></div>
     </div>
   </details>
 
