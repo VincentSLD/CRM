@@ -25,11 +25,13 @@ const AK_USER = process.env.AKUITEO_USER, AK_PASS = process.env.AKUITEO_PASS;
 const nowIso = () => new Date().toISOString();
 const TIME_BUDGET_MS = 250000;                    // marge sous 300 s
 const COLORS = ['#4f8ff7,#3b73d9', '#772471,#7c3aed', '#f59e0b,#d97706', '#10b981,#059669', '#ef4444,#dc2626'];
-const CUST_PAGE = 100;    // sociétés par lot (phase customers)
+const CUST_PAGE = 1000;   // sociétés par lot (phase customers — upsert base seulement, rapide)
 const ENRICH_PAGE = 60;   // sociétés enrichies par lot (phase enrich — 3 appels Akuiteo chacune)
 const DOC_PAGE = 500;     // documents par lot (phases quotations/orders/invoices)
 const STATE_KEY = 'akuiteo_full';
-const FULL_CRIT = { companyCode: { operator: 'IS_NOT_NULL' } };
+// Critères IDENTIQUES au full sync du navigateur : sociétés par code LIKE %, documents par companyCode non nul.
+const CUST_CRIT = { code: { operator: 'LIKE', value: '%' } };
+const DOC_CRIT = { companyCode: { operator: 'IS_NOT_NULL' } };
 
 // ── Supabase REST ──
 async function sbReq(path, options = {}) {
@@ -174,7 +176,7 @@ export default async function handler(req, res) {
       const refs = await loadRefs();
       let offset = st.offset || 0;
       while (Date.now() - t0 < TIME_BUDGET_MS) {
-        let batch; try { batch = await akRetry('POST', '/crm/customers/search?limit=' + CUST_PAGE + '&offset=' + offset, FULL_CRIT); } catch (e) { out.errors.push(e.message); break; }
+        let batch; try { batch = await akRetry('POST', '/crm/customers/search?limit=' + CUST_PAGE + '&offset=' + offset + '&sort=id&order=DESC', CUST_CRIT); } catch (e) { out.errors.push(e.message); break; }
         if (_akDown) { out.errors.push('Akuiteo maintenance'); break; }
         if (!Array.isArray(batch) || !batch.length) { st = { phase: skipEnrich ? 'quotations' : 'enrich', offset: 0, lastId: '' }; break; }
         const cust = batch.filter(ak => !excluded.has(String(ak.id || ak.code)));
@@ -240,7 +242,7 @@ export default async function handler(req, res) {
       const existAff = new Set((await sbSelectAll('affaires', 'id')).map(a => a.id));
       const existMar = new Set((await sbSelectAll('marches', 'id')).map(m => m.id));
       while (Date.now() - t0 < TIME_BUDGET_MS) {
-        let batch; try { batch = await akRetry('POST', epMap[phase] + '?limit=' + DOC_PAGE + '&offset=' + offset, FULL_CRIT); } catch (e) { out.errors.push(e.message); break; }
+        let batch; try { batch = await akRetry('POST', epMap[phase] + '?limit=' + DOC_PAGE + '&offset=' + offset + '&sort=id&order=DESC', DOC_CRIT); } catch (e) { out.errors.push(e.message); break; }
         if (_akDown) { out.errors.push('Akuiteo maintenance'); break; }
         const nextPhase = phase === 'quotations' ? 'orders' : phase === 'orders' ? 'invoices' : 'done';
         if (!Array.isArray(batch) || !batch.length) { st = { phase: nextPhase, offset: 0 }; break; }
