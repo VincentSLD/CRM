@@ -7,3 +7,7 @@ XML/
 
 # Fichiers de test veille Veilleco (donnees prestataire, ne pas publier)
 Veilleco_*.csv
+
+# Documents internes (supports de reunion, strategie) - ne pas publier sur GitHub
+*.doc
+*.docx
