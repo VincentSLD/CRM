@@ -3942,7 +3942,8 @@ function updateNavBadges() {
 // Applique les filtres actifs de la liste clients à une requête Supabase.
 // Partagé entre la liste paginée (loadClientsPage) et l'export Excel → garantit des résultats identiques.
 function _clientsApplyFilters(query, { loose = false, letter = '', q = '' } = {}) {
-  const _searchCols = ['name', 'code', 'city', 'sector', 'email', 'raison_sociale', 'raison_sociale2'];
+  // Recherche client/prospect : uniquement nom de la société (name), Raison sociale (raison_sociale) et Nom commercial (raison_sociale2)
+  const _searchCols = ['name', 'raison_sociale', 'raison_sociale2'];
   const _catCol = { apporteur: 'categorie_apporteur', architecte: 'categorie_architecte', gros_oeuvre: 'categorie_gros_oeuvre' }[clientsFilterCatRole] || 'categorie_compte';
   const _expandMulti = (field, arr) => [...new Set(arr.flatMap(v => _expandFilterVariants(field, v)))];
   if (viewMyData && currentCommercial && currentCommercial.akuiteo_manager_id) query = query.eq('account_manager_id', currentCommercial.akuiteo_manager_id);
