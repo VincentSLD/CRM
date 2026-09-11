@@ -30607,6 +30607,8 @@ async function deleteClient(clientId, clientName) {
   toast(`Société "${clientName}" supprimée` + (linkedReports.length ? ` (+ ${linkedReports.length} CR)` : ''), 'success');
   await loadDB();
   go('clients');
+  // loadDB a rechargé DB.clients SANS filtre : on réapplique les filtres / tri / page qui étaient actifs
+  loadClientsPage(clientsPage, clientsLetter, clientsSearch);
 }
 
 // ═══ DELETE RECORD ═══
