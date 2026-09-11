@@ -4345,7 +4345,7 @@ function renderContactDetail() {
     <div class="card-header"><div class="card-title">Commentaire</div></div>
     <div class="card-body"><div style="white-space:pre-wrap;font-size:13px;color:var(--t2)">${c.commentaire}</div></div>
   </div>` : ''}
-  ${_ctParti(c) ? `<div class="card" style="margin-top:16px;border-color:#9ca3af"><div class="card-body" style="padding:12px 14px;font-size:12px;color:var(--t2)">⚑ Ce contact a quitté <strong>${cmdEsc(c._clientName || "l'entreprise")}</strong>${c.parti_date ? ' le ' + fmtDateFR(c.parti_date) : ''}${c.parti_vers ? ' — désormais chez <strong>' + cmdEsc(c.parti_vers) + '</strong>' : ''}.${c.parti_note ? '<div style="margin-top:4px;color:var(--t3)">' + cmdEsc(c.parti_note) + '</div>' : ''}</div></div>` : ''}
+  ${_ctParti(c) ? `<div class="card" style="margin-top:16px;border-color:#9ca3af"><div class="card-body" style="padding:12px 14px;font-size:12px;color:var(--t2)">⚑ Ce contact a quitté <strong>${cmdEsc(c._clientName || "l'entreprise")}</strong>${_ctPartiYear(c) ? ' en ' + _ctPartiYear(c) : ''}${c.parti_vers ? ' — désormais chez <strong>' + cmdEsc(c.parti_vers) + '</strong>' : ''}.${c.parti_note ? '<div style="margin-top:4px;color:var(--t3)">' + cmdEsc(c.parti_note) + '</div>' : ''}</div></div>` : ''}
   <div id="ct-retrouve" style="margin-top:16px;display:none"></div>
   <div id="ct-parcours" style="margin-top:16px;display:none"></div>
   <div id="editContactForm" style="display:none;margin-top:16px">
@@ -4442,9 +4442,11 @@ let _ctHideParti = false, _ctHidePartiGlobal = false;
 function _uuid() { return (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : ('p_' + Date.now() + '_' + Math.random().toString(36).slice(2)); }
 function _ctNormName(a, b) { return String((a || '') + (b || '')).toLowerCase().replace(/[^a-z0-9]/g, ''); }
 function _ctParti(c) { return !!(c && c.statut_presence === 'parti'); }
+// Année de départ (info souvent imprécise) : parti_annee, sinon année dérivée d'une ancienne parti_date
+function _ctPartiYear(c) { if (!c) return ''; if (c.parti_annee) return String(c.parti_annee); if (c.parti_date) return String(c.parti_date).slice(0, 4); return ''; }
 function _ctPartiBadge(c) {
   if (!_ctParti(c)) return '';
-  const d = c.parti_date ? ' ' + fmtDateFR(c.parti_date) : '';
+  const y = _ctPartiYear(c); const d = y ? ' ' + y : '';
   const vers = c.parti_vers ? ' → ' + c.parti_vers : '';
   return ` <span class="badge" style="background:#9ca3af;color:#fff;font-size:9px;vertical-align:middle" title="Parti de l'entreprise${d}${vers}">⚑ Parti${d}</span>`;
 }
@@ -4452,7 +4454,8 @@ function _ctPartiBadge(c) {
 // --- Marquage « parti » (overlay) ---
 function marquerContactParti(contactId, clientId) {
   const c = (currentContact && currentContact.id === contactId) ? currentContact : null;
-  const today = new Date().toISOString().slice(0, 10);
+  const curYear = new Date().getFullYear();
+  const yVal = (c && _ctPartiYear(c)) || curYear;
   const nom = c ? [c.prenom, c.nom].filter(Boolean).join(' ') : 'ce contact';
   const ex = document.getElementById('ct-parti-ov'); if (ex) ex.remove();
   const ov = document.createElement('div');
@@ -4461,8 +4464,8 @@ function marquerContactParti(contactId, clientId) {
   ov.innerHTML = `<div style="background:var(--card,#fff);border-radius:12px;max-width:440px;width:100%;padding:20px;box-shadow:0 12px 40px rgba(0,0,0,.3)">
     <div style="font-size:15px;font-weight:700;color:var(--t1);margin-bottom:4px">Marquer comme parti</div>
     <div style="font-size:12px;color:var(--t3);margin-bottom:14px">${cmdEsc(nom)} quitte l'entreprise rattachée. Information CRM interne (non transmise à Akuiteo).</div>
-    <label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Date de départ</label>
-    <input type="date" id="ct-parti-date" value="${today}" class="fi" style="padding:6px 8px;font-size:12px;margin-bottom:10px;width:100%;box-sizing:border-box">
+    <label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Année de départ (approximative)</label>
+    <input type="number" id="ct-parti-annee" min="1980" max="2100" step="1" value="${yVal}" placeholder="${curYear}" class="fi" style="padding:6px 8px;font-size:12px;margin-bottom:10px;width:100%;box-sizing:border-box">
     <label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Parti vers (société de destination, optionnel)</label>
     <input type="text" id="ct-parti-vers" placeholder="Ex: nouvelle société" value="${c && c.parti_vers ? cmdEsc(c.parti_vers) : ''}" class="fi" style="padding:6px 8px;font-size:12px;margin-bottom:10px;width:100%;box-sizing:border-box">
     <label style="font-size:11px;color:var(--t3);display:block;margin-bottom:3px">Note (optionnel)</label>
@@ -4476,9 +4479,11 @@ function marquerContactParti(contactId, clientId) {
   document.body.appendChild(ov);
 }
 async function _ctConfirmParti(contactId, clientId) {
+  const yr = parseInt(document.getElementById('ct-parti-annee')?.value, 10);
   const upd = {
     statut_presence: 'parti',
-    parti_date: document.getElementById('ct-parti-date')?.value || null,
+    parti_annee: (yr && yr > 1900 && yr < 2200) ? yr : null,
+    parti_date: null,
     parti_vers: (document.getElementById('ct-parti-vers')?.value || '').trim() || null,
     parti_note: (document.getElementById('ct-parti-note')?.value || '').trim() || null,
   };
@@ -4490,7 +4495,7 @@ async function _ctConfirmParti(contactId, clientId) {
   _ctAfterStatusChange(clientId);
 }
 async function annulerContactParti(contactId, clientId) {
-  const upd = { statut_presence: 'actif', parti_date: null, parti_vers: null };
+  const upd = { statut_presence: 'actif', parti_date: null, parti_annee: null, parti_vers: null };
   const { error } = await sb.from('contacts').update(upd).eq('id', contactId);
   if (error) { toast('Erreur: ' + error.message, 'error'); return; }
   if (currentContact && currentContact.id === contactId) Object.assign(currentContact, upd);
@@ -4526,7 +4531,7 @@ async function _ctRunDupSearch(clientId) {
   let exMap = {}, clMap = {};
   try {
     const [ex, cls] = await Promise.all([
-      sb.from('contacts').select('id,statut_presence,parti_date,parti_vers,personne_id').in('id', ids),
+      sb.from('contacts').select('id,statut_presence,parti_date,parti_annee,parti_vers,personne_id').in('id', ids),
       clientIds.length ? sb.from('clients').select('id,name').in('id', clientIds) : Promise.resolve({ data: [] }),
     ]);
     (ex.data || []).forEach(x => exMap[x.id] = x);
@@ -4540,7 +4545,7 @@ async function _ctRunDupSearch(clientId) {
       const e = exMap[r.id] || {}; const same = r.client_id === clientId;
       const soc = clMap[r.client_id] || '—';
       const parti = e.statut_presence === 'parti';
-      const tag = parti ? ` <span class="badge" style="background:#9ca3af;color:#fff;font-size:9px">parti${e.parti_date ? ' ' + fmtDateFR(e.parti_date) : ''}</span>` : '';
+      const tag = parti ? ` <span class="badge" style="background:#9ca3af;color:#fff;font-size:9px">parti${_ctPartiYear(e) ? ' ' + _ctPartiYear(e) : ''}</span>` : '';
       const nm = [r.prenom, (r.nom || '').toUpperCase()].filter(Boolean).join(' ');
       return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;border-top:1px solid #fde68a">
         <div style="flex:1"><strong>${cmdEsc(nm)}</strong> — ${cmdEsc(soc)}${tag}${r.fonction ? ' <span style="color:var(--t3)">· ' + cmdEsc(r.fonction) + '</span>' : ''}</div>
@@ -4577,7 +4582,7 @@ async function _ctRenderParcours() {
   const c = currentContact;
   if (!c.personne_id) { box.style.display = 'none'; return; }
   let data = [];
-  try { const r = await sb.from('contacts').select('id,client_id,nom,prenom,fonction,statut_presence,parti_date,parti_vers').eq('personne_id', c.personne_id); data = r.data || []; } catch (e) { return; }
+  try { const r = await sb.from('contacts').select('id,client_id,nom,prenom,fonction,statut_presence,parti_date,parti_annee,parti_vers').eq('personne_id', c.personne_id); data = r.data || []; } catch (e) { return; }
   if (data.length <= 1) { box.style.display = 'none'; return; }
   const clientIds = [...new Set(data.map(x => x.client_id).filter(Boolean))];
   let nameMap = {};
@@ -4585,14 +4590,14 @@ async function _ctRenderParcours() {
   const items = data.slice().sort((a, b) => {
     const ap = a.statut_presence === 'parti', bp = b.statut_presence === 'parti';
     if (ap !== bp) return ap ? -1 : 1;
-    return (a.parti_date || '9999') < (b.parti_date || '9999') ? -1 : 1;
+    return (_ctPartiYear(a) || '9999') < (_ctPartiYear(b) || '9999') ? -1 : 1;
   });
   box.style.display = 'block';
   box.innerHTML = `<div class="card"><div class="card-header"><div class="card-title">Parcours professionnel</div></div>
     <div class="card-body">${items.map((x, i) => {
       const cur = x.id === c.id, parti = x.statut_presence === 'parti';
       const soc = nameMap[x.client_id] || '—';
-      const per = parti ? (x.parti_date ? 'jusqu\'à ' + fmtDateFR(x.parti_date) : 'parti') + (x.parti_vers ? ' → ' + cmdEsc(x.parti_vers) : '') : 'poste actuel';
+      const per = parti ? (_ctPartiYear(x) ? 'jusqu\'en ' + _ctPartiYear(x) : 'parti') + (x.parti_vers ? ' → ' + cmdEsc(x.parti_vers) : '') : 'poste actuel';
       return `<div style="display:flex;gap:10px;padding:8px 0;${i ? 'border-top:1px solid var(--border)' : ''};${parti && !cur ? 'opacity:.7' : ''}">
         <div style="width:10px;height:10px;border-radius:50%;margin-top:4px;flex-shrink:0;background:${cur ? '#772471' : (parti ? '#9ca3af' : '#22c55e')}"></div>
         <div style="flex:1">
@@ -15790,7 +15795,7 @@ async function saveNewContact(clientId) {
       try {
         await sb.from('contacts').update({
           statut_presence: 'parti',
-          parti_date: new Date().toISOString().slice(0, 10),
+          parti_annee: new Date().getFullYear(),
           parti_vers: (currentClient && currentClient.name) || null,
         }).eq('id', _ctPendingFromContact);
       } catch (e) {}

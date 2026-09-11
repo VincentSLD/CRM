@@ -103,7 +103,8 @@ ALTER TABLE contacts ADD COLUMN IF NOT EXISTS commentaire TEXT;
 --   personne_id     : identifiant partagé reliant les contacts d'une MÊME personne à travers plusieurs sociétés
 --                     → permet le "parcours professionnel" (une ligne contacts = personne @ société)
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS statut_presence TEXT DEFAULT 'actif';
-ALTER TABLE contacts ADD COLUMN IF NOT EXISTS parti_date DATE;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS parti_date DATE;      -- (obsolète : on ne saisit plus qu'une année)
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS parti_annee INTEGER;  -- année de départ (info souvent imprécise)
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS parti_vers TEXT;   -- société de destination (si connue)
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS parti_note TEXT;
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS arrivee_date DATE; -- date d'arrivée dans la société (parcours)
