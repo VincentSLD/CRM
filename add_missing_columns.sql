@@ -680,3 +680,15 @@ CREATE POLICY "sync_log_all" ON sync_log FOR ALL TO authenticated USING (true) W
 -- Curseur de veille SIRENE (radiations) : date du dernier contrôle légal par client (cron sync-sirene)
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS legal_checked_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_clients_legal_checked_at ON clients(legal_checked_at NULLS FIRST);
+
+-- ═══ État de reprise des synchros longues (curseur) — utilisé par la synchro COMPLÈTE Akuiteo ═══
+-- Une ligne par job (ex. key='akuiteo_full') contenant {phase, offset, lastId, ...} pour reprendre
+-- là où le lot précédent s'est arrêté (piloté en boucle par GitHub Actions, sous la limite 300 s de Vercel).
+CREATE TABLE IF NOT EXISTS sync_state (
+  key TEXT PRIMARY KEY,
+  value JSONB,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE sync_state ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "sync_state_all" ON sync_state;
+CREATE POLICY "sync_state_all" ON sync_state FOR ALL TO authenticated USING (true) WITH CHECK (true);

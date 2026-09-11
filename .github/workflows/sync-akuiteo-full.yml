@@ -1,0 +1,36 @@
+name: Synchro complete Akuiteo (nocturne)
+
+# Rapatrie TOUTES les donnees Akuiteo -> CRM chaque nuit (equivalent d'une synchro complete),
+# malgre la limite de 300 s de Vercel : appelle /api/sync-akuiteo-full-cron EN BOUCLE (chaque appel
+# traite un lot <= ~250 s et renvoie un curseur de reprise) jusqu'a "done":true.
+# Un job GitHub Actions peut tourner plusieurs heures -> pas de limite de duree cote pilote.
+#
+# PREREQUIS : definir le secret de depot CRON_SECRET (Settings > Secrets and variables > Actions)
+# a la MEME valeur que la variable d'environnement CRON_SECRET sur Vercel.
+on:
+  schedule:
+    - cron: '0 1 * * *'    # 01:00 UTC chaque nuit
+  workflow_dispatch: {}     # declenchable manuellement
+
+concurrency:
+  group: akuiteo-full
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - name: Synchroniser en boucle jusqu'a done
+        env:
+          URL: ${{ vars.AKUITEO_FULL_URL || 'https://crm-nine-livid.vercel.app/api/sync-akuiteo-full-cron' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          for i in $(seq 1 1000); do
+            RESP=$(curl -s -m 295 -H "Authorization: Bearer ${CRON_SECRET}" "${URL}") || RESP=""
+            echo "lot $i : ${RESP:0:300}"
+            if printf '%s' "$RESP" | grep -q '"done":true'; then echo "Synchro complete terminee."; break; fi
+            if printf '%s' "$RESP" | grep -qi 'maintenance'; then echo "Akuiteo en maintenance -> pause 60s"; sleep 60; continue; fi
+            if ! printf '%s' "$RESP" | grep -q '"ok":true'; then echo "Reponse anormale (pas de ok:true) -> pause 15s"; sleep 15; continue; fi
+            sleep 2
+          done
