@@ -10493,6 +10493,7 @@ function renderPage(page) {
     _clientsServerLoaded = true;
     loadClientsPage(clientsPage || 0, clientsLetter, clientsSearch);
   }
+  if (page === 'clients' && isSupervisor() && _cliCleanupMode) setTimeout(_cliLoadCounts, 20);
   if (page === 'admin') setTimeout(async () => { await Promise.all([loadCollaborateursLucca(), loadCollaborateurs()]); loadAdminAccessList(); renderAdminGroups(); loadAdminDeletePwd(); renderObjectifsAgences(); renderMetiersConfig(); loadMissionMapping(); renderDossierCheminsSocietes(); initTypoAdmin(); initCompAdmin(); renderNlAdminConfig(); renderRelanceSeuilsConfig(); renderSyncAdmin(); }, 50);
   if (page === 'dashboard') setTimeout(() => { renderDashObjectifsAgences(); renderDashClientLists(); renderDashMesTaches(); }, 50);
   if (page === 'analyse') setTimeout(initAnalyse, 30);
@@ -12948,8 +12949,8 @@ function renderClients(filter='all') {
     <span style="font-size:11px;color:var(--t3);margin-left:auto">Les sociétés rattachées à des devis/commandes/factures/marchés/affaires sont ignorées.</span>
   </div>` : ''}
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr>${_sup ? `<th style="width:30px;text-align:center"><input type="checkbox" title="Tout sélectionner (page)" ${filtered.length && filtered.every(c=>_cliSelected.has(c.id)) ? 'checked' : ''} onclick="_cliToggleAll(this.checked)"></th>` : ''}<th>Société</th><th style="width:50px">Dpt</th><th>Ville</th><th>Commercial Novam</th><th>Commercial GPH</th><th style="width:80px;text-align:center">Statut</th><th style="width:80px;text-align:center" title="Catégorie de compte (A/B/C)">Cat. compte</th><th style="width:60px;text-align:center">Pappers</th><th style="width:130px;text-align:center">Statut juridique</th>${_sup ? '<th style="width:40px;text-align:center"></th>' : ''}</tr></thead>
-    <tbody>${filtered.length === 0 ? `<tr><td colspan="${_sup ? 11 : 9}" style="text-align:center;padding:20px;color:var(--t3)">Aucun client/prospect trouvé</td></tr>` : filtered.map(c => {
+    <table><thead><tr>${_sup ? `<th style="width:30px;text-align:center"><input type="checkbox" title="Tout sélectionner (page)" ${filtered.length && filtered.every(c=>_cliSelected.has(c.id)) ? 'checked' : ''} onclick="_cliToggleAll(this.checked)"></th>` : ''}<th>Société</th><th style="width:50px">Dpt</th><th>Ville</th><th>Commercial Novam</th><th>Commercial GPH</th><th style="width:80px;text-align:center">Statut</th><th style="width:80px;text-align:center" title="Catégorie de compte (A/B/C)">Cat. compte</th><th style="width:60px;text-align:center">Pappers</th><th style="width:130px;text-align:center">Statut juridique</th>${_sup ? '<th style="width:64px;text-align:center" title="Nombre de contacts liés">Contacts</th><th style="width:48px;text-align:center" title="Nombre de comptes-rendus liés">CR</th><th style="width:40px;text-align:center"></th>' : ''}</tr></thead>
+    <tbody>${filtered.length === 0 ? `<tr><td colspan="${_sup ? 13 : 9}" style="text-align:center;padding:20px;color:var(--t3)">Aucun client/prospect trouvé</td></tr>` : filtered.map(c => {
       const pappersRef = c.siren || c.siret;
       const pappersLink = pappersRef ? '<a href="https://www.pappers.fr/entreprise/'+pappersRef+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Voir sur Pappers" style="color:#3b82f6;text-decoration:none;font-size:14px">📋</a>' : '<span style="color:var(--t3);font-size:11px">—</span>';
       const dept = c.code_postal ? c.code_postal.slice(0,2) : (c.departement || '');
@@ -12988,7 +12989,7 @@ function renderClients(filter='all') {
         <td style="text-align:center">${catBadge}</td>
         <td style="text-align:center">${pappersLink}</td>
         <td style="text-align:center;white-space:nowrap">${statusBadge}</td>
-        ${_sup ? `<td style="text-align:center" onclick="event.stopPropagation()"><button class="btn" style="font-size:12px;padding:2px 6px;color:#dc2626" title="Supprimer cette société" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">🗑</button></td>` : ''}
+        ${_sup ? `<td id="ctcount-${c.id}" style="text-align:center;font-size:12px;color:var(--t3)">…</td><td id="crcount-${c.id}" style="text-align:center;font-size:12px;color:var(--t3)">…</td><td style="text-align:center" onclick="event.stopPropagation()"><button class="btn" style="font-size:12px;padding:2px 6px;color:#dc2626" title="Supprimer cette société" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">🗑</button></td>` : ''}
       </tr>`;
     }).join('')}</tbody></table>
   </div></div></div>
@@ -30650,6 +30651,30 @@ function _cliToggleAll(checked) {
   renderPage('clients');
 }
 function _cliClearSel() { _cliSelected.clear(); renderPage('clients'); }
+
+// Remplit les colonnes "Contacts" et "CR" du mode nettoyage (requêtes groupées, après rendu)
+async function _cliLoadCounts() {
+  const ids = (DB.clients || []).map(c => c.id).filter(Boolean);
+  if (!ids.length) return;
+  const ct = {}, cr = {};
+  try {
+    for (let i = 0; i < ids.length; i += 200) {
+      const chunk = ids.slice(i, i + 200);
+      const [cRes, rRes] = await Promise.all([
+        sb.from('contacts').select('client_id').in('client_id', chunk),
+        sb.from('reports').select('client_id').in('client_id', chunk),
+      ]);
+      (cRes.data || []).forEach(x => { if (x.client_id) ct[x.client_id] = (ct[x.client_id] || 0) + 1; });
+      (rRes.data || []).forEach(x => { if (x.client_id) cr[x.client_id] = (cr[x.client_id] || 0) + 1; });
+    }
+  } catch (e) { return; }
+  for (const id of ids) {
+    const ce = document.getElementById('ctcount-' + id);
+    if (ce) { const n = ct[id] || 0; ce.textContent = n; ce.style.color = n ? 'var(--t2)' : 'var(--t3)'; ce.style.fontWeight = n ? '600' : '400'; }
+    const re = document.getElementById('crcount-' + id);
+    if (re) { const n = cr[id] || 0; re.textContent = n; re.style.color = n ? 'var(--t2)' : 'var(--t3)'; re.style.fontWeight = n ? '600' : '400'; }
+  }
+}
 
 async function bulkDeleteClients() {
   if (!isSupervisor()) return;
