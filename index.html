@@ -23020,7 +23020,6 @@ async function loadReport(id) {
 async function deleteReport() {
   if (!currentReport) return;
   if (!confirm('Supprimer ce compte-rendu ?')) return;
-  if (!(await requireDeletePassword())) return;
   // Supprimer les PJ du storage
   if (currentReport.pieces_jointes && currentReport.pieces_jointes.length) {
     const paths = currentReport.pieces_jointes.map(pj => pj.path);
@@ -23506,7 +23505,12 @@ async function removeCRAttachment(idx) {
 
 async function saveReport(silent) {
   const body = document.getElementById('editorBody');
-  const titre = document.getElementById('crTitre')?.value.trim() || '';
+  let titre = document.getElementById('crTitre')?.value.trim() || '';
+  // Titre proposé automatiquement si vide : « RDV <nom du client> » (rempli et visible dans le champ)
+  if (!titre && _crSelectedClients.length) {
+    titre = 'RDV ' + _crSelectedClients[0].name;
+    const tEl = document.getElementById('crTitre'); if (tEl) tEl.value = titre;
+  }
   const typeCr = document.getElementById('crType')?.value || '';
   const dateCr = document.getElementById('crDate')?.value || '';
   const redacteurId = document.getElementById('crRedacteur')?.value || '';
