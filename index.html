@@ -3955,12 +3955,15 @@ function _clientsApplyFilters(query, { loose = false, letter = '', q = '' } = {}
   }
   if (clientsFilterNovam.length) {
     const ors = [];
-    for (const key of clientsFilterNovam) { const vs = (clientsNovamVariants[key] && clientsNovamVariants[key].length) ? clientsNovamVariants[key] : [key]; for (const v of vs) { const ve = String(v).replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim(); if (ve) ors.push(`account_manager_name.ilike.%${ve}%`); } }
+    if (clientsFilterNovam.includes('__none__')) ors.push('account_manager_name.is.null', 'account_manager_name.eq.');
+    for (const key of clientsFilterNovam.filter(k => k !== '__none__')) { const vs = (clientsNovamVariants[key] && clientsNovamVariants[key].length) ? clientsNovamVariants[key] : [key]; for (const v of vs) { const ve = String(v).replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim(); if (ve) ors.push(`account_manager_name.ilike.%${ve}%`); } }
     if (ors.length) query = query.or(ors.join(','));
   }
   if (clientsFilterGph.length) {
     const ors = [];
-    for (const key of clientsFilterGph) { const vs = (clientsGphVariants[key] && clientsGphVariants[key].length) ? clientsGphVariants[key] : [key]; for (const v of vs) { const ve = String(v).replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim(); if (ve) ors.push(`salesman_name.ilike.%${ve}%`, `commerciaux_associes.ilike.%${ve}%`); } }
+    // « Sans commercial » GPH = ni salesman_name ni commerciaux_associes renseignés (null ou vide)
+    if (clientsFilterGph.includes('__none__')) ors.push('and(or(salesman_name.is.null,salesman_name.eq.),or(commerciaux_associes.is.null,commerciaux_associes.eq.))');
+    for (const key of clientsFilterGph.filter(k => k !== '__none__')) { const vs = (clientsGphVariants[key] && clientsGphVariants[key].length) ? clientsGphVariants[key] : [key]; for (const v of vs) { const ve = String(v).replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim(); if (ve) ors.push(`salesman_name.ilike.%${ve}%`, `commerciaux_associes.ilike.%${ve}%`); } }
     if (ors.length) query = query.or(ors.join(','));
   }
   if (clientsFilterStatut.length) query = query.in('status', clientsFilterStatut);
@@ -12890,8 +12893,8 @@ function renderClients(filter='all') {
         <option value="no" ${clientsFilterPlus==='no'?'selected':''}>✗ Hors grand compte</option>
       </select>
       ${_mkMs('cfDept', 'Département', _msStr(clientsFilterOpts.depts), clientsFilterDept, v => clientsFilterDept = v)}
-      ${_mkMs('cfNovam', 'Commercial Novam', (clientsFilterOpts.novam || []).map(o => ({ v: o.key, label: o.label })), clientsFilterNovam, v => clientsFilterNovam = v)}
-      ${_mkMs('cfGph', 'Commercial GPH', (clientsFilterOpts.gph || []).map(o => ({ v: o.key, label: o.label })), clientsFilterGph, v => clientsFilterGph = v)}
+      ${_mkMs('cfNovam', 'Commercial Novam', [{ v: '__none__', label: '⦸ Sans commercial' }, ...(clientsFilterOpts.novam || []).map(o => ({ v: o.key, label: o.label }))], clientsFilterNovam, v => clientsFilterNovam = v)}
+      ${_mkMs('cfGph', 'Commercial GPH', [{ v: '__none__', label: '⦸ Sans commercial' }, ...(clientsFilterOpts.gph || []).map(o => ({ v: o.key, label: o.label }))], clientsFilterGph, v => clientsFilterGph = v)}
       ${_mkMs('cfStatut', 'Statut', [{ v: 'prospect', label: 'Prospect' }, { v: 'actif', label: 'Actif' }, { v: 'dormant', label: 'Dormant' }, { v: 'nouveau', label: 'Nouveau' }], clientsFilterStatut, v => clientsFilterStatut = v)}
       <select onchange="clientsFilterSync=this.value;loadClientsPage(0,clientsLetter,clientsSearch)" style="padding:5px 8px;border:1px solid ${clientsFilterSync?'#FF1E63':'var(--border)'};border-radius:6px;font-size:12px;background:${clientsFilterSync?'rgba(255,30,99,0.13)':'var(--card)'};color:var(--t1)">
         <option value="" ${!clientsFilterSync?'selected':''}>— Akuiteo —</option>
