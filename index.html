@@ -20535,19 +20535,31 @@ async function fullSyncRun(reset) {
   const prog = document.getElementById('fullSyncProgress');
   const btn = document.getElementById('fullSyncRunBtn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ En cours…'; }
-  const _tk = (typeof getAuthToken === 'function') ? await getAuthToken() : null;
-  const hdr = _tk ? { Authorization: 'Bearer ' + _tk } : {};
   let iter = 0, done = false; const t0 = Date.now(); const totals = {};
+  // Appel avec jeton FRAIS à chaque lot (lots longs ~250 s → le jeton expire) ; sur 401, refresh + 1 nouvel essai
+  const _callFull = async (url) => {
+    let tk = (typeof getAuthToken === 'function') ? await getAuthToken() : null;
+    let r = await fetch(url, { headers: tk ? { Authorization: 'Bearer ' + tk } : {} });
+    if (r.status === 401) {
+      try { await sb.auth.refreshSession(); } catch (e) {}
+      tk = (typeof getAuthToken === 'function') ? await getAuthToken() : null;
+      r = await fetch(url, { headers: tk ? { Authorization: 'Bearer ' + tk } : {} });
+    }
+    let js = {}; try { js = await r.json(); } catch (e) {}
+    return { ok: r.ok, status: r.status, js };
+  };
   try {
     while (!_fullSyncStop && iter < 500) {
       iter++;
       const url = '/api/sync-akuiteo-full-cron' + (reset && iter === 1 ? '?reset=1' : '');
-      let js = {}, ok = false;
-      try { const r = await fetch(url, { headers: hdr }); ok = r.ok; js = await r.json().catch(() => ({})); }
+      let res;
+      try { res = await _callFull(url); }
       catch (e) { if (prog) prog.innerHTML = '<div style="color:var(--red)">Erreur réseau : ' + cmdEsc(e.message) + ' — reprise possible.</div>'; break; }
-      if (!ok) {
+      const js = res.js || {};
+      if (!res.ok) {
+        if (res.status === 401) { if (prog) prog.innerHTML = '<div style="color:var(--red)">Session expirée — reconnectez-vous, puis relancez (le curseur est conservé).</div>'; break; }
         if (/maintenance/i.test(js.error || '')) { if (prog) prog.innerHTML = '<div style="color:#f59e0b">Akuiteo en maintenance — nouvelle tentative dans 60 s…</div>'; await new Promise(s => setTimeout(s, 60000)); continue; }
-        if (prog) prog.innerHTML = '<div style="color:var(--red)">Erreur : ' + cmdEsc(js.error || 'HTTP') + '</div>'; break;
+        if (prog) prog.innerHTML = '<div style="color:var(--red)">Erreur : ' + cmdEsc(js.error || ('HTTP ' + res.status)) + '</div>'; break;
       }
       for (const k of ['processed', 'devis', 'commandes', 'factures']) if (typeof js[k] === 'number') totals[k] = (totals[k] || 0) + js[k];
       if (prog) prog.innerHTML = `<div style="font-size:12px;color:var(--t2)">Lot ${iter} · phase <b>${cmdEsc(js.phase || js.next || '?')}</b> · offset ${js.offset || 0} · ${Math.round((Date.now() - t0) / 1000)} s<br>Cumul : ${Object.entries(totals).map(([k, v]) => k + ' ' + v).join(' · ') || '—'}</div>`;
