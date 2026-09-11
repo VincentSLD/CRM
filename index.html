@@ -12828,8 +12828,21 @@ function _clientsHasFilters() {
   return !!(clientsFilterDept.length || clientsFilterNovam.length || clientsFilterGph.length || clientsFilterStatut.length || clientsFilterSync || clientsFilterCategorie.length || clientsFilterSousCategorie.length || clientsFilterCategoriePro.length || clientsFilterSecteur.length || clientsFilterType.length || clientsFilterGroupe.length || clientsFilterOrigine.length || clientsFilterSiret || clientsFilterPlateforme || clientsFilterCodial || clientsFilterSiege || clientsFilterCatCompte.length || !clientsHideRadiees || clientsFilterPlus || clientsFilterReseauxPro);
 }
 
+// ═══ Mode nettoyage SUPERVISEUR (suppression rapide / en masse de clients) ═══
+// Réservé au(x) superviseur(s) ci-dessous (extensible). Gate volontairement plus strict que "admin".
+const SUPERVISOR_EMAILS = ['vsalaud@be-gph.fr'];
+function isSupervisor() {
+  try {
+    const e = ((typeof currentUser !== 'undefined' && currentUser && currentUser.email) || (currentCommercial && currentCommercial.email) || '').toLowerCase().trim();
+    return SUPERVISOR_EMAILS.includes(e);
+  } catch (_) { return false; }
+}
+let _cliCleanupMode = false;
+let _cliSelected = new Set();
+
 function renderClients(filter='all') {
   let filtered = filter==='all' ? DB.clients : DB.clients.filter(c=>c.status===filter);
+  const _sup = isSupervisor() && _cliCleanupMode; // colonnes suppression actives ?
   if (clientsHideRadiees) filtered = filtered.filter(c => c.etat_insee !== 'C');
   const effectivePageSize = clientsFilterCatCompte.length ? clientsTotalCount : CLIENTS_PER_PAGE;
   const totalPages = clientsFilterCatCompte.length ? 1 : Math.ceil(clientsTotalCount / CLIENTS_PER_PAGE);
@@ -12844,6 +12857,7 @@ function renderClients(filter='all') {
       <span style="font-size:13px;color:var(--t2)">${clientsTotalCount} clients/prospects</span>
       <button class="btn btn-primary" onclick="_ncReturnCtx=null;openModal('new-client')">+ Nouveau client/prospect</button>
       <button class="btn" onclick="openModal('prospect-target')" style="background:linear-gradient(135deg,#772471,#FF1E63);color:#fff;border:none">🎯 Cibler prospects</button>
+      ${isSupervisor() ? `<button class="btn" onclick="toggleCliCleanup()" style="${_cliCleanupMode ? 'background:#dc2626;color:#fff;border:none' : ''}" title="Mode superviseur : suppression rapide / en masse de sociétés">${_cliCleanupMode ? '✓ Mode nettoyage actif' : '🧹 Mode nettoyage'}</button>` : ''}
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       <input type="text" id="clientSearchInput" placeholder="Rechercher un client/prospect..." value="${clientsSearch}"
@@ -12926,9 +12940,16 @@ function renderClients(filter='all') {
       </select>
     </div>
   </details>
+  ${_sup ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:8px 12px;border:1px solid #dc2626;border-radius:8px;background:rgba(220,38,38,.06);flex-wrap:wrap">
+    <span style="font-size:12px;color:#dc2626;font-weight:700">🧹 Mode nettoyage superviseur</span>
+    <span style="font-size:12px;color:var(--t2)"><span id="cliSelCount">${_cliSelected.size}</span> sélectionné(s)</span>
+    <button class="btn btn-danger" style="font-size:12px" onclick="bulkDeleteClients()">🗑 Supprimer la sélection</button>
+    <button class="btn" style="font-size:12px" onclick="_cliClearSel()">Tout désélectionner</button>
+    <span style="font-size:11px;color:var(--t3);margin-left:auto">Les sociétés rattachées à des devis/commandes/factures/marchés/affaires sont ignorées.</span>
+  </div>` : ''}
   <div class="card"><div class="card-body" style="padding:0"><div class="table-wrap">
-    <table><thead><tr><th>Société</th><th style="width:50px">Dpt</th><th>Ville</th><th>Commercial Novam</th><th>Commercial GPH</th><th style="width:80px;text-align:center">Statut</th><th style="width:80px;text-align:center" title="Catégorie de compte (A/B/C)">Cat. compte</th><th style="width:60px;text-align:center">Pappers</th><th style="width:130px;text-align:center">Statut juridique</th></tr></thead>
-    <tbody>${filtered.length === 0 ? '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--t3)">Aucun client/prospect trouvé</td></tr>' : filtered.map(c => {
+    <table><thead><tr>${_sup ? `<th style="width:30px;text-align:center"><input type="checkbox" title="Tout sélectionner (page)" ${filtered.length && filtered.every(c=>_cliSelected.has(c.id)) ? 'checked' : ''} onclick="_cliToggleAll(this.checked)"></th>` : ''}<th>Société</th><th style="width:50px">Dpt</th><th>Ville</th><th>Commercial Novam</th><th>Commercial GPH</th><th style="width:80px;text-align:center">Statut</th><th style="width:80px;text-align:center" title="Catégorie de compte (A/B/C)">Cat. compte</th><th style="width:60px;text-align:center">Pappers</th><th style="width:130px;text-align:center">Statut juridique</th>${_sup ? '<th style="width:40px;text-align:center"></th>' : ''}</tr></thead>
+    <tbody>${filtered.length === 0 ? `<tr><td colspan="${_sup ? 11 : 9}" style="text-align:center;padding:20px;color:var(--t3)">Aucun client/prospect trouvé</td></tr>` : filtered.map(c => {
       const pappersRef = c.siren || c.siret;
       const pappersLink = pappersRef ? '<a href="https://www.pappers.fr/entreprise/'+pappersRef+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Voir sur Pappers" style="color:#3b82f6;text-decoration:none;font-size:14px">📋</a>' : '<span style="color:var(--t3);font-size:11px">—</span>';
       const dept = c.code_postal ? c.code_postal.slice(0,2) : (c.departement || '');
@@ -12957,6 +12978,7 @@ function renderClients(filter='all') {
       const catCompte = (() => { const cc = c.categorie_compte; if (!cc || typeof cc !== 'object') return ''; return [...new Set(Object.values(cc).map(v => (String(v || '').trim()[0] || '')).filter(x => /[ABC]/.test(x)))].sort().join(', '); })();
       const catBadge = catCompte ? '<span style="font-weight:700;color:var(--t2)">' + catCompte + '</span>' : '<span style="color:var(--t3)">—</span>';
       return `<tr onclick="showClient('${c.id}')" style="cursor:pointer">
+        ${_sup ? `<td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" ${_cliSelected.has(c.id) ? 'checked' : ''} onchange="_cliToggleSel('${c.id}',this.checked)"></td>` : ''}
         <td><div class="cell-client"><div class="av" style="${_avStyle(c)}" title="${_avTitle(c)}"></div><div><div class="cell-name">${c.name||''} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.akuiteo_id ? '#22c55e' : '#f59e0b'};margin-left:4px;vertical-align:middle" title="${c.akuiteo_id ? 'Synchronisé Akuiteo' : 'Non synchronisé'}"></span></div><div class="cell-code">${code}</div></div></div></td>
         <td class="mono" style="font-size:12px">${dept}</td>
         <td style="font-size:12px">${c.city||''}</td>
@@ -12966,6 +12988,7 @@ function renderClients(filter='all') {
         <td style="text-align:center">${catBadge}</td>
         <td style="text-align:center">${pappersLink}</td>
         <td style="text-align:center;white-space:nowrap">${statusBadge}</td>
+        ${_sup ? `<td style="text-align:center" onclick="event.stopPropagation()"><button class="btn" style="font-size:12px;padding:2px 6px;color:#dc2626" title="Supprimer cette société" onclick="deleteClient('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">🗑</button></td>` : ''}
       </tr>`;
     }).join('')}</tbody></table>
   </div></div></div>
@@ -30608,6 +30631,72 @@ async function deleteClient(clientId, clientName) {
   await loadDB();
   go('clients');
   // loadDB a rechargé DB.clients SANS filtre : on réapplique les filtres / tri / page qui étaient actifs
+  loadClientsPage(clientsPage, clientsLetter, clientsSearch);
+}
+
+// ═══ MODE NETTOYAGE SUPERVISEUR (suppression rapide / en masse) ═══
+function toggleCliCleanup() {
+  if (!isSupervisor()) return;
+  _cliCleanupMode = !_cliCleanupMode;
+  if (!_cliCleanupMode) _cliSelected.clear();
+  renderPage('clients');
+}
+function _cliToggleSel(id, checked) {
+  if (checked) _cliSelected.add(id); else _cliSelected.delete(id);
+  const el = document.getElementById('cliSelCount'); if (el) el.textContent = _cliSelected.size;
+}
+function _cliToggleAll(checked) {
+  for (const c of (DB.clients || [])) { if (checked) _cliSelected.add(c.id); else _cliSelected.delete(c.id); }
+  renderPage('clients');
+}
+function _cliClearSel() { _cliSelected.clear(); renderPage('clients'); }
+
+async function bulkDeleteClients() {
+  if (!isSupervisor()) return;
+  const ids = [..._cliSelected];
+  if (!ids.length) { toast('Aucune société sélectionnée', 'warn'); return; }
+  if (!confirm(`Supprimer ${ids.length} société(s) sélectionnée(s) ?\n\n• Celles rattachées à des devis/commandes/factures/marchés/affaires seront IGNORÉES.\n• Les comptes-rendus et contacts liés seront supprimés.\n\nAction irréversible.`)) return;
+  if (!(await requireDeletePassword('Mot de passe requis pour la suppression en masse'))) return;
+  showSyncLoading(true); setSyncText('Vérification des liaisons…');
+  // 1) Repérer les sociétés rattachées à des documents (bloquées) — 5 requêtes groupées, pas N×5
+  const blocked = new Set();
+  try {
+    for (const t of ['devis', 'commandes', 'factures', 'marches', 'affaires']) {
+      for (let i = 0; i < ids.length; i += 200) {
+        const chunk = ids.slice(i, i + 200);
+        const { data } = await sb.from(t).select('client_id').in('client_id', chunk);
+        (data || []).forEach(r => { if (r.client_id) blocked.add(r.client_id); });
+      }
+    }
+  } catch (e) { showSyncLoading(false); toast('Erreur vérification: ' + e.message, 'error'); return; }
+  const deletable = ids.filter(id => !blocked.has(id));
+  const ignored = ids.length - deletable.length;
+  if (!deletable.length) { showSyncLoading(false); toast(`Aucune suppression : les ${ids.length} société(s) sont rattachées à des documents.`, 'warn'); return; }
+  // 2) Suppression cascade par lots de 100
+  let ok = 0, err = 0;
+  for (let i = 0; i < deletable.length; i += 100) {
+    const chunk = deletable.slice(i, i + 100);
+    setSyncText(`Suppression… ${Math.min(i + 100, deletable.length)}/${deletable.length}`);
+    // Exclure de la re-synchro Akuiteo les sociétés synchronisées
+    try {
+      const { data: cls } = await sb.from('clients').select('id,akuiteo_id,name').in('id', chunk);
+      const excl = (cls || []).filter(c => c.akuiteo_id).map(c => ({ akuiteo_id: c.akuiteo_id, client_name: c.name, excluded_at: new Date().toISOString() }));
+      if (excl.length) await sb.from('sync_exclusions').upsert(excl, { onConflict: 'akuiteo_id' });
+    } catch (e) {}
+    // Enfants (FK) puis la société
+    for (const t of ['reports', 'contacts', 'objectifs_clients', 'client_concurrents']) {
+      try { await sb.from(t).delete().in('client_id', chunk); } catch (e) {}
+    }
+    const { error } = await sb.from('clients').delete().in('id', chunk);
+    if (error) { // repli par id pour isoler un éventuel échec FK résiduel
+      for (const id of chunk) { const { error: e2 } = await sb.from('clients').delete().eq('id', id); if (e2) err++; else ok++; }
+    } else { ok += chunk.length; }
+  }
+  _cliSelected.clear();
+  showSyncLoading(false);
+  toast(`${ok} société(s) supprimée(s)` + (ignored ? ` · ${ignored} ignorée(s) (rattachées à des documents)` : '') + (err ? ` · ${err} en erreur` : ''), err ? 'warn' : 'success');
+  await loadDB();
+  go('clients');
   loadClientsPage(clientsPage, clientsLetter, clientsSearch);
 }
 
