@@ -76,6 +76,9 @@ export default async function handler(req, res) {
     if (!okAuth) return res.status(401).json({ error: 'unauthorized' });
   }
   if (!KEY) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY non configuré' });
+  // Respecter le toggle admin (app_config.sync_jobs, clé 'decp') — ?force=1 pour outrepasser
+  const _force = req.query && (req.query.force === '1');
+  if (!_force) { try { const rows = await sbReq("app_config?select=value&key=eq.sync_jobs&limit=1"); const arr = rows && rows[0] && rows[0].value; if (Array.isArray(arr)) { const j = arr.find(x => x.key === 'decp'); if (j && j.actif === false) return res.status(200).json({ ok: true, skipped: true }); } } catch (e) {} }
   try {
     const cutoff = new Date(Date.now() - 7 * 864e5).toISOString();
     const clients = await sbReq('clients?select=id,siren,decp_synced_at,marche_profil&siren=not.is.null&or=(decp_synced_at.is.null,decp_synced_at.lt.' + encodeURIComponent(cutoff) + ')&order=decp_synced_at.asc.nullsfirst&limit=' + BATCH);
