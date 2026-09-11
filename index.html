@@ -4558,9 +4558,9 @@ async function _ctLinkPersonne(candidateId, clientId) {
   let pid = cand.personne_id;
   if (!pid) { pid = _uuid(); try { await sb.from('contacts').update({ personne_id: pid }).eq('id', candidateId); } catch (e) {} }
   _ctPendingPersonneId = pid; _ctPendingFromContact = candidateId;
-  const setIf = (id, val) => { const el = document.getElementById(id); if (el && !el.value && val) el.value = val; };
-  setIf('nc-ct-prenom', cand.prenom); setIf('nc-ct-titre', cand.titre);
-  setIf('nc-ct-mobile', cand.mobile); setIf('nc-ct-tel', cand.telephone); setIf('nc-ct-email', cand.email);
+  // On ne reprend QUE l'identité (civilité, prénom, nom) — les coordonnées (tél/mobile/email) sont propres à la nouvelle société
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  setVal('nc-ct-titre', cand.titre); setVal('nc-ct-prenom', cand.prenom); setVal('nc-ct-nom', cand.nom);
   const box = document.getElementById('nc-dup-suggest');
   if (box) box.innerHTML = `<div style="border:1px solid #a7f3d0;background:#ecfdf5;border-radius:8px;padding:10px 12px;font-size:12px;color:#065f46">
     ✓ Parcours relié à <strong>${cmdEsc([cand.prenom, cand.nom].filter(Boolean).join(' '))}</strong>. À l'enregistrement, ce contact rejoindra son parcours.
